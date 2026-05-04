@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -35,6 +36,8 @@ class SecurityHeadersMiddleware:
         for origin in settings.cors_origins:
             if origin not in connect_sources:
                 connect_sources.append(origin)
+        if settings.frontend_url and settings.frontend_url not in connect_sources:
+            connect_sources.append(settings.frontend_url)
         self._csp = "; ".join([
             "default-src 'self'",
             "script-src 'self'",
@@ -165,14 +168,31 @@ app = FastAPI(
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
-)
+# CORS middleware — allow configured origins plus Vercel preview deployments
+_cors_origins = set(settings.cors_origins)
+if settings.frontend_url:
+    _cors_origins.add(settings.frontend_url)
+_cors_origins_list = list(_cors_origins)
+
+if settings.cors_allow_vercel_previews:
+    # Build regex: exact origins OR any *.vercel.app subdomain
+    escaped = [re.escape(o) for o in _cors_origins_list]
+    pattern = "^(?:" + "|".join(escaped) + r"|https://[a-z0-9-]+\.vercel\.app)$"
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=pattern,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+    )
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
