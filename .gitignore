@@ -105,3 +105,13 @@ logs/
 
 # Misc
 *.pem
+
+# ezcoder-eyes
+.ezcoder/eyes/out/
+.ezcoder/eyes/state/
+.ezcoder/eyes/bin/
+.ezcoder/eyes/recordings/
+.ezcoder/eyes/auth/
+.ezcoder/eyes/remote.json
+.ezcoder/eyes/_lib.sh
+.ezcoder/eyes/_redact.sh

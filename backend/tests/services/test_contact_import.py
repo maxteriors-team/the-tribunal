@@ -96,19 +96,19 @@ class TestCleanPhoneNumber:
 
     def test_valid_us_number(self) -> None:
         """Valid US number normalizes correctly."""
-        result = clean_phone_number("5551234567")
+        result = clean_phone_number("4155551234")
         assert result is not None
         assert len(result) >= 10
 
     def test_formatted_number_cleaned(self) -> None:
         """Formatting characters are stripped before length check."""
-        # "(555) 123-4567" → "5551234567" (10 digits)
-        result = clean_phone_number("(555) 123-4567")
+        # "(415) 555-1234" → "+14155551234"
+        result = clean_phone_number("(415) 555-1234")
         assert result is not None
 
     def test_e164_format_preserved(self) -> None:
         """E.164 format is accepted."""
-        result = clean_phone_number("+15551234567")
+        result = clean_phone_number("+14155551234")
         assert result is not None
 
 

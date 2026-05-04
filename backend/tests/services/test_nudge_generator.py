@@ -224,14 +224,26 @@ class TestCoolingNudge:
             "cooling_days": 30,
         })
 
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result([]),      # contacts (no important_dates contacts)
-                _scalar_result([conv]),   # cold conversations
-                _scalar_one_result(None), # dedup check → not found
-                _scalar_one_result(contact),  # load contact by id
-            ]
-        )
+        # The orchestrator runs ALL enabled strategies in registry order.
+        # Date strategies skip because date_contacts=[].
+        # Cooling strategy gets specific results; all subsequent strategies
+        # receive empty results via the generator fallback.
+        empty = _scalar_result([])
+        specific_results = [
+            _scalar_result([]),          # 1. contacts (no important_dates)
+            _scalar_result([conv]),      # 2. cooling: cold conversations
+            _scalar_one_result(None),    # 3. cooling: dedup → not found
+            _scalar_one_result(contact), # 4. cooling: load contact
+        ]
+        call_count = 0
+
+        async def _execute_side_effect(*args, **kwargs):
+            nonlocal call_count
+            idx = call_count
+            call_count += 1
+            return specific_results[idx] if idx < len(specific_results) else empty
+
+        mock_db.execute = AsyncMock(side_effect=_execute_side_effect)
 
         count = await generator.generate_for_workspace(mock_db, workspace)
 

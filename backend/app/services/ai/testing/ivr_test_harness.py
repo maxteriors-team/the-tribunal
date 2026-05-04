@@ -22,10 +22,10 @@ Example usage:
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
 from app.models.workspace import Workspace
@@ -37,9 +37,6 @@ from app.services.ai.testing.ivr_test_models import (
     IVRTestResult,
     IVRTestTurn,
 )
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 
