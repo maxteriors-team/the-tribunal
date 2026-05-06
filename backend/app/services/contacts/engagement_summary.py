@@ -4,12 +4,10 @@ Provides aggregated engagement counts for a single contact across
 messages, calls, and appointments — without loading full rows.
 """
 
-import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import cast
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
@@ -53,59 +51,62 @@ async def get_engagement_summary(
         .scalar_subquery()
     )
 
-    msg_base = select(func.count()).select_from(Message).where(
-        Message.conversation_id.in_(conv_id_subq)
+    # Combine all message-level aggregates into a single SELECT with conditional
+    # aggregates. AsyncSession is NOT safe for concurrent statements on a single
+    # connection (raises InvalidRequestError), so we issue one query per round-trip
+    # rather than gathering multiple `db.scalar()` calls in parallel.
+    is_outbound_non_voice = (Message.direction == "outbound") & (
+        Message.channel != "voice"
+    )
+    is_inbound_non_voice = (Message.direction == "inbound") & (
+        Message.channel != "voice"
+    )
+    is_voice = Message.channel == "voice"
+
+    msg_stats_stmt = select(
+        func.count(case((is_outbound_non_voice, 1))).label("total_sent"),
+        func.count(case((is_inbound_non_voice, 1))).label("total_received"),
+        func.count(case((is_voice, 1))).label("total_calls"),
+        func.count(case((Message.created_at >= since_7d, 1))).label("events_7d"),
+        func.count(case((Message.created_at >= since_30d, 1))).label("events_30d"),
+        func.max(Message.created_at).label("last_msg_at"),
+    ).where(Message.conversation_id.in_(conv_id_subq))
+
+    msg_row = (await db.execute(msg_stats_stmt)).one()
+    total_sent: int | None = msg_row.total_sent
+    total_received: int | None = msg_row.total_received
+    total_calls: int | None = msg_row.total_calls
+    events_7d: int | None = msg_row.events_7d
+    events_30d: int | None = msg_row.events_30d
+    last_msg_at: datetime | None = msg_row.last_msg_at
+
+    # Calls answered requires a join against CallOutcome, so it stays as its own
+    # statement (still sequential — no asyncio.gather).
+    total_calls_answered = await db.scalar(
+        select(func.count())
+        .select_from(Message)
+        .join(CallOutcome, CallOutcome.message_id == Message.id)
+        .where(
+            Message.conversation_id.in_(conv_id_subq),
+            Message.channel == "voice",
+            CallOutcome.outcome_type.in_(ANSWERED_OUTCOMES),
+        )
     )
 
-    results = await asyncio.gather(
-        db.scalar(
-            msg_base.where(Message.direction == "outbound", Message.channel != "voice")
-        ),
-        db.scalar(
-            msg_base.where(Message.direction == "inbound", Message.channel != "voice")
-        ),
-        db.scalar(msg_base.where(Message.channel == "voice")),
-        db.scalar(
-            select(func.count())
-            .select_from(Message)
-            .join(CallOutcome, CallOutcome.message_id == Message.id)
-            .where(
-                Message.conversation_id.in_(conv_id_subq),
-                Message.channel == "voice",
-                CallOutcome.outcome_type.in_(ANSWERED_OUTCOMES),
-            )
-        ),
-        db.scalar(
-            select(func.count())
-            .select_from(Appointment)
-            .where(
+    # Appointments live on a separate table — combine count + max in one query.
+    appt_row = (
+        await db.execute(
+            select(
+                func.count(Appointment.id).label("total"),
+                func.max(Appointment.created_at).label("last_appt_at"),
+            ).where(
                 Appointment.workspace_id == workspace_id,
                 Appointment.contact_id == contact.id,
             )
-        ),
-        db.scalar(msg_base.where(Message.created_at >= since_7d)),
-        db.scalar(msg_base.where(Message.created_at >= since_30d)),
-        db.scalar(
-            select(func.max(Message.created_at)).where(
-                Message.conversation_id.in_(conv_id_subq)
-            )
-        ),
-        db.scalar(
-            select(func.max(Appointment.created_at)).where(
-                Appointment.workspace_id == workspace_id,
-                Appointment.contact_id == contact.id,
-            )
-        ),
-    )
-    total_sent = cast(int | None, results[0])
-    total_received = cast(int | None, results[1])
-    total_calls = cast(int | None, results[2])
-    total_calls_answered = cast(int | None, results[3])
-    total_appointments = cast(int | None, results[4])
-    events_7d = cast(int | None, results[5])
-    events_30d = cast(int | None, results[6])
-    last_msg_at = cast(datetime | None, results[7])
-    last_appt_at = cast(datetime | None, results[8])
+        )
+    ).one()
+    total_appointments: int | None = appt_row.total
+    last_appt_at: datetime | None = appt_row.last_appt_at
 
     channel_rows = (
         await db.execute(
