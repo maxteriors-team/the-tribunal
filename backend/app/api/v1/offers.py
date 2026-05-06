@@ -309,16 +309,20 @@ async def reorder_lead_magnets(
     # Verify offer exists
     await get_or_404(db, Offer, offer_id, workspace_id=workspace_id)
 
-    # Update sort order for each lead magnet
-    for idx, lm_id in enumerate(lead_magnet_ids):
-        assoc_result = await db.execute(
-            select(OfferLeadMagnet).where(
-                OfferLeadMagnet.offer_id == offer_id,
-                OfferLeadMagnet.lead_magnet_id == lm_id,
-            )
+    # Bulk fetch all associations in a single query, then update sort order in memory
+    assoc_result = await db.execute(
+        select(OfferLeadMagnet).where(
+            OfferLeadMagnet.offer_id == offer_id,
+            OfferLeadMagnet.lead_magnet_id.in_(lead_magnet_ids),
         )
-        association: OfferLeadMagnet | None = assoc_result.scalar_one_or_none()
-        if association:
+    )
+    associations_by_lm_id: dict[uuid.UUID, OfferLeadMagnet] = {
+        assoc.lead_magnet_id: assoc for assoc in assoc_result.scalars().all()
+    }
+
+    for idx, lm_id in enumerate(lead_magnet_ids):
+        association = associations_by_lm_id.get(lm_id)
+        if association is not None:
             association.sort_order = idx
 
     await db.commit()
