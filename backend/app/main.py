@@ -70,6 +70,38 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+def _validate_security_key(
+    log: structlog.stdlib.BoundLogger,
+    *,
+    name: str,
+    value: str,
+    failure_detail: str,
+) -> None:
+    """Reject the default placeholder for a security-critical key in production.
+
+    Logs a warning when running in debug mode so local development is unaffected.
+    """
+    if value != "change-me-in-production":
+        return
+
+    if not settings.debug:
+        log.error(
+            f"insecure_{name.lower()}",
+            severity="critical",
+            message=f"Using default {name.lower()} in production is not allowed",
+        )
+        raise RuntimeError(
+            f"{name} must be set in production. "
+            f"Default value 'change-me-in-production' is insecure. {failure_detail}"
+        )
+
+    log.warning(
+        f"default_{name.lower()}",
+        severity="medium",
+        message=f"Using default {name.lower()} in development mode",
+    )
+
+
 def _validate_startup_config() -> None:
     """Validate required configuration at startup.
 
@@ -100,23 +132,24 @@ def _validate_startup_config() -> None:
         )
 
     # Check secret key security
-    if settings.secret_key == "change-me-in-production":
-        if not settings.debug:
-            log.error(
-                "insecure_secret_key",
-                severity="critical",
-                message="Using default secret_key in production is not allowed",
-            )
-            raise RuntimeError(
-                "SECRET_KEY must be set in production. "
-                "Default value 'change-me-in-production' is insecure."
-            )
-        else:
-            log.warning(
-                "default_secret_key",
-                severity="medium",
-                message="Using default secret_key in development mode",
-            )
+    _validate_security_key(
+        log,
+        name="SECRET_KEY",
+        value=settings.secret_key,
+        failure_detail="Used to sign JWT access and refresh tokens.",
+    )
+
+    # Check encryption key security (used for Fernet encryption of tenant credentials)
+    _validate_security_key(
+        log,
+        name="ENCRYPTION_KEY",
+        value=settings.encryption_key,
+        failure_detail=(
+            "Used to encrypt tenant third-party credentials (Telnyx, OpenAI, "
+            "FUB, Stripe). Leaving this default would expose every tenant's "
+            "credentials if the database were dumped."
+        ),
+    )
 
     # Warn if webhook verification is disabled in non-debug mode
     if settings.skip_webhook_verification and not settings.debug:
