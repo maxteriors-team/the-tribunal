@@ -99,21 +99,22 @@ class ConversationService:
                 if cc.campaign is not None
             }
 
-            needs_commit = False
+            modified = False
             for conv in conversations:
                 campaign = campaign_by_conv_id.get(conv.id)
                 if campaign and campaign.agent_id:
                     if conv.assigned_agent_id != campaign.agent_id:
                         conv.assigned_agent_id = campaign.agent_id
-                        needs_commit = True
+                        modified = True
                     if campaign.ai_enabled and not conv.ai_enabled:
                         conv.ai_enabled = True
-                        needs_commit = True
+                        modified = True
 
-            if needs_commit:
+            if modified:
+                # Session is configured with expire_on_commit=False, so the
+                # in-memory state we just set remains valid after commit.
+                # No per-row refresh needed.
                 await self.db.commit()
-                for conv in conversations:
-                    await self.db.refresh(conv)
 
         return PaginatedConversations(
             items=[
