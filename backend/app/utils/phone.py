@@ -58,3 +58,64 @@ def normalize_phone_safe(phone_input: str, country: str = DEFAULT_COUNTRY) -> st
         return normalize_phone_e164(phone_input, country)
     except PhoneNumberError:
         return None
+
+
+def phone_lookup_variants(phone_input: str, country: str = DEFAULT_COUNTRY) -> list[str]:
+    """Generate canonical format variants of a phone number for SQL IN-list lookup.
+
+    Used to find a contact whose ``phone_number`` column may have been stored in any
+    of the common formats (E.164, national, international, raw digits, etc.) without
+    scanning every row in the workspace.
+
+    Args:
+        phone_input: Phone number in any format.
+        country: Country code for parsing (default: US).
+
+    Returns:
+        Deduplicated list of string variants. The original ``phone_input`` is always
+        included as the first variant. Returns ``[phone_input]`` (or ``[]`` for
+        empty input) when the number cannot be parsed.
+    """
+    variants: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: str | None) -> None:
+        if value and value not in seen:
+            seen.add(value)
+            variants.append(value)
+
+    _add(phone_input)
+    if not phone_input or not phone_input.strip():
+        return variants
+
+    try:
+        parsed = phonenumbers.parse(phone_input, country)
+    except phonenumbers.NumberParseException:
+        return variants
+
+    e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
+    international = phonenumbers.format_number(
+        parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL
+    )
+    rfc3966 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.RFC3966)
+
+    _add(e164)
+    _add(national)
+    _add(international)
+    _add(rfc3966)
+
+    # Digit-only variants: full E.164 digits, national digits, and (for NANP)
+    # the 10-digit form without country code.
+    e164_digits = e164.lstrip("+")
+    national_digits = "".join(c for c in national if c.isdigit())
+    _add(e164_digits)
+    _add(national_digits)
+
+    country_code = str(parsed.country_code) if parsed.country_code else ""
+    if country_code and e164_digits.startswith(country_code):
+        subscriber_digits = e164_digits[len(country_code) :]
+        if subscriber_digits:
+            _add(subscriber_digits)
+
+    return variants

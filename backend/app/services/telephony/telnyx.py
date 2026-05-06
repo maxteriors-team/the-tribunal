@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.services.messaging.link_shortener import shorten_urls_in_text
-from app.utils.phone import normalize_phone_e164, normalize_phone_safe
+from app.utils.phone import normalize_phone_e164, phone_lookup_variants
 
 logger = structlog.get_logger()
 
@@ -426,8 +426,11 @@ class TelnyxSMSService:
     ) -> Contact | None:
         """Find a contact by phone number with flexible format matching.
 
-        Tries exact match first, then tries normalizing the stored phone numbers
-        and comparing to handle format variations.
+        Generates the canonical format variants of ``contact_phone`` (E.164,
+        national, international, RFC3966, raw digits, and the NANP 10-digit
+        subscriber form) and issues a single indexed ``IN (...)`` lookup so
+        legacy rows stored in non-E.164 formats still match without a full
+        table scan.
 
         Args:
             db: Database session
@@ -437,36 +440,32 @@ class TelnyxSMSService:
         Returns:
             Contact if found, None otherwise
         """
-        # Try exact match first
+        # Generate the small set of canonical variants the stored phone could be
+        # in (E.164, national, international, RFC3966, digits-only, NANP 10-digit)
+        # and resolve in a single indexed IN-list lookup. This keeps the inbound
+        # SMS path O(1) on the indexed phone_number column instead of O(n) over
+        # every contact in the workspace.
+        variants = phone_lookup_variants(contact_phone)
+        if not variants:
+            return None
+
         result = await db.execute(
-            select(Contact).where(
+            select(Contact)
+            .where(
                 Contact.workspace_id == workspace_id,
-                Contact.phone_number == contact_phone,
+                Contact.phone_number.in_(variants),
             )
+            .limit(1)
         )
         contact = result.scalars().first()
-        if contact:
-            return contact
-
-        # If no exact match, try normalizing phone numbers (limit to prevent memory exhaustion)
-        all_contacts_result = await db.execute(
-            select(Contact).where(Contact.workspace_id == workspace_id).limit(1000)
-        )
-        all_contacts = all_contacts_result.scalars().all()
-
-        for candidate in all_contacts:
-            # Normalize both phone numbers and compare
-            candidate_normalized = normalize_phone_safe(candidate.phone_number)
-            if candidate_normalized and candidate_normalized == contact_phone:
-                self.logger.info(
-                    "contact_found_via_normalization",
-                    original_phone=candidate.phone_number,
-                    normalized_phone=candidate_normalized,
-                    contact_id=candidate.id,
-                )
-                return candidate
-
-        return None
+        if contact and contact.phone_number != contact_phone:
+            self.logger.info(
+                "contact_found_via_phone_variant",
+                stored_phone=contact.phone_number,
+                lookup_phone=contact_phone,
+                contact_id=contact.id,
+            )
+        return contact
 
     async def list_phone_numbers(self) -> list[PhoneNumberInfo]:
         """List all Telnyx phone numbers."""
