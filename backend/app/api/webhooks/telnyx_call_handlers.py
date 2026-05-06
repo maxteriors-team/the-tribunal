@@ -52,6 +52,20 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:
         # Create message record for incoming call
         from app.models.conversation import Conversation, Message
 
+        # Idempotency: Telnyx retries on 5xx/timeout, so we may receive the same
+        # call.initiated event multiple times. Bail out early if we've already
+        # created a Message for this call_control_id to avoid duplicate ringing
+        # rows, duplicate push notifications, and double-firing auto-answer.
+        existing_result = await db.execute(
+            select(Message.id).where(Message.provider_message_id == call_control_id)
+        )
+        if existing_result.scalar_one_or_none() is not None:
+            log.info(
+                "call_initiated_duplicate_skipped",
+                call_control_id=call_control_id,
+            )
+            return
+
         # Get or create conversation
         conv_result = await db.execute(
             select(Conversation).where(
