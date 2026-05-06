@@ -64,16 +64,21 @@ class TestLoopDetectorThreshold:
 
     def test_sensitive_threshold_detects_loops(self):
         """Lower threshold should detect loops more easily."""
-        detector = LoopDetector(similarity_threshold=0.5, max_history=10)
+        strict = LoopDetector(similarity_threshold=0.95, max_history=10)
+        sensitive = LoopDetector(similarity_threshold=0.4, max_history=10)
 
-        # These share words: "press", "1", "for", "sales" = 4 words
-        # First has: press, 1, for, sales, or, support = 6 words
-        # Second has: press, 1, for, sales, department = 5 words
-        # Jaccard: 4 / 7 = 0.57 > 0.5
-        detector.add_transcript("Press 1 for sales or support")
-        detector.add_transcript("Press 1 for sales department")
+        # Same menu rephrased: shares core terms (sales, support, billing)
+        # but reordered/abbreviated. TF-IDF cosine sits in the mid range,
+        # so a strict threshold misses it while a sensitive one catches it.
+        first = "Press 1 for sales, press 2 for support, press 3 for billing."
+        second = "For sales press 1, for billing press 3."
 
-        assert detector.is_loop_detected()
+        for d in (strict, sensitive):
+            d.add_transcript(first)
+            d.add_transcript(second)
+
+        assert not strict.is_loop_detected()
+        assert sensitive.is_loop_detected()
 
 
 class TestLoopDetectorReset:
@@ -145,12 +150,12 @@ class TestLoopDetectorHistory:
         menu = "Press 1 for sales, press 2 for support."
 
         detector.add_transcript(menu)
-        detector.add_transcript("Different menu 1")
-        detector.add_transcript("Different menu 2")
+        detector.add_transcript("Connecting you to the next available agent.")
+        detector.add_transcript("Your estimated wait time is five minutes.")
         assert not detector.is_loop_detected()
 
         # Now add the original menu again - old copy should be evicted
-        detector.add_transcript("Different menu 3")
+        detector.add_transcript("Thank you for your patience, please continue to hold.")
         detector.add_transcript(menu)
 
         # The original was pushed out, so no loop
