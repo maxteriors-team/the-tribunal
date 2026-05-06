@@ -3,7 +3,10 @@
 Architecture:
 - Multi-turn tool loop (capped) so the model can chain actions like
   search → send_sms in one user request.
-- Parallel tool execution within a single turn (asyncio.gather).
+- Sequential tool execution within a single turn — tools share a single
+  AsyncSession and SQLAlchemy AsyncSession is NOT safe for concurrent
+  statements on one connection (raises InvalidRequestError). LLM latency
+  dominates; tool DB calls are fast.
 - OpenAI prompt caching via `prompt_cache_key` keyed per (workspace, user)
   — the system prompt prefix stays byte-identical across turns so
   cached_tokens hit on every follow-up call.
@@ -124,26 +127,32 @@ def _repair_pairing(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return repaired
 
 
-async def _execute_tool_calls_parallel(
+async def _execute_tool_calls_sequential(
     executor: CRMToolExecutor,
     tool_calls: list[Any],
 ) -> list[dict[str, Any]]:
-    """Run all tool calls in a single turn concurrently.
+    """Run all tool calls in a single turn sequentially.
 
     Returns a list of dicts: { id, name, arguments, result } in the same
     order as `tool_calls`, so we can build matching tool messages and
     actions_taken summaries.
+
+    Sequential (not asyncio.gather) because every tool shares the same
+    AsyncSession via `executor.db`, and SQLAlchemy AsyncSession does not
+    support concurrent statements on a single connection — concurrent use
+    raises InvalidRequestError. The same constraint motivated the
+    sequential rewrite of `services/contacts/engagement_summary.py`.
     """
-    async def _run(tc: Any) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    for tc in tool_calls:
         name = tc.function.name
         try:
             args = json.loads(tc.function.arguments)
         except json.JSONDecodeError:
             args = {}
         result = await executor.execute(name, args)
-        return {"id": tc.id, "name": name, "arguments": args, "result": result}
-
-    return await asyncio.gather(*(_run(tc) for tc in tool_calls))
+        results.append({"id": tc.id, "name": name, "arguments": args, "result": result})
+    return results
 
 
 async def process_assistant_message(  # noqa: PLR0913, PLR0915
@@ -254,7 +263,7 @@ async def process_assistant_message(  # noqa: PLR0913, PLR0915
                     await db.flush()
                 break
 
-            # Tool calls → record assistant turn, execute in parallel, append results.
+            # Tool calls → record assistant turn, execute sequentially, append results.
             tool_calls_payload = [
                 {
                     "id": tc.id,
@@ -283,7 +292,7 @@ async def process_assistant_message(  # noqa: PLR0913, PLR0915
                 }
             )
 
-            executions = await _execute_tool_calls_parallel(executor, assistant_msg.tool_calls)
+            executions = await _execute_tool_calls_sequential(executor, assistant_msg.tool_calls)
             for ex in executions:
                 result_json = json.dumps(ex["result"])
                 db.add(
