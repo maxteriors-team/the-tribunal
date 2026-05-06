@@ -65,8 +65,11 @@ async def resend_webhook(request: Request, db: DB) -> dict[str, str]:
     headers = {k.lower(): v for k, v in request.headers.items()}
 
     event = _verify_signature(body, headers)
-    log = log.bind(event_type=event.get("type"))
+    # svix-id is unique per webhook event and stable across retries — use it
+    # as the idempotency key when persisting the event.
+    svix_id = headers.get("svix-id") or headers.get("webhook-id")
+    log = log.bind(event_type=event.get("type"), svix_id=svix_id)
     log.info("resend_webhook_received")
 
-    await handle_event(db, event, log)
+    await handle_event(db, event, log, provider_event_id=svix_id)
     return {"status": "ok"}

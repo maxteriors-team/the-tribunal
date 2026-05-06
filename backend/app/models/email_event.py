@@ -46,7 +46,9 @@ class EmailEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
-    provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_event_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
     event_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSONB, nullable=True
     )

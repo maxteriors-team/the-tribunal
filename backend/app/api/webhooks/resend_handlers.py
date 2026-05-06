@@ -7,6 +7,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -71,9 +72,18 @@ async def _find_message(
 
 
 async def handle_event(
-    db: AsyncSession, event: dict[str, Any], log: Any = None
+    db: AsyncSession,
+    event: dict[str, Any],
+    log: Any = None,
+    provider_event_id: str | None = None,
 ) -> None:
-    """Process a verified Resend webhook event."""
+    """Process a verified Resend webhook event.
+
+    ``provider_event_id`` should be the ``svix-id`` header value, which Svix
+    guarantees is stable across retries of the same event. It is used as the
+    idempotency key so retried deliveries do not create duplicate
+    ``EmailEvent`` rows nor double-increment campaign counters.
+    """
     log = log or logger
     event_type = event.get("type", "")
     data = event.get("data") or {}
@@ -82,6 +92,21 @@ async def handle_event(
     if mapped is None:
         log.debug("resend_unhandled_event", event_type=event_type)
         return
+
+    # Idempotency: if we've already processed this svix-id, skip it.
+    if provider_event_id:
+        existing = await db.execute(
+            select(EmailEvent.id).where(
+                EmailEvent.provider_event_id == provider_event_id
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            log.info(
+                "resend_event_duplicate_skipped",
+                event_type=event_type,
+                provider_event_id=provider_event_id,
+            )
+            return
 
     message = await _find_message(db, data)
     workspace_id = message.conversation.workspace_id if message else None
@@ -99,7 +124,9 @@ async def handle_event(
         message_id=message.id if message else None,
         event_type=mapped.value,
         occurred_at=_parse_occurred_at(event.get("created_at")),
-        provider_event_id=str(data.get("email_id") or data.get("id") or ""),
+        provider_event_id=provider_event_id
+        or str(data.get("email_id") or data.get("id") or "")
+        or None,
         event_metadata=data,
     )
     db.add(event_row)
@@ -124,5 +151,17 @@ async def handle_event(
             .values({counter_field: getattr(Campaign, counter_field) + 1})
         )
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Lost a race with a concurrent retry of the same svix-id; the unique
+        # constraint on provider_event_id means the other request already
+        # committed this event. Roll back and treat as a successful no-op.
+        await db.rollback()
+        log.info(
+            "resend_event_duplicate_race",
+            event_type=event_type,
+            provider_event_id=provider_event_id,
+        )
+        return
     log.info("resend_event_processed", event_type=event_type, mapped=mapped.value)
