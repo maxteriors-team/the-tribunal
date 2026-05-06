@@ -419,58 +419,51 @@ async def get_contact_timeline(
     conversation_ids = [conv.id for conv in conversations]
 
     if conversation_ids:
-        # Single query to get all messages from all conversations
+        # Fetch only the most recent `limit` messages across all of this
+        # contact's conversations. The timeline is ultimately sorted by
+        # timestamp and clipped to `limit` items, so materializing more than
+        # that in Python wastes a full table scan on every poll (this endpoint
+        # is polled every 3s by the contact viewer).
         msg_result = await db.execute(
             select(Message)
             .where(Message.conversation_id.in_(conversation_ids))
             .options(selectinload(Message.call_outcome))
             .order_by(Message.created_at.desc())
+            .limit(limit)
         )
-        all_messages = msg_result.scalars().all()
+        recent_messages = msg_result.scalars().all()
 
-        # Group messages by conversation_id in memory
-        messages_by_conv: dict[uuid.UUID, list[Message]] = {}
-        for msg in all_messages:
-            if msg.conversation_id not in messages_by_conv:
-                messages_by_conv[msg.conversation_id] = []
-            messages_by_conv[msg.conversation_id].append(msg)
+        for msg in recent_messages:
+            # Determine type based on channel
+            item_type = "call" if msg.channel == "voice" else msg.channel
 
-        # Process messages for each conversation, limiting in memory
-        for conversation in conversations:
-            messages = messages_by_conv.get(conversation.id, [])
-            # Limit messages per conversation in memory
-            for msg in messages[:limit]:
-                # Determine type based on channel
-                item_type = "call" if msg.channel == "voice" else msg.channel
+            signals: dict[str, Any] | None = None
+            if msg.call_outcome is not None and msg.call_outcome.signals:
+                signals = dict(msg.call_outcome.signals)
 
-                signals: dict[str, Any] | None = None
-                if msg.call_outcome is not None and msg.call_outcome.signals:
-                    signals = dict(msg.call_outcome.signals)
+            timeline_items.append({
+                "id": msg.id,
+                "type": item_type,
+                "timestamp": msg.created_at,
+                "direction": msg.direction,
+                "is_ai": msg.is_ai,
+                "content": msg.body,
+                "duration_seconds": msg.duration_seconds,
+                "recording_url": msg.recording_url,
+                "transcript": msg.transcript,
+                "status": msg.status,
+                "booking_outcome": msg.booking_outcome,
+                "signals": signals,
+                "original_id": msg.id,
+                "original_type": f"{msg.channel}_message",
+            })
 
-                timeline_items.append({
-                    "id": msg.id,
-                    "type": item_type,
-                    "timestamp": msg.created_at,
-                    "direction": msg.direction,
-                    "is_ai": msg.is_ai,
-                    "content": msg.body,
-                    "duration_seconds": msg.duration_seconds,
-                    "recording_url": msg.recording_url,
-                    "transcript": msg.transcript,
-                    "status": msg.status,
-                    "booking_outcome": msg.booking_outcome,
-                    "signals": signals,
-                    "original_id": msg.id,
-                    "original_type": f"{msg.channel}_message",
-                })
-
-    # Sort by timestamp (oldest first)
+    # Sort by timestamp (oldest first) for client display
     timeline_items.sort(key=lambda x: x["timestamp"])
 
     log.info("timeline_retrieved", item_count=len(timeline_items))
 
-    # Return the last `limit` items
-    return timeline_items[-limit:]
+    return timeline_items
 
 
 async def list_contact_ids(
