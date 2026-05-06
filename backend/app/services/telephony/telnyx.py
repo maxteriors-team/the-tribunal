@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -213,6 +214,27 @@ class TelnyxSMSService:
         )
         log.info("processing_inbound_sms")
 
+        # Idempotency: Telnyx retries inbound webhooks on non-2xx responses
+        # (and occasionally on transient network issues). If we've already
+        # ingested this provider_message_id, return the existing Message
+        # without incrementing counters or re-firing AI/push.
+        if provider_message_id:
+            existing_result = await db.execute(
+                select(Message)
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(
+                    Message.provider_message_id == provider_message_id,
+                    Conversation.workspace_id == workspace_id,
+                )
+            )
+            existing_message = existing_result.scalar_one_or_none()
+            if existing_message is not None:
+                log.info(
+                    "inbound_sms_duplicate_ignored",
+                    message_id=str(existing_message.id),
+                )
+                return existing_message
+
         # Get or create conversation (swap from/to for inbound)
         conversation = await self._get_or_create_conversation(
             db=db,
@@ -251,7 +273,33 @@ class TelnyxSMSService:
             except Exception as e:
                 log.warning("engagement_update_failed", error=str(e))
 
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Race: a concurrent webhook delivery for the same
+            # provider_message_id committed first. Roll back our duplicate
+            # work (including the unread_count increment) and return the
+            # row that already won.
+            await db.rollback()
+            existing_result = await db.execute(
+                select(Message)
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(
+                    Message.provider_message_id == provider_message_id,
+                    Conversation.workspace_id == workspace_id,
+                )
+            )
+            existing_message = existing_result.scalar_one_or_none()
+            if existing_message is None:
+                # Constraint fired but we can't find the row — re-raise so
+                # the webhook returns non-2xx and Telnyx retries.
+                raise
+            log.info(
+                "inbound_sms_duplicate_race_ignored",
+                message_id=str(existing_message.id),
+            )
+            return existing_message
+
         await db.refresh(message)
 
         log.info("inbound_sms_processed", message_id=str(message.id))

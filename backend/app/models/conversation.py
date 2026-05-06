@@ -182,6 +182,11 @@ class Message(Base):
     """Individual message in a conversation."""
 
     __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_message_id", name="uq_messages_provider_message_id"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -209,7 +214,7 @@ class Message(Base):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="queued", index=True
     )
-    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
