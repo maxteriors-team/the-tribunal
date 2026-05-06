@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DB, CurrentUser, get_workspace
@@ -33,12 +33,13 @@ def _to_response(ls: LeadSource) -> LeadSourceResponse:
 
 @router.get("", response_model=list[LeadSourceResponse])
 async def list_lead_sources(
+    request: Request,
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> list[LeadSourceResponse]:
     """List all lead sources for a workspace."""
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(request, workspace_id, current_user, db)
 
     result = await db.execute(
         select(LeadSource)
@@ -51,13 +52,14 @@ async def list_lead_sources(
 
 @router.post("", response_model=LeadSourceResponse, status_code=status.HTTP_201_CREATED)
 async def create_lead_source(
+    request: Request,
     workspace_id: uuid.UUID,
     body: LeadSourceCreate,
     current_user: CurrentUser,
     db: DB,
 ) -> LeadSourceResponse:
     """Create a new lead source."""
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(request, workspace_id, current_user, db)
 
     lead_source = LeadSource(
         workspace_id=workspace_id,
@@ -76,13 +78,14 @@ async def create_lead_source(
 
 @router.get("/{lead_source_id}", response_model=LeadSourceResponse)
 async def get_lead_source(
+    request: Request,
     workspace_id: uuid.UUID,
     lead_source_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> LeadSourceResponse:
     """Get a single lead source."""
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(request, workspace_id, current_user, db)
 
     result = await db.execute(
         select(LeadSource).where(
@@ -99,6 +102,7 @@ async def get_lead_source(
 
 @router.put("/{lead_source_id}", response_model=LeadSourceResponse)
 async def update_lead_source(
+    request: Request,
     workspace_id: uuid.UUID,
     lead_source_id: uuid.UUID,
     body: LeadSourceUpdate,
@@ -106,7 +110,7 @@ async def update_lead_source(
     db: DB,
 ) -> LeadSourceResponse:
     """Update a lead source."""
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(request, workspace_id, current_user, db)
 
     result = await db.execute(
         select(LeadSource).where(
@@ -131,13 +135,14 @@ async def update_lead_source(
 
 @router.delete("/{lead_source_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_lead_source(
+    request: Request,
     workspace_id: uuid.UUID,
     lead_source_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> None:
     """Delete a lead source."""
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(request, workspace_id, current_user, db)
 
     result = await db.execute(
         select(LeadSource).where(

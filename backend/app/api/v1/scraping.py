@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DB, CurrentUser, get_workspace
@@ -22,6 +22,7 @@ router = APIRouter()
 
 @router.post("/search", response_model=BusinessSearchResponse)
 async def search_businesses(
+    http_request: Request,
     workspace_id: uuid.UUID,
     request: BusinessSearchRequest,
     current_user: CurrentUser,
@@ -32,7 +33,7 @@ async def search_businesses(
     Returns a list of businesses matching the search query with their details.
     """
     # Verify workspace access
-    await get_workspace(workspace_id, current_user, db)
+    await get_workspace(http_request, workspace_id, current_user, db)
 
     service = GooglePlacesService()
     try:
@@ -86,6 +87,7 @@ def _format_business_notes(lead: BusinessResult) -> str:
 
 @router.post("/import", response_model=ImportLeadsResponse)
 async def import_leads(
+    http_request: Request,
     workspace_id: uuid.UUID,
     request: ImportLeadsRequest,
     current_user: CurrentUser,
@@ -97,7 +99,7 @@ async def import_leads(
     Skips duplicates based on phone number.
     """
     # Verify workspace access
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(http_request, workspace_id, current_user, db)
 
     # Get existing phone numbers for duplicate detection
     phone_result = await db.execute(

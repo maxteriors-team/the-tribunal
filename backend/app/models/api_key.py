@@ -11,7 +11,14 @@ from app.db.base import Base
 
 
 class APIKey(Base):
-    """Long-lived API key for workspace-scoped CLI/agent access."""
+    """Long-lived API key for workspace-scoped CLI/agent access.
+
+    A key is bound to exactly one workspace via ``workspace_id``. The auth layer
+    (``app.api.deps._user_from_api_key`` /
+    ``app.api.deps._enforce_api_key_workspace``) enforces this at request time:
+    presenting a key issued for workspace A while calling a workspace-B endpoint
+    yields HTTP 403, even if the underlying user is a member of B.
+    """
 
     __tablename__ = "api_keys"
 

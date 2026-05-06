@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.api.deps import DB, CurrentUser, get_workspace
 from app.schemas.segment import (
@@ -19,12 +19,13 @@ router = APIRouter()
 
 @router.get("", response_model=SegmentListResponse)
 async def list_segments(
+    request: Request,
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> SegmentListResponse:
     """List all segments for a workspace."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     result = await service.list_segments(workspace.id)
     return SegmentListResponse(**result)
@@ -32,13 +33,14 @@ async def list_segments(
 
 @router.post("", response_model=SegmentResponse, status_code=201)
 async def create_segment(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_in: SegmentCreate,
     current_user: CurrentUser,
     db: DB,
 ) -> SegmentResponse:
     """Create a new segment."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     return await service.create_segment(
         workspace_id=workspace.id,
@@ -51,19 +53,21 @@ async def create_segment(
 
 @router.get("/{segment_id}", response_model=SegmentResponse)
 async def get_segment(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> SegmentResponse:
     """Get a specific segment."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     return await service.get_segment(segment_id, workspace.id)
 
 
 @router.put("/{segment_id}", response_model=SegmentResponse)
 async def update_segment(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_id: uuid.UUID,
     segment_in: SegmentUpdate,
@@ -71,7 +75,7 @@ async def update_segment(
     db: DB,
 ) -> SegmentResponse:
     """Update a segment."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     update_data = segment_in.model_dump(exclude_unset=True)
     # Convert FilterDefinition to dict if present
@@ -84,26 +88,28 @@ async def update_segment(
 
 @router.delete("/{segment_id}", status_code=204)
 async def delete_segment(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> None:
     """Delete a segment."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     await service.delete_segment(segment_id, workspace.id)
 
 
 @router.get("/{segment_id}/contacts", response_model=SegmentContactsResponse)
 async def get_segment_contacts(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> SegmentContactsResponse:
     """Resolve a segment to contact IDs."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     result = await service.get_segment_contacts(segment_id, workspace.id)
     return SegmentContactsResponse(**result)
@@ -111,12 +117,13 @@ async def get_segment_contacts(
 
 @router.post("/{segment_id}/refresh", response_model=SegmentResponse)
 async def refresh_segment(
+    request: Request,
     workspace_id: uuid.UUID,
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
 ) -> SegmentResponse:
     """Refresh a segment's cached contact count."""
-    workspace = await get_workspace(workspace_id, current_user, db)
+    workspace = await get_workspace(request, workspace_id, current_user, db)
     service = SegmentService(db)
     return await service.refresh_segment(segment_id, workspace.id)

@@ -64,7 +64,14 @@ async def get_optional_current_user(
 
 
 async def _user_from_api_key(request: Request, db: AsyncSession) -> User | None:
-    """Attempt to authenticate via X-API-Key header. Returns None if not present/invalid."""
+    """Attempt to authenticate via X-API-Key header. Returns None if not present/invalid.
+
+    On success, stashes the API key's workspace binding on ``request.state`` so
+    downstream workspace-resolution dependencies can enforce that the key is only
+    used against its own workspace. Without this binding, an API key issued for
+    workspace A would silently grant the underlying user access to every other
+    workspace they belong to (privilege escalation).
+    """
     api_key_header = request.headers.get("X-API-Key")
     if not api_key_header:
         return None
@@ -83,7 +90,28 @@ async def _user_from_api_key(request: Request, db: AsyncSession) -> User | None:
     user = user_result.scalar_one_or_none()
     if user is None or not user.is_active:
         return None
+
+    # Bind this request to the API key's workspace. Workspace-resolving deps
+    # MUST consult this and reject mismatched workspace_id path params.
+    request.state.api_key_workspace_id = api_key_obj.workspace_id
     return user
+
+
+def _enforce_api_key_workspace(request: Request, workspace_id: uuid.UUID) -> None:
+    """If auth came from an API key, require its workspace_id to match the URL.
+
+    API keys are workspace-scoped (see :class:`app.models.api_key.APIKey`). A key
+    issued for workspace A must not authorize access to workspace B, even when the
+    underlying user is a member of both. Raises 403 on mismatch.
+    """
+    api_key_workspace_id: uuid.UUID | None = getattr(
+        request.state, "api_key_workspace_id", None
+    )
+    if api_key_workspace_id is not None and api_key_workspace_id != workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is not authorized for this workspace",
+        )
 
 
 async def _user_from_jwt(token: str, db: AsyncSession) -> User | None:
@@ -109,11 +137,15 @@ async def _user_from_jwt(token: str, db: AsyncSession) -> User | None:
 
 
 async def get_workspace(
+    request: Request,
     workspace_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Workspace:
     """Get workspace and verify user has access."""
+    # Enforce API-key workspace binding before consulting membership.
+    _enforce_api_key_workspace(request, workspace_id)
+
     # Check membership
     result = await db.execute(
         select(WorkspaceMembership).where(
@@ -143,11 +175,14 @@ async def get_workspace(
 
 
 async def get_workspace_admin(
+    request: Request,
     workspace_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Workspace:
     """Get workspace and verify user has admin or owner access."""
+    _enforce_api_key_workspace(request, workspace_id)
+
     result = await db.execute(
         select(WorkspaceMembership).where(
             WorkspaceMembership.user_id == current_user.id,
@@ -181,11 +216,14 @@ async def get_workspace_admin(
 
 
 async def get_membership(
+    request: Request,
     workspace_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceMembership:
     """Get the current user's workspace membership (validates access)."""
+    _enforce_api_key_workspace(request, workspace_id)
+
     result = await db.execute(
         select(WorkspaceMembership).where(
             WorkspaceMembership.user_id == current_user.id,
