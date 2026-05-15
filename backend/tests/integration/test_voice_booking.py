@@ -7,7 +7,10 @@ that happens during real voice conversations.
 
 Usage:
     cd backend
-    uv run python scripts/test_voice_booking.py
+    # As pytest (integration marker required, opt-in):
+    uv run pytest -m integration tests/integration/test_voice_booking.py
+    # Or as a standalone script:
+    uv run python tests/integration/test_voice_booking.py
 
 Tests:
     1. Date format parsing (what Grok sends vs what we expect)
@@ -23,11 +26,15 @@ from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
+
 # Add backend to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings
 from app.services.calendar.calcom import CalComService
+
+pytestmark = pytest.mark.integration
 
 
 # ANSI colors for output

@@ -93,6 +93,11 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: integration tests that hit real external services (skipped by default; run with -m integration)",
+]
 
 [dependency-groups]
 dev = [
