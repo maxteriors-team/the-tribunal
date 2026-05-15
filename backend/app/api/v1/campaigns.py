@@ -183,7 +183,7 @@ async def start_campaign(
             detail="Campaign has no contacts",
         )
 
-    campaign.status = CampaignStatus.RUNNING.value
+    campaign.status = CampaignStatus.RUNNING
     campaign.started_at = datetime.now(UTC)
     if campaign.guarantee_target and campaign.guarantee_target > 0:
         campaign.guarantee_status = "pending"
@@ -209,7 +209,7 @@ async def pause_campaign(
             detail="Can only pause running campaigns",
         )
 
-    campaign.status = CampaignStatus.PAUSED.value
+    campaign.status = CampaignStatus.PAUSED
     await db.commit()
 
     return {"status": "paused"}
@@ -232,7 +232,7 @@ async def resume_campaign(
             detail="Can only resume paused campaigns",
         )
 
-    campaign.status = CampaignStatus.RUNNING.value
+    campaign.status = CampaignStatus.RUNNING
     await db.commit()
 
     return {"status": "running", "message": "Campaign resumed"}
@@ -255,7 +255,7 @@ async def cancel_campaign(
             detail="Can only cancel draft or paused campaigns",
         )
 
-    campaign.status = CampaignStatus.CANCELED.value
+    campaign.status = CampaignStatus.CANCELED
     await db.commit()
 
     return {"status": "canceled"}
@@ -466,7 +466,7 @@ async def duplicate_campaign(
         agent_id=campaign.agent_id,
         offer_id=campaign.offer_id,
         name=f"{campaign.name} (Copy)",
-        status=CampaignStatus.DRAFT.value,
+        status=CampaignStatus.DRAFT,
         from_phone_number=campaign.from_phone_number,
         initial_message=campaign.initial_message,
         ai_enabled=campaign.ai_enabled,

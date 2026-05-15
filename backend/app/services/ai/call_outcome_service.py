@@ -8,7 +8,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.call_outcome import CallOutcome
+from app.models.call_outcome import CallOutcome, ClassifiedBy, OutcomeType
 from app.models.conversation import Message
 from app.models.prompt_version import PromptVersion
 from app.services.ai.bandit_reward_service import record_bandit_reward
@@ -148,7 +148,7 @@ class CallOutcomeService:
         old_outcome_type = outcome.outcome_type
 
         if outcome_type is not None:
-            outcome.outcome_type = outcome_type
+            outcome.outcome_type = OutcomeType(outcome_type)
 
         if signals is not None:
             # Merge signals with existing
@@ -157,7 +157,7 @@ class CallOutcomeService:
             outcome.signals = existing_signals
 
         if classified_by is not None:
-            outcome.classified_by = classified_by
+            outcome.classified_by = ClassifiedBy(classified_by)
 
         if classification_confidence is not None:
             outcome.classification_confidence = classification_confidence

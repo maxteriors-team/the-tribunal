@@ -40,7 +40,7 @@ async def process_active_drip_campaigns(db: AsyncSession) -> None:
     """Process all active drip campaigns — called by the worker."""
     result = await db.execute(
         select(DripCampaign).where(
-            DripCampaign.status == DripCampaignStatus.ACTIVE.value,
+            DripCampaign.status == DripCampaignStatus.ACTIVE,
         )
     )
     campaigns = result.scalars().all()
@@ -79,7 +79,7 @@ async def _process_campaign(campaign: DripCampaign, db: AsyncSession) -> None:
         .where(
             and_(
                 DripEnrollment.drip_campaign_id == campaign.id,
-                DripEnrollment.status == DripEnrollmentStatus.ACTIVE.value,
+                DripEnrollment.status == DripEnrollmentStatus.ACTIVE,
                 DripEnrollment.next_step_at.is_not(None),
                 DripEnrollment.next_step_at <= now,
             )
@@ -128,7 +128,7 @@ async def _process_enrollment(
     """Process a single enrollment: send the current step's message."""
     contact = enrollment.contact
     if not contact or not contact.phone_number:
-        enrollment.status = DripEnrollmentStatus.CANCELLED.value
+        enrollment.status = DripEnrollmentStatus.CANCELLED
         enrollment.cancel_reason = "missing_phone"
         enrollment.completed_at = datetime.now(UTC)
         campaign.total_cancelled += 1
@@ -139,7 +139,7 @@ async def _process_enrollment(
         campaign.workspace_id, contact.phone_number, db
     )
     if is_opted_out:
-        enrollment.status = DripEnrollmentStatus.CANCELLED.value
+        enrollment.status = DripEnrollmentStatus.CANCELLED
         enrollment.cancel_reason = "opted_out"
         enrollment.completed_at = datetime.now(UTC)
         campaign.total_cancelled += 1
@@ -156,7 +156,7 @@ async def _process_enrollment(
 
     if current_step_config is None:
         # Past all steps — mark complete
-        enrollment.status = DripEnrollmentStatus.COMPLETED.value
+        enrollment.status = DripEnrollmentStatus.COMPLETED
         enrollment.completed_at = datetime.now(UTC)
         enrollment.next_step_at = None
         campaign.total_completed += 1
@@ -217,7 +217,7 @@ async def _process_enrollment(
         enrollment.next_step_at = datetime.now(UTC) + timedelta(days=delay)
     else:
         # All steps sent — mark completed
-        enrollment.status = DripEnrollmentStatus.COMPLETED.value
+        enrollment.status = DripEnrollmentStatus.COMPLETED
         enrollment.completed_at = datetime.now(UTC)
         enrollment.next_step_at = None
         campaign.total_completed += 1
@@ -257,7 +257,7 @@ async def enroll_contacts(
         enrollment = DripEnrollment(
             drip_campaign_id=campaign.id,
             contact_id=cid,
-            status=DripEnrollmentStatus.ACTIVE.value,
+            status=DripEnrollmentStatus.ACTIVE,
             current_step=0,
             next_step_at=next_step_at,
         )
@@ -285,14 +285,14 @@ async def handle_inbound_reply(
             and_(
                 DripCampaign.workspace_id == workspace_id,
                 DripEnrollment.contact_id == contact_id,
-                DripEnrollment.status == DripEnrollmentStatus.ACTIVE.value,
+                DripEnrollment.status == DripEnrollmentStatus.ACTIVE,
             )
         )
     )
     enrollments = result.scalars().all()
 
     for enrollment in enrollments:
-        enrollment.status = DripEnrollmentStatus.RESPONDED.value
+        enrollment.status = DripEnrollmentStatus.RESPONDED
         enrollment.last_reply_at = datetime.now(UTC)
         enrollment.messages_received += 1
         enrollment.next_step_at = None
@@ -323,13 +323,13 @@ async def _check_campaign_completion(
     active_count_result = await db.execute(
         select(func.count(DripEnrollment.id)).where(
             DripEnrollment.drip_campaign_id == campaign.id,
-            DripEnrollment.status == DripEnrollmentStatus.ACTIVE.value,
+            DripEnrollment.status == DripEnrollmentStatus.ACTIVE,
         )
     )
     active_count = active_count_result.scalar() or 0
 
     if active_count == 0 and campaign.total_enrolled > 0:
-        campaign.status = DripCampaignStatus.COMPLETED.value
+        campaign.status = DripCampaignStatus.COMPLETED
         campaign.completed_at = datetime.now(UTC)
         await db.commit()
         log.info("drip_campaign_completed")

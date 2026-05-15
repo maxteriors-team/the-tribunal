@@ -475,7 +475,7 @@ async def handle_booking_cancelled(data: dict[str, Any], log: Any) -> None:  # n
             return
 
         # Update appointment status
-        appointment.status = AppointmentStatus.CANCELLED.value
+        appointment.status = AppointmentStatus.CANCELLED
         appointment.sync_status = "synced"
         appointment.last_synced_at = datetime.now(UTC)
         appointment.sync_error = None  # Clear any previous sync errors
@@ -496,7 +496,7 @@ async def handle_booking_cancelled(data: dict[str, Any], log: Any) -> None:  # n
         log.info(
             "booking_cancelled",
             appointment_id=appointment.id,
-            status=AppointmentStatus.CANCELLED.value,
+            status=AppointmentStatus.CANCELLED,
             is_host_initiated=is_host_initiated,
         )
 
@@ -638,8 +638,8 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
 
         # Skip if already in terminal state
         if appointment.status in (
-            AppointmentStatus.COMPLETED.value,
-            AppointmentStatus.CANCELLED.value,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.CANCELLED,
         ):
             log.info("appointment_already_terminal", status=appointment.status)
             return
@@ -649,10 +649,10 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
         attendees = data.get("attendees", [])
 
         if no_show_host or not attendees:
-            appointment.status = AppointmentStatus.NO_SHOW.value
+            appointment.status = AppointmentStatus.NO_SHOW
             log.info("appointment_no_show", appointment_id=appointment.id)
         else:
-            appointment.status = AppointmentStatus.COMPLETED.value
+            appointment.status = AppointmentStatus.COMPLETED
             log.info("appointment_completed", appointment_id=appointment.id)
 
             # Update campaign guarantee tracking
@@ -664,7 +664,7 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
         appointment.sync_status = "synced"
         appointment.last_synced_at = datetime.now(UTC)
 
-        is_no_show = appointment.status == AppointmentStatus.NO_SHOW.value
+        is_no_show = appointment.status == AppointmentStatus.NO_SHOW
 
         # Update contact lifecycle tags and status fields before committing
         meeting_contact_result = await db.execute(

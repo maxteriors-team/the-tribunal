@@ -5,7 +5,18 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -64,11 +75,27 @@ class LeadMagnet(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Type and delivery
-    magnet_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=LeadMagnetType.PDF.value
+    magnet_type: Mapped[LeadMagnetType] = mapped_column(
+        SAEnum(
+            LeadMagnetType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=LeadMagnetType.PDF,
     )
-    delivery_method: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=DeliveryMethod.EMAIL.value
+    delivery_method: Mapped[DeliveryMethod] = mapped_column(
+        SAEnum(
+            DeliveryMethod,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=DeliveryMethod.EMAIL,
     )
 
     # Content

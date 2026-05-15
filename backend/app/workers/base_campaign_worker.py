@@ -72,7 +72,7 @@ class BaseCampaignWorker(BaseWorker):
                 .options(*[selectinload(load) for load in self.eager_loads])
                 .where(
                     and_(
-                        Campaign.status == CampaignStatus.RUNNING.value,
+                        Campaign.status == CampaignStatus.RUNNING,
                         Campaign.campaign_type == self.campaign_type.value,
                     )
                 )
@@ -110,7 +110,7 @@ class BaseCampaignWorker(BaseWorker):
 
         if campaign.scheduled_end and datetime.now(UTC) > campaign.scheduled_end:
             log.info("Campaign scheduled end reached, completing")
-            campaign.status = CampaignStatus.COMPLETED.value
+            campaign.status = CampaignStatus.COMPLETED
             campaign.completed_at = datetime.now(UTC)
             await db.commit()
             return
@@ -174,7 +174,7 @@ class BaseCampaignWorker(BaseWorker):
 
         if remaining == 0:
             log.info("All contacts processed, completing campaign")
-            campaign.status = CampaignStatus.COMPLETED.value
+            campaign.status = CampaignStatus.COMPLETED
             campaign.completed_at = datetime.now(UTC)
 
             try:

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.campaign import Campaign
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, Message, MessageStatus
 from app.models.email_event import EmailEvent, EmailEventType
 
 logger = structlog.get_logger()
@@ -39,10 +39,10 @@ _CAMPAIGN_COUNTER_FIELDS: dict[EmailEventType, str] = {
 }
 
 
-_MESSAGE_STATUS_UPDATES: dict[EmailEventType, str] = {
-    EmailEventType.SENT: "sent",
-    EmailEventType.DELIVERED: "delivered",
-    EmailEventType.BOUNCED: "failed",
+_MESSAGE_STATUS_UPDATES: dict[EmailEventType, MessageStatus] = {
+    EmailEventType.SENT: MessageStatus.SENT,
+    EmailEventType.DELIVERED: MessageStatus.DELIVERED,
+    EmailEventType.BOUNCED: MessageStatus.FAILED,
 }
 
 

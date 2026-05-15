@@ -156,7 +156,7 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:
 async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # noqa: PLR0912, PLR0915
     """Handle call answered event."""
     from app.models.agent import Agent
-    from app.models.conversation import Conversation, Message
+    from app.models.conversation import Conversation, Message, MessageStatus
     from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
     call_control_id = payload.get("call_control_id", "")
@@ -179,7 +179,7 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
             log.error("message_not_found_for_call", call_control_id=call_control_id)
             return
 
-        message.status = "answered"
+        message.status = MessageStatus.ANSWERED
         await db.commit()
 
         # Determine agent_id: prefer message.agent_id, fall back to conversation's assigned_agent_id
@@ -309,7 +309,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
     log.info("call_hangup")
 
     async with AsyncSessionLocal() as db:
-        from app.models.conversation import Message
+        from app.models.conversation import Message, MessageStatus
 
         result = await db.execute(
             select(Message)
@@ -369,9 +369,12 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                 log.info("rejected_call_detected", hangup_source=hangup_source)
 
             # Override if booking was successful
-            if message.booking_outcome == "success" and classification.message_status == "failed":
+            if (
+                message.booking_outcome == "success"
+                and classification.message_status == MessageStatus.FAILED
+            ):
                 log.info("overriding_failed_status_due_to_successful_booking")
-                message.status = "completed"
+                message.status = MessageStatus.COMPLETED
 
             await db.commit()
             log.info("message_updated", message_id=str(message.id), status=message.status)

@@ -429,7 +429,7 @@ class MessageTestService:
         if variant_count < 2:
             raise MessageTestValidationError("Test needs at least 2 variants")
 
-        message_test.status = MessageTestStatus.RUNNING.value
+        message_test.status = MessageTestStatus.RUNNING
         message_test.started_at = message_test.started_at or datetime.now(UTC)
         await self.db.commit()
 
@@ -449,7 +449,7 @@ class MessageTestService:
         if message_test.status != "running":
             raise MessageTestValidationError("Can only pause running tests")
 
-        message_test.status = MessageTestStatus.PAUSED.value
+        message_test.status = MessageTestStatus.PAUSED
         await self.db.commit()
 
         return {"status": "paused"}
@@ -467,7 +467,7 @@ class MessageTestService:
                 "Can only complete running or paused tests"
             )
 
-        message_test.status = MessageTestStatus.COMPLETED.value
+        message_test.status = MessageTestStatus.COMPLETED
         message_test.completed_at = datetime.now(UTC)
         await self.db.commit()
 
@@ -595,7 +595,7 @@ class MessageTestService:
             name=request_data.campaign_name,
             description=f"Converted from message test: {message_test.name}",
             campaign_type="sms",
-            status=CampaignStatus.DRAFT.value,
+            status=CampaignStatus.DRAFT,
             from_phone_number=message_test.from_phone_number,
             use_number_pool=message_test.use_number_pool,
             initial_message=initial_message,
@@ -616,7 +616,7 @@ class MessageTestService:
             remaining_contacts_result = await self.db.execute(
                 select(TestContact).where(
                     TestContact.message_test_id == test_id,
-                    TestContact.status == TestContactStatus.PENDING.value,
+                    TestContact.status == TestContactStatus.PENDING,
                 )
             )
             remaining_contacts = remaining_contacts_result.scalars().all()

@@ -139,7 +139,7 @@ class ReputationTracker:
         """
         # Skip if already quarantined and not reviewed
         if (
-            phone.health_status == PhoneNumberHealthStatus.QUARANTINED.value
+            phone.health_status == PhoneNumberHealthStatus.QUARANTINED
             and not phone.quarantine_reviewed
         ):
             return
@@ -150,7 +150,7 @@ class ReputationTracker:
 
         # Check for critical violations (quarantine)
         if phone.bounce_rate > self.MAX_BOUNCE_RATE:
-            phone.health_status = PhoneNumberHealthStatus.QUARANTINED.value
+            phone.health_status = PhoneNumberHealthStatus.QUARANTINED
             phone.quarantined_at = datetime.now(UTC)
             phone.quarantine_reason = f"High bounce rate: {phone.bounce_rate:.2%}"
             phone.quarantine_reviewed = False
@@ -161,7 +161,7 @@ class ReputationTracker:
             )
 
         elif phone.complaint_rate > self.MAX_COMPLAINT_RATE:
-            phone.health_status = PhoneNumberHealthStatus.QUARANTINED.value
+            phone.health_status = PhoneNumberHealthStatus.QUARANTINED
             phone.quarantined_at = datetime.now(UTC)
             phone.quarantine_reason = f"High complaint rate: {phone.complaint_rate:.4%}"
             phone.quarantine_reviewed = False
@@ -174,19 +174,19 @@ class ReputationTracker:
         elif phone.delivery_rate < self.MIN_DELIVERY_RATE:
             # Low delivery rate = cooldown (less severe)
             if phone.health_status not in [
-                PhoneNumberHealthStatus.COOLDOWN.value,
-                PhoneNumberHealthStatus.QUARANTINED.value,
+                PhoneNumberHealthStatus.COOLDOWN,
+                PhoneNumberHealthStatus.QUARANTINED,
             ]:
-                phone.health_status = PhoneNumberHealthStatus.COOLDOWN.value
+                phone.health_status = PhoneNumberHealthStatus.COOLDOWN
                 log.warning(
                     "number_cooldown_delivery_rate",
                     phone_number=phone.phone_number,
                     rate=phone.delivery_rate,
                 )
 
-        elif phone.health_status == PhoneNumberHealthStatus.COOLDOWN.value:
+        elif phone.health_status == PhoneNumberHealthStatus.COOLDOWN:
             # Number recovered - mark as healthy
-            phone.health_status = PhoneNumberHealthStatus.HEALTHY.value
+            phone.health_status = PhoneNumberHealthStatus.HEALTHY
             log.info(
                 "number_recovered_from_cooldown",
                 phone_number=phone.phone_number,
@@ -389,18 +389,18 @@ class ReputationTracker:
         if not phone:
             return False
 
-        if phone.health_status != PhoneNumberHealthStatus.QUARANTINED.value:
+        if phone.health_status != PhoneNumberHealthStatus.QUARANTINED:
             return False
 
         phone.quarantine_reviewed = True
 
         if start_warming:
             # Start warming schedule to gradually rebuild reputation
-            phone.health_status = PhoneNumberHealthStatus.WARMING.value
+            phone.health_status = PhoneNumberHealthStatus.WARMING
             phone.warming_stage = 1
             phone.warming_started_at = datetime.now(UTC)
         else:
-            phone.health_status = PhoneNumberHealthStatus.HEALTHY.value
+            phone.health_status = PhoneNumberHealthStatus.HEALTHY
 
         await db.commit()
 

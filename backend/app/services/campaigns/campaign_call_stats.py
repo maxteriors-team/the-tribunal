@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.campaign import CampaignContact
+from app.models.campaign import CampaignContact, CampaignContactStatus
 
 
 async def update_campaign_call_stats(
@@ -55,7 +55,7 @@ async def update_campaign_call_stats(
 
     if call_outcome is None and message_status == "completed":
         # Successful call — real conversation happened
-        campaign_contact.status = "call_answered"
+        campaign_contact.status = CampaignContactStatus.CALL_ANSWERED
         campaign_contact.last_call_status = "answered"
         campaign.calls_answered += 1
         log.info(
@@ -65,7 +65,7 @@ async def update_campaign_call_stats(
         )
     elif call_outcome:
         # Failed call
-        campaign_contact.status = "call_failed"
+        campaign_contact.status = CampaignContactStatus.CALL_FAILED
         campaign_contact.last_call_status = call_outcome
         if call_outcome == "no_answer":
             campaign.calls_no_answer += 1

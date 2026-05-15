@@ -5,7 +5,18 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,16 +86,33 @@ class PhoneNumber(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # === 10DLC Trust Tier Configuration ===
-    trust_tier: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=TrustTier.LOW_VOLUME.value
+    trust_tier: Mapped[TrustTier] = mapped_column(
+        SAEnum(
+            TrustTier,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=TrustTier.LOW_VOLUME,
     )
     daily_limit: Mapped[int] = mapped_column(Integer, default=75, nullable=False)
     hourly_limit: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     messages_per_second: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
 
     # === Health Status ===
-    health_status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default=PhoneNumberHealthStatus.HEALTHY.value, index=True
+    health_status: Mapped[PhoneNumberHealthStatus] = mapped_column(
+        SAEnum(
+            PhoneNumberHealthStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=PhoneNumberHealthStatus.HEALTHY,
+        index=True,
     )
 
     # === 7-Day Rolling Reputation Metrics ===

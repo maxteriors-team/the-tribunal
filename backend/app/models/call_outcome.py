@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -71,8 +72,16 @@ class CallOutcome(Base):
     )
 
     # Outcome classification
-    outcome_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True
+    outcome_type: Mapped[OutcomeType] = mapped_column(
+        SAEnum(
+            OutcomeType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        index=True,
     )
 
     # Flexible outcome signals (JSON)
@@ -89,8 +98,16 @@ class CallOutcome(Base):
     signals: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # Classification metadata
-    classified_by: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="hangup_cause"
+    classified_by: Mapped[ClassifiedBy] = mapped_column(
+        SAEnum(
+            ClassifiedBy,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=ClassifiedBy.HANGUP_CAUSE,
     )
     classification_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 

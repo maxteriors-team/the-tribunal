@@ -72,11 +72,11 @@ async def create_drip_campaign(
         sending_days=request.sending_days,
         timezone=request.timezone,
         messages_per_minute=request.messages_per_minute,
-        status=DripCampaignStatus.DRAFT.value,
+        status=DripCampaignStatus.DRAFT,
     )
 
     if request.auto_start:
-        campaign.status = DripCampaignStatus.ACTIVE.value
+        campaign.status = DripCampaignStatus.ACTIVE
         campaign.started_at = datetime.now(UTC)
 
     db.add(campaign)
@@ -116,15 +116,15 @@ async def start_drip_campaign(
     campaign = await _get_campaign(workspace_id, campaign_id, db)
 
     if campaign.status not in (
-        DripCampaignStatus.DRAFT.value,
-        DripCampaignStatus.PAUSED.value,
+        DripCampaignStatus.DRAFT,
+        DripCampaignStatus.PAUSED,
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot start campaign in '{campaign.status}' status",
         )
 
-    campaign.status = DripCampaignStatus.ACTIVE.value
+    campaign.status = DripCampaignStatus.ACTIVE
     campaign.started_at = campaign.started_at or datetime.now(UTC)
     await db.commit()
     await db.refresh(campaign)
@@ -143,13 +143,13 @@ async def pause_drip_campaign(
     """Pause a drip campaign."""
     campaign = await _get_campaign(workspace_id, campaign_id, db)
 
-    if campaign.status != DripCampaignStatus.ACTIVE.value:
+    if campaign.status != DripCampaignStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Can only pause active campaigns",
         )
 
-    campaign.status = DripCampaignStatus.PAUSED.value
+    campaign.status = DripCampaignStatus.PAUSED
     await db.commit()
     await db.refresh(campaign)
 
@@ -181,15 +181,15 @@ async def get_drip_campaign_stats(
     }
 
     total = campaign.total_enrolled or 1  # avoid division by zero
-    responded = counts.get(DripEnrollmentStatus.RESPONDED.value, 0)
-    completed = counts.get(DripEnrollmentStatus.COMPLETED.value, 0)
+    responded = counts.get(DripEnrollmentStatus.RESPONDED, 0)
+    completed = counts.get(DripEnrollmentStatus.COMPLETED, 0)
 
     return DripCampaignStats(
         total_enrolled=campaign.total_enrolled,
-        active=counts.get(DripEnrollmentStatus.ACTIVE.value, 0),
+        active=counts.get(DripEnrollmentStatus.ACTIVE, 0),
         responded=responded,
         completed=completed,
-        cancelled=counts.get(DripEnrollmentStatus.CANCELLED.value, 0),
+        cancelled=counts.get(DripEnrollmentStatus.CANCELLED, 0),
         messages_sent=campaign.total_messages_sent,
         appointments_booked=campaign.total_appointments_booked,
         response_rate=round(responded / total * 100, 1),

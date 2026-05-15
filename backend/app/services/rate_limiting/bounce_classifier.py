@@ -1,8 +1,6 @@
 """Classify Telnyx error codes into bounce types."""
 
-from typing import Literal
-
-BounceTypeValue = Literal["hard", "soft", "spam_complaint"]
+from app.models.conversation import BounceType
 
 
 class BounceClassifier:
@@ -63,7 +61,7 @@ class BounceClassifier:
         cls,
         error_code: str | None,
         error_message: str | None = None,
-    ) -> tuple[BounceTypeValue | None, str]:
+    ) -> tuple[BounceType | None, str]:
         """Classify error code into bounce type and category.
 
         Args:
@@ -83,25 +81,25 @@ class BounceClassifier:
 
         # Check spam complaints first (most severe)
         if error_code in cls.SPAM_COMPLAINT_CODES:
-            return "spam_complaint", cls._get_category(error_code)
+            return BounceType.SPAM_COMPLAINT, cls._get_category(error_code)
 
         # Check hard bounces
         if error_code in cls.HARD_BOUNCE_CODES:
-            return "hard", cls._get_category(error_code)
+            return BounceType.HARD, cls._get_category(error_code)
 
         # Check soft bounces
         if error_code in cls.SOFT_BOUNCE_CODES:
-            return "soft", cls._get_category(error_code)
+            return BounceType.SOFT, cls._get_category(error_code)
 
         # Check error message for additional classification hints
         if error_message:
             error_lower = error_message.lower()
             if "spam" in error_lower or "block" in error_lower:
-                return "spam_complaint", "content_filtered"
+                return BounceType.SPAM_COMPLAINT, "content_filtered"
             if "invalid" in error_lower or "not found" in error_lower:
-                return "hard", "invalid_number"
+                return BounceType.HARD, "invalid_number"
             if "timeout" in error_lower or "retry" in error_lower:
-                return "soft", "temporary_failure"
+                return BounceType.SOFT, "temporary_failure"
 
         # Unknown error
         return None, "unknown"

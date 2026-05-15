@@ -5,7 +5,18 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -77,8 +88,17 @@ class Appointment(Base):
         DateTime(timezone=True), nullable=False, index=True
     )
     duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="scheduled", index=True
+    status: Mapped[AppointmentStatus] = mapped_column(
+        SAEnum(
+            AppointmentStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=AppointmentStatus.SCHEDULED,
+        index=True,
     )
     service_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

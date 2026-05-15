@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.campaign import Campaign, CampaignContact
+from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 
 # Statuses that represent a final SMS delivery outcome. Once a message is in
 # one of these, subsequent provider webhooks for the same message should not
@@ -48,7 +48,7 @@ async def update_campaign_sms_reply(
         return
 
     campaign.replies_received += 1
-    campaign_contact.status = "replied"
+    campaign_contact.status = CampaignContactStatus.REPLIED
     campaign_contact.messages_received += 1
     campaign_contact.last_reply_at = datetime.now(UTC)
 
@@ -138,8 +138,8 @@ async def update_campaign_sms_delivery(
     )
 
     if delivered:
-        if campaign_contact.status == "sent":
-            campaign_contact.status = "delivered"
+        if campaign_contact.status == CampaignContactStatus.SENT:
+            campaign_contact.status = CampaignContactStatus.DELIVERED
         log.info(
             "campaign_sms_delivered",
             campaign_id=str(campaign.id),

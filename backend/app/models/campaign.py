@@ -17,6 +17,9 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -97,11 +100,29 @@ class Campaign(Base):
     # Campaign details
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    campaign_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="sms", index=True
+    campaign_type: Mapped[CampaignType] = mapped_column(
+        SAEnum(
+            CampaignType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=CampaignType.SMS,
+        index=True,
     )
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="draft", index=True
+    status: Mapped[CampaignStatus] = mapped_column(
+        SAEnum(
+            CampaignStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=CampaignStatus.DRAFT,
+        index=True,
     )
 
     # Phone settings
@@ -280,8 +301,17 @@ class CampaignContact(Base):
     )
 
     # Status tracking
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="pending", index=True
+    status: Mapped[CampaignContactStatus] = mapped_column(
+        SAEnum(
+            CampaignContactStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=CampaignContactStatus.PENDING,
+        index=True,
     )
 
     # Message tracking

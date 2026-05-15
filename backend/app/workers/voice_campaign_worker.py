@@ -51,8 +51,8 @@ class VoiceCampaignWorker(BaseCampaignWorker):
         return and_(
             CampaignContact.campaign_id == campaign.id,
             CampaignContact.status.in_([
-                CampaignContactStatus.PENDING.value,
-                CampaignContactStatus.CALLING.value,
+                CampaignContactStatus.PENDING,
+                CampaignContactStatus.CALLING,
             ]),
         )
 
@@ -94,7 +94,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
             .where(
                 and_(
                     CampaignContact.campaign_id == campaign.id,
-                    CampaignContact.status == CampaignContactStatus.PENDING.value,
+                    CampaignContact.status == CampaignContactStatus.PENDING,
                     CampaignContact.opted_out.is_(False),
                 )
             )
@@ -130,7 +130,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                     "Contact missing phone number",
                     contact_id=campaign_contact.contact_id,
                 )
-                campaign_contact.status = CampaignContactStatus.FAILED.value
+                campaign_contact.status = CampaignContactStatus.FAILED
                 campaign_contact.last_error = "missing_phone_number"
                 continue
 
@@ -150,7 +150,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                 )
 
                 # Update campaign contact
-                campaign_contact.status = CampaignContactStatus.CALLING.value
+                campaign_contact.status = CampaignContactStatus.CALLING
                 campaign_contact.call_attempts += 1
                 campaign_contact.last_call_at = datetime.now(UTC)
                 campaign_contact.call_message_id = message.id
@@ -176,7 +176,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                     phone=contact.phone_number,
                     error=str(e),
                 )
-                campaign_contact.status = CampaignContactStatus.FAILED.value
+                campaign_contact.status = CampaignContactStatus.FAILED
                 campaign_contact.last_error = str(e)
                 campaign.error_count += 1
                 campaign.last_error = str(e)
@@ -202,7 +202,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
             .where(
                 and_(
                     CampaignContact.campaign_id == campaign.id,
-                    CampaignContact.status == CampaignContactStatus.CALLING.value,
+                    CampaignContact.status == CampaignContactStatus.CALLING,
                     CampaignContact.last_call_at < cutoff_time,
                 )
             )
@@ -219,7 +219,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
         )
 
         for contact in stuck_contacts:
-            contact.status = CampaignContactStatus.CALL_FAILED.value
+            contact.status = CampaignContactStatus.CALL_FAILED
             contact.last_call_status = "no_answer"
             contact.last_error = "Call webhook timeout - no response after 5 minutes"
             campaign.calls_no_answer += 1

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.campaign import Campaign, CampaignContact
+from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
 from app.services.telephony.telnyx import TelnyxSMSService
 
@@ -108,7 +108,7 @@ async def send_sms_fallback(
         campaign_contact.sms_fallback_sent = True
         campaign_contact.sms_fallback_sent_at = datetime.now(UTC)
         campaign_contact.sms_fallback_message_id = message.id
-        campaign_contact.status = "sms_fallback_sent"
+        campaign_contact.status = CampaignContactStatus.SMS_FALLBACK_SENT
         campaign_contact.conversation_id = message.conversation_id
         campaign_contact.messages_sent += 1
 

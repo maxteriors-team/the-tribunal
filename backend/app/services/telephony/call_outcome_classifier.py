@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from app.models.conversation import MessageStatus
+
 
 @dataclass
 class CallClassificationResult:
@@ -16,7 +18,7 @@ class CallClassificationResult:
     """
 
     outcome: str | None
-    message_status: str
+    message_status: MessageStatus
     is_rejection: bool = False
     error_code: str | None = None
     error_message: str | None = None
@@ -78,43 +80,43 @@ class CallOutcomeClassifier:
 
         # Determine call outcome based on hangup cause
         call_outcome: str | None = None
-        message_status = "completed"  # Default to completed
+        message_status: MessageStatus = MessageStatus.COMPLETED  # Default to completed
         is_rejected_call = False
 
         if hangup_cause in self.NO_ANSWER_CAUSES:
             call_outcome = "no_answer"
-            message_status = "failed"
+            message_status = MessageStatus.FAILED
         elif hangup_cause in self.BUSY_CAUSES:
             call_outcome = "busy"
-            message_status = "failed"
+            message_status = MessageStatus.FAILED
         elif hangup_cause in self.REJECTION_CAUSES:
             call_outcome = "rejected"
-            message_status = "failed"
+            message_status = MessageStatus.FAILED
             is_rejected_call = True
         elif hangup_cause in self.NORMAL_CLEARING_CAUSES:
             if duration_secs == 0:
                 # No connection made
                 call_outcome = "no_answer"
-                message_status = "failed"
+                message_status = MessageStatus.FAILED
             elif duration_secs < self.SHORT_CALL_THRESHOLD_SECS and hangup_source == "callee":
                 # Callee hung up almost immediately — quick auto-reject
                 call_outcome = "rejected"
-                message_status = "failed"
+                message_status = MessageStatus.FAILED
                 is_rejected_call = True
             elif duration_secs < self.SHORT_CALL_THRESHOLD_SECS:
                 # Caller or other hung up very quickly — no real conversation
                 call_outcome = "no_answer"
-                message_status = "failed"
+                message_status = MessageStatus.FAILED
             # 5+ seconds with NORMAL_CLEARING = real interaction, leave as completed
 
         # If booking was successful, override failed status
-        if booking_outcome == "success" and message_status == "failed":
-            message_status = "completed"
+        if booking_outcome == "success" and message_status == MessageStatus.FAILED:
+            message_status = MessageStatus.COMPLETED
 
         # Populate error fields for failed calls
         error_code: str | None = None
         error_message: str | None = None
-        if message_status == "failed" and hangup_cause:
+        if message_status == MessageStatus.FAILED and hangup_cause:
             error_code = hangup_cause
             if call_outcome == "rejected":
                 error_message = "Call rejected (hung up quickly)"

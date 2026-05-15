@@ -9,7 +9,7 @@ import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, Message, MessageStatus
 
 logger = structlog.get_logger()
 
@@ -268,7 +268,7 @@ class TelnyxVoiceService:
                 call_control_id = data.get("call_control_id")
 
                 message.provider_message_id = call_control_id  # Store call_control_id
-                message.status = "ringing"
+                message.status = MessageStatus.RINGING
                 log.info(
                     "call_initiated",
                     call_id=call_id,
@@ -279,12 +279,12 @@ class TelnyxVoiceService:
                 first_error = errors[0] if errors else {}
                 error_code = str(first_error.get("code", "API_ERROR") or "API_ERROR")
                 error_msg = first_error.get("detail") or response.text
-                message.status, message.error_code = "failed", error_code
+                message.status, message.error_code = MessageStatus.FAILED, error_code
                 message.error_message = error_msg[:500] if error_msg else None
                 log.error("call_initiation_failed", error=error_msg, error_code=error_code)
 
         except Exception as e:
-            message.status = "failed"
+            message.status = MessageStatus.FAILED
             message.error_code = "EXCEPTION"
             message.error_message = str(e)[:500]
             log.exception("call_initiation_exception", error=str(e))
@@ -658,17 +658,17 @@ class TelnyxVoiceService:
             return None
 
         # Map Telnyx status to our status
-        status_map = {
-            "initiated": "initiated",
-            "ringing": "ringing",
-            "answered": "answered",
-            "completed": "completed",
-            "failed": "failed",
-            "busy": "failed",
-            "no_answer": "failed",
+        status_map: dict[str, MessageStatus] = {
+            "initiated": MessageStatus.INITIATED,
+            "ringing": MessageStatus.RINGING,
+            "answered": MessageStatus.ANSWERED,
+            "completed": MessageStatus.COMPLETED,
+            "failed": MessageStatus.FAILED,
+            "busy": MessageStatus.FAILED,
+            "no_answer": MessageStatus.FAILED,
         }
 
-        message.status = status_map.get(status, status)
+        message.status = status_map.get(status, MessageStatus(status))
         if duration_seconds is not None:
             message.duration_seconds = duration_seconds
         if recording_url:

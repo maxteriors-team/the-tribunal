@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.contact import Contact
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, Message, MessageStatus
 from app.services.messaging.link_shortener import shorten_urls_in_text
 from app.utils.phone import normalize_phone_e164, phone_lookup_variants
 from app.utils.pii import mask_phone
@@ -163,18 +163,18 @@ class TelnyxSMSService:
             if response.status_code in (200, 202):
                 data = response_data.get("data", {})
                 message.provider_message_id = data.get("id")
-                message.status = "sent"
+                message.status = MessageStatus.SENT
                 message.sent_at = datetime.now(UTC)
                 log.info("sms_sent", message_id=message.provider_message_id)
             else:
                 errors = response_data.get("errors", [])
                 first_error = errors[0] if errors else {}
                 error_msg = first_error.get("detail") if first_error else response.text
-                message.status = "failed"
+                message.status = MessageStatus.FAILED
                 log.error("sms_send_failed", error=error_msg)
 
         except Exception as e:
-            message.status = "failed"
+            message.status = MessageStatus.FAILED
             log.exception("sms_send_exception", error=str(e))
 
         # Update conversation
@@ -344,16 +344,16 @@ class TelnyxSMSService:
         previous_status = message.status
 
         # Map Telnyx status to our status
-        status_map = {
-            "queued": "queued",
-            "sending": "sending",
-            "sent": "sent",
-            "delivered": "delivered",
-            "delivery_failed": "failed",
-            "sending_failed": "failed",
+        status_map: dict[str, MessageStatus] = {
+            "queued": MessageStatus.QUEUED,
+            "sending": MessageStatus.SENDING,
+            "sent": MessageStatus.SENT,
+            "delivered": MessageStatus.DELIVERED,
+            "delivery_failed": MessageStatus.FAILED,
+            "sending_failed": MessageStatus.FAILED,
         }
 
-        message.status = status_map.get(status, status)
+        message.status = status_map.get(status, MessageStatus(status))
 
         # Store error info if provided
         if error_code:
@@ -363,7 +363,7 @@ class TelnyxSMSService:
 
         # Set delivered timestamp only on the first transition into delivered
         # so duplicate webhooks don't bump the timestamp forward.
-        if message.status == "delivered" and message.delivered_at is None:
+        if message.status == MessageStatus.DELIVERED and message.delivered_at is None:
             message.delivered_at = datetime.now(UTC)
 
         await db.commit()

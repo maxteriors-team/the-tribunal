@@ -4,7 +4,8 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,7 +68,16 @@ class BanditDecision(Base):
     )
 
     # How the arm was selected
-    decision_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    decision_type: Mapped[DecisionType] = mapped_column(
+        SAEnum(
+            DecisionType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
 
     # Exploration rate (epsilon) when using epsilon-greedy
     exploration_rate: Mapped[float | None] = mapped_column(Float, nullable=True)

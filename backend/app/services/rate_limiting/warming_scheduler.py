@@ -66,7 +66,7 @@ class WarmingScheduler:
         """
         phone.warming_stage = 1
         phone.warming_started_at = datetime.now(UTC)
-        phone.health_status = PhoneNumberHealthStatus.WARMING.value
+        phone.health_status = PhoneNumberHealthStatus.WARMING
 
         await db.commit()
 
@@ -104,7 +104,7 @@ class WarmingScheduler:
             if phone.warming_stage >= 7:
                 # Warming complete
                 phone.warming_stage = 0
-                phone.health_status = PhoneNumberHealthStatus.HEALTHY.value
+                phone.health_status = PhoneNumberHealthStatus.HEALTHY
 
                 self.logger.info(
                     "warming_completed",
@@ -141,7 +141,7 @@ class WarmingScheduler:
         """
         phone.warming_stage = 1
         phone.warming_started_at = datetime.now(UTC)
-        phone.health_status = PhoneNumberHealthStatus.WARMING.value
+        phone.health_status = PhoneNumberHealthStatus.WARMING
 
         await db.commit()
 

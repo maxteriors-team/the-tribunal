@@ -24,6 +24,9 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -90,8 +93,17 @@ class DripCampaign(Base):
     # Campaign details
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="draft", index=True
+    status: Mapped[DripCampaignStatus] = mapped_column(
+        SAEnum(
+            DripCampaignStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=DripCampaignStatus.DRAFT,
+        index=True,
     )
 
     # Phone settings
@@ -190,8 +202,17 @@ class DripEnrollment(Base):
     )
 
     # Progress
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="active", index=True
+    status: Mapped[DripEnrollmentStatus] = mapped_column(
+        SAEnum(
+            DripEnrollmentStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=DripEnrollmentStatus.ACTIVE,
+        index=True,
     )
     current_step: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     next_step_at: Mapped[datetime | None] = mapped_column(
@@ -199,7 +220,16 @@ class DripEnrollment(Base):
     )
 
     # Response tracking
-    response_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    response_category: Mapped[ResponseCategory | None] = mapped_column(
+        SAEnum(
+            ResponseCategory,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=True,
+    )
     cancel_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Message stats

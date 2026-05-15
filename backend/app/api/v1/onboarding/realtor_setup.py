@@ -493,7 +493,7 @@ async def create_realtor_campaign(
     campaign.total_contacts = added_count
 
     # 7. Start the campaign
-    campaign.status = CampaignStatus.RUNNING.value
+    campaign.status = CampaignStatus.RUNNING
     campaign.started_at = datetime.now(UTC)
 
     # 8. Create and start drip campaign (automated multi-step reactivation)

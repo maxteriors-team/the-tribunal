@@ -60,7 +60,7 @@ class MessageTestWorker(BaseWorker):
                     selectinload(MessageTest.agent),
                     selectinload(MessageTest.variants),
                 )
-                .where(MessageTest.status == MessageTestStatus.RUNNING.value)
+                .where(MessageTest.status == MessageTestStatus.RUNNING)
             )
             tests = result.scalars().all()
 
@@ -112,7 +112,7 @@ class MessageTestWorker(BaseWorker):
             .where(
                 and_(
                     TestContact.message_test_id == test.id,
-                    TestContact.status == TestContactStatus.PENDING.value,
+                    TestContact.status == TestContactStatus.PENDING,
                     TestContact.opted_out.is_(False),
                 )
             )
@@ -151,7 +151,7 @@ class MessageTestWorker(BaseWorker):
 
         test_contact.variant_id = variant.id
         test_contact.variant_assigned_at = datetime.now(UTC)
-        test_contact.status = TestContactStatus.SENT.value
+        test_contact.status = TestContactStatus.SENT
         test_contact.conversation_id = message.conversation_id
         test_contact.first_sent_at = datetime.now(UTC)
 
@@ -236,7 +236,7 @@ class MessageTestWorker(BaseWorker):
         """Process a single contact. Returns 'sent', 'skip', or 'break'."""
         contact = test_contact.contact
         if not contact or not contact.phone_number:
-            test_contact.status = TestContactStatus.FAILED.value
+            test_contact.status = TestContactStatus.FAILED
             test_contact.last_error = "missing_phone_number"
             return "skip"
 
@@ -244,7 +244,7 @@ class MessageTestWorker(BaseWorker):
             test.workspace_id, contact.phone_number, db
         )
         if is_opted_out:
-            test_contact.status = TestContactStatus.OPTED_OUT.value
+            test_contact.status = TestContactStatus.OPTED_OUT
             test_contact.opted_out = True
             test_contact.opted_out_at = datetime.now(UTC)
             return "skip"
@@ -263,7 +263,7 @@ class MessageTestWorker(BaseWorker):
             return "sent"
         except Exception as e:
             log.exception("Failed to send test message", contact_id=contact.id, error=str(e))
-            test_contact.status = TestContactStatus.FAILED.value
+            test_contact.status = TestContactStatus.FAILED
             test_contact.last_error = str(e)
             test.error_count += 1
             test.last_error = str(e)
@@ -280,7 +280,7 @@ class MessageTestWorker(BaseWorker):
             select(func.count(TestContact.id)).where(
                 and_(
                     TestContact.message_test_id == test.id,
-                    TestContact.status == TestContactStatus.PENDING.value,
+                    TestContact.status == TestContactStatus.PENDING,
                 )
             )
         )
@@ -288,7 +288,7 @@ class MessageTestWorker(BaseWorker):
 
         if remaining == 0:
             log.info("All contacts processed, completing test")
-            test.status = MessageTestStatus.COMPLETED.value
+            test.status = MessageTestStatus.COMPLETED
             test.completed_at = datetime.now(UTC)
 
     def _render_template(

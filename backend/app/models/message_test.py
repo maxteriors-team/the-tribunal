@@ -17,6 +17,9 @@ from sqlalchemy import (
     Time,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,8 +78,17 @@ class MessageTest(Base):
     # Test details
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="draft", index=True
+    status: Mapped[MessageTestStatus] = mapped_column(
+        SAEnum(
+            MessageTestStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=MessageTestStatus.DRAFT,
+        index=True,
     )
 
     # Phone settings
@@ -270,8 +282,17 @@ class TestContact(Base):
     )
 
     # Status tracking
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="pending", index=True
+    status: Mapped[TestContactStatus] = mapped_column(
+        SAEnum(
+            TestContactStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=TestContactStatus.PENDING,
+        index=True,
     )
 
     # Qualification

@@ -71,7 +71,7 @@ class CampaignWorker(BaseCampaignWorker):
         return and_(
             CampaignContact.campaign_id == campaign.id,
             or_(
-                CampaignContact.status == CampaignContactStatus.PENDING.value,
+                CampaignContact.status == CampaignContactStatus.PENDING,
                 and_(
                     CampaignContact.next_follow_up_at.is_not(None),
                     CampaignContact.follow_ups_sent < campaign.max_follow_ups,
@@ -124,7 +124,7 @@ class CampaignWorker(BaseCampaignWorker):
             .where(
                 and_(
                     CampaignContact.campaign_id == campaign.id,
-                    CampaignContact.status == CampaignContactStatus.PENDING.value,
+                    CampaignContact.status == CampaignContactStatus.PENDING,
                     CampaignContact.opted_out.is_(False),
                 )
             )
@@ -154,7 +154,7 @@ class CampaignWorker(BaseCampaignWorker):
                     "Contact missing phone number",
                     contact_id=campaign_contact.contact_id,
                 )
-                campaign_contact.status = CampaignContactStatus.FAILED.value
+                campaign_contact.status = CampaignContactStatus.FAILED
                 campaign_contact.last_error = "missing_phone_number"
                 continue
 
@@ -165,7 +165,7 @@ class CampaignWorker(BaseCampaignWorker):
                 db,
             )
             if is_opted_out:
-                campaign_contact.status = CampaignContactStatus.OPTED_OUT.value
+                campaign_contact.status = CampaignContactStatus.OPTED_OUT
                 campaign_contact.opted_out = True
                 campaign_contact.opted_out_at = datetime.now(UTC)
                 campaign.contacts_opted_out += 1
@@ -183,7 +183,7 @@ class CampaignWorker(BaseCampaignWorker):
                 # Skip if no initial message template
                 if not campaign.initial_message:
                     log.warning("no_initial_message_template", campaign_id=str(campaign.id))
-                    campaign_contact.status = CampaignContactStatus.FAILED.value
+                    campaign_contact.status = CampaignContactStatus.FAILED
                     campaign_contact.last_error = "missing_initial_message"
                     continue
 
@@ -212,7 +212,7 @@ class CampaignWorker(BaseCampaignWorker):
                 await self.reputation_tracker.increment_sent(from_phone.id, db)
 
                 # Update contact status and link conversation
-                campaign_contact.status = CampaignContactStatus.SENT.value
+                campaign_contact.status = CampaignContactStatus.SENT
                 campaign_contact.conversation_id = message.conversation_id
                 campaign_contact.messages_sent += 1
                 campaign_contact.first_sent_at = campaign_contact.first_sent_at or datetime.now(UTC)
@@ -249,7 +249,7 @@ class CampaignWorker(BaseCampaignWorker):
                     phone=contact.phone_number,
                     error=str(e),
                 )
-                campaign_contact.status = CampaignContactStatus.FAILED.value
+                campaign_contact.status = CampaignContactStatus.FAILED
                 campaign_contact.last_error = str(e)
                 campaign.messages_failed += 1
                 campaign.error_count += 1
@@ -304,8 +304,8 @@ class CampaignWorker(BaseCampaignWorker):
                 and_(
                     CampaignContact.campaign_id == campaign.id,
                     CampaignContact.status.in_([
-                        CampaignContactStatus.SENT.value,
-                        CampaignContactStatus.DELIVERED.value,
+                        CampaignContactStatus.SENT,
+                        CampaignContactStatus.DELIVERED,
                     ]),
                     CampaignContact.next_follow_up_at.is_not(None),
                     CampaignContact.next_follow_up_at <= now,
@@ -345,7 +345,7 @@ class CampaignWorker(BaseCampaignWorker):
                 db,
             )
             if is_opted_out:
-                campaign_contact.status = CampaignContactStatus.OPTED_OUT.value
+                campaign_contact.status = CampaignContactStatus.OPTED_OUT
                 campaign_contact.opted_out = True
                 campaign_contact.opted_out_at = datetime.now(UTC)
                 campaign.contacts_opted_out += 1
@@ -389,8 +389,8 @@ class CampaignWorker(BaseCampaignWorker):
                     )
                 else:
                     campaign_contact.next_follow_up_at = None
-                    if campaign_contact.status != CampaignContactStatus.REPLIED.value:
-                        campaign_contact.status = CampaignContactStatus.COMPLETED.value
+                    if campaign_contact.status != CampaignContactStatus.REPLIED:
+                        campaign_contact.status = CampaignContactStatus.COMPLETED
 
                 campaign.messages_sent += 1
                 sent_count += 1

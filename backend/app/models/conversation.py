@@ -16,6 +16,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,6 +53,11 @@ class MessageStatus(StrEnum):
     DELIVERED = "delivered"
     FAILED = "failed"
     RECEIVED = "received"
+    # Voice-call states
+    INITIATED = "initiated"
+    RINGING = "ringing"
+    ANSWERED = "answered"
+    COMPLETED = "completed"
 
 
 class MessageChannel(StrEnum):
@@ -58,6 +66,14 @@ class MessageChannel(StrEnum):
     SMS = "sms"
     VOICE = "voice"
     VOICEMAIL = "voicemail"
+
+
+class ConversationStatus(StrEnum):
+    """Conversation status."""
+
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+    BLOCKED = "blocked"
 
 
 class Conversation(Base):
@@ -101,9 +117,18 @@ class Conversation(Base):
     )  # Contact's phone
 
     # Status
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="active", index=True
-    )  # active, archived, blocked
+    status: Mapped[ConversationStatus] = mapped_column(
+        SAEnum(
+            ConversationStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=ConversationStatus.ACTIVE,
+        index=True,
+    )
     channel: Mapped[str] = mapped_column(
         String(20), nullable=False, default="sms"
     )  # sms, voice, mixed
@@ -211,10 +236,27 @@ class Message(Base):
     )
 
     # Message details
-    direction: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    channel: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # sms, voice, voicemail, email
+    direction: Mapped[MessageDirection] = mapped_column(
+        SAEnum(
+            MessageDirection,
+            native_enum=False,
+            create_constraint=False,
+            length=20,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        index=True,
+    )
+    channel: Mapped[MessageChannel] = mapped_column(
+        SAEnum(
+            MessageChannel,
+            native_enum=False,
+            create_constraint=False,
+            length=20,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
     body: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Email-specific fields
@@ -223,17 +265,33 @@ class Message(Base):
     sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
     # Delivery tracking
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="queued", index=True
+    status: Mapped[MessageStatus] = mapped_column(
+        SAEnum(
+            MessageStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=MessageStatus.QUEUED,
+        index=True,
     )
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # === Bounce Classification ===
-    bounce_type: Mapped[str | None] = mapped_column(
-        String(50), nullable=True
-    )  # hard, soft, spam_complaint
+    bounce_type: Mapped[BounceType | None] = mapped_column(
+        SAEnum(
+            BounceType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=True,
+    )
     bounce_category: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )  # invalid_number, carrier_block, opted_out, etc.

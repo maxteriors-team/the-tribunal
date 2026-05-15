@@ -4,7 +4,8 @@ import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -68,8 +69,16 @@ class CallFeedback(Base):
     )
 
     # Feedback source
-    source: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True
+    source: Mapped[FeedbackSource] = mapped_column(
+        SAEnum(
+            FeedbackSource,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        index=True,
     )
 
     # Who provided feedback (for user feedback)
@@ -83,9 +92,16 @@ class CallFeedback(Base):
     rating: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )  # 1-5 star rating
-    thumbs: Mapped[str | None] = mapped_column(
-        String(10), nullable=True
-    )  # "up" or "down"
+    thumbs: Mapped[ThumbsRating | None] = mapped_column(
+        SAEnum(
+            ThumbsRating,
+            native_enum=False,
+            create_constraint=False,
+            length=10,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=True,
+    )
 
     # Free-form feedback
     feedback_text: Mapped[str | None] = mapped_column(Text, nullable=True)
