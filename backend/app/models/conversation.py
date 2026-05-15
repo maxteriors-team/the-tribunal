@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -66,6 +67,12 @@ class Conversation(Base):
     __table_args__ = (
         UniqueConstraint(
             "workspace_id", "workspace_phone", "contact_phone", name="uq_conversation_phones"
+        ),
+        Index(
+            "ix_conversations_workspace_last_message_at",
+            "workspace_id",
+            "last_message_at",
+            postgresql_ops={"last_message_at": "DESC"},
         ),
     )
 
@@ -185,6 +192,11 @@ class Message(Base):
     __table_args__ = (
         UniqueConstraint(
             "provider_message_id", name="uq_messages_provider_message_id"
+        ),
+        Index(
+            "ix_messages_conversation_created_at",
+            "conversation_id",
+            "created_at",
         ),
     )
 

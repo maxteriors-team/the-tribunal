@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,13 @@ class LeadMagnetLead(Base):
     """Track leads captured via lead magnets."""
 
     __tablename__ = "lead_magnet_leads"
+    __table_args__ = (
+        Index(
+            "ix_lead_magnet_leads_workspace_created_at",
+            "workspace_id",
+            "created_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

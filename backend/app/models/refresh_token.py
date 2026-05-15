@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,14 @@ class RefreshToken(Base):
     """
 
     __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        Index(
+            "ix_refresh_tokens_user_revoked_expires",
+            "user_id",
+            "revoked",
+            "expires_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,18 @@ class DemoRequest(Base):
     """Track demo requests for rate limiting."""
 
     __tablename__ = "demo_requests"
+    __table_args__ = (
+        Index(
+            "ix_demo_requests_phone_created_at",
+            "phone_number",
+            "created_at",
+        ),
+        Index(
+            "ix_demo_requests_client_ip_created_at",
+            "client_ip",
+            "created_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

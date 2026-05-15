@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,11 @@ class AutomationExecution(Base):
             "automation_id",
             "contact_id",
             name="uq_automation_execution",
+        ),
+        Index(
+            "ix_automation_executions_status_scheduled_for",
+            "status",
+            "scheduled_for",
         ),
     )
 

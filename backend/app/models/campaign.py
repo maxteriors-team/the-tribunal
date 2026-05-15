@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -253,6 +254,7 @@ class CampaignContact(Base):
     __tablename__ = "campaign_contacts"
     __table_args__ = (
         UniqueConstraint("campaign_id", "contact_id", name="uq_campaign_contact"),
+        Index("ix_campaign_contacts_campaign_status", "campaign_id", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

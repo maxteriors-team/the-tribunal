@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,13 @@ class Appointment(Base):
     """Booked appointment with Cal.com sync."""
 
     __tablename__ = "appointments"
+    __table_args__ = (
+        Index(
+            "ix_appointments_workspace_scheduled_at",
+            "workspace_id",
+            "scheduled_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
