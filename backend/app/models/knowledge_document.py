@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -10,12 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if True:  # TYPE_CHECKING equivalent to avoid circular imports
-    from typing import TYPE_CHECKING
-
-    if TYPE_CHECKING:
-        from app.models.agent import Agent
-        from app.models.workspace import Workspace
+if TYPE_CHECKING:
+    from app.models.agent import Agent
+    from app.models.workspace import Workspace
 
 
 class KnowledgeDocument(Base):

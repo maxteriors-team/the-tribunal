@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Float, ForeignKey
 from sqlalchemy import Enum as SAEnum
@@ -11,13 +12,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if True:  # TYPE_CHECKING equivalent to avoid circular imports
-    from typing import TYPE_CHECKING
-
-    if TYPE_CHECKING:
-        from app.models.agent import Agent
-        from app.models.conversation import Message
-        from app.models.prompt_version import PromptVersion
+if TYPE_CHECKING:
+    from app.models.agent import Agent
+    from app.models.conversation import Message
+    from app.models.prompt_version import PromptVersion
 
 
 class DecisionType(StrEnum):

@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -9,12 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-if True:  # TYPE_CHECKING equivalent to avoid circular imports
-    from typing import TYPE_CHECKING
-
-    if TYPE_CHECKING:
-        from app.models.agent import Agent
-        from app.models.user import User
+if TYPE_CHECKING:
+    from app.models.agent import Agent
+    from app.models.user import User
 
 
 class PromptVersion(Base):
