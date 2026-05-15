@@ -8,8 +8,7 @@ import type { UseWizardReturn, WizardStepDef } from "@/hooks/useWizard";
 
 export interface BaseCampaignWizardLayoutProps<
   TStepId extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  TFormData extends object = any,
+  TFormData extends object = Record<string, unknown>,
 > {
   /** Steps array passed to WizardContainer (must match the wizard instance). */
   steps: readonly WizardStepDef<TStepId>[];
@@ -33,8 +32,7 @@ export interface BaseCampaignWizardLayoutProps<
  */
 export function BaseCampaignWizardLayout<
   TStepId extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  TFormData extends object = any,
+  TFormData extends object = Record<string, unknown>,
 >({
   steps,
   wizard,
