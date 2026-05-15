@@ -164,7 +164,7 @@ class OpportunityUpdate(BaseModel):
     currency: str | None = None
     stage_id: uuid.UUID | None = None
     expected_close_date: date | None = None
-    assigned_user_id: uuid.UUID | None = None
+    assigned_user_id: int | None = None
     source: str | None = None
     status: OpportunityStatus | None = None
     lost_reason: str | None = None
@@ -179,7 +179,7 @@ class OpportunityResponse(OpportunityBase):
     pipeline_id: uuid.UUID
     stage_id: uuid.UUID | None = None
     primary_contact_id: int | None = None
-    assigned_user_id: uuid.UUID | None = None
+    assigned_user_id: int | None = None
     probability: int
     status: OpportunityStatus
     lost_reason: str | None = None

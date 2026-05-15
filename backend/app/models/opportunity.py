@@ -74,8 +74,8 @@ class Opportunity(Base):
     )
 
     # Assigned user (deal owner)
-    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    assigned_user_id: Mapped[int | None] = mapped_column(
+        Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -215,8 +215,8 @@ class OpportunityActivity(Base):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
