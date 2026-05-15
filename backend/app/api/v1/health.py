@@ -23,6 +23,8 @@ from sqlalchemy import text
 
 from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal
+from app.workers import ALL_REGISTRIES
+from app.workers.base import heartbeat_key
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -68,6 +70,56 @@ async def _check_redis() -> tuple[bool, str | None]:
         return False, type(exc).__name__
 
 
+def _expected_worker_labels() -> list[str]:
+    """Return the component names of workers that are expected to be running.
+
+    A worker only counts toward the heartbeat check after its registry has
+    produced a live instance — i.e. once :func:`start_all_workers` has
+    completed. During cold start the registries are empty and this returns
+    an empty list, so ``/readyz`` won't spuriously fail before workers boot.
+    """
+    labels: list[str] = []
+    for registry in ALL_REGISTRIES:
+        instance = registry.get()
+        if instance is None:
+            continue
+        labels.append(
+            instance.COMPONENT_NAME or instance.__class__.__name__.lower()
+        )
+    return labels
+
+
+async def _check_worker_heartbeats() -> tuple[bool, dict[str, bool], str | None]:
+    """Verify every running worker has a fresh heartbeat key in Redis.
+
+    Returns ``(ok, per_worker, error)`` where ``per_worker`` maps each
+    expected worker's label to whether its heartbeat key currently exists.
+    A missing or expired key means the worker loop hasn't completed a cycle
+    within ``HEARTBEAT_TTL_MULTIPLIER * poll_interval`` seconds and is
+    presumed wedged.
+    """
+    labels = _expected_worker_labels()
+    if not labels:
+        # Pre-startup or test contexts — nothing to check.
+        return True, {}, None
+
+    try:
+        async def _run() -> dict[str, bool]:
+            client = await get_redis()
+            results = await asyncio.gather(
+                *(client.exists(heartbeat_key(label)) for label in labels)
+            )
+            return {label: bool(exists) for label, exists in zip(labels, results, strict=True)}
+
+        per_worker = await asyncio.wait_for(_run(), timeout=_PROBE_TIMEOUT_SECONDS)
+    except TimeoutError:
+        return False, dict.fromkeys(labels, False), "timeout"
+    except Exception as exc:  # noqa: BLE001 — surface any driver/connection error
+        return False, dict.fromkeys(labels, False), type(exc).__name__
+
+    return all(per_worker.values()), per_worker, None
+
+
 @router.get("/livez", tags=["Health"])
 async def livez() -> dict[str, str]:
     """Liveness probe — process is up.
@@ -84,19 +136,26 @@ async def readyz(response: Response) -> dict[str, Any]:
     Returns HTTP 503 when either dependency fails or times out so upstream
     load balancers stop sending traffic to this instance.
     """
-    postgres_result, redis_result = await asyncio.gather(
+    postgres_result, redis_result, worker_result = await asyncio.gather(
         _check_postgres(),
         _check_redis(),
+        _check_worker_heartbeats(),
     )
     postgres_ok, postgres_err = postgres_result
     redis_ok, redis_err = redis_result
+    workers_ok, worker_states, worker_err = worker_result
 
     checks = {
         "postgres": {"ok": postgres_ok, "error": postgres_err},
         "redis": {"ok": redis_ok, "error": redis_err},
+        "workers": {
+            "ok": workers_ok,
+            "error": worker_err,
+            "heartbeats": worker_states,
+        },
     }
 
-    if not (postgres_ok and redis_ok):
+    if not (postgres_ok and redis_ok and workers_ok):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         logger.warning(
             "readyz_failed",
@@ -104,6 +163,11 @@ async def readyz(response: Response) -> dict[str, Any]:
             postgres_err=postgres_err,
             redis_ok=redis_ok,
             redis_err=redis_err,
+            workers_ok=workers_ok,
+            worker_err=worker_err,
+            missing_heartbeats=[
+                label for label, ok in worker_states.items() if not ok
+            ],
         )
         return {"status": "unavailable", "checks": checks}
 

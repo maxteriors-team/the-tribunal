@@ -167,6 +167,60 @@ class TestReadyz:
         assert body["checks"]["postgres"]["error"] == "timeout"
         assert body["checks"]["redis"]["error"] == "timeout"
 
+    async def test_readyz_returns_503_when_worker_heartbeat_missing(
+        self, client: AsyncClient
+    ) -> None:
+        """Missing heartbeat ⇒ worker is wedged ⇒ /readyz flips to 503."""
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_worker_heartbeats",
+                new=AsyncMock(
+                    return_value=(False, {"campaign_worker": False}, None)
+                ),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 503
+        body = response.json()
+        assert body["status"] == "unavailable"
+        assert body["checks"]["workers"]["ok"] is False
+        assert body["checks"]["workers"]["heartbeats"] == {
+            "campaign_worker": False
+        }
+
+    async def test_readyz_returns_200_when_all_heartbeats_present(
+        self, client: AsyncClient
+    ) -> None:
+        """All workers have fresh heartbeats ⇒ /readyz passes."""
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_worker_heartbeats",
+                new=AsyncMock(
+                    return_value=(True, {"campaign_worker": True}, None)
+                ),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["checks"]["workers"]["ok"] is True
+
 
 class TestPostgresProbe:
     """Unit tests for the Postgres probe helper."""

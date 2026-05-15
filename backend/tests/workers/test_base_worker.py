@@ -6,8 +6,14 @@ No external services, databases, or Redis required.
 """
 
 import asyncio
+from unittest.mock import AsyncMock, patch
 
-from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.base import (
+    HEARTBEAT_TTL_MULTIPLIER,
+    BaseWorker,
+    WorkerRegistry,
+    heartbeat_key,
+)
 
 
 class ConcreteWorker(BaseWorker):
@@ -155,6 +161,121 @@ class TestBaseWorkerLifecycle:
         await worker.stop()
         # Loop kept running despite errors
         assert worker.process_count >= count_before
+
+
+class TestHeartbeatAndLogging:
+    """Tests for Redis heartbeat writes, structured logs, and sleep jitter."""
+
+    async def test_heartbeat_written_after_each_cycle(self) -> None:
+        """Each completed cycle writes ``worker:<name>:heartbeat`` via ``setex``."""
+        fake_redis = AsyncMock()
+        fake_redis.setex = AsyncMock(return_value=True)
+
+        async def _get_redis() -> AsyncMock:
+            return fake_redis
+
+        worker = ConcreteWorker(poll_interval=1)
+        with patch("app.workers.base.get_redis", new=_get_redis):
+            await worker.start()
+            await asyncio.sleep(0.05)
+            await worker.stop()
+
+        assert fake_redis.setex.await_count >= 1
+        call_kwargs = fake_redis.setex.call_args_list[0]
+        key, ttl, _value = call_kwargs.args
+        assert key == heartbeat_key("test_worker")
+        assert ttl == HEARTBEAT_TTL_MULTIPLIER * 1
+
+    async def test_heartbeat_write_failure_does_not_crash_loop(self) -> None:
+        """Redis being unreachable is logged and swallowed; loop keeps running."""
+
+        async def _broken_get_redis() -> AsyncMock:
+            raise RuntimeError("redis is down")
+
+        worker = ConcreteWorker(poll_interval=0)
+        with patch("app.workers.base.get_redis", new=_broken_get_redis):
+            await worker.start()
+            await asyncio.sleep(0.05)
+            count = worker.process_count
+            await worker.stop()
+
+        # The loop continued even though every heartbeat write blew up.
+        assert count >= 1
+
+    async def test_heartbeat_also_written_when_process_items_raises(self) -> None:
+        """A wedged-but-recovering cycle still publishes a heartbeat."""
+        fake_redis = AsyncMock()
+        fake_redis.setex = AsyncMock(return_value=True)
+
+        async def _get_redis() -> AsyncMock:
+            return fake_redis
+
+        worker = ErrorWorker()
+        with patch("app.workers.base.get_redis", new=_get_redis):
+            await worker.start()
+            await asyncio.sleep(0.05)
+            await worker.stop()
+
+        # Even though _process_items raises every cycle, the heartbeat is
+        # still written so /readyz reflects "loop is alive" rather than
+        # "loop is wedged".
+        assert fake_redis.setex.await_count >= 1
+
+    async def test_record_items_processed_feeds_into_loop_completed_log(self) -> None:
+        """``record_items_processed`` increments the per-cycle counter."""
+        observed: list[int] = []
+
+        class CountingWorker(BaseWorker):
+            POLL_INTERVAL_SECONDS = 0
+            COMPONENT_NAME = "counting_worker"
+
+            async def _process_items(self) -> None:
+                self.record_items_processed(3)
+                observed.append(self._items_this_cycle)
+
+        fake_redis = AsyncMock()
+        fake_redis.setex = AsyncMock(return_value=True)
+
+        async def _get_redis() -> AsyncMock:
+            return fake_redis
+
+        worker = CountingWorker()
+        with patch("app.workers.base.get_redis", new=_get_redis):
+            await worker.start()
+            await asyncio.sleep(0.05)
+            await worker.stop()
+
+        assert observed and all(value == 3 for value in observed)
+
+    async def test_sleep_uses_jitter(self) -> None:
+        """``asyncio.sleep`` is called with poll_interval + jitter (≤10%)."""
+        sleep_durations: list[float] = []
+        real_sleep = asyncio.sleep
+
+        async def _record_sleep(delay: float) -> None:
+            sleep_durations.append(delay)
+            # Hand control back so the loop can iterate quickly.
+            await real_sleep(0)
+
+        fake_redis = AsyncMock()
+        fake_redis.setex = AsyncMock(return_value=True)
+
+        async def _get_redis() -> AsyncMock:
+            return fake_redis
+
+        worker = ConcreteWorker(poll_interval=10)
+        with (
+            patch("app.workers.base.get_redis", new=_get_redis),
+            patch("app.workers.base.asyncio.sleep", new=_record_sleep),
+        ):
+            await worker.start()
+            await real_sleep(0.05)
+            await worker.stop()
+
+        assert sleep_durations, "loop never reached the sleep call"
+        for delay in sleep_durations:
+            # Must always be >= poll_interval and <= poll_interval * 1.10
+            assert 10 <= delay <= 11.0
 
 
 class TestWorkerRegistry:

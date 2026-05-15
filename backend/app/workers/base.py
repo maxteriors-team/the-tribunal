@@ -5,10 +5,13 @@ Provides a reusable base class that extracts common worker patterns:
 - Async run loop with configurable poll interval
 - Logging with component name binding
 - Singleton registry for global worker instances
+- Redis heartbeat keys so ``/readyz`` can verify per-worker liveness
 """
 
 import asyncio
 import contextlib
+import random
+import time
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
@@ -18,8 +21,23 @@ from app.core.metrics import (
     observe_worker_item,
     worker_loop_timer,
 )
+from app.db.redis import get_redis
 
 logger = structlog.get_logger()
+
+# Heartbeat TTL is set to ``HEARTBEAT_TTL_MULTIPLIER * poll_interval`` so that a
+# single missed cycle still leaves the key alive, but two consecutive misses
+# (a wedged loop) cause the key to expire and ``/readyz`` to flip to 503.
+HEARTBEAT_TTL_MULTIPLIER = 3
+
+# Jitter is bounded to 10% of the poll interval. Enough to desynchronise
+# workers across processes without materially shifting effective throughput.
+_JITTER_FRACTION = 0.1
+
+
+def heartbeat_key(component_name: str) -> str:
+    """Return the Redis key that holds ``component_name``'s heartbeat timestamp."""
+    return f"worker:{component_name}:heartbeat"
 
 
 class BaseWorker(ABC):
@@ -58,9 +76,9 @@ class BaseWorker(ABC):
         self.running = False
         self._task: asyncio.Task[None] | None = None
         self._poll_interval = poll_interval or self.POLL_INTERVAL_SECONDS
-        self.logger = logger.bind(
-            component=self.COMPONENT_NAME or self.__class__.__name__.lower()
-        )
+        self._worker_label = self.COMPONENT_NAME or self.__class__.__name__.lower()
+        self._items_this_cycle = 0
+        self.logger = logger.bind(component=self._worker_label)
 
     async def start(self) -> None:
         """Start the worker background task."""
@@ -85,18 +103,64 @@ class BaseWorker(ABC):
         self.logger.info("Worker stopped")
 
     async def _run_loop(self) -> None:
-        """Main worker loop that polls for items to process."""
-        worker_label = self.COMPONENT_NAME or self.__class__.__name__.lower()
+        """Main worker loop that polls for items to process.
+
+        Each cycle:
+        1. Times ``_process_items`` and updates Prometheus histograms/counters
+           via :func:`worker_loop_timer` (success or failure).
+        2. Writes a Redis heartbeat key with a TTL of
+           ``HEARTBEAT_TTL_MULTIPLIER * poll_interval`` so ``/readyz`` can
+           detect wedged workers.
+        3. Emits a structured ``loop_completed`` log with elapsed wall time
+           and the number of items the subclass reported via
+           :meth:`record_items_processed`.
+        4. Sleeps ``poll_interval`` plus small jitter (≤10%) to avoid
+           thundering-herd alignment across processes.
+        """
         while self.running:
+            self._items_this_cycle = 0
+            cycle_started = time.monotonic()
             try:
-                with worker_loop_timer(worker_label):
+                with worker_loop_timer(self._worker_label):
                     await self._process_items()
             except Exception:
                 # worker_loop_timer already incremented the error counter
                 # before re-raising; we only need to log here.
                 self.logger.exception("Error in worker loop")
 
-            await asyncio.sleep(self._poll_interval)
+            duration_ms = (time.monotonic() - cycle_started) * 1000.0
+            await self._write_heartbeat()
+            self.logger.info(
+                "loop_completed",
+                worker=self._worker_label,
+                duration_ms=round(duration_ms, 2),
+                items_processed=self._items_this_cycle,
+            )
+
+            jitter = random.uniform(0, self._poll_interval * _JITTER_FRACTION)
+            await asyncio.sleep(self._poll_interval + jitter)
+
+    async def _write_heartbeat(self) -> None:
+        """Persist this worker's heartbeat in Redis with a bounded TTL.
+
+        Failures are logged at WARNING and swallowed: Redis being unreachable
+        should not crash the worker loop — ``/readyz`` will already flip to
+        503 once the existing key expires.
+        """
+        ttl = max(1, int(self._poll_interval * HEARTBEAT_TTL_MULTIPLIER))
+        try:
+            redis = await get_redis()
+            await redis.setex(
+                heartbeat_key(self._worker_label),
+                ttl,
+                str(int(time.time())),
+            )
+        except Exception as exc:  # noqa: BLE001 — broad to keep the loop alive
+            self.logger.warning(
+                "heartbeat_write_failed",
+                worker=self._worker_label,
+                error=type(exc).__name__,
+            )
 
     def record_items_processed(self, count: int = 1) -> None:
         """Record ``count`` work items processed in the current cycle.
@@ -104,10 +168,13 @@ class BaseWorker(ABC):
         Subclasses should call this once per processed item (or in batches)
         from inside :meth:`_process_items` so the
         ``worker_items_processed_total`` counter reflects real throughput
-        rather than poll-cycle counts.
+        rather than poll-cycle counts. The same count is also surfaced in
+        the per-cycle ``loop_completed`` structured log.
         """
-        worker_label = self.COMPONENT_NAME or self.__class__.__name__.lower()
-        observe_worker_item(worker_label, count=count)
+        if count <= 0:
+            return
+        self._items_this_cycle += count
+        observe_worker_item(self._worker_label, count=count)
 
     @abstractmethod
     async def _process_items(self) -> None:
