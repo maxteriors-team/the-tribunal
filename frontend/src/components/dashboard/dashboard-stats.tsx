@@ -1,5 +1,3 @@
-"use client";
-
 import type React from "react";
 import { memo } from "react";
 import Link from "next/link";

@@ -1,5 +1,3 @@
-"use client";
-
 import { formatDate, formatRelative } from "@/lib/utils/date";
 import { Clock, AlertTriangle, Flame } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

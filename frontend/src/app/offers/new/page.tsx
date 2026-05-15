@@ -1,12 +1,7 @@
-"use client";
-
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { OfferBuilderWizard } from "@/components/offers/offer-builder-wizard";
-import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { OfferBuilderClient } from "./offer-builder-client";
 
 export default function CreateOfferPage() {
-  const workspaceId = useWorkspaceId();
-
   return (
     <AppSidebar>
       <div className="p-6 max-w-4xl mx-auto">
@@ -16,7 +11,7 @@ export default function CreateOfferPage() {
             Build an irresistible offer with value stacking
           </p>
         </div>
-        <OfferBuilderWizard workspaceId={workspaceId!} />
+        <OfferBuilderClient />
       </div>
     </AppSidebar>
   );

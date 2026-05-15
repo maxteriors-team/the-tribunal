@@ -1,5 +1,3 @@
-"use client";
-
 import { memo } from "react";
 import { Calendar, Megaphone, MessageSquare, Phone } from "lucide-react";
 
