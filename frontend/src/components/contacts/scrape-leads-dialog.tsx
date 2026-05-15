@@ -1,18 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Search,
-  Phone,
-  Globe,
-  Star,
-  MapPin,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Search } from "lucide-react";
 
 import {
   scrapingApi,
@@ -20,7 +11,7 @@ import {
   type ImportLeadsResponse,
 } from "@/lib/api/scraping";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
-import { queryKeys } from "@/lib/query-keys";
+import { useLeadImport } from "@/hooks/useLeadImport";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +25,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -44,7 +34,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import {
+  applyLeadFilters,
+  LeadFilters,
+  type LeadFilterState,
+} from "@/components/contacts/shared/lead-filters";
+import { LeadResultsList } from "@/components/contacts/shared/lead-results-list";
 
 interface ScrapeLeadsDialogProps {
   open: boolean;
@@ -53,21 +48,14 @@ interface ScrapeLeadsDialogProps {
 
 type DialogStep = "search" | "results" | "importing" | "done";
 
-interface Filters {
-  hasPhone: boolean;
-  noWebsite: boolean;
-  minRating: number | null;
-}
-
 export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps) {
-  const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
 
   const [step, setStep] = useState<DialogStep>("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BusinessResult[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [filters, setFilters] = useState<Filters>({
+  const [filters, setFilters] = useState<LeadFilterState>({
     hasPhone: true,
     noWebsite: false,
     minRating: null,
@@ -84,37 +72,25 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
       setResults(data.results);
       // Auto-select leads with phone numbers
       const withPhone = new Set(
-        data.results.filter((r) => r.has_phone).map((r) => r.place_id)
+        data.results.filter((r) => r.has_phone).map((r) => r.place_id),
       );
       setSelectedIds(withPhone);
       setStep("results");
     },
     onError: (error) => {
-      toast.error(getApiErrorMessage(error, "Failed to search. Please check your API key configuration."));
+      toast.error(
+        getApiErrorMessage(error, "Failed to search. Please check your API key configuration."),
+      );
     },
   });
 
-  const importMutation = useMutation({
-    mutationFn: async () => {
-      if (!workspaceId) throw new Error("No workspace");
-      const selectedLeads = results.filter((r) => selectedIds.has(r.place_id));
-      return scrapingApi.importLeads(workspaceId, {
-        leads: selectedLeads,
-        default_status: defaultStatus,
-      });
-    },
+  const importMutation = useLeadImport({
+    importFn: scrapingApi.importLeads,
     onSuccess: (data) => {
       setImportResult(data);
       setStep("done");
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
-      if (data.imported > 0) {
-        toast.success(`Successfully imported ${data.imported} leads`);
-      }
     },
-    onError: (error) => {
-      toast.error(getApiErrorMessage(error, "Failed to import leads"));
-      setStep("results");
-    },
+    onError: () => setStep("results"),
   });
 
   const handleSearch = () => {
@@ -130,8 +106,9 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
       toast.error("Please select at least one lead to import");
       return;
     }
+    const selectedLeads = results.filter((r) => selectedIds.has(r.place_id));
     setStep("importing");
-    importMutation.mutate();
+    importMutation.mutate({ leads: selectedLeads, default_status: defaultStatus });
   };
 
   const handleClose = () => {
@@ -146,35 +123,22 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
   const toggleSelect = (placeId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(placeId)) {
-        next.delete(placeId);
-      } else {
-        next.add(placeId);
-      }
+      if (next.has(placeId)) next.delete(placeId);
+      else next.add(placeId);
       return next;
     });
   };
 
+  const filteredResults = applyLeadFilters(results, filters);
+
   const toggleSelectAll = () => {
-    const filtered = filteredResults;
-    const allSelected = filtered.every((r) => selectedIds.has(r.place_id));
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map((r) => r.place_id)));
-    }
+    const allSelected = filteredResults.every((r) => selectedIds.has(r.place_id));
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredResults.map((r) => r.place_id)));
   };
 
-  // Apply filters
-  const filteredResults = results.filter((r) => {
-    if (filters.hasPhone && !r.has_phone) return false;
-    if (filters.noWebsite && r.has_website) return false;
-    if (filters.minRating && (!r.rating || r.rating < filters.minRating)) return false;
-    return true;
-  });
-
   const selectedCount = [...selectedIds].filter((id) =>
-    filteredResults.some((r) => r.place_id === id)
+    filteredResults.some((r) => r.place_id === id),
   ).length;
 
   return (
@@ -188,8 +152,10 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
             {step === "done" && "Import Complete"}
           </DialogTitle>
           <DialogDescription>
-            {step === "search" && "Search Google Places to find businesses and import them as contacts."}
-            {step === "results" && `Found ${results.length} businesses. Select the ones you want to import.`}
+            {step === "search" &&
+              "Search Google Places to find businesses and import them as contacts."}
+            {step === "results" &&
+              `Found ${results.length} businesses. Select the ones you want to import.`}
             {step === "importing" && "Please wait while we import your selected leads."}
             {step === "done" && "Here's a summary of your import."}
           </DialogDescription>
@@ -220,7 +186,8 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Tip: Include location for better results (e.g., &quot;restaurants in downtown Seattle&quot;)
+                Tip: Include location for better results (e.g., &quot;restaurants in downtown
+                Seattle&quot;)
               </p>
             </div>
           </div>
@@ -229,61 +196,21 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
         {/* Results Step */}
         {step === "results" && (
           <div className="flex-1 min-h-0 flex flex-col gap-4">
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-4 p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="filter-phone"
-                  checked={filters.hasPhone}
-                  onCheckedChange={(checked) =>
-                    setFilters({ ...filters, hasPhone: checked === true })
-                  }
-                />
-                <Label htmlFor="filter-phone" className="text-sm cursor-pointer">
-                  Has phone
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="filter-website"
-                  checked={filters.noWebsite}
-                  onCheckedChange={(checked) =>
-                    setFilters({ ...filters, noWebsite: checked === true })
-                  }
-                />
-                <Label htmlFor="filter-website" className="text-sm cursor-pointer">
-                  No website
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">Min rating:</Label>
-                <Select
-                  value={filters.minRating?.toString() || "any"}
-                  onValueChange={(v) =>
-                    setFilters({ ...filters, minRating: v === "any" ? null : parseFloat(v) })
-                  }
-                >
-                  <SelectTrigger className="w-20 h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any</SelectItem>
-                    <SelectItem value="3">3+</SelectItem>
-                    <SelectItem value="4">4+</SelectItem>
-                    <SelectItem value="4.5">4.5+</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1" />
-              <span className="text-sm text-muted-foreground">
-                {filteredResults.length} of {results.length} shown
-              </span>
-            </div>
+            <LeadFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              filteredCount={filteredResults.length}
+              totalCount={results.length}
+              showNoWebsite
+            />
 
             {/* Selection bar */}
             <div className="flex items-center gap-3">
               <Checkbox
-                checked={filteredResults.length > 0 && filteredResults.every((r) => selectedIds.has(r.place_id))}
+                checked={
+                  filteredResults.length > 0 &&
+                  filteredResults.every((r) => selectedIds.has(r.place_id))
+                }
                 onCheckedChange={toggleSelectAll}
               />
               <span className="text-sm font-medium">{selectedCount} selected</span>
@@ -303,88 +230,12 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
               </div>
             </div>
 
-            {/* Results list */}
-            <ScrollArea className="flex-1 min-h-0 border rounded-lg">
-              <div className="p-2 space-y-2">
-                {filteredResults.length === 0 ? (
-                  <div className="py-8 text-center text-muted-foreground">
-                    No results match your filters
-                  </div>
-                ) : (
-                  filteredResults.map((result) => (
-                    <div
-                      key={result.place_id}
-                      className={cn(
-                        "p-3 rounded-lg border cursor-pointer transition-colors",
-                        selectedIds.has(result.place_id)
-                          ? "bg-primary/5 border-primary"
-                          : "hover:bg-muted/50"
-                      )}
-                      onClick={() => toggleSelect(result.place_id)}
-                    >
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          checked={selectedIds.has(result.place_id)}
-                          onCheckedChange={() => toggleSelect(result.place_id)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium truncate">{result.name}</span>
-                            {result.rating && (
-                              <Badge variant="secondary" className="gap-1 shrink-0">
-                                <Star className="h-3 w-3 fill-warning text-warning" />
-                                {result.rating}
-                                {result.review_count > 0 && (
-                                  <span className="text-muted-foreground">
-                                    ({result.review_count})
-                                  </span>
-                                )}
-                              </Badge>
-                            )}
-                          </div>
-                          {result.address && (
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                              <MapPin className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{result.address}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-4 mt-2 text-sm">
-                            <div
-                              className={cn(
-                                "flex items-center gap-1",
-                                result.has_phone ? "text-success" : "text-muted-foreground"
-                              )}
-                            >
-                              <Phone className="h-3 w-3" />
-                              {result.phone_number || "No phone"}
-                            </div>
-                            <div
-                              className={cn(
-                                "flex items-center gap-1",
-                                result.has_website ? "text-info" : "text-muted-foreground"
-                              )}
-                            >
-                              <Globe className="h-3 w-3" />
-                              {result.has_website ? "Has website" : "No website"}
-                            </div>
-                          </div>
-                          {result.types.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {result.types.slice(0, 3).map((type) => (
-                                <Badge key={type} variant="outline" className="text-xs">
-                                  {type.replace(/_/g, " ")}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
+            <LeadResultsList
+              results={filteredResults}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              variant="list"
+            />
           </div>
         )}
 
@@ -466,9 +317,7 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
               </Button>
             </>
           )}
-          {step === "done" && (
-            <Button onClick={handleClose}>Done</Button>
-          )}
+          {step === "done" && <Button onClick={handleClose}>Done</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
