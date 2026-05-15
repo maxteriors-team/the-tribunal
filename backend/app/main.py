@@ -22,6 +22,7 @@ from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core.config import settings
 from app.db.redis import close_redis
+from app.db.session import engine
 from app.websockets.voice_bridge import router as voice_bridge_router
 from app.websockets.voice_test import router as voice_test_router
 from app.workers import start_all_workers, stop_all_workers
@@ -249,6 +250,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("Shutting down AI CRM backend...")
     await stop_all_workers()
     await close_redis()
+    # Dispose the SQLAlchemy engine so all pooled asyncpg connections are
+    # closed cleanly. Without this, shutdown can leave half-open sockets that
+    # Postgres only reaps after its ``idle_in_transaction_session_timeout``,
+    # and asyncio raises "Event loop is closed" warnings as the loop tears
+    # down underneath live connections.
+    await engine.dispose()
 
 
 app = FastAPI(
