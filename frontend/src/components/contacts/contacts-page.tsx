@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useContactStore } from "@/lib/contact-store";
-import { CreateContactDialog } from "@/components/contacts/create-contact-dialog";
+import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ImportContactsDialog } from "@/components/contacts/import-contacts-dialog";
 import { ScrapeLeadsDialog } from "@/components/contacts/scrape-leads-dialog";
 import { BulkTagDialog } from "@/components/contacts/bulk-tag-dialog";
@@ -390,7 +390,8 @@ export function ContactsPage() {
         </div>
       </ScrollArea>
 
-      <CreateContactDialog
+      <ContactFormDialog
+        mode="create"
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       />

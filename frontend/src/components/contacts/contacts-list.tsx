@@ -17,7 +17,7 @@ import { useContactsPaginated } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import { getContactInitials } from "@/lib/utils/initials";
-import { CreateContactDialog } from "./create-contact-dialog";
+import { ContactFormDialog } from "./contact-form-dialog";
 import type { Contact } from "@/types";
 
 interface ContactsListProps {
@@ -196,7 +196,8 @@ export function ContactsList({ className }: ContactsListProps) {
         </div>
       </ScrollArea>
 
-      <CreateContactDialog
+      <ContactFormDialog
+        mode="create"
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       />

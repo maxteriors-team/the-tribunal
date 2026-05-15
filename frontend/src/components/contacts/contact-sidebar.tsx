@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/select";
 import { conversationsApi } from "@/lib/api/conversations";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
-import { EditContactDialog } from "@/components/contacts/edit-contact-dialog";
+import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appointment-dialog";
 import { EngagementSummary } from "@/components/contacts/contact-sidebar/engagement-summary";
 import { TagBadge } from "@/components/tags/tag-badge";
@@ -876,7 +876,8 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
       </ScrollArea>
 
       {/* Dialogs */}
-      <EditContactDialog
+      <ContactFormDialog
+        mode="edit"
         contact={selectedContact}
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
