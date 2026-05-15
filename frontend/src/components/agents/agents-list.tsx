@@ -411,6 +411,7 @@ export function AgentsList() {
                             variant="ghost"
                             size="icon-sm"
                             className="opacity-0 group-hover:opacity-100"
+                            aria-label="Agent actions"
                           >
                             <MoreHorizontal className="size-4" />
                           </Button>

@@ -8,6 +8,38 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "no-console": ["error", { allow: ["warn", "error"] }],
+      // Require an accessible label on interactive controls. Icon-only buttons
+      // must supply `aria-label` (or wrap a labelled child like an <a aria-label>)
+      // so screen readers can announce them.
+      "jsx-a11y/control-has-associated-label": [
+        "error",
+        {
+          labelAttributes: ["aria-label", "aria-labelledby", "title"],
+          controlComponents: ["Button"],
+          ignoreElements: [
+            "audio",
+            "canvas",
+            "embed",
+            "input",
+            "textarea",
+            "tr",
+            "video",
+          ],
+          ignoreRoles: [
+            "grid",
+            "listbox",
+            "menu",
+            "menubar",
+            "radiogroup",
+            "row",
+            "tablist",
+            "toolbar",
+            "tree",
+            "treegrid",
+          ],
+          depth: 5,
+        },
+      ],
       // Forbid inline string-tuple React Query keys. All query keys must be
       // produced by `queryKeys.<resource>.<scope>(...)` from `@/lib/query-keys`
       // so that invalidation, prefetch, and cache reads share one source of truth.

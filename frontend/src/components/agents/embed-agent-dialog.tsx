@@ -292,6 +292,7 @@ function EmbedDialogContent({
       variant="ghost"
       className="absolute right-2 top-2 h-8 w-8"
       onClick={() => copyToClipboard(code, tabId)}
+      aria-label="Copy code"
     >
       {copiedTab === tabId ? (
         <Check className="h-4 w-4 text-success" />
@@ -345,7 +346,7 @@ function EmbedDialogContent({
                     onChange={(e) => setNewDomain(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && addDomain()}
                   />
-                  <Button type="button" variant="outline" size="icon" onClick={addDomain}>
+                  <Button type="button" variant="outline" size="icon" onClick={addDomain} aria-label="Add domain">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -610,6 +611,7 @@ function EmbedDialogContent({
                           "sharelink"
                         )
                       }
+                      aria-label="Copy share link"
                     >
                       {copiedTab === "sharelink" ? (
                         <Check className="h-4 w-4 text-success" />
@@ -622,6 +624,7 @@ function EmbedDialogContent({
                         href={`${baseUrl}/embed/${publicId}/fullpage?theme=${currentValues.theme}`}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label="Open share link in new tab"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </a>

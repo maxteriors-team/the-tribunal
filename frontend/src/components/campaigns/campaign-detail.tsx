@@ -137,7 +137,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       <div className="p-6 max-w-2xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/campaigns">
+            <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>
@@ -162,7 +162,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-4 flex-1">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/campaigns">
+            <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>

@@ -301,6 +301,7 @@ export function ExperimentsList() {
                               variant="ghost"
                               size="icon"
                               className="opacity-0 group-hover:opacity-100"
+                              aria-label="Experiment actions"
                             >
                               <MoreHorizontal className="size-4" />
                             </Button>

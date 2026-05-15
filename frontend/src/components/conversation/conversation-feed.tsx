@@ -355,12 +355,12 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="icon" variant="ghost" className="h-8 w-8">
+          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Call contact">
             <Phone className="h-4 w-4" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-8 w-8">
+              <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Conversation actions">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -431,7 +431,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
           </div>
         )}
         <div className="flex items-end gap-2">
-          <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" disabled={isSending}>
+          <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0" disabled={isSending} aria-label="Attach file">
             <Paperclip className="h-4 w-4" />
           </Button>
           <div className="flex-1 relative">
@@ -450,6 +450,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
               variant="ghost"
               className="absolute right-1 bottom-1 h-8 w-8"
               disabled={isSending}
+              aria-label="Voice message"
             >
               <Mic className="h-4 w-4" />
             </Button>
@@ -459,6 +460,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
             className="h-9 w-9 shrink-0"
             onClick={handleSendMessage}
             disabled={!message.trim() || isSending}
+            aria-label="Send message"
           >
             {isSending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

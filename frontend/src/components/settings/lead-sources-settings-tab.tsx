@@ -80,7 +80,13 @@ function CopyButton({ text }: { text: string }) {
   };
 
   return (
-    <Button variant="ghost" size="icon" className="size-7" onClick={handleCopy}>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-7"
+      onClick={handleCopy}
+      aria-label={copied ? "Copied" : "Copy to clipboard"}
+    >
       {copied ? (
         <Check className="size-3.5 text-green-500" />
       ) : (
@@ -559,6 +565,7 @@ export function LeadSourcesSettingsTab() {
                       size="icon"
                       className="size-8"
                       onClick={() => handleEdit(source)}
+                      aria-label="Edit lead source"
                     >
                       <Pencil className="size-3.5" />
                     </Button>
@@ -567,6 +574,7 @@ export function LeadSourcesSettingsTab() {
                       size="icon"
                       className="size-8 text-destructive hover:text-destructive"
                       onClick={() => setDeleteTarget(source)}
+                      aria-label="Delete lead source"
                     >
                       <Trash2 className="size-3.5" />
                     </Button>

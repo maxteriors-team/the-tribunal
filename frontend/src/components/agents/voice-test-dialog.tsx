@@ -367,6 +367,7 @@ export function VoiceTestDialog({
               )}
               onClick={toggleMute}
               disabled={connectionStatus !== "connected"}
+              aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
             >
               {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
@@ -378,6 +379,7 @@ export function VoiceTestDialog({
               className="h-16 w-16 rounded-full"
               onClick={handleCallToggle}
               disabled={connectionStatus === "connecting"}
+              aria-label={connectionStatus === "connected" ? "End call" : "Start call"}
             >
               {connectionStatus === "connecting" ? (
                 <Loader2 className="h-7 w-7 animate-spin" />

@@ -493,6 +493,7 @@ export function AutomationsPage() {
                               variant="ghost"
                               size="icon"
                               className="size-8 opacity-0 group-hover:opacity-100"
+                              aria-label="Automation actions"
                             >
                               <MoreHorizontal className="size-4" />
                             </Button>

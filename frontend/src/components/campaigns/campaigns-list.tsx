@@ -360,6 +360,7 @@ export function CampaignsList() {
                               variant="ghost"
                               size="icon"
                               className="opacity-0 group-hover:opacity-100"
+                              aria-label="Campaign actions"
                             >
                               <MoreHorizontal className="size-4" />
                             </Button>

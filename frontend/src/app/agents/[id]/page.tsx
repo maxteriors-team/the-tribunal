@@ -351,7 +351,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-            <Link href="/agents">
+            <Link href="/agents" aria-label="Back to agents">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>

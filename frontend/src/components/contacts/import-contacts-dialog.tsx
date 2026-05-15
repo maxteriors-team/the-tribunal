@@ -395,6 +395,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label="Remove file"
                 onClick={() => {
                   setFile(null);
                   setPreview(null);

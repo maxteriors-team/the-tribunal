@@ -137,6 +137,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
             variant="ghost"
             size="icon"
             onClick={() => router.push("/experiments")}
+            aria-label="Back to experiments"
           >
             <ArrowLeft className="size-5" />
           </Button>

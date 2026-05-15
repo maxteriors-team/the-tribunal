@@ -69,6 +69,7 @@ export function AssistantChat({ className }: { className?: string }) {
             type="submit"
             size="icon"
             disabled={!input.trim() || chat.isPending}
+            aria-label="Send message"
           >
             {chat.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

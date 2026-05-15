@@ -149,7 +149,7 @@ export default function NewSMSCampaignPage() {
         {/* Header */}
         <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/campaigns">
+            <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>

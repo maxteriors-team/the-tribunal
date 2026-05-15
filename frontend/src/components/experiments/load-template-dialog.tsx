@@ -134,6 +134,7 @@ export function LoadTemplateDialog({
                       className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-destructive hover:text-destructive"
                       onClick={(e) => handleDelete(e, template.id)}
                       disabled={deleteMutation.isPending}
+                      aria-label="Delete template"
                     >
                       {deleteMutation.isPending ? (
                         <Loader2 className="size-4 animate-spin" />

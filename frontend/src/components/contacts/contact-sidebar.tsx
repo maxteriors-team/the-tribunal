@@ -221,6 +221,7 @@ function ImportantDatesSection({ contact, workspaceId }: { contact: Contact; wor
           className="h-6 w-6"
           onClick={() => setAddFormOpen(!addFormOpen)}
           disabled={updateDatesMutation.isPending}
+          aria-label={addFormOpen ? "Close add date form" : "Add important date"}
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
@@ -247,6 +248,7 @@ function ImportantDatesSection({ contact, workspaceId }: { contact: Contact; wor
               className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={() => handleRemove("birthday")}
               disabled={updateDatesMutation.isPending}
+              aria-label="Remove birthday"
             >
               <X className="h-3 w-3" />
             </Button>
@@ -265,6 +267,7 @@ function ImportantDatesSection({ contact, workspaceId }: { contact: Contact; wor
               className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={() => handleRemove("anniversary")}
               disabled={updateDatesMutation.isPending}
+              aria-label="Remove anniversary"
             >
               <X className="h-3 w-3" />
             </Button>
@@ -283,6 +286,7 @@ function ImportantDatesSection({ contact, workspaceId }: { contact: Contact; wor
               className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={() => handleRemove("custom", i)}
               disabled={updateDatesMutation.isPending}
+              aria-label={`Remove ${item.label}`}
             >
               <X className="h-3 w-3" />
             </Button>
@@ -563,7 +567,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
       {isMobile && onClose && (
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Contact Details</h3>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose} aria-label="Close contact details">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -792,6 +796,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
                         size="icon"
                         className="h-6 w-6 shrink-0"
                         title="Send SMS reminder"
+                        aria-label="Send SMS reminder"
                         disabled={sendingReminderIds.has(apt.id)}
                         onClick={() => void handleSendReminder(apt.id)}
                       >

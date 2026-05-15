@@ -27,14 +27,14 @@ export function ConversationLayout({ className }: ConversationLayoutProps) {
         {/* Mobile Header with navigation */}
         <div className="flex items-center justify-between px-2 py-2 border-b">
           <div className="flex items-center gap-1">
-            <Link href="/contacts">
+            <Link href="/contacts" aria-label="Back to contacts">
               <Button size="icon" variant="ghost" className="h-9 w-9">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <Sheet open={showActionsPanel} onOpenChange={setShowActionsPanel}>
               <SheetTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-9 w-9">
+                <Button size="icon" variant="ghost" className="h-9 w-9" aria-label="Open actions menu">
                   <Menu className="h-4 w-4" />
                 </Button>
               </SheetTrigger>
@@ -46,7 +46,7 @@ export function ConversationLayout({ className }: ConversationLayoutProps) {
 
           <Sheet open={showSidebar} onOpenChange={setShowSidebar}>
             <SheetTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-9 w-9">
+              <Button size="icon" variant="ghost" className="h-9 w-9" aria-label="Open contact details">
                 <User className="h-4 w-4" />
               </Button>
             </SheetTrigger>

@@ -108,7 +108,12 @@ export default function NewExperimentPage() {
       <div className="flex flex-col h-[calc(100vh-4rem)]">
         {/* Header */}
         <div className="flex items-center gap-4 px-6 py-4 border-b">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.back()}
+            aria-label="Go back"
+          >
             <ArrowLeft className="size-5" />
           </Button>
           <div>

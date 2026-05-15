@@ -514,6 +514,7 @@ export function CalendarPage() {
                                           onClick={() => handleDeleteAppointment(apt.id)}
                                           disabled={deleteAppointmentMutation.isPending}
                                           className="text-destructive hover:text-destructive"
+                                          aria-label="Delete appointment"
                                         >
                                           <Trash2 className="size-4" />
                                         </Button>

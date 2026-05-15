@@ -93,7 +93,7 @@ export function CampaignForm({ campaignId }: CampaignFormProps) {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/campaigns">
+          <Link href="/campaigns" aria-label="Back to campaigns">
             <ArrowLeft className="size-4" />
           </Link>
         </Button>

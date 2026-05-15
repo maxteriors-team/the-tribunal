@@ -141,6 +141,7 @@ export function TagManagement() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => openEdit(tag)}
+                aria-label="Edit tag"
               >
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -149,6 +150,7 @@ export function TagManagement() {
                 size="icon"
                 className="h-8 w-8 text-destructive hover:text-destructive"
                 onClick={() => setDeleteConfirmTag(tag)}
+                aria-label="Delete tag"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -178,12 +180,15 @@ export function TagManagement() {
                 {PRESET_COLORS.map((c) => (
                   <button
                     key={c}
+                    type="button"
                     onClick={() => setColor(c)}
                     className="h-7 w-7 rounded-full border-2 transition-all"
                     style={{
                       backgroundColor: c,
                       borderColor: color === c ? "#000" : "transparent",
                     }}
+                    aria-label={`Select color ${c}`}
+                    aria-pressed={color === c}
                   />
                 ))}
               </div>
@@ -233,12 +238,15 @@ export function TagManagement() {
                 {PRESET_COLORS.map((c) => (
                   <button
                     key={c}
+                    type="button"
                     onClick={() => setColor(c)}
                     className="h-7 w-7 rounded-full border-2 transition-all"
                     style={{
                       backgroundColor: c,
                       borderColor: color === c ? "#000" : "transparent",
                     }}
+                    aria-label={`Select color ${c}`}
+                    aria-pressed={color === c}
                   />
                 ))}
               </div>

@@ -26,7 +26,7 @@ export function ActionsPanel({ className, onClose }: ActionsPanelProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="flex items-center gap-2">
           {!isMobile && (
-            <Link href="/contacts">
+            <Link href="/contacts" aria-label="Back to contacts">
               <Button size="icon" variant="ghost" className="h-8 w-8">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -35,7 +35,7 @@ export function ActionsPanel({ className, onClose }: ActionsPanelProps) {
           <h2 className="font-semibold">Actions</h2>
         </div>
         {isMobile && onClose && (
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose} aria-label="Close actions panel">
             <X className="h-4 w-4" />
           </Button>
         )}
