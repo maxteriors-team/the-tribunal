@@ -6,8 +6,14 @@ from fastapi import Request
 
 
 def validate_origin(request: Request, allowed_domains: list[str]) -> bool:
-    """Validate the request origin against allowed domains."""
-    origin = request.headers.get("origin") or request.headers.get("referer")
+    """Validate the request origin against allowed domains.
+
+    Only the ``Origin`` header is consulted. The ``Referer`` header is not
+    used as a fallback because it is trivially spoofable by non-browser
+    clients and is omitted or stripped in many legitimate browser contexts,
+    making it unsuitable as a security boundary.
+    """
+    origin = request.headers.get("origin")
 
     if not origin:
         return False
