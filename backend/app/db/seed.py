@@ -14,20 +14,15 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.utils.pii import mask_email
 
-# Hardcoded workspace ID used by frontend
-DEFAULT_WORKSPACE_ID = uuid.UUID("ba0e0e99-c7c9-45ec-9625-567d54d6e9c2")
+# Workspace ID used by frontend. Overridable via env var for non-default deployments;
+# falls back to the historical hardcoded UUID so existing setups keep working.
+DEFAULT_WORKSPACE_ID = uuid.UUID(
+    os.environ.get("DEFAULT_WORKSPACE_ID", "ba0e0e99-c7c9-45ec-9625-567d54d6e9c2")
+)
 
 # Default admin credentials from environment (required for seeding)
 DEFAULT_ADMIN_EMAIL = os.environ.get("SEED_ADMIN_EMAIL", "admin@example.com")
 DEFAULT_ADMIN_PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD", "")
-
-if not DEFAULT_ADMIN_PASSWORD:
-    print(
-        "WARNING: SEED_ADMIN_PASSWORD not set. "
-        "Set the SEED_ADMIN_PASSWORD environment variable before seeding.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
 
 
 async def create_admin_user(
@@ -124,6 +119,14 @@ async def create_workspace_membership(
 
 async def seed_database() -> None:
     """Seed database with initial data."""
+    if not DEFAULT_ADMIN_PASSWORD:
+        print(
+            "ERROR: SEED_ADMIN_PASSWORD not set. "
+            "Set the SEED_ADMIN_PASSWORD environment variable before seeding.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     async with AsyncSessionLocal() as db:
         user = await create_admin_user(db)
         workspace = await create_default_workspace(db)
