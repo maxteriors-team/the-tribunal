@@ -16,7 +16,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useAgents } from "@/hooks/useAgents";
 import { useContacts } from "@/hooks/useContacts";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar } from "@/components/ui/calendar-lazy";
 import {
   Dialog,
   DialogContent,

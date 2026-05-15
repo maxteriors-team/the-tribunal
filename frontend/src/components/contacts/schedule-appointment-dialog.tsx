@@ -15,7 +15,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useAgents } from "@/hooks/useAgents";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar } from "@/components/ui/calendar-lazy";
 import {
   Dialog,
   DialogContent,

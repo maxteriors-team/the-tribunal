@@ -57,7 +57,12 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { CommandPalette } from "./command-palette";
+import dynamic from "next/dynamic";
+
+const CommandPalette = dynamic(
+  () => import("./command-palette").then((m) => m.CommandPalette),
+  { ssr: false },
+);
 import {
   Collapsible,
   CollapsibleContent,
@@ -275,6 +280,25 @@ export function AppSidebar({ children }: AppSidebarProps) {
   });
   const breadcrumbs = buildBreadcrumbs(pathname);
   const [commandOpen, setCommandOpen] = React.useState(false);
+  const [commandMounted, setCommandMounted] = React.useState(false);
+
+  const openCommandPalette = () => {
+    setCommandMounted(true);
+    setCommandOpen(true);
+  };
+
+  // Global ⌘K shortcut — hoisted here so the cmdk bundle stays lazy until first open.
+  React.useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandMounted(true);
+        setCommandOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
 
   const isActive = (url: string) => {
     if (url === "/contacts") {
@@ -521,7 +545,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             </BreadcrumbList>
           </Breadcrumb>
           <button
-            onClick={() => setCommandOpen(true)}
+            onClick={openCommandPalette}
             className="ml-auto flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted cursor-pointer"
           >
             <Search className="size-3.5" />
@@ -542,7 +566,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
             )}
           </Button>
         </header>
-        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        {commandMounted && (
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        )}
         <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
       </SidebarInset>
     </SidebarProvider>

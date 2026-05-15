@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -35,7 +36,11 @@ import { PageEmptyState } from "@/components/ui/page-state";
 
 import { QuizBuilder } from "@/components/lead-magnets/quiz-builder";
 import { CalculatorBuilder } from "@/components/lead-magnets/calculator-builder";
-import { RichTextEditor } from "@/components/lead-magnets/rich-text-editor";
+
+const RichTextEditor = dynamic(
+  () => import("@/components/lead-magnets/rich-text-editor").then((m) => m.RichTextEditor),
+  { ssr: false, loading: () => <div className="h-64 rounded-md border bg-muted/30 animate-pulse" /> },
+);
 
 import { useWorkspace } from "@/providers/workspace-provider";
 import { leadMagnetsApi, CreateLeadMagnetRequest } from "@/lib/api/lead-magnets";

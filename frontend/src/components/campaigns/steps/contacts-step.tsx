@@ -1,9 +1,14 @@
 "use client";
 
 import { AlertCircle } from "lucide-react";
+import dynamic from "next/dynamic";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { VirtualContactSelector } from "../virtual-contact-selector";
+
+const VirtualContactSelector = dynamic(
+  () => import("../virtual-contact-selector").then((m) => m.VirtualContactSelector),
+  { ssr: false, loading: () => <div className="h-96 rounded-md border bg-muted/30 animate-pulse" /> },
+);
 
 interface ContactsStepProps {
   workspaceId: string;

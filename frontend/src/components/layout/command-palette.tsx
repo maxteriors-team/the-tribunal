@@ -41,17 +41,6 @@ export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPa
     onOpenChange?.(value);
   }, [isControlled, onOpenChange]);
 
-  React.useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setOpen(!open);
-      }
-    };
-    document.addEventListener("keydown", down);
-    return () => document.removeEventListener("keydown", down);
-  }, [open, setOpen]);
-
   const handleSelect = (href: string) => {
     router.push(href);
     setOpen(false);
