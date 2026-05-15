@@ -8,6 +8,11 @@ dependencies = [
     # FastAPI + ASGI
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
+    "starlette>=0.40.0",
+    # WebSocket client (Grok realtime, audio streaming)
+    "websockets>=14.0",
+    # YAML (scenario/config loaders)
+    "pyyaml>=6.0",
     # Database
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30.0",
