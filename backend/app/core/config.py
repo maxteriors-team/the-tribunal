@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Security
-    secret_key: str = "change-me-in-production"
+    # SECRET_KEY signs all JWT access/refresh tokens. Required from environment —
+    # the app refuses to boot without it. Generate with: `openssl rand -hex 32`.
+    secret_key: str = Field(..., min_length=32)
     encryption_key: str = "change-me-in-production"  # Used for Fernet encryption of credentials
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30  # 30 minutes (short-lived)
@@ -102,8 +105,14 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Get cached settings instance."""
-    return Settings()
+    """Get cached settings instance.
+
+    ``secret_key`` is required from the environment (no default), so the app
+    refuses to boot without ``SECRET_KEY`` set. The ``type: ignore`` silences
+    mypy's call-arg check — pydantic-settings populates required fields from
+    env vars at instantiation, which mypy cannot see.
+    """
+    return Settings()  # type: ignore[call-arg]
 
 
 settings = get_settings()

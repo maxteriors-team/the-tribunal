@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import math
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -70,6 +71,37 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+# Minimum key material size in bytes. A 256-bit (32-byte) key is the recommended
+# minimum for HMAC-SHA256 (used to sign JWTs) and Fernet. We require the key to:
+#   1. Be at least 32 bytes long, AND
+#   2. Carry enough Shannon entropy to rule out trivial repeats / dictionary words.
+# A 64-char hex string from `openssl rand -hex 32` encodes 32 bytes of entropy
+# in 64 visible bytes; we require at least half the theoretical maximum to allow
+# for natural distribution skew while still rejecting strings like ``"a" * 64``.
+_MIN_KEY_LENGTH_BYTES = 32
+_MIN_KEY_ENTROPY_BITS = 128
+
+
+def _shannon_entropy_bits(value: str) -> float:
+    """Estimate total Shannon entropy of ``value`` in bits.
+
+    Returns ``H * len(value_bytes)`` where ``H`` is the per-byte Shannon entropy
+    in bits. A uniformly random 64-char hex string yields ~256 bits; a repetitive
+    string like ``"a" * 64`` yields 0.
+    """
+    data = value.encode("utf-8")
+    if not data:
+        return 0.0
+    counts: dict[int, int] = {}
+    for byte in data:
+        counts[byte] = counts.get(byte, 0) + 1
+    length = len(data)
+    entropy_per_byte = -sum(
+        (count / length) * math.log2(count / length) for count in counts.values()
+    )
+    return entropy_per_byte * length
+
+
 def _validate_security_key(
     log: structlog.stdlib.BoundLogger,
     *,
@@ -77,29 +109,56 @@ def _validate_security_key(
     value: str,
     failure_detail: str,
 ) -> None:
-    """Reject the default placeholder for a security-critical key in production.
+    """Reject weak security-critical keys at startup.
 
-    Logs a warning when running in debug mode so local development is unaffected.
+    Refuses to boot when the configured key is shorter than
+    :data:`_MIN_KEY_LENGTH_BYTES`, carries less than :data:`_MIN_KEY_ENTROPY_BITS`
+    of Shannon entropy, or matches the legacy ``change-me-in-production``
+    placeholder. The SECRET_KEY field in :class:`Settings` is already required
+    (no default) and pydantic enforces a minimum length — this check additionally
+    rejects long-but-low-entropy values such as ``"a" * 64``.
     """
-    if value != "change-me-in-production":
-        return
-
-    if not settings.debug:
+    if value == "change-me-in-production":
         log.error(
             f"insecure_{name.lower()}",
             severity="critical",
-            message=f"Using default {name.lower()} in production is not allowed",
+            message=f"Default placeholder {name} is not allowed",
         )
         raise RuntimeError(
-            f"{name} must be set in production. "
+            f"{name} must be set to a strong random value. "
             f"Default value 'change-me-in-production' is insecure. {failure_detail}"
         )
 
-    log.warning(
-        f"default_{name.lower()}",
-        severity="medium",
-        message=f"Using default {name.lower()} in development mode",
-    )
+    byte_length = len(value.encode("utf-8"))
+    if byte_length < _MIN_KEY_LENGTH_BYTES:
+        log.error(
+            f"short_{name.lower()}",
+            severity="critical",
+            byte_length=byte_length,
+            required_bytes=_MIN_KEY_LENGTH_BYTES,
+            message=f"{name} is shorter than {_MIN_KEY_LENGTH_BYTES} bytes",
+        )
+        raise RuntimeError(
+            f"{name} must be at least {_MIN_KEY_LENGTH_BYTES} bytes "
+            f"(got {byte_length}). Generate with `openssl rand -hex 32`. "
+            f"{failure_detail}"
+        )
+
+    entropy_bits = _shannon_entropy_bits(value)
+    if entropy_bits < _MIN_KEY_ENTROPY_BITS:
+        log.error(
+            f"weak_{name.lower()}",
+            severity="critical",
+            entropy_bits=round(entropy_bits, 2),
+            required_entropy_bits=_MIN_KEY_ENTROPY_BITS,
+            message=f"{name} has insufficient entropy",
+        )
+        raise RuntimeError(
+            f"{name} has insufficient entropy "
+            f"({entropy_bits:.1f} < {_MIN_KEY_ENTROPY_BITS} bits). "
+            f"Use a CSPRNG-generated value, e.g. `openssl rand -hex 32`. "
+            f"{failure_detail}"
+        )
 
 
 def _validate_startup_config() -> None:
