@@ -1,16 +1,20 @@
 """FastAPI application entry point."""
 
 import math
+import os
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -258,6 +262,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await engine.dispose()
 
 
+# Initialize Sentry before app creation so the SDK can patch ASGI/Starlette
+# internals as FastAPI is constructed. No-op when ``sentry_dsn`` is unset.
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        integrations=[StarletteIntegration(), FastApiIntegration()],
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+        environment=settings.environment,
+        release=os.environ.get("RAILWAY_GIT_COMMIT_SHA"),
+    )
+
 app = FastAPI(
     title="AI CRM API",
     description="AI-powered CRM with voice agents, SMS campaigns, and Cal.com integration",
@@ -384,6 +400,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     to avoid leaking internal details.
     """
     logger.error("unhandled_exception", exc_info=exc, path=str(request.url))
+    sentry_sdk.capture_exception(exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 

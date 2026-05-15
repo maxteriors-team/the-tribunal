@@ -69,6 +69,7 @@ class Settings(BaseSettings):
 
     # App
     debug: bool = False
+    environment: str = "development"
     cors_origins: list[str] = ["http://localhost:3000"]
     cors_allow_vercel_previews: bool = True  # Allow *.vercel.app origins for preview deployments
     api_base_url: str = ""  # Base URL for webhooks (e.g., https://api.example.com)
@@ -102,6 +103,9 @@ class Settings(BaseSettings):
 
     # Security - Trusted Proxies
     trusted_proxies: list[str] = ["127.0.0.1", "::1"]  # IPs allowed to set X-Forwarded-For
+
+    # Sentry — error tracking & performance monitoring. Leave DSN unset to disable.
+    sentry_dsn: str | None = None
 
 
 @lru_cache
