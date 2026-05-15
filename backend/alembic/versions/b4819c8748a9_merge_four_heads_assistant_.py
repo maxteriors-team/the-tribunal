@@ -12,7 +12,12 @@ from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
 revision: str = 'b4819c8748a9'
-down_revision: str | None = ('a9b0c1d2e3f4', 'a9b0c1d2e3f5', 'ed05a7b8c9d0', 'f1a2b3c4d5e7')
+down_revision: tuple[str, ...] | None = (
+    'a9b0c1d2e3f4',
+    'a9b0c1d2e3f5',
+    'ed05a7b8c9d0',
+    'f1a2b3c4d5e7',
+)
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
