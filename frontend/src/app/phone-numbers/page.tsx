@@ -1,10 +1,10 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { PhoneNumbersPage } from "@/components/settings/phone-numbers-page";
+import { PhoneNumbersTable } from "@/components/settings/phone-numbers-table";
 
 export default function PhoneNumbers() {
   return (
     <AppSidebar>
-      <PhoneNumbersPage />
+      <PhoneNumbersTable variant="page" />
     </AppSidebar>
   );
 }

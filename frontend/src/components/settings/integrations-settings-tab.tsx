@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PhoneNumbersSection } from "@/components/settings/phone-numbers-section";
+import { PhoneNumbersTable } from "@/components/settings/phone-numbers-table";
 import { IntegrationConfigDialog } from "@/components/settings/integration-config-dialog";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { queryKeys } from "@/lib/query-keys";
@@ -94,7 +94,7 @@ export function IntegrationsSettingsTab() {
   return (
     <div className="space-y-6">
       {/* Phone Numbers Section */}
-      <PhoneNumbersSection />
+      <PhoneNumbersTable variant="section" />
 
       <div className="grid gap-4 md:grid-cols-2">
         {integrationsLoading ? (
