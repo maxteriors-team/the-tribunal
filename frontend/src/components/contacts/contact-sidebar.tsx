@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatDate, formatLongDate } from "@/lib/utils/date";
 import {
   Phone,
@@ -355,6 +355,32 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
   const { selectedContact, setSelectedContact } = useContactStore();
   const isMobile = useIsMobile();
   const workspaceId = useWorkspaceId();
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Escape-to-close + focus restoration. Only active when rendered as a
+  // slide-over (i.e. onClose is provided); inline desktop usage is a no-op.
+  useEffect(() => {
+    if (!onClose) return;
+
+    previousActiveElement.current =
+      typeof document !== "undefined"
+        ? (document.activeElement as HTMLElement | null)
+        : null;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === "function") {
+        previousActiveElement.current.focus();
+      }
+    };
+  }, [onClose]);
 
   // Fetch timeline for activity stats (hooks must be called before any early returns)
   const { data: timelineData } = useContactTimeline(
@@ -563,6 +589,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
       className={cn("flex flex-col h-full bg-background", className)}
+      {...(onClose ? { role: "dialog", "aria-modal": true } : {})}
     >
       {/* Header with close button on mobile */}
       {isMobile && onClose && (
