@@ -25,6 +25,7 @@ from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core.config import settings
+from app.core.request_id import sanitize_request_id
 from app.db.redis import close_redis
 from app.db.session import engine
 from app.websockets.voice_bridge import router as voice_bridge_router
@@ -32,6 +33,81 @@ from app.websockets.voice_test import router as voice_test_router
 from app.workers import start_all_workers, stop_all_workers
 
 logger = structlog.get_logger()
+
+
+REQUEST_ID_HEADER = "x-request-id"
+
+
+class RequestIDMiddleware:
+    """Assign every HTTP request a correlation ID and propagate it everywhere.
+
+    Behaviour:
+
+    * Reads the inbound ``X-Request-ID`` header if present and well-formed,
+      otherwise generates a fresh ULID.
+    * Stores the ID on ``request.state.request_id`` so route handlers /
+      dependencies can read it (see :mod:`app.api.deps`, which additionally
+      binds ``workspace_id`` and ``user_id`` once auth resolves).
+    * Binds the ID into structlog's contextvars so every log line emitted
+      while handling this request automatically carries ``request_id=...``
+      via the ``merge_contextvars`` processor configured in
+      :mod:`app.core.logging`.
+    * Writes the same ID back as the outbound ``X-Request-ID`` response
+      header so clients can quote it when reporting bugs.
+
+    Implemented as pure ASGI (no ``BaseHTTPMiddleware``) so we can mutate
+    response headers without buffering the response body and so context-var
+    binding happens in the same task that runs the endpoint.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Extract any inbound X-Request-ID header (case-insensitive per RFC 7230).
+        inbound: str | None = None
+        for name, value in scope.get("headers", []):
+            if name == b"x-request-id":
+                try:
+                    inbound = value.decode("latin-1")
+                except UnicodeDecodeError:
+                    inbound = None
+                break
+
+        request_id = sanitize_request_id(inbound)
+
+        # Stash on ASGI scope so downstream code (Starlette's Request wrapper,
+        # FastAPI dependencies) can read it via ``request.state.request_id``.
+        scope.setdefault("state", {})
+        if isinstance(scope["state"], dict):
+            scope["state"]["request_id"] = request_id
+
+        # Clear any inherited contextvars from a prior task on the same worker
+        # before binding fresh ones for this request. Without the clear, a
+        # long-lived worker can leak ``request_id`` / ``user_id`` from a prior
+        # request into background logging that runs after the response is sent.
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+
+        async def send_with_request_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", [])
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-ID"] = request_id
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        finally:
+            # Drop contextvars so they don't leak into the next request on the
+            # same task. The next request's middleware will re-bind anyway,
+            # but unhandled background tasks spawned during this request
+            # shouldn't inherit stale auth identifiers.
+            structlog.contextvars.clear_contextvars()
 
 
 class SecurityHeadersMiddleware:
@@ -286,6 +362,13 @@ app = FastAPI(
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Request-ID middleware — runs outermost (added last) so the X-Request-ID
+# response header is set on *every* response, including those produced by
+# downstream middlewares (CORS preflight, security headers) and exception
+# handlers. It also binds ``request_id`` into structlog contextvars before any
+# route code runs, so every log line during the request is correlated.
+app.add_middleware(RequestIDMiddleware)
 
 # CORS middleware — allow configured origins plus Vercel preview deployments
 _cors_origins = set(settings.cors_origins)

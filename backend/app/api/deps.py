@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
+import structlog
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
@@ -36,6 +37,30 @@ def _extract_jwt(request: Request, header_token: str | None) -> str | None:
     return header_token
 
 
+def _bind_identity_to_logs(
+    *,
+    user_id: int | None = None,
+    workspace_id: uuid.UUID | None = None,
+) -> None:
+    """Attach the resolved identity to structlog's per-request contextvars.
+
+    The request-scoped ``request_id`` is bound earlier by
+    :class:`app.main.RequestIDMiddleware`; this helper adds ``user_id`` and,
+    when known, ``workspace_id`` so every subsequent log line in this request
+    carries the full ``(request_id, workspace_id, user_id)`` triple.
+
+    Values are bound only when present so we never emit ``user_id=None`` keys
+    that would clutter logs for anonymous endpoints.
+    """
+    fields: dict[str, object] = {}
+    if user_id is not None:
+        fields["user_id"] = user_id
+    if workspace_id is not None:
+        fields["workspace_id"] = str(workspace_id)
+    if fields:
+        structlog.contextvars.bind_contextvars(**fields)
+
+
 async def get_current_user(
     request: Request,
     token: Annotated[str | None, Depends(oauth2_scheme)],
@@ -55,6 +80,14 @@ async def get_current_user(
             user = await _user_from_jwt(jwt_token, db)
     if user is None:
         raise credentials_exception
+
+    # Bind the resolved user (and the API-key-scoped workspace, if any) to
+    # structlog contextvars so the rest of the request's log lines are
+    # automatically tagged. The middleware already bound ``request_id``.
+    api_key_workspace_id: uuid.UUID | None = getattr(
+        request.state, "api_key_workspace_id", None
+    )
+    _bind_identity_to_logs(user_id=user.id, workspace_id=api_key_workspace_id)
     return user
 
 
@@ -72,14 +105,17 @@ async def get_optional_current_user(
 ) -> User | None:
     """Get the current user if authenticated, None otherwise."""
     user = await _user_from_api_key(request, db)
+    if user is None:
+        jwt_token = _extract_jwt(request, token)
+        if jwt_token is not None:
+            user = await _user_from_jwt(jwt_token, db)
+
     if user is not None:
-        return user
-
-    jwt_token = _extract_jwt(request, token)
-    if jwt_token is None:
-        return None
-
-    return await _user_from_jwt(jwt_token, db)
+        api_key_workspace_id: uuid.UUID | None = getattr(
+            request.state, "api_key_workspace_id", None
+        )
+        _bind_identity_to_logs(user_id=user.id, workspace_id=api_key_workspace_id)
+    return user
 
 
 async def _user_from_api_key(request: Request, db: AsyncSession) -> User | None:
@@ -190,6 +226,7 @@ async def get_workspace(
             detail="Workspace not found",
         )
 
+    _bind_identity_to_logs(workspace_id=workspace.id)
     return workspace
 
 
@@ -231,6 +268,7 @@ async def get_workspace_admin(
             detail="Workspace not found",
         )
 
+    _bind_identity_to_logs(workspace_id=workspace.id)
     return workspace
 
 
@@ -257,6 +295,7 @@ async def get_membership(
             detail="Workspace not found or access denied",
         )
 
+    _bind_identity_to_logs(workspace_id=workspace_id)
     return membership
 
 
