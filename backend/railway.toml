@@ -4,7 +4,7 @@ builder = "nixpacks"
 [deploy]
 preDeployCommand = ["bash scripts/release.sh"]
 startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'"
-healthcheckPath = "/health"
+healthcheckPath = "/readyz"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

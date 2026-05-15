@@ -1,9 +1,12 @@
-"""Tests for the health check endpoint.
+"""Tests for the health probe endpoints.
 
-Tests GET /health using a mocked app lifespan that bypasses
-worker startup and Redis/database initialization.
+Exercises GET ``/livez``, ``/readyz``, and ``/version`` using a mocked app
+lifespan that bypasses worker startup and Redis/database initialization. The
+readiness checks themselves are patched so we can simulate dependency failures
+without a live Postgres or Redis.
 """
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
@@ -12,6 +15,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
@@ -31,14 +35,11 @@ def _make_test_app() -> FastAPI:
 
     # Register all the same routers as the real app
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(health_router)
     app.include_router(calcom_webhook_router, prefix="/api/webhooks")
     app.include_router(telnyx_webhook_router, prefix="/api/webhooks")
     app.include_router(voice_bridge_router)
     app.include_router(voice_test_router)
-
-    @app.get("/health")
-    async def health_check() -> dict[str, str]:
-        return {"status": "healthy"}
 
     return app
 
@@ -54,28 +55,245 @@ async def client() -> AsyncIterator[AsyncClient]:
         yield ac
 
 
-class TestHealthEndpoint:
-    """Tests for GET /health."""
+class TestLivez:
+    """GET /livez — pure process-up probe."""
 
-    async def test_health_returns_200(self, client: AsyncClient) -> None:
-        """Health check endpoint returns HTTP 200."""
-        response = await client.get("/health")
+    async def test_livez_returns_200(self, client: AsyncClient) -> None:
+        response = await client.get("/livez")
         assert response.status_code == 200
 
-    async def test_health_returns_json(self, client: AsyncClient) -> None:
-        """Health check returns JSON content type."""
-        response = await client.get("/health")
-        assert "application/json" in response.headers["content-type"]
+    async def test_livez_body(self, client: AsyncClient) -> None:
+        response = await client.get("/livez")
+        assert response.json() == {"status": "ok"}
 
-    async def test_health_returns_status_healthy(self, client: AsyncClient) -> None:
-        """Health check body contains status: healthy."""
-        response = await client.get("/health")
-        data = response.json()
-        assert data["status"] == "healthy"
+    async def test_livez_does_not_touch_postgres_or_redis(
+        self, client: AsyncClient
+    ) -> None:
+        """Liveness must not depend on external services."""
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(side_effect=AssertionError("should not be called")),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(side_effect=AssertionError("should not be called")),
+            ),
+        ):
+            response = await client.get("/livez")
+        assert response.status_code == 200
+
+
+class TestReadyz:
+    """GET /readyz — Postgres + Redis probe."""
+
+    async def test_readyz_returns_200_when_both_ok(
+        self, client: AsyncClient
+    ) -> None:
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["checks"]["postgres"]["ok"] is True
+        assert body["checks"]["redis"]["ok"] is True
+
+    async def test_readyz_returns_503_when_postgres_fails(
+        self, client: AsyncClient
+    ) -> None:
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(False, "OperationalError")),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 503
+        body = response.json()
+        assert body["status"] == "unavailable"
+        assert body["checks"]["postgres"]["ok"] is False
+        assert body["checks"]["postgres"]["error"] == "OperationalError"
+        assert body["checks"]["redis"]["ok"] is True
+
+    async def test_readyz_returns_503_when_redis_fails(
+        self, client: AsyncClient
+    ) -> None:
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(False, "ConnectionError")),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 503
+        body = response.json()
+        assert body["status"] == "unavailable"
+        assert body["checks"]["redis"]["ok"] is False
+        assert body["checks"]["redis"]["error"] == "ConnectionError"
+
+    async def test_readyz_returns_503_when_both_fail(
+        self, client: AsyncClient
+    ) -> None:
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(False, "timeout")),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(False, "timeout")),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 503
+        body = response.json()
+        assert body["checks"]["postgres"]["error"] == "timeout"
+        assert body["checks"]["redis"]["error"] == "timeout"
+
+
+class TestPostgresProbe:
+    """Unit tests for the Postgres probe helper."""
+
+    async def test_postgres_probe_reports_timeout(self) -> None:
+        """A slow query past the 2s budget reports ``timeout``."""
+        import asyncio
+
+        from app.api.v1 import health
+
+        async def _slow_session() -> AsyncMock:
+            await asyncio.sleep(10)
+            return AsyncMock()
+
+        # Force the timeout path by patching the timeout constant to something
+        # tiny and the session factory to a slow no-op.
+        slow_session = AsyncMock()
+        slow_session.__aenter__ = AsyncMock(side_effect=_slow_session)
+        slow_session.__aexit__ = AsyncMock(return_value=None)
+
+        with (
+            patch.object(health, "_PROBE_TIMEOUT_SECONDS", 0.01),
+            patch.object(
+                health, "AsyncSessionLocal", return_value=slow_session
+            ),
+        ):
+            ok, err = await health._check_postgres()
+        assert ok is False
+        assert err == "timeout"
+
+    async def test_postgres_probe_reports_error_class(self) -> None:
+        """A driver-level failure surfaces the exception class name."""
+        from app.api.v1 import health
+
+        class FakeOperationalError(Exception):
+            pass
+
+        broken_session = AsyncMock()
+        broken_session.__aenter__ = AsyncMock(
+            side_effect=FakeOperationalError("boom")
+        )
+        broken_session.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(
+            health, "AsyncSessionLocal", return_value=broken_session
+        ):
+            ok, err = await health._check_postgres()
+        assert ok is False
+        assert err == "FakeOperationalError"
+
+
+class TestRedisProbe:
+    """Unit tests for the Redis probe helper."""
+
+    async def test_redis_probe_reports_timeout(self) -> None:
+        import asyncio
+
+        from app.api.v1 import health
+
+        async def _slow_get_redis() -> AsyncMock:
+            await asyncio.sleep(10)
+            return AsyncMock()
+
+        with (
+            patch.object(health, "_PROBE_TIMEOUT_SECONDS", 0.01),
+            patch.object(health, "get_redis", new=_slow_get_redis),
+        ):
+            ok, err = await health._check_redis()
+        assert ok is False
+        assert err == "timeout"
+
+    async def test_redis_probe_reports_error_class(self) -> None:
+        from app.api.v1 import health
+
+        class FakeConnectionError(Exception):
+            pass
+
+        async def _broken_get_redis() -> AsyncMock:
+            raise FakeConnectionError("nope")
+
+        with patch.object(health, "get_redis", new=_broken_get_redis):
+            ok, err = await health._check_redis()
+        assert ok is False
+        assert err == "FakeConnectionError"
+
+    async def test_redis_probe_ok_when_ping_succeeds(self) -> None:
+        from app.api.v1 import health
+
+        fake_client = AsyncMock()
+        fake_client.ping = AsyncMock(return_value=True)
+
+        async def _ok_get_redis() -> AsyncMock:
+            return fake_client
+
+        with patch.object(health, "get_redis", new=_ok_get_redis):
+            ok, err = await health._check_redis()
+        assert ok is True
+        assert err is None
+        fake_client.ping.assert_awaited_once()
+
+
+class TestVersion:
+    """GET /version — git SHA from RAILWAY_GIT_COMMIT_SHA."""
+
+    async def test_version_returns_sha_from_env(self, client: AsyncClient) -> None:
+        with patch.dict(os.environ, {"RAILWAY_GIT_COMMIT_SHA": "abc123def"}):
+            response = await client.get("/version")
+        assert response.status_code == 200
+        assert response.json() == {"sha": "abc123def"}
+
+    async def test_version_defaults_to_unknown_when_env_missing(
+        self, client: AsyncClient
+    ) -> None:
+        env = {k: v for k, v in os.environ.items() if k != "RAILWAY_GIT_COMMIT_SHA"}
+        with patch.dict(os.environ, env, clear=True):
+            response = await client.get("/version")
+        assert response.status_code == 200
+        assert response.json() == {"sha": "unknown"}
 
 
 class TestAuthEndpointErrors:
-    """Tests for auth endpoint error responses (no DB needed)."""
+    """Tests for auth endpoint error responses (no DB needed).
+
+    These ride along on the same lightweight test app used for the health
+    probes because they only exercise error paths that never reach the
+    database.
+    """
 
     async def test_login_invalid_credentials_returns_401(
         self, client: AsyncClient

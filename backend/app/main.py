@@ -15,6 +15,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.redirects import router as redirects_router
+from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.resend import router as resend_webhook_router
@@ -114,9 +115,11 @@ def _validate_security_key(
     Refuses to boot when the configured key is shorter than
     :data:`_MIN_KEY_LENGTH_BYTES`, carries less than :data:`_MIN_KEY_ENTROPY_BITS`
     of Shannon entropy, or matches the legacy ``change-me-in-production``
-    placeholder. The SECRET_KEY field in :class:`Settings` is already required
-    (no default) and pydantic enforces a minimum length — this check additionally
-    rejects long-but-low-entropy values such as ``"a" * 64``.
+    placeholder. The ``SECRET_KEY`` and ``ENCRYPTION_KEY`` fields on
+    :class:`Settings` are already required (no defaults) with a pydantic-enforced
+    minimum length, so the app refuses to boot without them regardless of the
+    ``DEBUG`` flag — this check additionally rejects long-but-low-entropy values
+    such as ``"a" * 64``.
     """
     if value == "change-me-in-production":
         log.error(
@@ -255,6 +258,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
 
 # Security headers middleware
@@ -293,6 +297,10 @@ else:
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# Health, readiness, and version probes — mounted at root so orchestrators
+# (Railway, Kubernetes) can hit them without an API prefix.
+app.include_router(health_router, tags=["Health"])
 
 # Public short-link redirects (no /api/v1 prefix — these are user-facing URLs)
 app.include_router(redirects_router)
@@ -372,7 +380,3 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-@app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "healthy"}
