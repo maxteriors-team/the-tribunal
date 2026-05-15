@@ -13,7 +13,7 @@ As the Lead Synthesizer, I analyzed 38 unique go-to-market strategies across 5 s
 - Complete 90-day roadmap for the #1 strategy
 - Key success principles and critical success factors
 
-**File Location:** `/home/groot/aicrm/BREAKTHROUGH_STRATEGY_REPORT.md`
+**File Location:** `/home/groot/aicrm/docs/strategy/BREAKTHROUGH_STRATEGY_REPORT.md`
 
 ---
 
@@ -27,7 +27,7 @@ As the Lead Synthesizer, I analyzed 38 unique go-to-market strategies across 5 s
 - Success milestones (Month 1, 3, 6, 12)
 - Key insights on why these work
 
-**File Location:** `/home/groot/aicrm/STRATEGY_QUICK_REFERENCE.md`
+**File Location:** `/home/groot/aicrm/docs/strategy/STRATEGY_QUICK_REFERENCE.md`
 
 ---
 
@@ -41,7 +41,7 @@ As the Lead Synthesizer, I analyzed 38 unique go-to-market strategies across 5 s
 - Speed-to-market comparison
 - Final 80/20 recommendation
 
-**File Location:** `/home/groot/aicrm/STRATEGY_DECISION_MATRIX.md`
+**File Location:** `/home/groot/aicrm/docs/strategy/STRATEGY_DECISION_MATRIX.md`
 
 ---
 
@@ -222,9 +222,9 @@ It needs a **category king** brave enough to:
 
 All deliverables are in the project root:
 
-1. **Main Report:** `/home/groot/aicrm/BREAKTHROUGH_STRATEGY_REPORT.md`
-2. **Quick Reference:** `/home/groot/aicrm/STRATEGY_QUICK_REFERENCE.md`
-3. **Decision Matrix:** `/home/groot/aicrm/STRATEGY_DECISION_MATRIX.md`
+1. **Main Report:** `/home/groot/aicrm/docs/strategy/BREAKTHROUGH_STRATEGY_REPORT.md`
+2. **Quick Reference:** `/home/groot/aicrm/docs/strategy/STRATEGY_QUICK_REFERENCE.md`
+3. **Decision Matrix:** `/home/groot/aicrm/docs/strategy/STRATEGY_DECISION_MATRIX.md`
 
 ---
 
