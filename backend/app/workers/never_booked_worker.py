@@ -32,6 +32,7 @@ from app.models.phone_number import PhoneNumber
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 MAX_CONTACTS_PER_TICK = 20
 
@@ -41,11 +42,13 @@ _DEFAULT_NEVER_BOOKED_TEMPLATE = (
 )
 
 
-class NeverBookedWorker(BaseWorker):
+class NeverBookedWorker(RetryableWorker, BaseWorker):
     """Background worker for never-booked lead re-engagement."""
 
     POLL_INTERVAL_SECONDS = 3600  # once per hour
     COMPONENT_NAME = "never_booked_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -63,13 +66,12 @@ class NeverBookedWorker(BaseWorker):
                 return
 
             for agent in agents:
-                try:
-                    await self._process_agent(agent, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error processing never-booked re-engagement for agent",
-                        agent_id=str(agent.id),
-                    )
+                await self.execute_with_retry(
+                    self._process_agent,
+                    agent,
+                    db,
+                    item_key=f"agent:{agent.id}",
+                )
 
     async def _process_agent(self, agent: Agent, db: AsyncSession) -> None:
         """Find qualifying contacts for this agent and send re-engagement SMS."""
@@ -128,14 +130,13 @@ class NeverBookedWorker(BaseWorker):
             )
 
         for contact in contacts:
-            try:
-                await self._send_reengagement(contact, agent, db)
-            except Exception:
-                self.logger.exception(
-                    "Error sending never-booked re-engagement SMS",
-                    contact_id=contact.id,
-                    agent_id=str(agent.id),
-                )
+            await self.execute_with_retry(
+                self._send_reengagement,
+                contact,
+                agent,
+                db,
+                item_key=f"never_booked:{agent.id}:contact:{contact.id}",
+            )
 
     async def _send_reengagement(
         self,

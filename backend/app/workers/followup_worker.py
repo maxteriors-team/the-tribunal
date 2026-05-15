@@ -18,16 +18,19 @@ from app.models.conversation import Conversation
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 # Worker configuration
 MAX_FOLLOWUPS_PER_TICK = 10
 
 
-class FollowupWorker(BaseWorker):
+class FollowupWorker(RetryableWorker, BaseWorker):
     """Background worker for processing conversation follow-ups."""
 
     POLL_INTERVAL_SECONDS = 60
     COMPONENT_NAME = "followup_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
         """Process all pending follow-ups."""
@@ -58,21 +61,28 @@ class FollowupWorker(BaseWorker):
             self.logger.info("Processing follow-ups", count=len(conversations))
 
             for conversation in conversations:
-                try:
-                    await self._process_conversation_followup(conversation, db)
+                ok = await self.execute_with_retry(
+                    self._process_conversation_followup,
+                    conversation,
+                    db,
+                    item_key=f"conversation:{conversation.id}",
+                )
+                if ok:
                     self.record_items_processed()
-                except Exception:
-                    self.logger.exception(
-                        "Error processing conversation follow-up",
-                        conversation_id=str(conversation.id),
-                    )
 
     async def _process_conversation_followup(
         self,
         conversation: Conversation,
         db: AsyncSession,
-    ) -> None:
-        """Process follow-up for a single conversation."""
+    ) -> bool:
+        """Process follow-up for a single conversation.
+
+        Returns:
+            True on a successful invocation (regardless of whether a message
+            was actually sent), so the caller knows the retry helper did not
+            give up. Raises on transient errors so ``execute_with_retry``
+            can back off and try again.
+        """
         log = self.logger.bind(conversation_id=str(conversation.id))
 
         # Check for required API keys
@@ -81,11 +91,11 @@ class FollowupWorker(BaseWorker):
 
         if not openai_key:
             log.warning("No OpenAI API key configured")
-            return
+            return False
 
         if not telnyx_key:
             log.warning("No Telnyx API key configured")
-            return
+            return False
 
         # Generate follow-up message
         message_body = await generate_followup_message(
@@ -101,7 +111,7 @@ class FollowupWorker(BaseWorker):
                 hours=conversation.followup_delay_hours
             )
             await db.commit()
-            return
+            return False
 
         # Send the follow-up via SMS
         sms_service = TelnyxSMSService(telnyx_key)
@@ -134,14 +144,7 @@ class FollowupWorker(BaseWorker):
                 log.info("Max follow-ups reached", max_count=conversation.followup_max_count)
 
             await db.commit()
-
-        except Exception as e:
-            log.exception("Failed to send follow-up", error=str(e))
-            # Still schedule next attempt, but with a delay
-            conversation.next_followup_at = datetime.now(UTC) + timedelta(
-                hours=conversation.followup_delay_hours
-            )
-            await db.commit()
+            return True
         finally:
             await sms_service.close()
 

@@ -18,9 +18,10 @@ from app.models.prompt_version import PromptVersion
 from app.services.ai.bandit_statistics import ComparisonResult, compare_prompt_versions
 from app.services.ai.prompt_version_service import PromptVersionService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 
-class ExperimentEvaluationWorker(BaseWorker):
+class ExperimentEvaluationWorker(RetryableWorker, BaseWorker):
     """Background worker for evaluating A/B test experiments.
 
     Runs hourly to analyze agents with 2+ active prompt versions,
@@ -30,6 +31,8 @@ class ExperimentEvaluationWorker(BaseWorker):
 
     POLL_INTERVAL_SECONDS = 3600  # Hourly
     COMPONENT_NAME = "experiment_evaluation"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
         """Find agents with active experiments and evaluate them."""
@@ -57,13 +60,12 @@ class ExperimentEvaluationWorker(BaseWorker):
             self.logger.info("Evaluating experiments", agent_count=len(agents))
 
             for agent in agents:
-                try:
-                    await self._evaluate_agent(db, agent)
-                except Exception:
-                    self.logger.exception(
-                        "Error evaluating agent experiment",
-                        agent_id=str(agent.id),
-                    )
+                await self.execute_with_retry(
+                    self._evaluate_agent,
+                    db,
+                    agent,
+                    item_key=f"agent:{agent.id}",
+                )
 
     async def _evaluate_agent(
         self,

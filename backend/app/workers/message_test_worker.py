@@ -32,16 +32,19 @@ from app.services.rate_limiting.rate_limiter import RateLimiter
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 # Worker configuration
 MAX_MESSAGES_PER_TICK = 20
 
 
-class MessageTestWorker(BaseWorker):
+class MessageTestWorker(RetryableWorker, BaseWorker):
     """Background worker for processing message tests with round-robin variant assignment."""
 
     POLL_INTERVAL_SECONDS = settings.campaign_poll_interval
     COMPONENT_NAME = "message_test_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -70,14 +73,12 @@ class MessageTestWorker(BaseWorker):
             self.logger.debug("Processing message tests", count=len(tests))
 
             for test in tests:
-                try:
-                    await self._process_test(test, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error processing message test",
-                        test_id=str(test.id),
-                        test_name=test.name,
-                    )
+                await self.execute_with_retry(
+                    self._process_test,
+                    test,
+                    db,
+                    item_key=f"message_test:{test.id}",
+                )
 
     async def _process_test(self, test: MessageTest, db: AsyncSession) -> None:
         """Process a single message test."""

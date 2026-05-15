@@ -15,17 +15,25 @@ from app.models.call_outcome import CallOutcome
 from app.models.conversation import Message
 from app.services.ai.transcript_analysis import analyze_transcript
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 BATCH_SIZE = 10
 
 
-class TranscriptAnalysisWorker(BaseWorker):
+class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
     """Background worker that analyzes voice call transcripts."""
 
     POLL_INTERVAL_SECONDS = 30
     COMPONENT_NAME = "transcript_analysis_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
+        await self.execute_with_retry(
+            self._process_batch, item_key="transcript_batch"
+        )
+
+    async def _process_batch(self) -> None:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(Message)

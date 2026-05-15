@@ -13,9 +13,10 @@ from app.models.improvement_suggestion import ImprovementSuggestion
 from app.models.prompt_version import PromptVersion
 from app.services.ai.prompt_improvement_service import PromptImprovementService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 
-class PromptImprovementWorker(BaseWorker):
+class PromptImprovementWorker(RetryableWorker, BaseWorker):
     """Generates prompt improvement suggestions automatically.
 
     Runs daily to analyze agents with auto_suggest=True and generate
@@ -25,6 +26,8 @@ class PromptImprovementWorker(BaseWorker):
 
     POLL_INTERVAL_SECONDS = 86400  # Daily
     COMPONENT_NAME = "prompt_improvement"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
         """Process agents with auto-improvement enabled."""
@@ -45,13 +48,12 @@ class PromptImprovementWorker(BaseWorker):
             self.logger.info("Processing auto-improvement agents", count=len(agents))
 
             for agent in agents:
-                try:
-                    await self._process_agent(db, agent)
-                except Exception:
-                    self.logger.exception(
-                        "Error processing agent for improvement",
-                        agent_id=str(agent.id),
-                    )
+                await self.execute_with_retry(
+                    self._process_agent,
+                    db,
+                    agent,
+                    item_key=f"agent:{agent.id}",
+                )
 
             await db.commit()
 

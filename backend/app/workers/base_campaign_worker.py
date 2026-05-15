@@ -25,9 +25,10 @@ from app.models.campaign import (
 )
 from app.services.ai.campaign_report_service import CampaignReportService
 from app.workers.base import BaseWorker
+from app.workers.retryable import RetryableWorker
 
 
-class BaseCampaignWorker(BaseWorker):
+class BaseCampaignWorker(RetryableWorker, BaseWorker):
     """Abstract base for campaign workers (SMS and voice).
 
     Subclasses must implement:
@@ -36,6 +37,9 @@ class BaseCampaignWorker(BaseWorker):
     - _process_campaign_contacts(): The actual contact processing logic
     - _get_remaining_filter(): SQLAlchemy WHERE clause for remaining contacts
     """
+
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     @property
     @abstractmethod
@@ -86,14 +90,12 @@ class BaseCampaignWorker(BaseWorker):
             self.logger.debug("Processing campaigns", count=len(campaigns))
 
             for campaign in campaigns:
-                try:
-                    await self._process_campaign(campaign, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error processing campaign",
-                        campaign_id=str(campaign.id),
-                        campaign_name=campaign.name,
-                    )
+                await self.execute_with_retry(
+                    self._process_campaign,
+                    campaign,
+                    db,
+                    item_key=f"campaign:{campaign.id}",
+                )
 
     async def _process_campaign(
         self, campaign: Campaign, db: AsyncSession

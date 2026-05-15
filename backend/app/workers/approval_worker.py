@@ -17,13 +17,16 @@ from app.models.pending_action import PendingAction
 from app.services.approval.approval_delivery_service import ApprovalDeliveryService
 from app.services.approval.approval_gate_service import ApprovalGateService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 
-class ApprovalWorker(BaseWorker):
+class ApprovalWorker(RetryableWorker, BaseWorker):
     """Processes approved actions, handles timeouts, and sends pending notifications."""
 
     POLL_INTERVAL_SECONDS = 30
     COMPONENT_NAME = "approval_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -52,16 +55,24 @@ class ApprovalWorker(BaseWorker):
         actions = result.scalars().all()
 
         for action in actions:
-            try:
-                await self.delivery_service.notify_pending_action(db, action)
-                await db.commit()
-                self.record_items_processed()
-            except Exception:
-                await db.rollback()
-                self.logger.exception(
-                    "Failed to send notification",
-                    action_id=str(action.id),
-                )
+            await self.execute_with_retry(
+                self._notify_pending_action,
+                db,
+                action,
+                item_key=f"notify:{action.id}",
+            )
+
+    async def _notify_pending_action(
+        self, db: AsyncSession, action: PendingAction
+    ) -> None:
+        """Notify a single pending action; raises on failure for retry."""
+        try:
+            await self.delivery_service.notify_pending_action(db, action)
+            await db.commit()
+            self.record_items_processed()
+        except Exception:
+            await db.rollback()
+            raise
 
     async def _execute_approved_actions(self, db: AsyncSession) -> None:
         """Find approved actions and execute them."""
@@ -71,16 +82,24 @@ class ApprovalWorker(BaseWorker):
         actions = result.scalars().all()
 
         for action in actions:
-            try:
-                await self.gate_service.execute_approved_action(db, action)
-                await db.commit()
-                self.record_items_processed()
-            except Exception:
-                await db.rollback()
-                self.logger.exception(
-                    "Failed to execute approved action",
-                    action_id=str(action.id),
-                )
+            await self.execute_with_retry(
+                self._execute_single_action,
+                db,
+                action,
+                item_key=f"execute:{action.id}",
+            )
+
+    async def _execute_single_action(
+        self, db: AsyncSession, action: PendingAction
+    ) -> None:
+        """Execute a single approved action; raises on failure for retry."""
+        try:
+            await self.gate_service.execute_approved_action(db, action)
+            await db.commit()
+            self.record_items_processed()
+        except Exception:
+            await db.rollback()
+            raise
 
     async def _handle_timeouts(self, db: AsyncSession) -> None:
         """Handle auto-approve timeouts and expiration.

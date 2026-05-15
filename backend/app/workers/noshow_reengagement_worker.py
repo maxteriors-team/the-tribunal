@@ -29,6 +29,7 @@ from app.models.phone_number import PhoneNumber
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 MAX_CONTACTS_PER_TICK = 20
 
@@ -43,11 +44,13 @@ _DEFAULT_DAY7_TEMPLATE = (
 )
 
 
-class NoshowReengagementWorker(BaseWorker):
+class NoshowReengagementWorker(RetryableWorker, BaseWorker):
     """Background worker for no-show multi-day re-engagement sequences."""
 
     POLL_INTERVAL_SECONDS = 3600  # once per hour
     COMPONENT_NAME = "noshow_reengagement_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -66,13 +69,12 @@ class NoshowReengagementWorker(BaseWorker):
                 return
 
             for agent in agents:
-                try:
-                    await self._process_agent(agent, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error processing noshow re-engagement for agent",
-                        agent_id=str(agent.id),
-                    )
+                await self.execute_with_retry(
+                    self._process_agent,
+                    agent,
+                    db,
+                    item_key=f"agent:{agent.id}",
+                )
 
     async def _process_agent(self, agent: Agent, db: AsyncSession) -> None:
         """Process re-engagement for all qualifying contacts of one agent."""

@@ -35,6 +35,7 @@ from app.services.calendar.reminder_service import resolve_from_number
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 MAX_REMINDERS_PER_TICK = 20
 
@@ -47,11 +48,13 @@ _AGENTLESS_DEFAULT_OFFSETS = [60]
 VR_SENTINEL = -1
 
 
-class ReminderWorker(BaseWorker):
+class ReminderWorker(RetryableWorker, BaseWorker):
     """Background worker for sending appointment reminders via SMS."""
 
     POLL_INTERVAL_SECONDS = 60
     COMPONENT_NAME = "reminder_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -120,14 +123,13 @@ class ReminderWorker(BaseWorker):
                 )
 
                 for appt, offset in due_pairs:
-                    try:
-                        await self._send_reminder(appt, offset, db)
-                    except Exception:
-                        self.logger.exception(
-                            "Error sending appointment reminder",
-                            appointment_id=appt.id,
-                            offset_minutes=offset,
-                        )
+                    await self.execute_with_retry(
+                        self._send_reminder,
+                        appt,
+                        offset,
+                        db,
+                        item_key=f"reminder:{appt.id}:offset:{offset}",
+                    )
 
             # Value-reinforcement pre-appointment messages
             await self._process_value_reinforcement(appointments, now, db)
@@ -274,13 +276,12 @@ class ReminderWorker(BaseWorker):
             if appt.scheduled_at > threshold:
                 continue  # Not within the VR send window yet
 
-            try:
-                await self._send_value_reinforcement(appt, db)
-            except Exception:
-                self.logger.exception(
-                    "Error sending value-reinforcement message",
-                    appointment_id=appt.id,
-                )
+            await self.execute_with_retry(
+                self._send_value_reinforcement,
+                appt,
+                db,
+                item_key=f"vr:{appt.id}",
+            )
 
     async def _send_value_reinforcement(
         self,

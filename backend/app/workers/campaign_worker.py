@@ -49,6 +49,8 @@ class CampaignWorker(BaseCampaignWorker):
 
     POLL_INTERVAL_SECONDS = settings.campaign_poll_interval
     COMPONENT_NAME = "campaign_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()

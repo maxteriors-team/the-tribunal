@@ -1,6 +1,7 @@
 """Background worker for phone number reputation updates."""
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -8,9 +9,10 @@ from app.models.phone_number import PhoneNumber
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.rate_limiting.warming_scheduler import WarmingScheduler
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 
-class ReputationWorker(BaseWorker):
+class ReputationWorker(RetryableWorker, BaseWorker):
     """Background worker for phone number reputation management.
 
     Periodically:
@@ -21,6 +23,8 @@ class ReputationWorker(BaseWorker):
 
     POLL_INTERVAL_SECONDS = getattr(settings, "reputation_poll_interval", 300)
     COMPONENT_NAME = "reputation_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -41,42 +45,20 @@ class ReputationWorker(BaseWorker):
             quarantined_count = 0
 
             for phone in phones:
-                try:
-                    # Capture health status before update
-                    old_status = phone.health_status
-
-                    # Update reputation metrics
-                    await self.tracker.update_phone_reputation(phone.id, db)
-
-                    # Refresh phone to get updated values
-                    await db.refresh(phone)
-
-                    # Check if number was quarantined
-                    if (
-                        old_status != "quarantined"
-                        and phone.health_status == "quarantined"
-                    ):
-                        quarantined_count += 1
-                        self.logger.warning(
-                            "phone_number_quarantined",
-                            phone_number=phone.phone_number,
-                            phone_number_id=str(phone.id),
-                            reason=phone.quarantine_reason,
-                        )
-
-                    # Advance warming stage if applicable
-                    if phone.warming_stage > 0:
-                        advanced = await self.warming.advance_warming_stage(phone, db)
-                        if advanced:
-                            warming_advanced += 1
-
-                    updated_count += 1
-
-                except Exception:
-                    self.logger.exception(
-                        "error_updating_phone_reputation",
-                        phone_id=str(phone.id),
-                    )
+                outcome = await self.execute_with_retry(
+                    self._update_one_phone,
+                    phone,
+                    db,
+                    item_key=f"phone:{phone.id}",
+                )
+                if outcome is None:
+                    continue
+                was_advanced, was_quarantined = outcome
+                if was_quarantined:
+                    quarantined_count += 1
+                if was_advanced:
+                    warming_advanced += 1
+                updated_count += 1
 
             self.logger.info(
                 "reputation_update_cycle_completed",
@@ -84,6 +66,35 @@ class ReputationWorker(BaseWorker):
                 warming_advanced=warming_advanced,
                 newly_quarantined=quarantined_count,
             )
+
+    async def _update_one_phone(
+        self, phone: PhoneNumber, db: AsyncSession
+    ) -> tuple[bool, bool]:
+        """Update reputation for a single phone. Returns (advanced, quarantined)."""
+        old_status = phone.health_status
+
+        await self.tracker.update_phone_reputation(phone.id, db)
+        await db.refresh(phone)
+
+        was_quarantined = (
+            old_status != "quarantined"
+            and phone.health_status == "quarantined"
+        )
+        if was_quarantined:
+            self.logger.warning(
+                "phone_number_quarantined",
+                phone_number=phone.phone_number,
+                phone_number_id=str(phone.id),
+                reason=phone.quarantine_reason,
+            )
+
+        was_advanced = False
+        if phone.warming_stage > 0:
+            was_advanced = bool(
+                await self.warming.advance_warming_stage(phone, db)
+            )
+
+        return was_advanced, was_quarantined
 
 
 # Singleton registry (consistent with all other workers)

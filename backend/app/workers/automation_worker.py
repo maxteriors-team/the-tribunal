@@ -47,6 +47,7 @@ from app.models.phone_number import PhoneNumber
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 # Maximum contacts to process per automation per poll cycle.
 MAX_CONTACTS_PER_AUTOMATION = 50
@@ -58,11 +59,13 @@ DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_NEVER_BOOKED_DAYS = 7
 
 
-class AutomationWorker(BaseWorker):
+class AutomationWorker(RetryableWorker, BaseWorker):
     """Executes trigger-based automations against contacts."""
 
     POLL_INTERVAL_SECONDS = 60
     COMPONENT_NAME = "automation_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     # ------------------------------------------------------------------ #
     # BaseWorker interface                                                 #
@@ -84,14 +87,12 @@ class AutomationWorker(BaseWorker):
             )
 
             for automation in automations:
-                try:
-                    await self._evaluate_automation(automation, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error evaluating automation",
-                        automation_id=str(automation.id),
-                        trigger_type=automation.trigger_type,
-                    )
+                await self.execute_with_retry(
+                    self._evaluate_automation,
+                    automation,
+                    db,
+                    item_key=f"automation:{automation.id}",
+                )
 
             await db.commit()
 
@@ -120,13 +121,13 @@ class AutomationWorker(BaseWorker):
         log.info("Trigger matched contacts", count=len(contacts))
 
         for contact in contacts:
-            try:
-                await self._execute_for_contact(automation, contact, db)
-            except Exception:
-                log.exception(
-                    "Error executing automation for contact",
-                    contact_id=contact.id,
-                )
+            await self.execute_with_retry(
+                self._execute_for_contact,
+                automation,
+                contact,
+                db,
+                item_key=f"automation:{automation.id}:contact:{contact.id}",
+            )
 
         automation.last_evaluated_at = datetime.now(UTC)
 

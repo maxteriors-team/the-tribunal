@@ -21,16 +21,19 @@ from app.db.session import AsyncSessionLocal
 from app.models.contact import Contact
 from app.services.scraping.enrichment_service import enrich_contact_data
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 # Worker configuration
 MAX_CONTACTS_PER_TICK = 10
 
 
-class EnrichmentWorker(BaseWorker):
+class EnrichmentWorker(RetryableWorker, BaseWorker):
     """Background worker for enriching contacts with website data."""
 
     POLL_INTERVAL_SECONDS = getattr(settings, "enrichment_poll_interval", 30)
     COMPONENT_NAME = "enrichment_worker"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     def __init__(self) -> None:
         super().__init__()
@@ -67,13 +70,12 @@ class EnrichmentWorker(BaseWorker):
             self.logger.debug("Processing pending enrichments", count=len(contacts))
 
             for contact in contacts:
-                try:
-                    await self._enrich_contact(contact, db)
-                except Exception:
-                    self.logger.exception(
-                        "Error enriching contact",
-                        contact_id=contact.id,
-                    )
+                await self.execute_with_retry(
+                    self._enrich_contact,
+                    contact,
+                    db,
+                    item_key=f"contact:{contact.id}",
+                )
 
             await db.commit()
 

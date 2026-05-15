@@ -14,9 +14,10 @@ from app.db.session import AsyncSessionLocal
 from app.models.call_outcome import CallOutcome, OutcomeType
 from app.models.prompt_version_stats import PromptVersionStats
 from app.workers.base import BaseWorker, WorkerRegistry
+from app.workers.retryable import RetryableWorker
 
 
-class PromptStatsWorker(BaseWorker):
+class PromptStatsWorker(RetryableWorker, BaseWorker):
     """Aggregates daily stats for prompt versions.
 
     Runs hourly to aggregate yesterday's call outcomes into
@@ -25,14 +26,28 @@ class PromptStatsWorker(BaseWorker):
 
     POLL_INTERVAL_SECONDS = 3600  # Hourly
     COMPONENT_NAME = "prompt_stats"
+    max_retries = 3
+    backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
         """Process daily aggregation for all prompt versions."""
         async with AsyncSessionLocal() as db:
             # Aggregate yesterday's data by default
             yesterday = date.today() - timedelta(days=1)
-            await self._aggregate_for_date(db, yesterday)
-            await db.commit()
+            await self.execute_with_retry(
+                self._aggregate_and_commit,
+                db,
+                yesterday,
+                item_key=f"aggregate:{yesterday.isoformat()}",
+            )
+
+    async def _aggregate_and_commit(
+        self, db: AsyncSession, stat_date: date
+    ) -> int:
+        """Aggregate for a date and commit; raises on failure to trigger retry."""
+        processed = await self._aggregate_for_date(db, stat_date)
+        await db.commit()
+        return processed
 
     async def _aggregate_for_date(
         self,
