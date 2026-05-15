@@ -8,18 +8,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { useAuth } from "@/providers/auth-provider";
-import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const { isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoadingState className="min-h-screen" />;
   }
 
   return (

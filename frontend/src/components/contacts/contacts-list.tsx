@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { contactStatusColors } from "@/lib/status-colors";
@@ -173,12 +174,11 @@ export function ContactsList({ className }: ContactsListProps) {
               ))}
             </div>
           ) : contacts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <User className="h-12 w-12 text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">
-                {searchQuery ? "No contacts found" : "No contacts yet"}
-              </p>
-            </div>
+            <PageEmptyState
+              className="py-12"
+              icon={<User className="h-12 w-12" />}
+              title={searchQuery ? "No contacts found" : "No contacts yet"}
+            />
           ) : (
             <AnimatePresence mode="popLayout">
               <div className="space-y-1">

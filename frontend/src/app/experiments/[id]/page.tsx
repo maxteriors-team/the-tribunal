@@ -9,8 +9,6 @@ import {
   Play,
   Pause,
   CheckCircle2,
-  Loader2,
-  AlertCircle,
   Settings2,
   FlaskConical,
   Users,
@@ -21,6 +19,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TestAnalytics } from "@/components/experiments/test-analytics";
 import { SaveTemplateDialog } from "@/components/experiments/save-template-dialog";
@@ -109,9 +108,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
   if (isPending) {
     return (
       <AppSidebar>
-        <div className="flex items-center justify-center h-screen">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoadingState className="h-screen" />
       </AppSidebar>
     );
   }
@@ -119,13 +116,12 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
   if (error || !test) {
     return (
       <AppSidebar>
-        <div className="flex flex-col items-center justify-center h-screen gap-4">
-          <AlertCircle className="size-12 text-destructive" />
-          <h2 className="text-xl font-semibold">Experiment not found</h2>
-          <Button variant="outline" onClick={() => router.push("/experiments")}>
-            Back to Experiments
-          </Button>
-        </div>
+        <PageErrorState
+          className="h-screen"
+          message="Experiment not found"
+          onRetry={() => router.push("/experiments")}
+          retryLabel="Back to Experiments"
+        />
       </AppSidebar>
     );
   }

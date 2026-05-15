@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -496,16 +497,16 @@ function NudgeStatusBadge({ status }: { status: string }) {
 function NudgeEmptyState({ status }: { status: string }) {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-        <Inbox className="mb-4 h-12 w-12 text-muted-foreground" />
-        <h3 className="mb-2 text-lg font-semibold">
-          {status === "pending" ? "All caught up!" : "No nudges"}
-        </h3>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {status === "pending"
-            ? "No nudges right now. When your contacts have upcoming birthdays or need follow-ups, they'll appear here."
-            : `No ${status} nudges found.`}
-        </p>
+      <CardContent className="py-4">
+        <PageEmptyState
+          icon={<Inbox className="h-12 w-12" />}
+          title={status === "pending" ? "All caught up!" : "No nudges"}
+          description={
+            status === "pending"
+              ? "No nudges right now. When your contacts have upcoming birthdays or need follow-ups, they'll appear here."
+              : `No ${status} nudges found.`
+          }
+        />
       </CardContent>
     </Card>
   );

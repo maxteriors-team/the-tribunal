@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -71,15 +72,12 @@ function DateSeparator({ date }: { date: Date }) {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-        <MessageSquare className="h-8 w-8 text-muted-foreground" />
-      </div>
-      <h3 className="font-medium text-lg mb-2">No conversation yet</h3>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        Start a conversation by sending a message, making a call, or scheduling an appointment.
-      </p>
-    </div>
+    <PageEmptyState
+      className="h-full"
+      icon={<MessageSquare className="h-8 w-8" />}
+      title="No conversation yet"
+      description="Start a conversation by sending a message, making a call, or scheduling an appointment."
+    />
   );
 }
 
@@ -280,15 +278,12 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
 
   if (!selectedContact) {
     return (
-      <div className={cn("flex flex-col h-full items-center justify-center", className)}>
-        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <MessageSquare className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h3 className="font-medium text-lg mb-2">Select a contact</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose a contact to view their conversation history
-        </p>
-      </div>
+      <PageEmptyState
+        className={cn("h-full", className)}
+        icon={<MessageSquare className="h-8 w-8" />}
+        title="Select a contact"
+        description="Choose a contact to view their conversation history"
+      />
     );
   }
 

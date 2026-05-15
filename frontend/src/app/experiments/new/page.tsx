@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Button } from "@/components/ui/button";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { MessageTestWizard } from "@/components/experiments/message-test-wizard";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { contactsApi } from "@/lib/api/contacts";
@@ -96,9 +97,7 @@ export default function NewExperimentPage() {
   if (isPending) {
     return (
       <AppSidebar>
-        <div className="flex items-center justify-center h-screen">
-          <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageLoadingState className="h-screen" />
       </AppSidebar>
     );
   }

@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { PageEmptyState } from "@/components/ui/page-state";
 
 import { QuizBuilder } from "@/components/lead-magnets/quiz-builder";
 import { CalculatorBuilder } from "@/components/lead-magnets/calculator-builder";
@@ -526,9 +527,10 @@ export default function NewLeadMagnetPage() {
 
   if (!workspaceId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Please select a workspace</p>
-      </div>
+      <PageEmptyState
+        className="h-full"
+        title="Please select a workspace"
+      />
     );
   }
 

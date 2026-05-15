@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, XCircle, Clock, Users } from "lucide-react";
 
+import { PageLoadingState } from "@/components/ui/page-state";
 import { invitationsApi } from "@/lib/api/invitations";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -71,11 +72,7 @@ export default function InviteAcceptPage({ params }: PageProps) {
 
   // Loading state
   if (isAuthLoading || isInvitationLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoadingState className="min-h-screen" />;
   }
 
   // Error state

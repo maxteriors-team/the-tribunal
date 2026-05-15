@@ -10,7 +10,6 @@ import {
   Eye,
   Wand2,
   MoreHorizontal,
-  Loader2,
   Lightbulb,
   ChevronDown,
   ChevronUp,
@@ -24,6 +23,7 @@ import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,24 +155,22 @@ export function SuggestionsQueue({
   };
 
   if (isPending) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoadingState className="min-h-0 py-8" />;
   }
 
   if (!suggestions?.items.length) {
     return (
       <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-          <Lightbulb className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="mb-2 text-lg font-semibold">No Suggestions</h3>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {statusFilter === "pending"
-              ? "No pending improvement suggestions. Generate suggestions from an agent's A/B testing tab."
-              : "No suggestions found with this filter."}
-          </p>
+        <CardContent className="py-4">
+          <PageEmptyState
+            icon={<Lightbulb className="h-12 w-12" />}
+            title="No Suggestions"
+            description={
+              statusFilter === "pending"
+                ? "No pending improvement suggestions. Generate suggestions from an agent's A/B testing tab."
+                : "No suggestions found with this filter."
+            }
+          />
         </CardContent>
       </Card>
     );

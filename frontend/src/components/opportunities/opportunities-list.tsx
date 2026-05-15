@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { opportunityStatusColors } from "@/lib/status-colors";
 import { opportunitiesApi } from "@/lib/api/opportunities";
@@ -123,8 +124,8 @@ export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                No opportunities found
+              <TableCell colSpan={7} className="py-0">
+                <PageEmptyState className="min-h-0 py-8" title="No opportunities found" />
               </TableCell>
             </TableRow>
           )}

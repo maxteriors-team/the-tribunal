@@ -64,6 +64,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { leadMagnetsApi, CreateLeadMagnetRequest } from "@/lib/api/lead-magnets";
@@ -260,16 +261,18 @@ export default function LeadMagnetsPage() {
           </div>
         ) : leadMagnets.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileText className="size-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No lead magnets yet</h3>
-              <p className="text-muted-foreground text-center mb-4">
-                Create your first lead magnet to attach as a bonus to offers
-              </p>
-              <Button onClick={() => setShowCreateDialog(true)}>
-                <Plus className="size-4 mr-2" />
-                Create Your First Lead Magnet
-              </Button>
+            <CardContent className="py-4">
+              <PageEmptyState
+                title="No lead magnets yet"
+                description="Create your first lead magnet to attach as a bonus to offers"
+                icon={<FileText className="size-12" />}
+                action={
+                  <Button onClick={() => setShowCreateDialog(true)}>
+                    <Plus className="size-4 mr-2" />
+                    Create Your First Lead Magnet
+                  </Button>
+                }
+              />
             </CardContent>
           </Card>
         ) : (

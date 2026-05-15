@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 
 import { publicOffersApi, OptInRequest } from "@/lib/api/public-offers";
 import { formatNumber } from "@/lib/utils/number";
@@ -67,24 +68,19 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
 
   if (isPending) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted">
-        <Loader2 className="size-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+        <PageLoadingState className="min-h-screen" />
       </div>
     );
   }
 
   if (error || !offer) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="size-12 text-muted-foreground mx-auto mb-4" />
-            <h1 className="text-xl font-semibold mb-2">Offer Not Found</h1>
-            <p className="text-muted-foreground">
-              This offer may have expired or the link is incorrect.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+        <PageErrorState
+          className="min-h-screen"
+          message="This offer may have expired or the link is incorrect."
+        />
       </div>
     );
   }

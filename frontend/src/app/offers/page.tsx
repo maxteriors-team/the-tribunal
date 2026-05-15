@@ -38,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { offersApi } from "@/lib/api/offers";
@@ -188,16 +189,18 @@ export default function OffersPage() {
           </div>
         ) : offers.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Tag className="size-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No offers yet</h3>
-              <p className="text-muted-foreground text-center mb-4">
-                Create your first irresistible offer with value stacking
-              </p>
-              <Button onClick={() => router.push("/offers/new")}>
-                <Plus className="size-4 mr-2" />
-                Create Your First Offer
-              </Button>
+            <CardContent className="py-4">
+              <PageEmptyState
+                title="No offers yet"
+                description="Create your first irresistible offer with value stacking"
+                icon={<Tag className="size-12" />}
+                action={
+                  <Button onClick={() => router.push("/offers/new")}>
+                    <Plus className="size-4 mr-2" />
+                    Create Your First Offer
+                  </Button>
+                }
+              />
             </CardContent>
           </Card>
         ) : (

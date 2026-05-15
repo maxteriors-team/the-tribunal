@@ -59,6 +59,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
@@ -238,8 +239,8 @@ export function AutomationsPage() {
 
   if (error) {
     return (
-      <div className="p-6 flex items-center justify-center">
-        <p className="text-destructive">Failed to load automations</p>
+      <div className="p-6">
+        <PageErrorState message="Failed to load automations" />
       </div>
     );
   }
@@ -431,24 +432,26 @@ export function AutomationsPage() {
           <AutomationCardSkeleton />
         </div>
       ) : filteredAutomations.length === 0 ? (
-        <Card className="p-12 text-center">
-          <div className="flex flex-col items-center gap-4">
-            <Zap className="size-12 text-muted-foreground" />
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold">No automations found</h3>
-              <p className="text-muted-foreground">
-                {searchQuery
+        <Card>
+          <CardContent className="py-4">
+            <PageEmptyState
+              icon={<Zap className="size-12" />}
+              title="No automations found"
+              description={
+                searchQuery
                   ? "Try adjusting your search"
-                  : "Create your first automation to automate repetitive tasks"}
-              </p>
-            </div>
-            {!searchQuery && (
-              <Button onClick={() => { setEditingAutomation(null); setIsCreateDialogOpen(true); }}>
-                <Plus className="mr-2 size-4" />
-                Create Automation
-              </Button>
-            )}
-          </div>
+                  : "Create your first automation to automate repetitive tasks"
+              }
+              action={
+                !searchQuery ? (
+                  <Button onClick={() => { setEditingAutomation(null); setIsCreateDialogOpen(true); }}>
+                    <Plus className="mr-2 size-4" />
+                    Create Automation
+                  </Button>
+                ) : undefined
+              }
+            />
+          </CardContent>
         </Card>
       ) : (
         <motion.div

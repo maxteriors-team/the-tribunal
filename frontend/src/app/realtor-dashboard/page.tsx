@@ -15,6 +15,7 @@ import {
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -205,12 +206,12 @@ function RealtorDashboardContent() {
             ))}
           </div>
         ) : appointments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-16 text-center">
-            <CalendarX className="h-10 w-10 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">
-              No upcoming appointments yet. Your AI agent is working on it!
-            </p>
-          </div>
+          <PageEmptyState
+            className="min-h-0 rounded-lg border border-dashed py-16"
+            title="No upcoming appointments yet"
+            description="Your AI agent is working on it!"
+            icon={<CalendarX className="h-10 w-10" />}
+          />
         ) : (
           <div className="rounded-lg border">
             <Table>

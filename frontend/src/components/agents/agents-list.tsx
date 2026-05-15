@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { PhoneInput } from "@/components/landing/phone-input";
 import {
   ResourceListHeader,
@@ -276,16 +277,16 @@ export function AgentsList() {
       }
       isEmpty={filteredAgents.length === 0}
       emptyState={
-        <div className="text-center py-12">
-          <Bot className="mx-auto size-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No agents yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Create your first AI agent to start handling calls and messages
-          </p>
-          <Button asChild>
-            <Link href="/agents/create">Create Agent</Link>
-          </Button>
-        </div>
+        <PageEmptyState
+          icon={<Bot className="size-12" />}
+          title="No agents yet"
+          description="Create your first AI agent to start handling calls and messages"
+          action={
+            <Button asChild>
+              <Link href="/agents/create">Create Agent</Link>
+            </Button>
+          }
+        />
       }
       extras={
         <Dialog open={testCallDialogOpen} onOpenChange={setTestCallDialogOpen}>

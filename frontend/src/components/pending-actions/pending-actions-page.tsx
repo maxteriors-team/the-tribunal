@@ -18,6 +18,7 @@ import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -308,16 +309,16 @@ export function PendingActionsPage() {
 function ActionEmptyState({ status }: { status: string }) {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-        <ClipboardCheck className="mb-4 h-12 w-12 text-muted-foreground" />
-        <h3 className="mb-2 text-lg font-semibold">
-          {status === "pending" ? "All caught up!" : "No actions"}
-        </h3>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          {status === "pending"
-            ? "No pending actions to review. When your AI agents need approval, actions will appear here."
-            : `No ${status === "all" ? "" : status} actions found.`}
-        </p>
+      <CardContent className="py-4">
+        <PageEmptyState
+          icon={<ClipboardCheck className="h-12 w-12" />}
+          title={status === "pending" ? "All caught up!" : "No actions"}
+          description={
+            status === "pending"
+              ? "No pending actions to review. When your AI agents need approval, actions will appear here."
+              : `No ${status === "all" ? "" : status} actions found.`
+          }
+        />
       </CardContent>
     </Card>
   );

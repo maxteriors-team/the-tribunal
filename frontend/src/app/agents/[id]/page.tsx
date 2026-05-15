@@ -14,14 +14,13 @@ import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
+import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
-  AlertCircle,
   ArrowLeft,
   Code2,
-  Loader2,
   Trash2,
   Headphones,
   UserCircle,
@@ -315,11 +314,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
   }
 
   if (isPending) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoadingState className="py-16" />;
   }
 
   if (error || !agent) {
@@ -330,11 +325,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       (error as { response?: { status?: number } }).response?.status === 404;
 
     if (is404) {
-      return (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      );
+      return <PageLoadingState className="py-16" />;
     }
 
     return (
@@ -345,18 +336,11 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
             Back to Agents
           </Link>
         </Button>
-        <Card className="border-destructive">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <AlertCircle className="mb-4 h-16 w-16 text-destructive" />
-            <h3 className="mb-2 text-lg font-semibold">Error loading agent</h3>
-            <p className="mb-4 text-center text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : "Failed to load agent details"}
-            </p>
-            <Button asChild>
-              <Link href="/agents">Return to Agents</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <PageErrorState
+          message={error instanceof Error ? error.message : "Failed to load agent details"}
+          onRetry={() => router.push("/agents")}
+          retryLabel="Return to Agents"
+        />
       </div>
     );
   }

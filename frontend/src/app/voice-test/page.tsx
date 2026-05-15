@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PageEmptyState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatTime } from "@/lib/utils/date";
 import { Slider } from "@/components/ui/slider";
@@ -406,9 +407,10 @@ export default function VoiceTestPage() {
       <div className="relative flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1 p-4 pb-20">
           {transcript.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              Start a session to see the conversation
-            </div>
+            <PageEmptyState
+              className="h-full"
+              title="Start a session to see the conversation"
+            />
           ) : (
             <div className="space-y-4">
               {transcript.map((item) => (

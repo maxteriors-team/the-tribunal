@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { PageEmptyState } from "@/components/ui/page-state";
 import {
   ResourceListHeader,
   ResourceListStats,
@@ -253,13 +254,11 @@ export function CampaignsList() {
       }
       isEmpty={filteredCampaigns.length === 0}
       emptyState={
-        <div className="text-center py-12">
-          <MessageSquare className="mx-auto size-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No campaigns yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Create your first campaign to start reaching your contacts
-          </p>
-        </div>
+        <PageEmptyState
+          icon={<MessageSquare className="size-12" />}
+          title="No campaigns yet"
+          description="Create your first campaign to start reaching your contacts"
+        />
       }
       pagination={
         <ResourceListPagination

@@ -41,6 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { PageEmptyState } from "@/components/ui/page-state";
 import {
   ResourceListHeader,
   ResourceListStats,
@@ -197,16 +198,16 @@ export function ExperimentsList() {
         />
       }
       emptyState={
-        <div className="text-center py-12">
-          <FlaskConical className="mx-auto size-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-2">No experiments yet</h3>
-          <p className="text-muted-foreground mb-4">
-            Create your first A/B test to start optimizing your outreach
-          </p>
-          <Button asChild>
-            <Link href="/experiments/new">Create Experiment</Link>
-          </Button>
-        </div>
+        <PageEmptyState
+          icon={<FlaskConical className="size-12" />}
+          title="No experiments yet"
+          description="Create your first A/B test to start optimizing your outreach"
+          action={
+            <Button asChild>
+              <Link href="/experiments/new">Create Experiment</Link>
+            </Button>
+          }
+        />
       }
       isEmpty={filteredTests.length === 0}
       pagination={

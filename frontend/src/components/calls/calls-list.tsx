@@ -17,7 +17,6 @@ import {
   Bot,
   Download,
   Loader2,
-  AlertCircle,
   CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -55,6 +54,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TranscriptViewer } from "@/components/calls/transcript-viewer";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
@@ -145,20 +145,15 @@ export function CallsList() {
   }, [handleObserver]);
 
   if (isPending) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PageLoadingState className="h-96" />;
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <AlertCircle className="size-12 text-destructive" />
-        <p className="text-muted-foreground">Failed to load calls</p>
-        <p className="text-sm text-muted-foreground">{(error as Error).message}</p>
-      </div>
+      <PageErrorState
+        className="h-96"
+        message={(error as Error).message || "Failed to load calls"}
+      />
     );
   }
 
@@ -248,13 +243,12 @@ export function CallsList() {
       <Card>
         <CardContent className="p-0">
           {filteredCalls.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Phone className="size-12 text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">No calls found</p>
-              <p className="text-sm text-muted-foreground">
-                Voice calls will appear here once made
-              </p>
-            </div>
+            <PageEmptyState
+              className="py-12"
+              icon={<Phone className="size-12" />}
+              title="No calls found"
+              description="Voice calls will appear here once made"
+            />
           ) : (
             <ScrollArea className="h-[calc(100vh-480px)] min-h-[300px]">
             <Table>
