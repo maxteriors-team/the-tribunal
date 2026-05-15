@@ -113,6 +113,25 @@ class Settings(BaseSettings):
     # scraper with `Authorization: Bearer <metrics_token>`.
     metrics_token: str = ""
 
+    # WebSocket connection limits (backpressure)
+    # ``voice_bridge_max_connections`` caps total concurrent Telnyx voice bridge
+    # sockets; new arrivals get WS_1013 (try again later) once the semaphore is
+    # full. ``voice_test_max_connections`` does the same for the browser test
+    # endpoint, which is much lower-volume.
+    voice_bridge_max_connections: int = 100
+    voice_test_max_connections: int = 20
+    # Per-workspace cap on concurrent voice sessions (any endpoint). Tracked in
+    # Redis so the limit holds across multiple backend replicas.
+    voice_workspace_max_sessions: int = 10
+    # Heartbeat — send {"type":"ping"} every N seconds, close the socket if no
+    # pong is received within ``voice_pong_timeout_seconds``.
+    voice_heartbeat_interval_seconds: int = 20
+    voice_pong_timeout_seconds: int = 40
+    # Absolute backstop on call duration. Even if the heartbeat and per-tenant
+    # limits don't catch a runaway session, this guarantees we close the socket
+    # after N seconds.
+    voice_max_call_duration_seconds: int = 30 * 60
+
 
 @lru_cache
 def get_settings() -> Settings:

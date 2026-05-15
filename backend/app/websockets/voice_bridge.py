@@ -40,6 +40,13 @@ from app.services.audio import (
     convert_openai_to_telnyx,
     convert_telnyx_to_openai,
 )
+from app.websockets.connection_limits import (
+    HeartbeatMonitor,
+    acquire_connection_slot,
+    acquire_workspace_slot,
+    enforce_duration_cap,
+    voice_bridge_semaphore,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -278,13 +285,91 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
         headers=_safe_headers(dict(websocket.headers)) if hasattr(websocket, "headers") else {},
     )
 
-    await websocket.accept()
-    log.info("websocket_accepted", state="connection_established")
+    # Global backpressure: cap total concurrent voice bridges across the
+    # process. Telnyx will retry on WS_1013 (try again later).
+    async with acquire_connection_slot(
+        websocket, voice_bridge_semaphore(), log, endpoint="voice_bridge"
+    ) as slot_ok:
+        if not slot_ok:
+            return
 
-    # Get agent and conversation context from database first to determine provider
-    log.info("looking_up_call_context", call_id=call_id)
-    context_result = await _lookup_call_context_wrapper(call_id, log)
-    agent, contact_info, offer_info, timezone, prompt_version_id = context_result
+        await websocket.accept()
+        log.info("websocket_accepted", state="connection_established")
+
+        # Get agent and conversation context from database first to determine
+        # provider — we also need workspace_id for the per-tenant cap below.
+        log.info("looking_up_call_context", call_id=call_id)
+        full_context = await lookup_call_context(call_id, log)
+        agent = full_context.agent
+        contact_info = full_context.contact_info
+        offer_info = full_context.offer_info
+        timezone = full_context.timezone
+        prompt_version_id = full_context.prompt_version_id
+        workspace_id = full_context.workspace_id
+
+        # Per-tenant cap (Redis-backed). Fails open on Redis outage so a cache
+        # blip can't drop live calls. Heartbeat watchdog + duration backstop
+        # run inside this scope so they're armed for the entire phase block.
+        async with acquire_workspace_slot(
+            websocket, workspace_id, log
+        ) as (ws_ok, _session_id):
+            if not ws_ok:
+                return
+
+            heartbeat = HeartbeatMonitor(websocket, log, send_ping=False)
+            heartbeat.start()
+            duration_task = asyncio.create_task(
+                enforce_duration_cap(
+                    websocket,
+                    log,
+                    max_seconds=settings.voice_max_call_duration_seconds,
+                ),
+                name="voice-bridge-duration-cap",
+            )
+            # Stash heartbeat on the websocket scope so the deeply-nested
+            # Telnyx receive loop can call ``mark_activity()`` on each frame
+            # without threading an extra parameter through every helper.
+            websocket.scope["voice_heartbeat"] = heartbeat
+
+            try:
+                await _voice_stream_bridge_body(
+                    websocket=websocket,
+                    call_id=call_id,
+                    is_outbound=is_outbound,
+                    connection_start=connection_start,
+                    log=log,
+                    agent=agent,
+                    contact_info=contact_info,
+                    offer_info=offer_info,
+                    timezone=timezone,
+                    prompt_version_id=prompt_version_id,
+                )
+            finally:
+                await heartbeat.stop()
+                duration_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await duration_task
+
+
+async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
+    *,
+    websocket: WebSocket,
+    call_id: str,
+    is_outbound: bool,
+    connection_start: float,
+    log: Any,
+    agent: Any,
+    contact_info: dict[str, Any] | None,
+    offer_info: dict[str, Any] | None,
+    timezone: str,
+    prompt_version_id: str | None,
+) -> None:
+    """Core bridge handler running inside the capacity-guard scope.
+
+    Split out so the ``async with`` block over the global semaphore and the
+    per-workspace Redis cap stay at the top of the endpoint and pyright/ruff
+    don't trip on an even-longer function body.
+    """
 
     # Stamp prompt version on message for attribution
     if prompt_version_id:
@@ -716,10 +801,17 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
             log.exception("trigger_initial_response_failed_phase2", error=str(e))
             raise
 
+    # Heartbeat watchdog (idle-timeout only — no pings on this socket): stashed
+    # on the websocket scope by ``voice_stream_bridge`` so each Telnyx frame
+    # resets the inactivity clock.
+    heartbeat = websocket.scope.get("voice_heartbeat")
+
     try:
         while True:
             # Receive JSON message from Telnyx
             raw_data = await websocket.receive_text()
+            if heartbeat is not None:
+                heartbeat.mark_activity()
 
             try:
                 data = json.loads(raw_data)

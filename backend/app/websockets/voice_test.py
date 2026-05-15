@@ -23,6 +23,13 @@ from app.models.workspace import WorkspaceMembership
 from app.services.ai.elevenlabs_voice_agent import ElevenLabsVoiceAgentSession
 from app.services.ai.grok import GrokVoiceAgentSession
 from app.services.ai.voice_agent import VoiceAgentSession
+from app.websockets.connection_limits import (
+    HeartbeatMonitor,
+    acquire_connection_slot,
+    acquire_workspace_slot,
+    enforce_duration_cap,
+    voice_test_semaphore,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -267,6 +274,7 @@ async def _process_messages(
     agent: Any,
     voice_provider: str,
     log: Any,
+    heartbeat: HeartbeatMonitor | None = None,
 ) -> None:
     """Process incoming messages from the client.
 
@@ -276,6 +284,8 @@ async def _process_messages(
         agent: Agent model
         voice_provider: Provider name
         log: Logger instance
+        heartbeat: Optional heartbeat monitor; ``mark_activity`` is called on
+            every inbound frame and ``pong`` messages are consumed silently.
     """
     session_active = False
     receive_task: asyncio.Task[None] | None = None
@@ -283,8 +293,15 @@ async def _process_messages(
     try:
         while True:
             raw_data = await websocket.receive_text()
+            if heartbeat is not None:
+                heartbeat.mark_activity()
             message = json.loads(raw_data)
             msg_type = message.get("type", "")
+
+            if msg_type == "pong":
+                # Heartbeat reply — ``mark_activity`` above already reset the
+                # idle clock; nothing else to do.
+                continue
 
             if msg_type == "start" and not session_active:
                 receive_task = await _handle_start_message(
@@ -352,43 +369,78 @@ async def voice_test_endpoint(
     )
     log.info("voice_test_connection_received")
 
-    # Authenticate via JWT token in query params before accepting
-    if not await _authenticate_websocket(websocket, workspace_id, log):
-        return
+    # Backpressure: cap total concurrent test sessions across the process.
+    async with acquire_connection_slot(
+        websocket, voice_test_semaphore(), log, endpoint="voice_test"
+    ) as slot_ok:
+        if not slot_ok:
+            return
 
-    await websocket.accept()
+        # Authenticate via JWT token in query params before accepting
+        if not await _authenticate_websocket(websocket, workspace_id, log):
+            return
 
-    # Look up the agent
-    agent = await _get_agent_by_id(agent_id, workspace_id, log)
-    if not agent:
-        await websocket.send_json({"type": "error", "message": "Agent not found"})
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+        # Per-tenant cap (Redis-backed, shared across replicas).
+        async with acquire_workspace_slot(websocket, workspace_id, log) as (
+            ws_ok,
+            _session_id,
+        ):
+            if not ws_ok:
+                return
 
-    # Determine voice provider
-    voice_provider = agent.voice_provider.lower() if agent.voice_provider else "openai"
-    log.info("using_voice_provider", provider=voice_provider)
+            await websocket.accept()
 
-    # Create voice session
-    voice_session, error = _create_voice_session_for_test(voice_provider, agent)
-    if voice_session is None:
-        log.error("api_key_not_configured", provider=voice_provider)
-        await websocket.send_json({"type": "error", "message": error})
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+            # Look up the agent
+            agent = await _get_agent_by_id(agent_id, workspace_id, log)
+            if not agent:
+                await websocket.send_json({"type": "error", "message": "Agent not found"})
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
 
-    try:
-        await _process_messages(websocket, voice_session, agent, voice_provider, log)
-    except Exception as e:
-        log.exception("voice_test_error", error=str(e))
-        with contextlib.suppress(Exception):
-            await websocket.send_json({"type": "error", "message": str(e)})
-    finally:
-        await voice_session.disconnect()
-        with contextlib.suppress(Exception):
-            await websocket.send_json({"type": "stopped"})
-            await websocket.close()
-        log.info("voice_test_session_ended")
+            # Determine voice provider
+            voice_provider = (
+                agent.voice_provider.lower() if agent.voice_provider else "openai"
+            )
+            log.info("using_voice_provider", provider=voice_provider)
+
+            # Create voice session
+            voice_session, error = _create_voice_session_for_test(voice_provider, agent)
+            if voice_session is None:
+                log.error("api_key_not_configured", provider=voice_provider)
+                await websocket.send_json({"type": "error", "message": error})
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Heartbeat + absolute duration backstop.
+            heartbeat = HeartbeatMonitor(websocket, log)
+            heartbeat.start()
+            duration_task = asyncio.create_task(
+                enforce_duration_cap(
+                    websocket,
+                    log,
+                    max_seconds=settings.voice_max_call_duration_seconds,
+                ),
+                name="voice-test-duration-cap",
+            )
+
+            try:
+                await _process_messages(
+                    websocket, voice_session, agent, voice_provider, log, heartbeat
+                )
+            except Exception as e:
+                log.exception("voice_test_error", error=str(e))
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({"type": "error", "message": str(e)})
+            finally:
+                await heartbeat.stop()
+                duration_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await duration_task
+                await voice_session.disconnect()
+                with contextlib.suppress(Exception):
+                    await websocket.send_json({"type": "stopped"})
+                    await websocket.close()
+                log.info("voice_test_session_ended")
 
 
 def _normalize_audio_to_pcm16_24k(audio_data: bytes, voice_provider: str) -> bytes:
