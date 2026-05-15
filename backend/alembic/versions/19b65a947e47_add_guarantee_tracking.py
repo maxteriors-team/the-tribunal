@@ -1,6 +1,6 @@
 """Add guarantee tracking.
 
-Revision ID: a9b0c1d2e3f4
+Revision ID: 19b65a947e47
 Revises: f6g7h8i9j0k1
 Create Date: 2026-02-14
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "a9b0c1d2e3f4"
+revision = "19b65a947e47"
 down_revision = "f6g7h8i9j0k1"
 branch_labels = None
 depends_on = None

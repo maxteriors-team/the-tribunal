@@ -1,7 +1,7 @@
 """Add push preference columns to users.
 
 Revision ID: b0c1d2e3f4g5
-Revises: a9b0c1d2e3f4
+Revises: 19b65a947e47
 Create Date: 2026-02-22
 """
 
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b0c1d2e3f4g5"
-down_revision = "a9b0c1d2e3f4"
+down_revision = "19b65a947e47"
 branch_labels = None
 depends_on = None
 
