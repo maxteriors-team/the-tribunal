@@ -9,6 +9,7 @@ import * as z from "zod";
 import { Loader2 } from "lucide-react";
 
 import { opportunitiesApi, type CreatePipelineRequest } from "@/lib/api/opportunities";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +62,7 @@ export function CreatePipelineDialog({ open, onOpenChange, workspaceId }: Create
     },
     onSuccess: () => {
       // Invalidate pipelines query to trigger a refetch
-      queryClient.invalidateQueries({ queryKey: ["pipelines", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.pipelines(workspaceId ?? "") });
       toast.success("Pipeline created successfully!");
       form.reset();
       onOpenChange(false);

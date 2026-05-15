@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 
+import { queryKeys } from "@/lib/query-keys";
 const inviteFormSchema = z.object({
   email: z.email({ error: "Please enter a valid email address" }),
   role: z.enum(["admin", "member"]),
@@ -73,10 +74,10 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
       invitationsApi.create(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["invitations", workspaceId],
+        queryKey: queryKeys.invitations.bare(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: ["settings", "team", workspaceId],
+        queryKey: queryKeys.settings.team(workspaceId ?? ""),
       });
       toast.success("Invitation sent successfully!");
       form.reset();

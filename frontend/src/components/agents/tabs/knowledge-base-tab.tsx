@@ -10,6 +10,7 @@ import { Loader2, Plus, Trash2, BookOpen, FileText } from "lucide-react";
 import { knowledgeDocumentsApi } from "@/lib/api/knowledge-documents";
 import type { KnowledgeDocumentCreate } from "@/types/knowledge-document";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -82,7 +83,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
   const [newPriority, setNewPriority] = useState(0);
 
   const { data: docList, isPending } = useQuery({
-    queryKey: ["knowledgeDocs", workspaceId, agentId],
+    queryKey: queryKeys.agents.knowledgeDocs(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return knowledgeDocumentsApi.list(workspaceId, agentId);
@@ -98,7 +99,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
     onSuccess: () => {
       toast.success("Document added");
       void queryClient.invalidateQueries({
-        queryKey: ["knowledgeDocs", workspaceId, agentId],
+        queryKey: queryKeys.agents.knowledgeDocs(workspaceId ?? "", agentId),
       });
       resetForm();
     },
@@ -114,7 +115,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
     onSuccess: () => {
       toast.success("Document deleted");
       void queryClient.invalidateQueries({
-        queryKey: ["knowledgeDocs", workspaceId, agentId],
+        queryKey: queryKeys.agents.knowledgeDocs(workspaceId ?? "", agentId),
       });
     },
     onError: (err: unknown) =>

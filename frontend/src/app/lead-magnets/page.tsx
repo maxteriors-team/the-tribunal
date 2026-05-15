@@ -69,6 +69,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { leadMagnetsApi, CreateLeadMagnetRequest } from "@/lib/api/lead-magnets";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import type { LeadMagnet, LeadMagnetType, DeliveryMethod } from "@/types";
 
 const magnetTypeIcons: Record<LeadMagnetType, React.ReactNode> = {
@@ -129,7 +130,7 @@ export default function LeadMagnetsPage() {
   });
 
   const { data, isPending } = useQuery({
-    queryKey: ["lead-magnets", workspaceId],
+    queryKey: queryKeys.leadMagnets.bare(workspaceId ?? ""),
     queryFn: () => leadMagnetsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -138,7 +139,7 @@ export default function LeadMagnetsPage() {
     mutationFn: (data: CreateLeadMagnetRequest) =>
       leadMagnetsApi.create(workspaceId!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead-magnets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
       setShowCreateDialog(false);
       resetForm();
     },
@@ -148,7 +149,7 @@ export default function LeadMagnetsPage() {
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateLeadMagnetRequest> }) =>
       leadMagnetsApi.update(workspaceId!, id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead-magnets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
       setEditingMagnet(null);
       resetForm();
     },
@@ -157,7 +158,7 @@ export default function LeadMagnetsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => leadMagnetsApi.delete(workspaceId!, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead-magnets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
       setDeleteMagnetId(null);
     },
   });

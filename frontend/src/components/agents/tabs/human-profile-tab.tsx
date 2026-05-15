@@ -8,6 +8,7 @@ import { Loader2, Save } from "lucide-react";
 import { humanProfilesApi } from "@/lib/api/human-profiles";
 import type { HumanProfileCreate } from "@/types/human-profile";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,7 +60,7 @@ export function HumanProfileTab({ agentId }: HumanProfileTabProps) {
   const workspaceId = useWorkspaceId();
 
   const { data: profile, isPending, error } = useQuery({
-    queryKey: ["humanProfile", workspaceId, agentId],
+    queryKey: queryKeys.agents.humanProfile(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return humanProfilesApi.get(workspaceId, agentId);
@@ -134,7 +135,7 @@ function HumanProfileForm({ agentId, workspaceId, profile, is404 }: HumanProfile
     onSuccess: () => {
       toast.success("Human profile saved");
       void queryClient.invalidateQueries({
-        queryKey: ["humanProfile", workspaceId, agentId],
+        queryKey: queryKeys.agents.humanProfile(workspaceId ?? "", agentId),
       });
     },
     onError: (err: unknown) =>

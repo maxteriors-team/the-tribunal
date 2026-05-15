@@ -45,6 +45,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { appointmentsApi } from "@/lib/api/appointments";
 import { useToggleContactAI, useDeleteContact, useContactTimeline, contactQueryKeys } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { callsApi, type InitiateCallRequest } from "@/lib/api/calls";
 import { contactsApi, type ImportantDates } from "@/lib/api/contacts";
 import { Input } from "@/components/ui/input";
@@ -365,7 +366,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
 
   // Fetch appointments for this contact only (server-side filter by contact_id)
   const { data: appointmentsData, isPending: appointmentsLoading } = useQuery({
-    queryKey: ["appointments", workspaceId, { contact_id: selectedContact?.id }],
+    queryKey: queryKeys.appointments.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       appointmentsApi.list(workspaceId!, {
         page: 1,
@@ -377,7 +378,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
 
   // Fetch phone numbers for calls
   const { data: phoneNumbersData } = useQuery({
-    queryKey: ["phone-numbers", workspaceId],
+    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
     queryFn: () =>
       workspaceId
         ? phoneNumbersApi.list(workspaceId, { active_only: true })
@@ -390,7 +391,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
 
   // Fetch conversations for this contact to get AI state
   const { data: conversationsData } = useQuery({
-    queryKey: ["conversations", workspaceId, selectedContact?.id],
+    queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
         ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })
@@ -441,7 +442,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
       if (result.success) {
         toast.success(`Reminder sent to ${result.sent_to ?? "contact"}`);
         void queryClient.invalidateQueries({
-          queryKey: ["appointments", workspaceId, { contact_id: selectedContact?.id }],
+          queryKey: queryKeys.appointments.byContact(workspaceId ?? "", selectedContact?.id),
         });
       } else {
         toast.error(result.message || "Failed to send reminder");

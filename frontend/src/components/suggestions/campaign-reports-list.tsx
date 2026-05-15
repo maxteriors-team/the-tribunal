@@ -8,6 +8,7 @@ import {
   type CampaignReportResponse,
 } from "@/lib/api/campaign-reports";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Card, CardContent } from "@/components/ui/card";
 import { CampaignReportCard } from "./campaign-report-card";
 
@@ -15,7 +16,7 @@ export function CampaignReportsList() {
   const workspaceId = useWorkspaceId();
 
   const { data, isPending } = useQuery({
-    queryKey: ["campaignReports", workspaceId],
+    queryKey: queryKeys.campaignReports.list(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return campaignReportsApi.list(workspaceId, { page_size: 50 });
@@ -26,7 +27,7 @@ export function CampaignReportsList() {
   // Fetch full reports for each summary item
   const reportIds = data?.items.map((item) => item.id) ?? [];
   const { data: fullReports } = useQuery({
-    queryKey: ["campaignReportsFull", workspaceId, reportIds],
+    queryKey: queryKeys.campaignReports.full(workspaceId ?? "", reportIds),
     queryFn: async () => {
       if (!workspaceId || !data?.items.length) return [];
       const reports = await Promise.all(

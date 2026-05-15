@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { offersApi } from "@/lib/api/offers";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 
 interface EditOfferPageProps {
   params: Promise<{ id: string }>;
@@ -27,7 +28,7 @@ export default function EditOfferPage({ params }: EditOfferPageProps) {
     isPending,
     error,
   } = useQuery({
-    queryKey: ["offers", workspaceId, offerId],
+    queryKey: queryKeys.offers.get(workspaceId ?? "", offerId),
     queryFn: () => offersApi.getWithLeadMagnets(workspaceId!, offerId),
     enabled: !!workspaceId,
   });

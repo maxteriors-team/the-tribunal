@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { PhoneNumbersSection } from "@/components/settings/phone-numbers-section";
 import { IntegrationConfigDialog } from "@/components/settings/integration-config-dialog";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { settingsApi } from "@/lib/api/settings";
 import {
   integrationsApi,
@@ -63,14 +64,14 @@ export function IntegrationsSettingsTab() {
 
   // Fetch integrations (status display)
   const { data: integrationsData, isPending: integrationsLoading } = useQuery({
-    queryKey: ["settings", "integrations", workspaceId],
+    queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
     queryFn: () => settingsApi.getIntegrations(workspaceId!),
     enabled: !!workspaceId,
   });
 
   // Fetch configured integrations (with credentials)
   const { data: configuredIntegrations } = useQuery({
-    queryKey: ["integrations", workspaceId],
+    queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
     queryFn: () => integrationsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });

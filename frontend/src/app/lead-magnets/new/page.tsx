@@ -39,6 +39,7 @@ import { RichTextEditor } from "@/components/lead-magnets/rich-text-editor";
 
 import { useWorkspace } from "@/providers/workspace-provider";
 import { leadMagnetsApi, CreateLeadMagnetRequest } from "@/lib/api/lead-magnets";
+import { queryKeys } from "@/lib/query-keys";
 import { formatNumber } from "@/lib/utils/number";
 import type {
   LeadMagnetType,
@@ -178,7 +179,7 @@ export default function NewLeadMagnetPage() {
       return leadMagnetsApi.create(workspaceId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead-magnets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
       router.push("/lead-magnets");
     },
   });

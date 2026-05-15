@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { conversationsApi } from "@/lib/api/conversations";
+import { queryKeys } from "@/lib/query-keys";
 
 /**
  * Fetch follow-up settings for a conversation
  */
 export function useFollowupSettings(workspaceId: string, conversationId: string) {
   return useQuery({
-    queryKey: ["followup-settings", workspaceId, conversationId],
+    queryKey: queryKeys.conversations.followupSettings(workspaceId, conversationId),
     queryFn: () => conversationsApi.getFollowupSettings(workspaceId, conversationId),
     enabled: !!workspaceId && !!conversationId,
     refetchInterval: 30000, // Refresh every 30 seconds to update next_followup_at
@@ -30,9 +31,9 @@ export function useUpdateFollowupSettings(workspaceId: string) {
     }) => conversationsApi.updateFollowupSettings(workspaceId, data.conversationId, data.settings),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["followup-settings", workspaceId, variables.conversationId],
+        queryKey: queryKeys.conversations.followupSettings(workspaceId, variables.conversationId),
       });
-      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detailAll() });
     },
   });
 }
@@ -71,12 +72,12 @@ export function useSendFollowup(workspaceId: string) {
       ),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["followup-settings", workspaceId, variables.conversationId],
+        queryKey: queryKeys.conversations.followupSettings(workspaceId, variables.conversationId),
       });
       queryClient.invalidateQueries({
-        queryKey: ["conversation", workspaceId, variables.conversationId],
+        queryKey: queryKeys.conversations.detail(workspaceId, variables.conversationId),
       });
-      queryClient.invalidateQueries({ queryKey: ["conversations", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
     },
   });
 }
@@ -92,7 +93,7 @@ export function useResetFollowupCounter(workspaceId: string) {
       conversationsApi.resetFollowupCounter(workspaceId, conversationId),
     onSuccess: (_, conversationId) => {
       queryClient.invalidateQueries({
-        queryKey: ["followup-settings", workspaceId, conversationId],
+        queryKey: queryKeys.conversations.followupSettings(workspaceId, conversationId),
       });
     },
   });

@@ -53,6 +53,7 @@ import {
 } from "@/components/resource-list";
 import { messageTestStatusColors } from "@/lib/status-colors";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import type { MessageTest } from "@/types";
 import { messageTestsApi } from "@/lib/api/message-tests";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -65,7 +66,7 @@ export function ExperimentsList() {
   const queryClient = useQueryClient();
 
   const { data: testsData, isPending, error } = useQuery({
-    queryKey: ["message-tests", workspaceId],
+    queryKey: queryKeys.messageTests.bare(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTestsApi.list(workspaceId);
@@ -81,7 +82,7 @@ export function ExperimentsList() {
       return messageTestsApi.pause(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test paused");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause test")),
@@ -93,7 +94,7 @@ export function ExperimentsList() {
       return messageTestsApi.start(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test started");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to start test")),
@@ -105,7 +106,7 @@ export function ExperimentsList() {
       return messageTestsApi.complete(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test completed");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to complete test")),
@@ -117,7 +118,7 @@ export function ExperimentsList() {
       return messageTestsApi.delete(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test deleted");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete test")),
@@ -140,7 +141,7 @@ export function ExperimentsList() {
     return (
       <ResourceListError
         resourceName="experiments"
-        onRetry={() => queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] })}
+        onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") })}
       />
     );
   }

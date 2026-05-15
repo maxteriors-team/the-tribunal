@@ -58,6 +58,7 @@ import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TranscriptViewer } from "@/components/calls/transcript-viewer";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { callStatusColors } from "@/lib/status-colors";
 import { callsApi } from "@/lib/api/calls";
 
@@ -96,7 +97,7 @@ export function CallsList() {
   }, [searchQuery]);
 
   const { data, isPending, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ["calls", workspaceId, directionFilter, statusFilter, debouncedSearch],
+    queryKey: queryKeys.calls.listFiltered(workspaceId ?? "", directionFilter, statusFilter, debouncedSearch),
     queryFn: ({ pageParam }) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return callsApi.list(workspaceId, {

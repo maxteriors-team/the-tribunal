@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { nudgesApi } from "@/lib/api/nudges";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import type { UpdateNudgeSettings, NudgeType } from "@/types/nudge";
 
 const NUDGE_TYPE_OPTIONS: { type: NudgeType; label: string; emoji: string }[] = [
@@ -31,7 +32,7 @@ export function NudgeSettingsTab() {
   const queryClient = useQueryClient();
 
   const { data: settings, isPending } = useQuery({
-    queryKey: ["nudge-settings", workspaceId],
+    queryKey: queryKeys.nudges.settings(workspaceId ?? ""),
     queryFn: () => nudgesApi.getSettings(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -40,7 +41,7 @@ export function NudgeSettingsTab() {
     mutationFn: (data: UpdateNudgeSettings) =>
       nudgesApi.updateSettings(workspaceId!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["nudge-settings", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.nudges.settings(workspaceId ?? "") });
     },
   });
 

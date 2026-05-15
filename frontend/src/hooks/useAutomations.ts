@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { automationsApi } from "@/lib/api/automations";
+import { queryKeys } from "@/lib/query-keys";
 
 const {
   queryKeys: automationQueryKeys,
@@ -30,8 +31,8 @@ export function useToggleAutomation(workspaceId: string) {
     mutationFn: (automationId: string) =>
       automationsApi.toggle(workspaceId, automationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["automations", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["automations"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.automations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.automations.root() });
     },
   });
 }

@@ -8,6 +8,7 @@ import {
   type PromptVersionResponse,
 } from "@/lib/api/prompt-versions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils/number";
 
@@ -19,7 +20,7 @@ export function PromptPerformanceChart({ agentId }: PromptPerformanceChartProps)
   const workspaceId = useWorkspaceId();
 
   const { data: versions, isPending } = useQuery({
-    queryKey: ["promptVersions", workspaceId, agentId],
+    queryKey: queryKeys.agents.promptVersions(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return promptVersionsApi.list(workspaceId, agentId, { page_size: 20 });

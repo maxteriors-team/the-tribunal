@@ -20,6 +20,7 @@ import {
 import { nudgesApi } from "@/lib/api/nudges";
 import type { HumanNudge, NudgeStatus, SuggestedAction } from "@/types/nudge";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,7 +71,7 @@ export function NudgesPage() {
   const [page, setPage] = useState(1);
 
   const { data: stats, isPending: statsLoading } = useQuery({
-    queryKey: ["nudgeStats", workspaceId],
+    queryKey: queryKeys.nudges.stats(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return nudgesApi.getStats(workspaceId);
@@ -79,7 +80,7 @@ export function NudgesPage() {
   });
 
   const { data: nudgeList, isPending: listLoading } = useQuery({
-    queryKey: ["nudges", workspaceId, statusFilter, page],
+    queryKey: queryKeys.nudges.list(workspaceId ?? "", statusFilter, page),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return nudgesApi.list(workspaceId, {
@@ -92,8 +93,8 @@ export function NudgesPage() {
   });
 
   const invalidateNudges = () => {
-    void queryClient.invalidateQueries({ queryKey: ["nudges"] });
-    void queryClient.invalidateQueries({ queryKey: ["nudgeStats"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.root() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.statsRoot() });
   };
 
   const actMutation = useMutation({

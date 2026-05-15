@@ -27,6 +27,7 @@ import {
   type AIImportLeadsResponse,
 } from "@/lib/api/find-leads-ai";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,7 +124,7 @@ export function FindLeadsAIPage() {
     },
     onSuccess: (data) => {
       setImportResult(data);
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
       if (data.imported > 0) {
         const rejectedMsg = data.rejected_low_score > 0
           ? ` (${data.rejected_low_score} rejected below quality threshold)`

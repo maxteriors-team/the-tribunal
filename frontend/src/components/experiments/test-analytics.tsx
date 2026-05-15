@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { messageTestsApi } from "@/lib/api/message-tests";
 import type { VariantAnalytics } from "@/types";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -63,7 +64,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
     isPending,
     error,
   } = useQuery({
-    queryKey: ["message-test-analytics", workspaceId, testId],
+    queryKey: queryKeys.messageTests.analytics(workspaceId ?? "", testId),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTestsApi.getAnalytics(workspaceId, testId);
@@ -81,10 +82,10 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-test-analytics", workspaceId, testId],
+        queryKey: queryKeys.messageTests.analytics(workspaceId ?? "", testId),
       });
       queryClient.invalidateQueries({
-        queryKey: ["message-tests", workspaceId],
+        queryKey: queryKeys.messageTests.bare(workspaceId ?? ""),
       });
       toast.success("Winner selected");
       setShowWinnerDialog(false);
@@ -103,9 +104,9 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: ["message-tests", workspaceId],
+        queryKey: queryKeys.messageTests.bare(workspaceId ?? ""),
       });
-      queryClient.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
       toast.success(data.message);
       setShowConvertDialog(false);
     },

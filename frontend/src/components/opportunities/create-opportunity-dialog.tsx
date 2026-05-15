@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { opportunitiesApi } from "@/lib/api/opportunities";
+import { queryKeys } from "@/lib/query-keys";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface CreateOpportunityDialogProps {
@@ -39,7 +40,7 @@ export function CreateOpportunityDialog({
   });
 
   const { data: pipelines } = useQuery({
-    queryKey: ["pipelines", workspaceId],
+    queryKey: queryKeys.opportunities.pipelines(workspaceId ?? ""),
     queryFn: () => opportunitiesApi.listPipelines(workspaceId),
     enabled: !!workspaceId && open,
   });
@@ -57,7 +58,7 @@ export function CreateOpportunityDialog({
         stage_id: formData.stage_id || undefined,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["opportunities", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.bare(workspaceId ?? "") });
       setFormData({
         name: "",
         description: "",

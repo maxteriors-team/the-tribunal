@@ -8,6 +8,18 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "no-console": ["error", { allow: ["warn", "error"] }],
+      // Forbid inline string-tuple React Query keys. All query keys must be
+      // produced by `queryKeys.<resource>.<scope>(...)` from `@/lib/query-keys`
+      // so that invalidation, prefetch, and cache reads share one source of truth.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "Property[key.name='queryKey'] > ArrayExpression",
+          message:
+            "Inline `queryKey: [...]` literals are not allowed. Use `queryKeys.<resource>.<scope>(...)` from '@/lib/query-keys' instead. Add a new builder there if needed.",
+        },
+      ],
       "no-restricted-imports": [
         "error",
         {
@@ -33,6 +45,13 @@ const eslintConfig = defineConfig([
     files: ["src/lib/utils/date.ts"],
     rules: {
       "no-restricted-imports": "off",
+    },
+  },
+  {
+    // The factory file itself is the canonical source of literal query keys.
+    files: ["src/lib/query-keys.ts"],
+    rules: {
+      "no-restricted-syntax": "off",
     },
   },
   // Override default ignores of eslint-config-next.

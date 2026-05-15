@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useContactStore } from "@/lib/contact-store";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { conversationsApi } from "@/lib/api/conversations";
 import {
   useFollowupSettings,
@@ -57,7 +58,7 @@ export function FollowupSection() {
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
-    queryKey: ["conversations", workspaceId, selectedContact?.id],
+    queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
         ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })

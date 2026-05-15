@@ -25,6 +25,7 @@ import { TestAnalytics } from "@/components/experiments/test-analytics";
 import { SaveTemplateDialog } from "@/components/experiments/save-template-dialog";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { messageTestsApi } from "@/lib/api/message-tests";
+import { queryKeys } from "@/lib/query-keys";
 import type { MessageTestStatus, TestVariant } from "@/types";
 
 const statusColors: Record<MessageTestStatus, string> = {
@@ -51,7 +52,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     isPending,
     error,
   } = useQuery({
-    queryKey: ["message-test", workspaceId, testId],
+    queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTestsApi.get(workspaceId, testId);
@@ -66,9 +67,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-test", workspaceId, testId],
+        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test started");
     },
     onError: (error) =>
@@ -82,9 +83,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-test", workspaceId, testId],
+        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test paused");
     },
     onError: () => toast.error("Failed to pause test"),
@@ -97,9 +98,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-test", workspaceId, testId],
+        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: ["message-tests", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
       toast.success("Test completed");
     },
     onError: () => toast.error("Failed to complete test"),

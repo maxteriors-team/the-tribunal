@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { formatDate } from "@/lib/utils/date";
 import { voiceCampaignsApi } from "@/lib/api/voice-campaigns";
@@ -26,7 +27,7 @@ export function GuaranteeProgress({ campaignId, campaignType }: GuaranteeProgres
   const workspaceId = useWorkspaceId();
 
   const { data: progress, isPending } = useQuery<GuaranteeProgressType>({
-    queryKey: ["guarantee-progress", workspaceId, campaignId],
+    queryKey: queryKeys.campaigns.guaranteeProgress(workspaceId ?? "", campaignId),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       if (campaignType === "voice_sms_fallback") {

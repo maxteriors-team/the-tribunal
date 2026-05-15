@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 
+import { queryKeys } from "@/lib/query-keys";
 type IntegrationType = "calcom" | "telnyx" | "openai" | "resend" | "lob";
 
 interface IntegrationConfig {
@@ -236,10 +237,10 @@ export function IntegrationConfigDialog({
       integrationsApi.create(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["settings", "integrations", workspaceId],
+        queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: ["integrations", workspaceId],
+        queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
       });
       toast.success(`${config.name} connected successfully!`);
       onOpenChange(false);
@@ -259,10 +260,10 @@ export function IntegrationConfigDialog({
       integrationsApi.update(workspaceId!, integrationType, { credentials }),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["settings", "integrations", workspaceId],
+        queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: ["integrations", workspaceId],
+        queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
       });
       toast.success(`${config.name} updated successfully!`);
       onOpenChange(false);

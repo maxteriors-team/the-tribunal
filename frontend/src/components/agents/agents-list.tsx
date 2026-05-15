@@ -66,6 +66,7 @@ import {
   ResourceListLayout,
 } from "@/components/resource-list";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { agentsApi } from "@/lib/api/agents";
 import { callsApi } from "@/lib/api/calls";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
@@ -92,7 +93,7 @@ export function AgentsList() {
     isPending,
     error,
   } = useQuery({
-    queryKey: ["agents", workspaceId],
+    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return agentsApi.list(workspaceId, { active_only: false });
@@ -107,7 +108,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
       }
       toast.success("Agent status updated");
     },
@@ -123,7 +124,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
       }
       toast.success("Agent deleted");
     },
@@ -153,7 +154,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
       }
       toast.success("Agent duplicated");
     },
@@ -163,7 +164,7 @@ export function AgentsList() {
   });
 
   const { data: phoneNumbersData } = useQuery({
-    queryKey: ["phoneNumbers", workspaceId],
+    queryKey: queryKeys.phoneNumbers.legacyList(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.list(workspaceId, { voice_enabled: true });
@@ -228,7 +229,7 @@ export function AgentsList() {
         resourceName="agents"
         onRetry={() => {
           if (workspaceId) {
-            queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
           }
         }}
       />

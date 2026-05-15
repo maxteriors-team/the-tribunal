@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { createCheckout, createPortal, getBillingStatus, type BillingStatus } from "@/lib/api/billing";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ function BillingContent() {
   const [isRedirecting, setIsRedirecting] = React.useState(false);
 
   const { data: billingStatus, isPending } = useQuery<BillingStatus>({
-    queryKey: ["billing-status"],
+    queryKey: queryKeys.billing.status(),
     queryFn: getBillingStatus,
     retry: false,
   });

@@ -32,6 +32,7 @@ import { PublishStep } from "./publish-step";
 import { ReviewStep } from "./review-step";
 
 import { offersApi, CreateOfferRequest } from "@/lib/api/offers";
+import { queryKeys } from "@/lib/query-keys";
 import { leadMagnetsApi } from "@/lib/api/lead-magnets";
 import type {
   Offer,
@@ -174,7 +175,7 @@ export function OfferBuilderWizard({
 
   // Fetch lead magnets
   const { data: leadMagnetsData } = useQuery({
-    queryKey: ["lead-magnets", workspaceId],
+    queryKey: queryKeys.leadMagnets.bare(workspaceId ?? ""),
     queryFn: () => leadMagnetsApi.list(workspaceId, { active_only: true }),
   });
 
@@ -202,7 +203,7 @@ export function OfferBuilderWizard({
       return offer;
     },
     onSuccess: (offer) => {
-      queryClient.invalidateQueries({ queryKey: ["offers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId ?? "") });
       if (onSuccess) {
         onSuccess(offer);
       } else {
@@ -224,7 +225,7 @@ export function OfferBuilderWizard({
         is_active: true,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["lead-magnets", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
     },
   });
 

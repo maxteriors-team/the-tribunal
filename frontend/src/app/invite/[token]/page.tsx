@@ -9,6 +9,7 @@ import { Loader2, XCircle, Clock, Users } from "lucide-react";
 
 import { PageLoadingState } from "@/components/ui/page-state";
 import { invitationsApi } from "@/lib/api/invitations";
+import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,7 @@ export default function InviteAcceptPage({ params }: PageProps) {
     isPending: isInvitationLoading,
     error,
   } = useQuery({
-    queryKey: ["invitation", token],
+    queryKey: queryKeys.invitations.byToken(token),
     queryFn: () => invitationsApi.getByToken(token),
     retry: false,
   });
@@ -47,8 +48,8 @@ export default function InviteAcceptPage({ params }: PageProps) {
     mutationFn: () => invitationsApi.accept(token),
     onSuccess: (data) => {
       toast.success(data.message || "Invitation accepted!");
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      queryClient.invalidateQueries({ queryKey: ["user"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.user() });
       // Redirect to the workspace
       if (data.workspace_slug) {
         router.push(`/?workspace=${data.workspace_slug}`);

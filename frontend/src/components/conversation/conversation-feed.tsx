@@ -43,6 +43,7 @@ import { useToggleConversationAI, useAssignAgent, useClearConversationHistory } 
 import { useContactStore } from "@/lib/contact-store";
 import { useContactTimeline } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { conversationsApi } from "@/lib/api/conversations";
 import { MessageItem } from "./message-item";
 import type { Conversation } from "@/types";
@@ -122,7 +123,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
-    queryKey: ["conversations", workspaceId, selectedContact?.id],
+    queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
         ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })
@@ -193,7 +194,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
 
       // Invalidate timeline so the sent message appears immediately
       void queryClient.invalidateQueries({
-        queryKey: ["contact-timeline", workspaceId, selectedContact.id],
+        queryKey: queryKeys.contacts.timelineLegacy(workspaceId ?? "", selectedContact.id),
       });
       toast.success("Message sent");
     } catch (error) {
@@ -261,7 +262,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     clearHistoryMutation.mutate(contactConversation.id, {
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: ["contact-timeline", workspaceId, selectedContact?.id],
+          queryKey: queryKeys.contacts.timelineLegacy(workspaceId ?? "", selectedContact?.id),
         });
         toast.success("Conversation history cleared");
         setShowClearHistoryDialog(false);

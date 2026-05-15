@@ -20,6 +20,7 @@ import {
   type ImprovementSuggestionResponse,
 } from "@/lib/api/improvement-suggestions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -68,7 +69,7 @@ export function SuggestionsQueue({
     useState<ImprovementSuggestionResponse | null>(null);
 
   const { data: suggestions, isPending } = useQuery({
-    queryKey: ["improvementSuggestions", workspaceId, agentId, statusFilter],
+    queryKey: queryKeys.improvementSuggestions.list(workspaceId ?? "", agentId, statusFilter),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return improvementSuggestionsApi.list(workspaceId, {
@@ -87,8 +88,8 @@ export function SuggestionsQueue({
     },
     onSuccess: () => {
       toast.success("Suggestion approved! New version created.");
-      void queryClient.invalidateQueries({ queryKey: ["improvementSuggestions"] });
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.improvementSuggestions.root() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to approve suggestion")),
   });
@@ -100,7 +101,7 @@ export function SuggestionsQueue({
     },
     onSuccess: () => {
       toast.success("Suggestion rejected");
-      void queryClient.invalidateQueries({ queryKey: ["improvementSuggestions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.improvementSuggestions.root() });
       setShowRejectDialog(null);
       setRejectReason("");
     },

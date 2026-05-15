@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { appointmentsApi } from "@/lib/api/appointments";
+import { queryKeys } from "@/lib/query-keys";
 import type {
   AppointmentAgentStat,
   AppointmentCampaignStat,
@@ -182,7 +183,7 @@ export function AppointmentPerformanceCard({
   workspaceId,
 }: AppointmentPerformanceCardProps) {
   const { data, isPending, isError } = useQuery<AppointmentStatsResponse>({
-    queryKey: ["appointments", "stats", workspaceId],
+    queryKey: queryKeys.appointments.stats(workspaceId ?? ""),
     queryFn: () => appointmentsApi.getStats(workspaceId),
     enabled: !!workspaceId,
     // Refresh every 2 minutes — stats don't change that fast

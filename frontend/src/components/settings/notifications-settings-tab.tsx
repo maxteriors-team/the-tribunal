@@ -17,12 +17,13 @@ import {
   type NotificationSettings,
 } from "@/lib/api/settings";
 
+import { queryKeys } from "@/lib/query-keys";
 export function NotificationsSettingsTab() {
   const queryClient = useQueryClient();
 
   // Fetch notifications
   const { data: notifications, isPending: notificationsLoading } = useQuery({
-    queryKey: ["settings", "notifications"],
+    queryKey: queryKeys.settings.notifications(),
     queryFn: settingsApi.getNotifications,
   });
 
@@ -30,7 +31,7 @@ export function NotificationsSettingsTab() {
   const notificationsMutation = useMutation({
     mutationFn: settingsApi.updateNotifications,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings", "notifications"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.notifications() });
     },
   });
 

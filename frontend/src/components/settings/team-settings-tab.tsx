@@ -51,6 +51,7 @@ import { Separator } from "@/components/ui/separator";
 import { InviteMemberDialog } from "@/components/workspaces/invite-member-dialog";
 import { EditMemberDialog } from "@/components/workspaces/edit-member-dialog";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { useWorkspace } from "@/providers/workspace-provider";
 import { settingsApi, type TeamMember } from "@/lib/api/settings";
 import { workspacesApi } from "@/lib/api/workspaces";
@@ -94,7 +95,7 @@ export function TeamSettingsTab() {
 
   // Fetch team members
   const { data: teamMembers, isPending: teamLoading } = useQuery({
-    queryKey: ["settings", "team", workspaceId],
+    queryKey: queryKeys.settings.team(workspaceId ?? ""),
     queryFn: () => settingsApi.getTeamMembers(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -103,7 +104,7 @@ export function TeamSettingsTab() {
   const isAdminOrOwner =
     currentWorkspace?.role === "owner" || currentWorkspace?.role === "admin";
   const { data: pendingInvitations, isPending: invitationsLoading } = useQuery({
-    queryKey: ["invitations", workspaceId],
+    queryKey: queryKeys.invitations.bare(workspaceId ?? ""),
     queryFn: () => invitationsApi.list(workspaceId!),
     enabled: !!workspaceId && isAdminOrOwner,
   });
@@ -113,7 +114,7 @@ export function TeamSettingsTab() {
     mutationFn: (invitationId: string) =>
       invitationsApi.cancel(workspaceId!, invitationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invitations", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invitations.bare(workspaceId ?? "") });
       toast.success("Invitation cancelled");
     },
     onError: (err: unknown) => {
@@ -126,7 +127,7 @@ export function TeamSettingsTab() {
     mutationFn: (data: { name?: string; description?: string }) =>
       workspacesApi.update(workspaceId!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       setWorkspaceEdits({});
       setWorkspaceSaved(true);
       toast.success("Workspace updated successfully");
@@ -141,7 +142,7 @@ export function TeamSettingsTab() {
   const workspaceDeleteMutation = useMutation({
     mutationFn: () => workspacesApi.delete(workspaceId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       toast.success("Workspace deleted successfully");
       setDeleteDialogOpen(false);
       // Switch to another workspace if available
@@ -163,7 +164,7 @@ export function TeamSettingsTab() {
   const setDefaultMutation = useMutation({
     mutationFn: () => workspacesApi.setDefault(workspaceId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       toast.success("Default workspace updated");
     },
     onError: (err: unknown) => {
@@ -223,7 +224,7 @@ export function TeamSettingsTab() {
         },
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       setCompanyEdits({});
       setCompanySaved(true);
       toast.success("Company information updated successfully");

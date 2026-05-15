@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { contactsApi, type ContactsListParams } from "@/lib/api/contacts";
+import { queryKeys } from "@/lib/query-keys";
 import type { Contact, ContactStatus } from "@/types";
 
 const PAGE_SIZE = 50;
@@ -50,9 +51,7 @@ export function useInfiniteContacts({
   filters,
 }: UseInfiniteContactsParams): UseInfiniteContactsReturn {
   const query = useInfiniteQuery({
-    queryKey: [
-      "contacts-infinite",
-      workspaceId,
+    queryKey: queryKeys.contacts.infinite(workspaceId, {
       search,
       status,
       tags,
@@ -66,7 +65,7 @@ export function useInfiniteContacts({
       created_before,
       enrichment_status,
       filters,
-    ],
+    }),
     queryFn: async ({ pageParam = 1 }) => {
       if (!workspaceId) {
         return { items: [], total: 0, page: 1, page_size: PAGE_SIZE, pages: 0 };

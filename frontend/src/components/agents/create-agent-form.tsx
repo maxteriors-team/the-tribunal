@@ -10,6 +10,7 @@ import * as z from "zod";
 
 import { agentsApi, type CreateAgentRequest } from "@/lib/api/agents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import {
   ArrowLeft,
@@ -96,7 +97,7 @@ export function CreateAgentForm() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["agents", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId) });
       }
       toast.success("Agent created successfully!");
       router.push("/agents");

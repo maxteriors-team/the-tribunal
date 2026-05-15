@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { tagsApi, type BulkTagRequest } from "@/lib/api/tags";
+import { queryKeys } from "@/lib/query-keys";
 
 const {
   queryKeys: tagQueryKeys,
@@ -23,8 +24,8 @@ export function useBulkTagContacts(workspaceId: string) {
   return useMutation({
     mutationFn: (data: BulkTagRequest) => tagsApi.bulkTag(workspaceId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tags", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
     },
   });
 }

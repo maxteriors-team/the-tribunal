@@ -15,6 +15,7 @@ import {
 import { contactQueryKeys } from "@/hooks/useContacts";
 import { useContactStore } from "@/lib/contact-store";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import {
   contactFormSchema,
@@ -115,7 +116,7 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
       return contactsApi.create(workspaceId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
       toast.success("Contact created successfully!");
       form.reset();
       onOpenChange(false);

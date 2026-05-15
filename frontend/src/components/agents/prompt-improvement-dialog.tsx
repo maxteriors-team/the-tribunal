@@ -7,6 +7,7 @@ import { Wand2, Loader2, Sparkles } from "lucide-react";
 
 import { improvementSuggestionsApi } from "@/lib/api/improvement-suggestions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,7 +48,7 @@ export function PromptImprovementDialog({
     onSuccess: (suggestions) => {
       toast.success(`Generated ${suggestions.length} improvement suggestions`);
       setHasGenerated(true);
-      void queryClient.invalidateQueries({ queryKey: ["improvementSuggestions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.improvementSuggestions.root() });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to generate suggestions");

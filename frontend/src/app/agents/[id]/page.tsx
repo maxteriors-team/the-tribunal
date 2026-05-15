@@ -9,8 +9,9 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 import { agentsApi, type UpdateAgentRequest } from "@/lib/api/agents";
-import { useAgent, agentQueryKeys } from "@/hooks/useAgents";
+import { useAgent } from "@/hooks/useAgents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
@@ -238,8 +239,8 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
     isDeletingRef.current = true;
     setIsDeleting(true);
 
-    void queryClient.cancelQueries({ queryKey: agentQueryKeys.get(workspaceId, agentId) });
-    queryClient.removeQueries({ queryKey: agentQueryKeys.get(workspaceId, agentId) });
+    void queryClient.cancelQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
+    queryClient.removeQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
 
     try {
       await agentsApi.delete(workspaceId, agentId);
@@ -302,8 +303,8 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
     try {
       await agentsApi.update(workspaceId, agentId, request);
       toast.success("Agent updated successfully");
-      await queryClient.invalidateQueries({ queryKey: agentQueryKeys.all(workspaceId) });
-      await queryClient.invalidateQueries({ queryKey: agentQueryKeys.get(workspaceId, agentId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
       router.push("/agents");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to update agent";

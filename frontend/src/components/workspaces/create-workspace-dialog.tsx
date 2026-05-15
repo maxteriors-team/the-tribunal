@@ -9,6 +9,7 @@ import * as z from "zod";
 import { Loader2 } from "lucide-react";
 
 import { workspacesApi, type CreateWorkspaceRequest } from "@/lib/api/workspaces";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,7 +73,7 @@ export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDia
   const createWorkspaceMutation = useMutation({
     mutationFn: (data: CreateWorkspaceRequest) => workspacesApi.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       toast.success("Workspace created successfully!");
       form.reset();
       onOpenChange(false);

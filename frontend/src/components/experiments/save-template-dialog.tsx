@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { messageTemplatesApi } from "@/lib/api/message-templates";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
@@ -47,7 +48,7 @@ export function SaveTemplateDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-templates", workspaceId],
+        queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
       });
       toast.success("Template saved successfully");
       setName("");

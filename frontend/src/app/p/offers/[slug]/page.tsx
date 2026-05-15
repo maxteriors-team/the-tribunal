@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 
 import { publicOffersApi, OptInRequest } from "@/lib/api/public-offers";
+import { queryKeys } from "@/lib/query-keys";
 import { formatNumber } from "@/lib/utils/number";
 
 interface PublicOfferPageProps {
@@ -37,7 +38,7 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
   const [submitted, setSubmitted] = useState(false);
 
   const { data: offer, isPending, error } = useQuery({
-    queryKey: ["public-offer", slug],
+    queryKey: queryKeys.publicOffers.bySlug(slug),
     queryFn: () => publicOffersApi.get(slug),
     enabled: !!slug,
     retry: false,

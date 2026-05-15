@@ -18,6 +18,7 @@ import {
   type VersionComparisonItem,
 } from "@/lib/api/prompt-versions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -48,7 +49,7 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
   const [eliminateVersion, setEliminateVersion] = useState<string | null>(null);
 
   const { data: comparison, isPending } = useQuery({
-    queryKey: ["promptVersionComparison", workspaceId, agentId],
+    queryKey: queryKeys.agents.promptVersionComparison(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return promptVersionsApi.compare(workspaceId, agentId);
@@ -64,8 +65,8 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Winner declared! Other versions deactivated.");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
       setDeclareWinnerVersion(null);
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to declare winner")),
@@ -78,8 +79,8 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version paused");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause version")),
   });
@@ -91,8 +92,8 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version resumed");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to resume version")),
   });
@@ -104,8 +105,8 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version eliminated from testing");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
       setEliminateVersion(null);
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to eliminate version")),

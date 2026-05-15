@@ -54,6 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import {
   phoneNumbersApi,
   type PhoneNumberSearchResult,
@@ -85,7 +86,7 @@ export function PhoneNumbersPage() {
     isPending: isLoadingNumbers,
     error: numbersError,
   } = useQuery({
-    queryKey: ["phone-numbers", workspaceId, { active_only: false }],
+    queryKey: queryKeys.phoneNumbers.activeOnlyFalse(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.list(workspaceId, { active_only: false });
@@ -125,7 +126,7 @@ export function PhoneNumbersPage() {
     },
     onSuccess: (data) => {
       toast.success(`Successfully purchased ${data.phone_number}`);
-      queryClient.invalidateQueries({ queryKey: ["phone-numbers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? "") });
       setSearchResults((prev) =>
         prev.filter((r) => r.phone_number !== data.phone_number)
       );
@@ -143,7 +144,7 @@ export function PhoneNumbersPage() {
     },
     onSuccess: () => {
       toast.success("Phone number released successfully");
-      queryClient.invalidateQueries({ queryKey: ["phone-numbers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? "") });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to release number");
@@ -162,7 +163,7 @@ export function PhoneNumbersPage() {
       } else {
         toast.info("No new phone numbers to sync");
       }
-      queryClient.invalidateQueries({ queryKey: ["phone-numbers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? "") });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Failed to sync phone numbers");

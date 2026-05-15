@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { workspacesApi, type WorkspaceWithMembership } from "@/lib/api/workspaces";
+import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "./auth-provider";
 
 const WORKSPACE_STORAGE_KEY = "current_workspace_id";
@@ -43,7 +44,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [currentWorkspaceId, setCurrentWorkspaceId] = React.useState<string | null>(null);
 
   const { data: workspaces = [], isPending } = useQuery({
-    queryKey: ["workspaces"],
+    queryKey: queryKeys.workspaces.all(),
     queryFn: workspacesApi.list,
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,

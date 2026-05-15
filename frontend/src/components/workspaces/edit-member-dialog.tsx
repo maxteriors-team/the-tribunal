@@ -36,6 +36,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 
+import { queryKeys } from "@/lib/query-keys";
 interface EditMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,7 +72,7 @@ export function EditMemberDialog({
     mutationFn: () =>
       workspacesApi.updateMemberRole(workspaceId!, member.id, selectedRole),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings", "team", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.team(workspaceId ?? "") });
       toast.success("Member role updated");
       onOpenChange(false);
     },
@@ -83,7 +84,7 @@ export function EditMemberDialog({
   const removeMemberMutation = useMutation({
     mutationFn: () => workspacesApi.removeMember(workspaceId!, member.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings", "team", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.team(workspaceId ?? "") });
       toast.success("Member removed from workspace");
       onOpenChange(false);
     },

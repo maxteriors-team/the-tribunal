@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { improvementSuggestionsApi } from "@/lib/api/improvement-suggestions";
 import { campaignReportsApi } from "@/lib/api/campaign-reports";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SuggestionsQueue } from "@/components/suggestions/suggestions-queue";
@@ -20,7 +21,7 @@ export default function SuggestionsPage() {
   const [statusFilter, setStatusFilter] = useState("pending");
 
   const { data: pendingCount } = useQuery({
-    queryKey: ["suggestionsPendingCount", workspaceId],
+    queryKey: queryKeys.improvementSuggestions.pendingCount(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return improvementSuggestionsApi.getPendingCount(workspaceId);
@@ -29,7 +30,7 @@ export default function SuggestionsPage() {
   });
 
   const { data: reportCount } = useQuery({
-    queryKey: ["campaignReportsCount", workspaceId],
+    queryKey: queryKeys.campaignReports.count(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return campaignReportsApi.getCount(workspaceId);
@@ -38,7 +39,7 @@ export default function SuggestionsPage() {
   });
 
   const { data: suggestionStats, isPending: statsLoading } = useQuery({
-    queryKey: ["suggestionsStats", workspaceId],
+    queryKey: queryKeys.improvementSuggestions.stats(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return improvementSuggestionsApi.getStats(workspaceId);

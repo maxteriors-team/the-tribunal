@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { opportunitiesApi } from "@/lib/api/opportunities";
+import { queryKeys } from "@/lib/query-keys";
 import { opportunityStatusColors } from "@/lib/status-colors";
 import type { Opportunity, OpportunityStatus, OpportunityActivity } from "@/types";
 import { cn } from "@/lib/utils";
@@ -144,7 +145,7 @@ export function OpportunityDetailSheet({
 
   // Fetch full opportunity details with activities
   const { data: opportunityDetail } = useQuery({
-    queryKey: ["opportunity", workspaceId, opportunity?.id],
+    queryKey: queryKeys.opportunities.get(workspaceId ?? "", opportunity?.id),
     queryFn: () =>
       opportunity ? opportunitiesApi.get(workspaceId, opportunity.id) : null,
     enabled: !!opportunity && open,
@@ -152,7 +153,7 @@ export function OpportunityDetailSheet({
 
   // Fetch pipelines for stage selector
   const { data: pipelines } = useQuery({
-    queryKey: ["pipelines", workspaceId],
+    queryKey: queryKeys.opportunities.pipelines(workspaceId ?? ""),
     queryFn: () => opportunitiesApi.listPipelines(workspaceId),
     enabled: !!workspaceId && open,
   });
@@ -187,10 +188,10 @@ export function OpportunityDetailSheet({
       opportunitiesApi.update(workspaceId, opportunity!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["opportunities", workspaceId],
+        queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: ["opportunity", workspaceId, opportunity?.id],
+        queryKey: queryKeys.opportunities.get(workspaceId ?? "", opportunity?.id),
       });
       setIsEditing(false);
     },
@@ -200,7 +201,7 @@ export function OpportunityDetailSheet({
     mutationFn: () => opportunitiesApi.delete(workspaceId, opportunity!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["opportunities", workspaceId],
+        queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
       });
       onOpenChange(false);
     },

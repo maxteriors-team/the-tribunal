@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { opportunitiesApi } from "@/lib/api/opportunities";
+import { queryKeys } from "@/lib/query-keys";
 import { opportunityStatusColors } from "@/lib/status-colors";
 import type { Opportunity, OpportunityStatus, PipelineStage } from "@/types";
 import { OpportunityDetailSheet } from "./opportunity-detail-sheet";
@@ -231,13 +232,13 @@ export function OpportunitiesBoard({ workspaceId }: OpportunitiesBoardProps) {
   );
 
   const { data: pipelines, isPending: pipelinesLoading } = useQuery({
-    queryKey: ["pipelines", workspaceId],
+    queryKey: queryKeys.opportunities.pipelines(workspaceId ?? ""),
     queryFn: () => opportunitiesApi.listPipelines(workspaceId),
     enabled: !!workspaceId,
   });
 
   const { data: opportunities, isPending: opportunitiesLoading } = useQuery({
-    queryKey: ["opportunities", workspaceId],
+    queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
     queryFn: () => opportunitiesApi.list(workspaceId, { page_size: 500 }),
     enabled: !!workspaceId,
   });
@@ -251,7 +252,7 @@ export function OpportunitiesBoard({ workspaceId }: OpportunitiesBoardProps) {
       stageId: string;
     }) => opportunitiesApi.update(workspaceId, opportunityId, { stage_id: stageId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["opportunities", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.bare(workspaceId ?? "") });
     },
   });
 

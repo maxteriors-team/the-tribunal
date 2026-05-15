@@ -63,6 +63,7 @@ import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import {
   useAutomations,
   useCreateAutomation,
@@ -136,7 +137,7 @@ export function AutomationsPage() {
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
   const { data: statsData } = useQuery({
-    queryKey: ["automationStats", workspaceId],
+    queryKey: queryKeys.automations.stats(workspaceId ?? ""),
     queryFn: () => automationsApi.getStats(workspaceId!),
     enabled: !!workspaceId,
   });

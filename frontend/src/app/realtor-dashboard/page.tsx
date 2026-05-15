@@ -30,6 +30,7 @@ import {
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 import { getRealtorStats, type RealtorStats } from "@/lib/api/realtor";
 import { appointmentsApi } from "@/lib/api/appointments";
+import { queryKeys } from "@/lib/query-keys";
 import type { Appointment } from "@/types";
 import { formatDateTime } from "@/lib/utils/date";
 import { formatNumber } from "@/lib/utils/number";
@@ -126,7 +127,7 @@ function RealtorDashboardContent() {
     data: stats,
     isPending: statsLoading,
   } = useQuery<RealtorStats>({
-    queryKey: ["realtor-stats", workspaceId],
+    queryKey: queryKeys.realtor.stats(workspaceId ?? ""),
     queryFn: () => getRealtorStats(workspaceId!),
     enabled: !!workspaceId,
     refetchInterval: 30_000,
@@ -137,7 +138,7 @@ function RealtorDashboardContent() {
     data: appointmentsData,
     isPending: appointmentsLoading,
   } = useQuery({
-    queryKey: ["realtor-appointments", workspaceId],
+    queryKey: queryKeys.realtor.appointments(workspaceId ?? ""),
     queryFn: () =>
       appointmentsApi.list(workspaceId!, {
         status_filter: "scheduled",

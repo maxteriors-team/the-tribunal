@@ -15,6 +15,7 @@ import {
 import { pendingActionsApi } from "@/lib/api/pending-actions";
 import type { PendingActionStatus } from "@/types/pending-action";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,7 +54,7 @@ export function PendingActionsPage() {
   const [rejectReason, setRejectReason] = useState("");
 
   const { data: stats, isPending: statsLoading } = useQuery({
-    queryKey: ["pendingActionStats", workspaceId],
+    queryKey: queryKeys.pendingActions.stats(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return pendingActionsApi.getStats(workspaceId);
@@ -62,7 +63,7 @@ export function PendingActionsPage() {
   });
 
   const { data: actionList, isPending: listLoading } = useQuery({
-    queryKey: ["pendingActions", workspaceId, statusFilter, page],
+    queryKey: queryKeys.pendingActions.list(workspaceId ?? "", statusFilter, page),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return pendingActionsApi.list(workspaceId, {
@@ -75,8 +76,8 @@ export function PendingActionsPage() {
   });
 
   const invalidateActions = () => {
-    void queryClient.invalidateQueries({ queryKey: ["pendingActions"] });
-    void queryClient.invalidateQueries({ queryKey: ["pendingActionStats"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.pendingActions.root() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.pendingActions.statsRoot() });
   };
 
   const approveMutation = useMutation({

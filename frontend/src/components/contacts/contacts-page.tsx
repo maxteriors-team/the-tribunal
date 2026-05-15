@@ -31,6 +31,7 @@ import { ContactsEmptyState } from "@/components/contacts/contacts-empty-state";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBulkDeleteContacts, useBulkUpdateStatus, useContactIds, useContactsPaginated } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import type { Contact, ContactStatus } from "@/types";
 import type { ContactIdsParams, ContactsListParams } from "@/lib/api/contacts";
 
@@ -257,7 +258,7 @@ export function ContactsPage() {
     if (!workspaceId || selectedCount === 0) return;
     try {
       const result = await bulkUpdateStatusMutation.mutateAsync({ ids: selectedArray, status });
-      void queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
       toast.success(`Updated ${result.updated} contact${result.updated !== 1 ? "s" : ""} to ${status}`);
     } catch {
       toast.error("Failed to update status");

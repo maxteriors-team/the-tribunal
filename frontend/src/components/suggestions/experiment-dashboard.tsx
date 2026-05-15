@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/prompt-versions";
 import { useAgents } from "@/hooks/useAgents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -103,7 +104,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
   const [eliminateVersion, setEliminateVersion] = useState<string | null>(null);
 
   const { data: comparison, isPending } = useQuery<VersionComparisonResponse>({
-    queryKey: ["promptVersionComparison", workspaceId, agentId],
+    queryKey: queryKeys.agents.promptVersionComparison(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return promptVersionsApi.compare(workspaceId, agentId);
@@ -119,7 +120,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
     },
     onSuccess: () => {
       toast.success("Winner declared!");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
       setDeclareWinnerVersion(null);
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to declare winner")),
@@ -132,7 +133,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
     },
     onSuccess: () => {
       toast.success("Version paused");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause version")),
   });
@@ -144,7 +145,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
     },
     onSuccess: () => {
       toast.success("Version resumed");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to resume version")),
   });
@@ -156,7 +157,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
     },
     onSuccess: () => {
       toast.success("Version eliminated");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersionComparison"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
       setEliminateVersion(null);
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to eliminate version")),

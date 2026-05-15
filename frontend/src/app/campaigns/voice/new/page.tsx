@@ -17,6 +17,7 @@ import {
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
 import { agentsApi } from "@/lib/api/agents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { VoiceCampaign } from "@/types";
 
@@ -28,7 +29,7 @@ export default function NewVoiceCampaignPage() {
 
   // Fetch phone numbers from API - filter to voice-enabled only
   const { data: phoneNumbersData, isPending: phoneNumbersLoading } = useQuery({
-    queryKey: ["phone-numbers", workspaceId],
+    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       const response = await phoneNumbersApi.list(workspaceId);
@@ -40,7 +41,7 @@ export default function NewVoiceCampaignPage() {
 
   // Fetch agents from API - all active agents
   const { data: agentsData, isPending: agentsLoading } = useQuery({
-    queryKey: ["agents", workspaceId, { active_only: true }],
+    queryKey: queryKeys.agents.activeOnly(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       const response = await agentsApi.list(workspaceId, { active_only: true });
@@ -76,9 +77,9 @@ export default function NewVoiceCampaignPage() {
     onSuccess: (campaign) => {
       toast.success("Voice campaign created successfully!");
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId) });
         queryClient.invalidateQueries({
-          queryKey: ["voice-campaigns", workspaceId],
+          queryKey: queryKeys.voiceCampaigns.bare(workspaceId),
         });
       }
       router.push(`/campaigns/${campaign.id}`);

@@ -12,6 +12,7 @@ import {
   type CSVPreviewResult,
 } from "@/lib/api/contacts";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { Button } from "@/components/ui/button";
 import {
@@ -95,7 +96,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
     onSuccess: (data) => {
       setResult(data);
       setStep("results");
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
       if (data.successful > 0) {
         toast.success(`Successfully imported ${data.successful} contacts`);
       }

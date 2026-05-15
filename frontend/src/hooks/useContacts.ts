@@ -7,6 +7,7 @@ import {
   type UpdateContactRequest,
 } from "@/lib/api/contacts";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
+import { queryKeys } from "@/lib/query-keys";
 import type { Contact, ContactStatus } from "@/types";
 import type { ApiClient } from "@/lib/api/create-api-client";
 
@@ -29,7 +30,7 @@ export { contactQueryKeys, useContacts, useContact, useCreateContact, useUpdateC
  */
 export function useContactsPaginated(workspaceId: string, params: ContactsListParams) {
   return useQuery({
-    queryKey: ["contacts", workspaceId, params],
+    queryKey: queryKeys.contacts.listWith(workspaceId, params),
     queryFn: () => contactsApi.list(workspaceId, params),
     enabled: !!workspaceId,
     placeholderData: keepPreviousData,
@@ -45,7 +46,7 @@ export function useBulkDeleteContacts(workspaceId: string) {
   return useMutation({
     mutationFn: (ids: number[]) => contactsApi.bulkDelete(workspaceId, ids),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
     },
   });
 }
@@ -55,7 +56,7 @@ export function useBulkDeleteContacts(workspaceId: string) {
  */
 export function useContactTimeline(workspaceId: string, contactId: number, limit: number = 100) {
   return useQuery({
-    queryKey: ["contact-timeline", workspaceId, contactId, limit],
+    queryKey: queryKeys.contacts.timelineLegacy(workspaceId, contactId, limit),
     queryFn: () => contactsApi.getTimeline(workspaceId, contactId, limit),
     enabled: !!workspaceId && !!contactId,
     // Poll every 3 seconds for real-time updates
@@ -75,7 +76,7 @@ export function useBulkUpdateStatus(workspaceId: string) {
     mutationFn: (variables: { ids: number[]; status: ContactStatus }) =>
       contactsApi.bulkUpdateStatus(workspaceId, variables.ids, variables.status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["contacts", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
     },
   });
 }
@@ -85,7 +86,7 @@ export function useBulkUpdateStatus(workspaceId: string) {
  */
 export function useContactIds(workspaceId: string, params: ContactIdsParams, enabled: boolean) {
   return useQuery({
-    queryKey: ["contact-ids", workspaceId, params],
+    queryKey: queryKeys.contacts.ids(workspaceId, params),
     queryFn: () => contactsApi.listIds(workspaceId, params),
     enabled: !!workspaceId && enabled,
   });
@@ -102,8 +103,10 @@ export function useToggleContactAI(workspaceId: string) {
       contactsApi.toggleAI(workspaceId, variables.contactId, variables.enabled),
     onSuccess: (_, variables) => {
       // Invalidate conversations to refresh AI state
-      queryClient.invalidateQueries({ queryKey: ["conversations", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["contact-ai-state", workspaceId, variables.contactId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contacts.aiState(workspaceId, variables.contactId),
+      });
     },
   });
 }

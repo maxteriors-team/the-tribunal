@@ -7,6 +7,7 @@ import { Play, Square, Loader2 } from "lucide-react";
 
 import { agentsApi } from "@/lib/api/agents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -155,7 +156,7 @@ export default function VoiceTestPage() {
 
   // Fetch agents
   const { data: agentsData } = useQuery({
-    queryKey: ["agents", workspaceId],
+    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return agentsApi.list(workspaceId);

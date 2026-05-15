@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { campaignStatusColors } from "@/lib/status-colors";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { useCampaignAnalytics } from "@/hooks/useCampaigns";
 import { GuaranteeProgress } from "@/components/campaigns/guarantee-progress";
@@ -42,7 +43,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
   // Load campaign data
   const { data: campaign, isPending, error } = useQuery({
-    queryKey: ["campaigns", workspaceId, campaignId],
+    queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return campaignsApi.get(workspaceId, campaignId);
@@ -61,7 +62,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign started!");
       queryClient.invalidateQueries({
-        queryKey: ["campaigns", workspaceId, campaignId],
+        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -78,7 +79,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign paused!");
       queryClient.invalidateQueries({
-        queryKey: ["campaigns", workspaceId, campaignId],
+        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -95,7 +96,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign resumed!");
       queryClient.invalidateQueries({
-        queryKey: ["campaigns", workspaceId, campaignId],
+        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -112,7 +113,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign cancelled!");
       queryClient.invalidateQueries({
-        queryKey: ["campaigns", workspaceId, campaignId],
+        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {

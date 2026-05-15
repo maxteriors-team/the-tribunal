@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { campaignsApi, type CreateCampaignRequest, type UpdateCampaignRequest } from "@/lib/api/campaigns";
+import { queryKeys } from "@/lib/query-keys";
 import type { Campaign } from "@/types";
 import type { ApiClient } from "@/lib/api/create-api-client";
 
@@ -20,7 +21,7 @@ export { campaignQueryKeys, useCampaigns, useCampaign, useCreateCampaign, useUpd
 
 export function useCampaignAnalytics(workspaceId: string, campaignId: string) {
   return useQuery({
-    queryKey: ["campaignAnalytics", workspaceId, campaignId],
+    queryKey: queryKeys.campaigns.analytics(workspaceId, campaignId),
     queryFn: () => campaignsApi.getAnalytics(workspaceId, campaignId),
     enabled: !!workspaceId && !!campaignId,
   });

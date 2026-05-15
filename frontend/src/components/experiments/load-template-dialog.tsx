@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { messageTemplatesApi } from "@/lib/api/message-templates";
 import type { MessageTemplate } from "@/types";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -36,7 +37,7 @@ export function LoadTemplateDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, isPending } = useQuery({
-    queryKey: ["message-templates", workspaceId],
+    queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTemplatesApi.list(workspaceId);
@@ -51,7 +52,7 @@ export function LoadTemplateDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["message-templates", workspaceId],
+        queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
       });
       toast.success("Template deleted");
     },

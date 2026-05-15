@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { offersApi } from "@/lib/api/offers";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import type { Offer, DiscountType } from "@/types";
 import { formatNumber } from "@/lib/utils/number";
 
@@ -73,7 +74,7 @@ export default function OffersPage() {
   const [deleteOfferId, setDeleteOfferId] = useState<string | null>(null);
 
   const { data, isPending } = useQuery({
-    queryKey: ["offers", workspaceId],
+    queryKey: queryKeys.offers.bare(workspaceId ?? ""),
     queryFn: () => offersApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -81,7 +82,7 @@ export default function OffersPage() {
   const deleteMutation = useMutation({
     mutationFn: (offerId: string) => offersApi.delete(workspaceId!, offerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["offers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId ?? "") });
       setDeleteOfferId(null);
     },
   });
@@ -118,7 +119,7 @@ export default function OffersPage() {
         require_name: offer.require_name,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["offers", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId ?? "") });
     },
   });
 

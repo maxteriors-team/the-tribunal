@@ -35,6 +35,7 @@ import { nudgesApi } from "@/lib/api/nudges";
 import { pendingActionsApi } from "@/lib/api/pending-actions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
 
+import { queryKeys } from "@/lib/query-keys";
 import {
   Sidebar,
   SidebarContent,
@@ -260,13 +261,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
   const { theme, setTheme } = useTheme();
   const workspaceId = useWorkspaceId();
   const { data: nudgeStats } = useQuery({
-    queryKey: ["nudgeStats", workspaceId],
+    queryKey: queryKeys.nudges.stats(workspaceId ?? ""),
     queryFn: () => nudgesApi.getStats(workspaceId!),
     enabled: !!workspaceId,
     refetchInterval: 60000,
   });
   const { data: pendingActionStats } = useQuery({
-    queryKey: ["pendingActionStats", workspaceId],
+    queryKey: queryKeys.pendingActions.stats(workspaceId ?? ""),
     queryFn: () => pendingActionsApi.getStats(workspaceId!),
     enabled: !!workspaceId,
     refetchInterval: 60000,

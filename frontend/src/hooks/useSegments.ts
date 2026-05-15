@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { segmentsApi } from "@/lib/api/segments";
+import { queryKeys } from "@/lib/query-keys";
 
 const {
   queryKeys: segmentQueryKeys,
@@ -18,7 +19,7 @@ export { segmentQueryKeys, useSegments, useSegment, useCreateSegment, useUpdateS
 
 export function useSegmentContacts(workspaceId: string, segmentId: string) {
   return useQuery({
-    queryKey: ["segment-contacts", workspaceId, segmentId],
+    queryKey: queryKeys.segments.contacts(workspaceId, segmentId),
     queryFn: () => segmentsApi.getContacts(workspaceId, segmentId),
     enabled: !!workspaceId && !!segmentId,
   });

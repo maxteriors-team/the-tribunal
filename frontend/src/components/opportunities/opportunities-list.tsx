@@ -8,6 +8,7 @@ import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { opportunityStatusColors } from "@/lib/status-colors";
 import { opportunitiesApi } from "@/lib/api/opportunities";
+import { queryKeys } from "@/lib/query-keys";
 import type { OpportunityStatus } from "@/types";
 import { formatDate } from "@/lib/utils/date";
 
@@ -36,7 +37,7 @@ export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
   const [search] = React.useState("");
 
   const { data, isPending } = useQuery({
-    queryKey: ["opportunities", workspaceId, page, search],
+    queryKey: queryKeys.opportunities.list(workspaceId ?? "", page, search),
     queryFn: () =>
       opportunitiesApi.list(workspaceId, {
         page,

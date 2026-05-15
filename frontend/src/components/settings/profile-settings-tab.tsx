@@ -26,6 +26,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { settingsApi } from "@/lib/api/settings";
+import { queryKeys } from "@/lib/query-keys";
 import { TIMEZONE_OPTIONS } from "@/lib/constants";
 
 export function ProfileSettingsTab() {
@@ -43,7 +44,7 @@ export function ProfileSettingsTab() {
 
   // Fetch profile
   const { data: profile, isPending: profileLoading } = useQuery({
-    queryKey: ["settings", "profile"],
+    queryKey: queryKeys.settings.profile(),
     queryFn: settingsApi.getProfile,
   });
 
@@ -58,7 +59,7 @@ export function ProfileSettingsTab() {
   const profileMutation = useMutation({
     mutationFn: settingsApi.updateProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings.profile() });
       setLocalEdits({});
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2000);

@@ -23,6 +23,7 @@ import {
   type PromptVersionResponse,
 } from "@/lib/api/prompt-versions";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,7 +62,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
   const [selectedVersion, setSelectedVersion] = useState<PromptVersionResponse | null>(null);
 
   const { data: versions, isPending } = useQuery({
-    queryKey: ["promptVersions", workspaceId, agentId],
+    queryKey: queryKeys.agents.promptVersions(workspaceId ?? "", agentId),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return promptVersionsApi.list(workspaceId, agentId, { page_size: 50 });
@@ -76,7 +77,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version activated");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to activate version")),
   });
@@ -88,7 +89,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version added to A/B test");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to activate for testing")),
   });
@@ -100,7 +101,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version deactivated");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to deactivate version")),
   });
@@ -112,7 +113,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version paused");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause version")),
   });
@@ -124,7 +125,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version resumed");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to resume version")),
   });
@@ -136,7 +137,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Version eliminated from testing");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to eliminate version")),
   });
@@ -148,7 +149,7 @@ export function PromptVersionHistory({ agentId }: PromptVersionHistoryProps) {
     },
     onSuccess: () => {
       toast.success("Rolled back to this version");
-      void queryClient.invalidateQueries({ queryKey: ["promptVersions"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to rollback")),
   });

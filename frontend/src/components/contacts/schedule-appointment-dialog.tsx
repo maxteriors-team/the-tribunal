@@ -11,6 +11,7 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 
 import { appointmentsApi, type CreateAppointmentRequest } from "@/lib/api/appointments";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useAgents } from "@/hooks/useAgents";
 import { Button } from "@/components/ui/button";
@@ -115,7 +116,7 @@ export function ScheduleAppointmentDialog({
       return appointmentsApi.create(workspaceId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["appointments", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appointments.bare(workspaceId ?? "") });
       toast.success("Appointment scheduled successfully!");
       form.reset();
       onOpenChange(false);

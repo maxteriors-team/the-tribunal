@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { agentsApi, type EmbedSettingsUpdate } from "@/lib/api/agents";
+import { queryKeys } from "@/lib/query-keys";
 
 interface EmbedAgentDialogProps {
   open: boolean;
@@ -116,7 +117,7 @@ function EmbedDialogContent({
 
   // Fetch embed settings
   const { data: embedSettings, isPending } = useQuery({
-    queryKey: ["agent-embed", workspaceId, agentId],
+    queryKey: queryKeys.agents.embed(workspaceId, agentId),
     queryFn: () => agentsApi.getEmbedSettings(workspaceId, agentId),
   });
 
@@ -165,7 +166,7 @@ function EmbedDialogContent({
       agentsApi.updateEmbedSettings(workspaceId, agentId, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["agent-embed", workspaceId, agentId],
+        queryKey: queryKeys.agents.embed(workspaceId, agentId),
       });
       toast.success("Embed settings saved");
       setLocalChanges({});

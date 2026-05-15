@@ -15,6 +15,7 @@ import { offersApi } from "@/lib/api/offers";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
 import { agentsApi } from "@/lib/api/agents";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Offer, SMSCampaign } from "@/types";
 
@@ -26,7 +27,7 @@ export default function NewSMSCampaignPage() {
 
   // Fetch offers from API (with fallback to empty array)
   const { data: offersData, isPending: offersLoading } = useQuery({
-    queryKey: ["offers", workspaceId],
+    queryKey: queryKeys.offers.bare(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       try {
@@ -42,7 +43,7 @@ export default function NewSMSCampaignPage() {
 
   // Fetch phone numbers from API - filter to SMS-enabled only
   const { data: phoneNumbersData, isPending: phoneNumbersLoading } = useQuery({
-    queryKey: ["phone-numbers", workspaceId, { sms_enabled: true }],
+    queryKey: queryKeys.phoneNumbers.smsEnabled(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       const response = await phoneNumbersApi.list(workspaceId, { sms_enabled: true });
@@ -53,7 +54,7 @@ export default function NewSMSCampaignPage() {
 
   // Fetch agents from API - filter to active agents only
   const { data: agentsData, isPending: agentsLoading } = useQuery({
-    queryKey: ["agents", workspaceId, { active_only: true }],
+    queryKey: queryKeys.agents.activeOnly(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       const response = await agentsApi.list(workspaceId, { active_only: true });
@@ -77,7 +78,7 @@ export default function NewSMSCampaignPage() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["offers", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId) });
       }
       toast.success("Offer created successfully");
     },
@@ -110,7 +111,7 @@ export default function NewSMSCampaignPage() {
     onSuccess: (campaign) => {
       toast.success("Campaign created successfully!");
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: ["campaigns", workspaceId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId) });
       }
       router.push(`/campaigns/${campaign.id}`);
     },

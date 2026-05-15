@@ -17,13 +17,14 @@ import {
   messageTestsApi,
   type CreateMessageTestRequest,
 } from "@/lib/api/message-tests";
+import { queryKeys } from "@/lib/query-keys";
 
 export default function NewExperimentPage() {
   const router = useRouter();
   const workspaceId = useWorkspaceId();
 
   const { data: contacts = [], isPending: contactsLoading } = useQuery({
-    queryKey: ["contacts", workspaceId],
+    queryKey: queryKeys.contacts.bare(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return contactsApi.list(workspaceId);
@@ -33,7 +34,7 @@ export default function NewExperimentPage() {
   });
 
   const { data: agents = [], isPending: agentsLoading } = useQuery({
-    queryKey: ["agents", workspaceId],
+    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       const response = await agentsApi.list(workspaceId);
@@ -43,7 +44,7 @@ export default function NewExperimentPage() {
   });
 
   const { data: phoneNumbers = [], isPending: phoneNumbersLoading } = useQuery({
-    queryKey: ["phone-numbers", workspaceId],
+    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       const response = await phoneNumbersApi.list(workspaceId);
