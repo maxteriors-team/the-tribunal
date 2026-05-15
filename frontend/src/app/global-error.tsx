@@ -1,24 +1,7 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
-
-/**
- * Structured error reporter. Logs error details in a consistent format.
- * TODO: Replace with Sentry.captureException() or similar when error
- * monitoring is set up.
- */
-function reportError(
-  error: Error & { digest?: string },
-  context?: { componentStack?: string },
-) {
-  console.error("[GlobalErrorBoundary]", {
-    message: error.message,
-    digest: error.digest,
-    stack: error.stack,
-    componentStack: context?.componentStack,
-    timestamp: new Date().toISOString(),
-  });
-}
 
 export default function GlobalError({
   error,
@@ -28,7 +11,7 @@ export default function GlobalError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    reportError(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (
