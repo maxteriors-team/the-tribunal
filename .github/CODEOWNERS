@@ -1,0 +1,16 @@
+# Code Owners for The Tribunal
+#
+# These owners are automatically requested for review when a PR
+# modifies files matching the patterns below. The last matching
+# pattern wins, so order from general to specific.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Default owner for anything not otherwise claimed
+*           @Gahroot
+
+# Backend (FastAPI / Python)
+/backend/   @Gahroot
+
+# Frontend (Next.js / React)
+/frontend/  @Gahroot
