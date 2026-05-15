@@ -27,5 +27,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # No-op: previous values unknown
-    pass
+    """Downgrade not supported.
+
+    The upgrade overwrites ``voice_provider`` and ``voice_id`` on the Jess
+    agent row without capturing the prior values. There is no record of what
+    those columns held before this migration ran, so a faithful reversal is
+    impossible. Restoring stale defaults could silently corrupt production
+    configuration, so we fail loudly instead.
+    """
+    raise NotImplementedError(
+        "Downgrade not supported: data mutation is one-way"
+    )
