@@ -128,9 +128,7 @@ async def error_client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 async def headers_client() -> AsyncIterator[AsyncClient]:
     app = _make_security_headers_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
 
 
@@ -149,9 +147,7 @@ class TestHttpExceptionHandler:
         # Status-code-derived slug, no `detail` field, no `details` field.
         assert body == {"code": "not_found", "message": "missing widget"}
 
-    async def test_structured_detail_is_preserved(
-        self, error_client: AsyncClient
-    ) -> None:
+    async def test_structured_detail_is_preserved(self, error_client: AsyncClient) -> None:
         response = await error_client.get("/raise/structured")
         assert response.status_code == 409
         body = response.json()
@@ -237,9 +233,7 @@ class TestErrorPayloadFromDetail:
 
     def test_structured_dict_without_details(self) -> None:
         """Structured dicts that omit ``details`` don't get a stray key added."""
-        payload = _error_payload_from_detail(
-            409, {"code": "conflict_x", "message": "x conflict"}
-        )
+        payload = _error_payload_from_detail(409, {"code": "conflict_x", "message": "x conflict"})
         assert payload == {"code": "conflict_x", "message": "x conflict"}
         assert "details" not in payload
 
@@ -267,15 +261,13 @@ _EXPECTED_SECURITY_HEADERS = {
 class TestSecurityHeadersMiddleware:
     """Every HTTP response gains the locked-down security header set."""
 
-    async def test_all_security_headers_present(
-        self, headers_client: AsyncClient
-    ) -> None:
+    async def test_all_security_headers_present(self, headers_client: AsyncClient) -> None:
         response = await headers_client.get("/ping")
         assert response.status_code == 200
         for header, value in _EXPECTED_SECURITY_HEADERS.items():
-            assert response.headers.get(header) == value, (
-                f"missing or wrong {header}; got {response.headers.get(header)!r}"
-            )
+            assert (
+                response.headers.get(header) == value
+            ), f"missing or wrong {header}; got {response.headers.get(header)!r}"
 
     async def test_csp_locks_default_src(self, headers_client: AsyncClient) -> None:
         response = await headers_client.get("/ping")
@@ -353,15 +345,11 @@ class TestProductionCorsWiring:
         compiled = re.compile(pattern)
 
         # Allowed: a preview under our Vercel team.
-        assert compiled.match(
-            "https://aicrm-xyz-ngrout70-6776s-projects.vercel.app"
-        )
+        assert compiled.match("https://aicrm-xyz-ngrout70-6776s-projects.vercel.app")
         # Rejected: any other Vercel tenant.
         assert not compiled.match("https://evil.vercel.app")
         # Rejected: a preview under a different team slug entirely.
-        assert not compiled.match(
-            "https://aicrm-xyz-other-team-projects.vercel.app"
-        )
+        assert not compiled.match("https://aicrm-xyz-other-team-projects.vercel.app")
 
 
 # --------------------------------------------------------------------------- #
@@ -390,9 +378,7 @@ class TestLifespan:
             calls.append("close_redis")
 
         fake_engine = MagicMock()
-        fake_engine.dispose = AsyncMock(
-            side_effect=lambda: calls.append("dispose")
-        )
+        fake_engine.dispose = AsyncMock(side_effect=lambda: calls.append("dispose"))
 
         def _validate() -> None:
             calls.append("validate")
@@ -436,6 +422,164 @@ class TestLifespan:
             async with lifespan(production_app):
                 pass
         fake_engine.dispose.assert_awaited_once()
+
+
+# --------------------------------------------------------------------------- #
+# Startup-state flag — /readyz must reflect app.state.ready
+# --------------------------------------------------------------------------- #
+
+
+class TestStartupReadinessFlag:
+    """``app.state.ready`` flips False → True only after startup succeeds.
+
+    The /readyz endpoint reads this flag and returns 503 while it is False,
+    so orchestrators (Railway, Kubernetes) hold traffic on the previous
+    container until the new one finishes booting.
+    """
+
+    async def test_ready_is_false_before_lifespan_runs(self) -> None:
+        """A fresh app has no ``ready`` attribute — readyz must treat that as not-ready."""
+        fresh_app = FastAPI()
+        # Before lifespan, the flag is unset — the readyz endpoint reads it via
+        # ``getattr(..., "ready", False)`` so the absence itself means not-ready.
+        assert getattr(fresh_app.state, "ready", False) is False
+
+    async def test_ready_flips_to_true_after_startup_succeeds(self) -> None:
+        """Inside the lifespan context, ``app.state.ready`` is True."""
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+        # Use a fresh FastAPI instance so we don't mutate state on the real
+        # production_app between tests.
+        target_app = FastAPI()
+
+        with (
+            patch.object(main_module, "start_all_workers", AsyncMock()),
+            patch.object(main_module, "stop_all_workers", AsyncMock()),
+            patch.object(main_module, "close_redis", AsyncMock()),
+            patch.object(main_module, "_validate_startup_config", MagicMock()),
+            patch.object(main_module, "engine", fake_engine),
+        ):
+            # Before entering: not ready.
+            assert getattr(target_app.state, "ready", False) is False
+            async with lifespan(target_app):
+                # Inside the context: ready.
+                assert target_app.state.ready is True
+            # After exiting: flipped back to False for drain.
+            assert target_app.state.ready is False
+
+    async def test_ready_stays_false_if_validation_fails(self) -> None:
+        """A startup-config failure must leave ``ready`` False and propagate."""
+        target_app = FastAPI()
+
+        def _boom() -> None:
+            raise RuntimeError("bad config")
+
+        with (
+            patch.object(main_module, "start_all_workers", AsyncMock()),
+            patch.object(main_module, "stop_all_workers", AsyncMock()),
+            patch.object(main_module, "close_redis", AsyncMock()),
+            patch.object(main_module, "_validate_startup_config", _boom),
+            patch.object(main_module, "engine", MagicMock(dispose=AsyncMock())),
+            pytest.raises(RuntimeError, match="bad config"),
+        ):
+            async with lifespan(target_app):
+                pass  # pragma: no cover
+
+        # ready was set to False at entry and never advanced to True.
+        assert target_app.state.ready is False
+
+    async def test_ready_stays_false_if_worker_startup_fails(self) -> None:
+        """If ``start_all_workers`` raises, ``ready`` must not flip to True."""
+        target_app = FastAPI()
+        failing_workers = AsyncMock(side_effect=RuntimeError("worker boom"))
+
+        with (
+            patch.object(main_module, "start_all_workers", failing_workers),
+            patch.object(main_module, "stop_all_workers", AsyncMock()),
+            patch.object(main_module, "close_redis", AsyncMock()),
+            patch.object(main_module, "_validate_startup_config", MagicMock()),
+            patch.object(main_module, "engine", MagicMock(dispose=AsyncMock())),
+            pytest.raises(RuntimeError, match="worker boom"),
+        ):
+            async with lifespan(target_app):
+                pass  # pragma: no cover
+
+        assert target_app.state.ready is False
+
+    async def test_readyz_returns_503_when_not_ready(self) -> None:
+        """/readyz returns 503 with status="starting" while app.state.ready is False.
+
+        End-to-end: build a minimal app mounting the real health router, do
+        NOT run the lifespan that flips ``ready`` to True, and confirm /readyz
+        short-circuits before touching Postgres or Redis.
+        """
+        from app.api.v1.health import router as health_router
+
+        not_ready_app = FastAPI()
+        not_ready_app.include_router(health_router)
+        # Leave app.state.ready unset — the endpoint must treat that as not-ready.
+
+        # Patch the dependency probes so a regression that skips the
+        # short-circuit would surface as an AssertionError instead of a
+        # silent pass.
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(side_effect=AssertionError("must not run when not ready")),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(side_effect=AssertionError("must not run when not ready")),
+            ),
+            patch(
+                "app.api.v1.health._check_worker_heartbeats",
+                new=AsyncMock(side_effect=AssertionError("must not run when not ready")),
+            ),
+        ):
+            async with AsyncClient(
+                transport=ASGITransport(app=not_ready_app),
+                base_url="http://testserver",
+            ) as ac:
+                response = await ac.get("/readyz")
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["status"] == "starting"
+        assert body["checks"]["startup"]["ok"] is False
+        assert body["checks"]["startup"]["error"] == "startup_incomplete"
+
+    async def test_readyz_runs_dependency_checks_when_ready(self) -> None:
+        """Once ``app.state.ready`` is True, /readyz runs the full probe stack."""
+        from app.api.v1.health import router as health_router
+
+        ready_app = FastAPI()
+        ready_app.include_router(health_router)
+        ready_app.state.ready = True
+
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_worker_heartbeats",
+                new=AsyncMock(return_value=(True, {}, None)),
+            ),
+        ):
+            async with AsyncClient(
+                transport=ASGITransport(app=ready_app),
+                base_url="http://testserver",
+            ) as ac:
+                response = await ac.get("/readyz")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["checks"]["startup"]["ok"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -557,9 +701,7 @@ class TestValidateStartupConfig:
     def test_missing_telnyx_public_key_warns_when_verification_required(
         self,
     ) -> None:
-        cfg = self._make_settings(
-            telnyx_public_key="", skip_webhook_verification=False
-        )
+        cfg = self._make_settings(telnyx_public_key="", skip_webhook_verification=False)
         with patch.object(main_module, "settings", cfg):
             _validate_startup_config()
 

@@ -326,9 +326,20 @@ def _validate_startup_config() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan handler."""
+    """Application lifespan handler.
+
+    Sets ``app.state.ready`` to ``True`` only after configuration validation
+    and worker startup both succeed. ``/readyz`` reads this flag and returns
+    503 while it is ``False`` so orchestrators (Railway, Kubernetes) hold
+    traffic on the previous container until this one finishes booting.
+    """
     log = logger.bind(context="app_lifespan")
     log.info("Starting AI CRM backend...")
+
+    # Default to not-ready so any in-flight readiness probe between process
+    # start and lifespan completion returns 503. We never serve traffic with
+    # this flag unset.
+    app.state.ready = False
 
     # Validate configuration at startup
     _validate_startup_config()
@@ -336,9 +347,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Start all background workers
     await start_all_workers()
 
+    # Only mark ready after both validation and worker startup succeed. If
+    # either raises, ``ready`` stays ``False`` and the process exits before
+    # serving traffic.
+    app.state.ready = True
+    log.info("startup_complete", ready=True)
+
     yield
 
     log.info("Shutting down AI CRM backend...")
+    # Flip ready off immediately so /readyz reports 503 during drain.
+    app.state.ready = False
     await stop_all_workers()
     await close_redis()
     # Dispose the SQLAlchemy engine so all pooled asyncpg connections are

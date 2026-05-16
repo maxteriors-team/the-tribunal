@@ -18,7 +18,7 @@ import os
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import text
 
 from app.db.redis import get_redis
@@ -37,6 +37,7 @@ _PROBE_TIMEOUT_SECONDS = 2.0
 async def _check_postgres() -> tuple[bool, str | None]:
     """Run ``SELECT 1`` against Postgres with a hard timeout."""
     try:
+
         async def _run() -> None:
             async with AsyncSessionLocal() as session:
                 await session.execute(text("SELECT 1"))
@@ -52,6 +53,7 @@ async def _check_postgres() -> tuple[bool, str | None]:
 async def _check_redis() -> tuple[bool, str | None]:
     """Run ``PING`` against Redis with a hard timeout."""
     try:
+
         async def _run() -> None:
             client = await get_redis()
             # ``redis.asyncio.Redis.ping`` is typed as returning ``Awaitable[bool]
@@ -83,9 +85,7 @@ def _expected_worker_labels() -> list[str]:
         instance = registry.get()
         if instance is None:
             continue
-        labels.append(
-            instance.COMPONENT_NAME or instance.__class__.__name__.lower()
-        )
+        labels.append(instance.COMPONENT_NAME or instance.__class__.__name__.lower())
     return labels
 
 
@@ -104,6 +104,7 @@ async def _check_worker_heartbeats() -> tuple[bool, dict[str, bool], str | None]
         return True, {}, None
 
     try:
+
         async def _run() -> dict[str, bool]:
             client = await get_redis()
             results = await asyncio.gather(
@@ -130,12 +131,31 @@ async def livez() -> dict[str, str]:
 
 
 @router.get("/readyz", tags=["Health"])
-async def readyz(response: Response) -> dict[str, Any]:
-    """Readiness probe — Postgres + Redis reachable within 2s each.
+async def readyz(request: Request, response: Response) -> dict[str, Any]:
+    """Readiness probe — startup complete + Postgres + Redis reachable.
 
-    Returns HTTP 503 when either dependency fails or times out so upstream
-    load balancers stop sending traffic to this instance.
+    Returns HTTP 503 when:
+
+    * ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished
+      validating config and starting workers yet (or shutdown is in progress).
+    * Either Postgres or Redis fails / times out (2s budget each).
+    * Any expected worker is missing a fresh heartbeat key.
+
+    Orchestrators (Railway, Kubernetes) use this to hold traffic on the
+    previous container until the new one finishes booting and to drain a
+    container before it stops accepting requests.
     """
+    # Short-circuit before touching external services: if startup hasn't
+    # completed (or shutdown has begun) the dependency probes are meaningless.
+    startup_ready = bool(getattr(request.app.state, "ready", False))
+    if not startup_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        logger.info("readyz_not_ready", reason="startup_incomplete")
+        return {
+            "status": "starting",
+            "checks": {"startup": {"ok": False, "error": "startup_incomplete"}},
+        }
+
     postgres_result, redis_result, worker_result = await asyncio.gather(
         _check_postgres(),
         _check_redis(),
@@ -146,6 +166,7 @@ async def readyz(response: Response) -> dict[str, Any]:
     workers_ok, worker_states, worker_err = worker_result
 
     checks = {
+        "startup": {"ok": True, "error": None},
         "postgres": {"ok": postgres_ok, "error": postgres_err},
         "redis": {"ok": redis_ok, "error": redis_err},
         "workers": {
@@ -165,9 +186,7 @@ async def readyz(response: Response) -> dict[str, Any]:
             redis_err=redis_err,
             workers_ok=workers_ok,
             worker_err=worker_err,
-            missing_heartbeats=[
-                label for label, ok in worker_states.items() if not ok
-            ],
+            missing_heartbeats=[label for label, ok in worker_states.items() if not ok],
         )
         return {"status": "unavailable", "checks": checks}
 

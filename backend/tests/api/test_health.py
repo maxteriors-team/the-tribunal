@@ -30,8 +30,14 @@ async def _test_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def _make_test_app() -> FastAPI:
-    """Create a minimal FastAPI app with all routes but no worker startup."""
+    """Create a minimal FastAPI app with all routes but no worker startup.
+
+    Pins ``app.state.ready = True`` so ``/readyz`` doesn't short-circuit to
+    503 — ``ASGITransport`` doesn't fire FastAPI lifespan events, so the
+    flag must be set explicitly here to mirror a fully-booted process.
+    """
     app = FastAPI(lifespan=_test_lifespan)
+    app.state.ready = True
 
     # Register all the same routers as the real app
     app.include_router(api_router, prefix="/api/v1")
@@ -66,9 +72,7 @@ class TestLivez:
         response = await client.get("/livez")
         assert response.json() == {"status": "ok"}
 
-    async def test_livez_does_not_touch_postgres_or_redis(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_livez_does_not_touch_postgres_or_redis(self, client: AsyncClient) -> None:
         """Liveness must not depend on external services."""
         with (
             patch(
@@ -87,9 +91,7 @@ class TestLivez:
 class TestReadyz:
     """GET /readyz — Postgres + Redis probe."""
 
-    async def test_readyz_returns_200_when_both_ok(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_readyz_returns_200_when_both_ok(self, client: AsyncClient) -> None:
         with (
             patch(
                 "app.api.v1.health._check_postgres",
@@ -107,9 +109,7 @@ class TestReadyz:
         assert body["checks"]["postgres"]["ok"] is True
         assert body["checks"]["redis"]["ok"] is True
 
-    async def test_readyz_returns_503_when_postgres_fails(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_readyz_returns_503_when_postgres_fails(self, client: AsyncClient) -> None:
         with (
             patch(
                 "app.api.v1.health._check_postgres",
@@ -128,9 +128,7 @@ class TestReadyz:
         assert body["checks"]["postgres"]["error"] == "OperationalError"
         assert body["checks"]["redis"]["ok"] is True
 
-    async def test_readyz_returns_503_when_redis_fails(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_readyz_returns_503_when_redis_fails(self, client: AsyncClient) -> None:
         with (
             patch(
                 "app.api.v1.health._check_postgres",
@@ -148,9 +146,7 @@ class TestReadyz:
         assert body["checks"]["redis"]["ok"] is False
         assert body["checks"]["redis"]["error"] == "ConnectionError"
 
-    async def test_readyz_returns_503_when_both_fail(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_readyz_returns_503_when_both_fail(self, client: AsyncClient) -> None:
         with (
             patch(
                 "app.api.v1.health._check_postgres",
@@ -182,9 +178,7 @@ class TestReadyz:
             ),
             patch(
                 "app.api.v1.health._check_worker_heartbeats",
-                new=AsyncMock(
-                    return_value=(False, {"campaign_worker": False}, None)
-                ),
+                new=AsyncMock(return_value=(False, {"campaign_worker": False}, None)),
             ),
         ):
             response = await client.get("/readyz")
@@ -192,9 +186,7 @@ class TestReadyz:
         body = response.json()
         assert body["status"] == "unavailable"
         assert body["checks"]["workers"]["ok"] is False
-        assert body["checks"]["workers"]["heartbeats"] == {
-            "campaign_worker": False
-        }
+        assert body["checks"]["workers"]["heartbeats"] == {"campaign_worker": False}
 
     async def test_readyz_returns_200_when_all_heartbeats_present(
         self, client: AsyncClient
@@ -211,9 +203,7 @@ class TestReadyz:
             ),
             patch(
                 "app.api.v1.health._check_worker_heartbeats",
-                new=AsyncMock(
-                    return_value=(True, {"campaign_worker": True}, None)
-                ),
+                new=AsyncMock(return_value=(True, {"campaign_worker": True}, None)),
             ),
         ):
             response = await client.get("/readyz")
@@ -243,9 +233,7 @@ class TestPostgresProbe:
 
         with (
             patch.object(health, "_PROBE_TIMEOUT_SECONDS", 0.01),
-            patch.object(
-                health, "AsyncSessionLocal", return_value=slow_session
-            ),
+            patch.object(health, "AsyncSessionLocal", return_value=slow_session),
         ):
             ok, err = await health._check_postgres()
         assert ok is False
@@ -259,14 +247,10 @@ class TestPostgresProbe:
             pass
 
         broken_session = AsyncMock()
-        broken_session.__aenter__ = AsyncMock(
-            side_effect=FakeOperationalError("boom")
-        )
+        broken_session.__aenter__ = AsyncMock(side_effect=FakeOperationalError("boom"))
         broken_session.__aexit__ = AsyncMock(return_value=None)
 
-        with patch.object(
-            health, "AsyncSessionLocal", return_value=broken_session
-        ):
+        with patch.object(health, "AsyncSessionLocal", return_value=broken_session):
             ok, err = await health._check_postgres()
         assert ok is False
         assert err == "FakeOperationalError"
@@ -331,9 +315,7 @@ class TestVersion:
         assert response.status_code == 200
         assert response.json() == {"sha": "abc123def"}
 
-    async def test_version_defaults_to_unknown_when_env_missing(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_version_defaults_to_unknown_when_env_missing(self, client: AsyncClient) -> None:
         env = {k: v for k, v in os.environ.items() if k != "RAILWAY_GIT_COMMIT_SHA"}
         with patch.dict(os.environ, env, clear=True):
             response = await client.get("/version")
@@ -349,9 +331,7 @@ class TestAuthEndpointErrors:
     database.
     """
 
-    async def test_login_invalid_credentials_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_invalid_credentials_returns_401(self, client: AsyncClient) -> None:
         """Login with invalid credentials returns 401 when DB returns no user.
 
         The DB is not running in tests, so we mock it to return None for the
@@ -387,9 +367,7 @@ class TestAuthEndpointErrors:
 
         assert response.status_code == 401
 
-    async def test_register_missing_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_missing_body_returns_422(self, client: AsyncClient) -> None:
         """Register with no body returns 422 Unprocessable Entity."""
         response = await client.post("/api/v1/auth/register", json={})
         assert response.status_code == 422
