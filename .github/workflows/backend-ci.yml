@@ -49,5 +49,23 @@ jobs:
       - name: Mypy
         run: uv run mypy app
 
+      - name: OpenAPI schema freshness
+        # Regenerate the committed schema from the live FastAPI app; fail if it
+        # drifts. Forces every PR that changes a public route/schema to ship the
+        # regenerated ``backend/openapi.json`` alongside the code change, so API
+        # contract changes are reviewable in the diff.
+        env:
+          # Importing ``app.main`` instantiates Settings, which requires
+          # SECRET_KEY (min 32 chars). The value is only used for in-process
+          # schema generation — no tokens are signed.
+          SECRET_KEY: ci-openapi-export-secret-key-not-used-for-signing-0123
+          ENCRYPTION_KEY: ci-openapi-export-encryption-key-not-used-for-crypto-01
+        run: |
+          uv run export-openapi
+          if ! git diff --exit-code openapi.json; then
+            echo "::error file=backend/openapi.json::openapi.json is out of date. Run 'cd backend && uv run export-openapi' and commit the result."
+            exit 1
+          fi
+
       - name: Pytest with coverage
         run: uv run pytest --cov=app --cov-report=term

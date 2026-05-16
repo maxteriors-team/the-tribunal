@@ -14,6 +14,11 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=500]
+        # ``backend/openapi.json`` is a generated snapshot of the FastAPI
+        # schema (~1 MB) committed as the source of truth for the CI
+        # freshness gate (see .github/workflows/backend-ci.yml). It must be
+        # tracked so ``git diff --exit-code`` can detect drift.
+        exclude: ^backend/openapi\.json$
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.8.6
