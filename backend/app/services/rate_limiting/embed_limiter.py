@@ -14,8 +14,8 @@ can be mocked easily in tests.
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import HTTPException, status
 
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.db.redis import get_redis
 from app.services.rate_limiting.rate_limiter import INCREMENT_WITH_LIMIT_SCRIPT
 
@@ -23,6 +23,10 @@ logger = structlog.get_logger()
 
 
 _KEY_PREFIX = "rate_limit:embed"
+
+
+def _build_key(scope: str, identifier: str) -> str:
+    return f"{_KEY_PREFIX}:{scope}:{identifier}"
 
 
 async def _check_and_increment(
@@ -45,7 +49,7 @@ async def _check_and_increment(
         not incremented further in that case.
     """
     redis_client = await get_redis()
-    key = f"{_KEY_PREFIX}:{scope}:{identifier}"
+    key = _build_key(scope, identifier)
 
     result = await redis_client.eval(  # type: ignore[misc]
         INCREMENT_WITH_LIMIT_SCRIPT, 1, key, limit, window_seconds
@@ -54,6 +58,31 @@ async def _check_and_increment(
     allowed = bool(int(result[0]))
     current = int(result[1])
     return allowed, current
+
+
+async def _retry_after_seconds(scope: str, identifier: str, window_seconds: int) -> int:
+    """Read the live TTL on a limiter key to derive a precise ``Retry-After``.
+
+    Falls back to ``window_seconds`` if Redis can't tell us (key missing,
+    TTL not set, or a transient error) — a conservative upper bound is
+    always better than no header at all.
+    """
+    try:
+        redis_client = await get_redis()
+        ttl = await redis_client.ttl(_build_key(scope, identifier))
+    except Exception as exc:  # noqa: BLE001 - fail-safe to window default
+        logger.warning(
+            "embed_rate_limit_ttl_lookup_failed",
+            scope=scope,
+            identifier=identifier,
+            error=str(exc),
+        )
+        return window_seconds
+    # Redis returns -2 (missing key) or -1 (no expire). Both mean we can't
+    # derive a real remaining window; fall back to the configured window.
+    if ttl is None or ttl < 0:
+        return window_seconds
+    return max(1, int(ttl))
 
 
 async def enforce_embed_rate_limit(
@@ -87,18 +116,17 @@ async def enforce_embed_rate_limit(
         return
 
     if not allowed:
+        retry_after = await _retry_after_seconds(scope, identifier, window_seconds)
         logger.info(
             "embed_rate_limit_exceeded",
             scope=scope,
             identifier=identifier,
             limit=limit,
             current=current,
+            retry_after_seconds=retry_after,
             timestamp=datetime.now(UTC).isoformat(),
         )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-        )
+        raise_rate_limited(retry_after, detail=detail)
 
 
 # Default limits ---------------------------------------------------------------

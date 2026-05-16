@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DB, CurrentUser
 from app.core.config import settings
+from app.core.encryption import hash_value
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -63,6 +65,7 @@ def _hash_username(username: str) -> str:
     Hashed so the rate-limit table never stores plaintext account identifiers.
     """
     return hashlib.sha256(username.strip().lower().encode("utf-8")).hexdigest()
+
 
 _REFRESH_COOKIE_PATH = "/api/v1/auth"
 _REFRESH_COOKIE_MAX_AGE = 7 * 24 * 3600  # 7 days
@@ -130,20 +133,33 @@ async def _check_auth_rate_limit(db: AsyncSession, client_ip: str, endpoint: str
     Raises:
         HTTPException: If rate limit exceeded
     """
-    window_start = datetime.now(UTC) - timedelta(minutes=_AUTH_RATE_WINDOW_MINUTES)
+    now = datetime.now(UTC)
+    window_seconds = _AUTH_RATE_WINDOW_MINUTES * 60
+    window_start = now - timedelta(seconds=window_seconds)
 
+    # Pull the oldest in-window record alongside the count so we can compute
+    # a precise ``Retry-After`` instead of a flat 15-minute default.
     count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(AuthRateLimit.created_at)).where(
             AuthRateLimit.client_ip == client_ip,
             AuthRateLimit.endpoint == endpoint,
             AuthRateLimit.created_at >= window_start,
         )
     )
-    count = count_result.scalar() or 0
+    row = count_result.one()
+    count = row[0] or 0
+    oldest = row[1]
 
     if count >= _AUTH_RATE_LIMIT:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        retry_after = window_seconds
+        if oldest is not None:
+            if oldest.tzinfo is None:
+                oldest = oldest.replace(tzinfo=UTC)
+            retry_after = max(
+                1, int((oldest + timedelta(seconds=window_seconds) - now).total_seconds())
+            )
+        raise_rate_limited(
+            retry_after,
             detail="Too many requests. Please try again later.",
         )
 
@@ -160,9 +176,7 @@ async def _check_username_lockout(db: AsyncSession, username: str) -> bool:
     window. The caller MUST treat a True result the same as a wrong-password
     response (generic 401) so a probe cannot tell whether the account exists.
     """
-    window_start = datetime.now(UTC) - timedelta(
-        minutes=_USERNAME_LOCKOUT_WINDOW_MINUTES
-    )
+    window_start = datetime.now(UTC) - timedelta(minutes=_USERNAME_LOCKOUT_WINDOW_MINUTES)
     username_hash = _hash_username(username)
 
     count_result = await db.execute(
@@ -198,17 +212,21 @@ async def register(
     client_ip = get_client_ip(request, settings.trusted_proxies)
     await _check_auth_rate_limit(db, client_ip, "register")
 
-    # Check if email already exists
-    result = await db.execute(select(User).where(User.email == user_in.email))
+    # Check if email already exists — query the BLAKE2b lookup hash, not the
+    # encrypted ``email`` column (Fernet ciphertext is non-deterministic so
+    # equality matching there is impossible).
+    email_hash = hash_value(user_in.email)
+    result = await db.execute(select(User).where(User.email_hash == email_hash))
     if result.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
 
-    # Create user
+    # Create user — write encrypted value + lookup hash in lockstep.
     user = User(
         email=user_in.email,
+        email_hash=email_hash,
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
     )
@@ -248,8 +266,8 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Find user by email
-    result = await db.execute(select(User).where(User.email == form_data.username))
+    # Find user by email — lookup via the BLAKE2b hash column.
+    result = await db.execute(select(User).where(User.email_hash == hash_value(form_data.username)))
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(form_data.password, user.hashed_password):

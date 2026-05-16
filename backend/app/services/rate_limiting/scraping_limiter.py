@@ -24,8 +24,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from fastapi import HTTPException, status
 
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.db.redis import get_redis
 from app.services.rate_limiting.rate_limiter import INCREMENT_WITH_LIMIT_SCRIPT
 
@@ -48,16 +48,12 @@ def _day_bucket(now: datetime) -> str:
 
 
 def _seconds_until_next_hour(now: datetime) -> int:
-    next_hour = (now + timedelta(hours=1)).replace(
-        minute=0, second=0, microsecond=0
-    )
+    next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     return max(1, int((next_hour - now).total_seconds()))
 
 
 def _seconds_until_midnight(now: datetime) -> int:
-    midnight = (now + timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((midnight - now).total_seconds()))
 
 
@@ -123,14 +119,14 @@ async def enforce_scraping_rate_limit(
             window="hour",
             limit=hourly_limit,
             current=hour_count,
+            retry_after_seconds=hour_ttl,
         )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        raise_rate_limited(
+            hour_ttl,
             detail=(
-                "Hourly search limit reached for this workspace. "
+                f"Hourly search limit reached for this workspace. "
                 f"Try again in {hour_ttl} seconds."
             ),
-            headers={"Retry-After": str(hour_ttl)},
         )
 
     try:
@@ -155,12 +151,12 @@ async def enforce_scraping_rate_limit(
             window="day",
             limit=daily_limit,
             current=day_count,
+            retry_after_seconds=day_ttl,
         )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        raise_rate_limited(
+            day_ttl,
             detail=(
-                "Daily search limit reached for this workspace. "
+                f"Daily search limit reached for this workspace. "
                 f"Try again in {day_ttl} seconds."
             ),
-            headers={"Retry-After": str(day_ttl)},
         )

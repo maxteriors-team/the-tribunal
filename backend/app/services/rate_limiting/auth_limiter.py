@@ -15,8 +15,8 @@ self-contained for easy mocking in tests.
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import HTTPException, status
 
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.db.redis import get_redis
 from app.services.rate_limiting.rate_limiter import INCREMENT_WITH_LIMIT_SCRIPT
 
@@ -24,6 +24,10 @@ logger = structlog.get_logger()
 
 
 _KEY_PREFIX = "rate_limit:auth"
+
+
+def _build_key(scope: str, user_id: int) -> str:
+    return f"{_KEY_PREFIX}:{scope}:{user_id}"
 
 
 async def _check_and_increment(
@@ -39,7 +43,7 @@ async def _check_and_increment(
     incremented further in that case (the Lua script short-circuits).
     """
     redis_client = await get_redis()
-    key = f"{_KEY_PREFIX}:{scope}:{user_id}"
+    key = _build_key(scope, user_id)
 
     result = await redis_client.eval(  # type: ignore[misc]
         INCREMENT_WITH_LIMIT_SCRIPT, 1, key, limit, window_seconds
@@ -48,6 +52,29 @@ async def _check_and_increment(
     allowed = bool(int(result[0]))
     current = int(result[1])
     return allowed, current
+
+
+async def _retry_after_seconds(scope: str, user_id: int, window_seconds: int) -> int:
+    """Look up the live TTL on a limiter key for a precise ``Retry-After``.
+
+    Falls back to ``window_seconds`` when the TTL can't be read (missing key,
+    no expire, or transient Redis error). A conservative upper bound is
+    better than no header.
+    """
+    try:
+        redis_client = await get_redis()
+        ttl = await redis_client.ttl(_build_key(scope, user_id))
+    except Exception as exc:  # noqa: BLE001 - fail-safe to window default
+        logger.warning(
+            "auth_rate_limit_ttl_lookup_failed",
+            scope=scope,
+            user_id=user_id,
+            error=str(exc),
+        )
+        return window_seconds
+    if ttl is None or ttl < 0:
+        return window_seconds
+    return max(1, int(ttl))
 
 
 async def _enforce(
@@ -81,18 +108,17 @@ async def _enforce(
         return
 
     if not allowed:
+        retry_after = await _retry_after_seconds(scope, user_id, window_seconds)
         logger.info(
             "auth_rate_limit_exceeded",
             scope=scope,
             user_id=user_id,
             limit=limit,
             current=current,
+            retry_after_seconds=retry_after,
             timestamp=datetime.now(UTC).isoformat(),
         )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=detail,
-        )
+        raise_rate_limited(retry_after, detail=detail)
 
 
 # Default limits ---------------------------------------------------------------

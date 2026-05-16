@@ -15,7 +15,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.core.origin_validation import validate_origin
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.core.utils import get_client_ip
 from app.db.session import get_db
 from app.models.agent import Agent
@@ -119,9 +121,27 @@ class EmbedPhoneRequest(BaseModel):
             raise ValueError("Phone number must be a valid US number (10 digits)")
 
 
-async def _check_embed_rate_limits(
-    db: AsyncSession, client_ip: str, phone_number: str
-) -> None:
+def _seconds_until_window_clears(
+    oldest_created_at: datetime | None,
+    window_seconds: int,
+    now: datetime,
+) -> int:
+    """Seconds until the rolling window has room for another request.
+
+    Mirrors the helper in ``demo.py``: once the oldest in-window record ages
+    out, the caller is back under cap. Falls back to ``window_seconds`` when
+    no rows are visible (paranoia path).
+    """
+    if oldest_created_at is None:
+        return window_seconds
+    if oldest_created_at.tzinfo is None:
+        oldest_created_at = oldest_created_at.replace(tzinfo=UTC)
+    expires_at = oldest_created_at + timedelta(seconds=window_seconds)
+    remaining = int((expires_at - now).total_seconds())
+    return max(1, remaining)
+
+
+async def _check_embed_rate_limits(db: AsyncSession, client_ip: str, phone_number: str) -> None:
     """Check rate limits for embed call/text requests."""
     # Bypass rate limits for dev/test phone numbers
     if phone_number in settings.demo_rate_limit_bypass_phones:
@@ -130,35 +150,43 @@ async def _check_embed_rate_limits(
     now = datetime.now(UTC)
     hour_ago = now - timedelta(hours=1)
     day_ago = now - timedelta(days=1)
+    hour_seconds = 3600
+    day_seconds = 86400
 
     # Check IP rate limit
     ip_count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(DemoRequest.created_at)).where(
             DemoRequest.client_ip == client_ip,
             DemoRequest.created_at >= hour_ago,
         )
     )
-    ip_count = ip_count_result.scalar() or 0
+    ip_row = ip_count_result.one()
+    ip_count = ip_row[0] or 0
+    ip_oldest = ip_row[1]
 
     if ip_count >= settings.demo_ip_rate_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        retry_after = _seconds_until_window_clears(ip_oldest, hour_seconds, now)
+        raise_rate_limited(
+            retry_after,
             detail="Rate limit exceeded. Please try again later.",
         )
 
     # Check phone rate limit
     phone_count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(DemoRequest.created_at)).where(
             DemoRequest.phone_number == phone_number,
             DemoRequest.created_at >= day_ago,
         )
     )
-    phone_count = phone_count_result.scalar() or 0
+    phone_row = phone_count_result.one()
+    phone_count = phone_row[0] or 0
+    phone_oldest = phone_row[1]
 
     if phone_count >= settings.demo_phone_rate_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="This phone number has reached its daily limit. Please try again tomorrow.",
+        retry_after = _seconds_until_window_clears(phone_oldest, day_seconds, now)
+        raise_rate_limited(
+            retry_after,
+            detail=("This phone number has reached its daily limit. " "Please try again tomorrow."),
         )
 
 
@@ -244,8 +272,16 @@ async def get_ephemeral_token(
 
     # Map voice to OpenAI Realtime-compatible voices
     openai_realtime_voices = {
-        "alloy", "ash", "ballad", "coral", "echo",
-        "sage", "shimmer", "verse", "marin", "cedar",
+        "alloy",
+        "ash",
+        "ballad",
+        "coral",
+        "echo",
+        "sage",
+        "shimmer",
+        "verse",
+        "marin",
+        "cedar",
     }
     voice = agent.voice_id if agent.voice_id in openai_realtime_voices else "ash"
 
@@ -281,24 +317,26 @@ async def get_ephemeral_token(
     tools: list[dict[str, object]] = []
 
     # Add end_call tool by default for embed sessions
-    tools.append({
-        "type": "function",
-        "name": "end_call",
-        "description": (
-            "End the current call. Use this when the user says goodbye, "
-            "thanks you and indicates they're done, or explicitly asks to end the call."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reason": {
-                    "type": "string",
-                    "description": "The reason for ending the call",
-                }
+    tools.append(
+        {
+            "type": "function",
+            "name": "end_call",
+            "description": (
+                "End the current call. Use this when the user says goodbye, "
+                "thanks you and indicates they're done, or explicitly asks to end the call."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "The reason for ending the call",
+                    }
+                },
+                "required": ["reason"],
             },
-            "required": ["reason"],
-        },
-    })
+        }
+    )
 
     return TokenResponse(
         client_secret={"value": session_data.get("client_secret", {}).get("value", "")},
@@ -341,9 +379,7 @@ async def send_chat_message(
         )
 
     # Build messages for OpenAI
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": agent.system_prompt}
-    ]
+    messages: list[dict[str, str]] = [{"role": "system", "content": agent.system_prompt}]
 
     # Add conversation history
     for msg in body.conversation_history[-agent.text_max_context_messages :]:
@@ -492,7 +528,7 @@ async def trigger_embed_call(
         contact_result = await db.execute(
             select(Contact).where(
                 Contact.workspace_id == agent.workspace_id,
-                Contact.phone_number == body.phone_number,
+                Contact.phone_hash == hash_phone(body.phone_number),
             )
         )
         contact = contact_result.scalar_one_or_none()
@@ -518,6 +554,7 @@ async def trigger_embed_call(
                 first_name=first_name,
                 last_name=last_name,
                 phone_number=body.phone_number,
+                phone_hash=hash_phone(body.phone_number),
                 notes=body.notes,
                 source="embed_demo",
             )

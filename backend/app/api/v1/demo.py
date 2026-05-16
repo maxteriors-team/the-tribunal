@@ -9,6 +9,8 @@ from sqlalchemy import func, select
 
 from app.api.deps import DB
 from app.core.config import settings
+from app.core.encryption import hash_phone, hash_value_or_none
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.core.utils import get_client_ip
 from app.models.contact import Contact
 from app.models.demo_request import DemoRequest
@@ -25,6 +27,29 @@ from app.utils.pii import mask_phone
 
 router = APIRouter()
 logger = structlog.get_logger()
+
+
+def _seconds_until_window_clears(
+    oldest_created_at: datetime | None,
+    window_seconds: int,
+    now: datetime,
+) -> int:
+    """Compute seconds until the rolling window has room for another request.
+
+    The window is a rolling ``window_seconds`` interval. Once the oldest
+    record currently in the window ages out, the caller is back under cap, so
+    that's the soonest a retry can succeed. Falls back to ``window_seconds``
+    if we somehow hit the cap without seeing any rows (shouldn't happen, but
+    a clamped-positive default is safer than a 0 / negative header value).
+    """
+    if oldest_created_at is None:
+        return window_seconds
+    # Tolerate naive datetimes coming back from the DB driver.
+    if oldest_created_at.tzinfo is None:
+        oldest_created_at = oldest_created_at.replace(tzinfo=UTC)
+    expires_at = oldest_created_at + timedelta(seconds=window_seconds)
+    remaining = int((expires_at - now).total_seconds())
+    return max(1, remaining)
 
 
 async def check_rate_limits(
@@ -51,38 +76,46 @@ async def check_rate_limits(
     now = datetime.now(UTC)
     hour_ago = now - timedelta(hours=1)
     day_ago = now - timedelta(days=1)
+    hour_seconds = 3600
+    day_seconds = 86400
 
-    # Check IP rate limit: 3 requests per hour
+    # Check IP rate limit: 3 requests per hour. Compute retry-after as the
+    # time until the *oldest* in-window record ages out, so a client that hit
+    # the cap 5 minutes ago is told to wait 55 minutes, not a flat hour.
     ip_count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(DemoRequest.created_at)).where(
             DemoRequest.client_ip == client_ip,
             DemoRequest.created_at >= hour_ago,
         )
     )
-    ip_count = ip_count_result.scalar() or 0
+    ip_row = ip_count_result.one()
+    ip_count = ip_row[0] or 0
+    ip_oldest = ip_row[1]
 
     if ip_count >= settings.demo_ip_rate_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        retry_after = _seconds_until_window_clears(ip_oldest, hour_seconds, now)
+        raise_rate_limited(
+            retry_after,
             detail="Rate limit exceeded. Please try again later.",
         )
 
     # Check phone rate limit: 2 requests per day
     phone_count_result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(DemoRequest.created_at)).where(
             DemoRequest.phone_number == phone_number,
             DemoRequest.created_at >= day_ago,
         )
     )
-    phone_count = phone_count_result.scalar() or 0
+    phone_row = phone_count_result.one()
+    phone_count = phone_row[0] or 0
+    phone_oldest = phone_row[1]
 
     if phone_count >= settings.demo_phone_rate_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="This phone number has reached its daily limit. Please try again tomorrow.",
+        retry_after = _seconds_until_window_clears(phone_oldest, day_seconds, now)
+        raise_rate_limited(
+            retry_after,
+            detail=("This phone number has reached its daily limit. " "Please try again tomorrow."),
         )
-
-
 
 
 @router.post("/call", response_model=DemoResponse)
@@ -265,9 +298,7 @@ async def _trigger_demo_call(lead_request: LeadSubmitRequest, db: DB) -> bool:
         await voice_service.close()
         return True
     except Exception:
-        logger.exception(
-            "demo_call_trigger_failed", phone=mask_phone(lead_request.phone_number)
-        )
+        logger.exception("demo_call_trigger_failed", phone=mask_phone(lead_request.phone_number))
         return False
 
 
@@ -290,9 +321,7 @@ async def _trigger_demo_text(lead_request: LeadSubmitRequest, db: DB) -> bool:
         await sms_service.close()
         return True
     except Exception:
-        logger.exception(
-            "demo_text_trigger_failed", phone=mask_phone(lead_request.phone_number)
-        )
+        logger.exception("demo_text_trigger_failed", phone=mask_phone(lead_request.phone_number))
         return False
 
 
@@ -316,12 +345,13 @@ async def submit_lead(
     client_ip = get_client_ip(request, settings.trusted_proxies)
     await check_rate_limits(db, client_ip, lead_request.phone_number, "lead")
 
-    # Check if contact already exists in demo workspace
+    # Check if contact already exists in demo workspace — lookup via the
+    # deterministic phone hash, not the Fernet-encrypted plaintext column.
     workspace_id = uuid.UUID(settings.demo_workspace_id)
     result = await db.execute(
         select(Contact).where(
             Contact.workspace_id == workspace_id,
-            Contact.phone_number == lead_request.phone_number,
+            Contact.phone_hash == hash_phone(lead_request.phone_number),
         )
     )
     existing_contact = result.scalar_one_or_none()
@@ -335,7 +365,9 @@ async def submit_lead(
             first_name=lead_request.first_name,
             last_name=lead_request.last_name,
             phone_number=lead_request.phone_number,
+            phone_hash=hash_phone(lead_request.phone_number),
             email=lead_request.email,
+            email_hash=hash_value_or_none(lead_request.email),
             company_name=lead_request.company_name,
             notes=lead_request.notes,
             source=lead_request.source or "landing_page",

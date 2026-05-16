@@ -11,7 +11,9 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB
 from app.core.config import settings
+from app.core.encryption import hash_phone, hash_value, hash_value_or_none
 from app.core.origin_validation import validate_origin
+from app.core.rate_limit_helpers import raise_rate_limited
 from app.core.utils import get_client_ip
 from app.db.scope import apply_workspace_scope
 from app.models.campaign import CampaignContact
@@ -31,19 +33,35 @@ router = APIRouter()
 
 
 async def _check_lead_form_rate_limit(db: DB, client_ip: str) -> None:
-    """Check IP rate limit for lead form submissions."""
-    hour_ago = datetime.now(UTC) - timedelta(hours=1)
+    """Check IP rate limit for lead form submissions.
+
+    On 429 the response includes a ``Retry-After`` header (seconds) computed
+    from when the oldest in-window submission will age out — so clients back
+    off only as long as the rolling window actually requires.
+    """
+    now = datetime.now(UTC)
+    window_seconds = 3600
+    hour_ago = now - timedelta(seconds=window_seconds)
     result = await db.execute(
-        select(func.count()).where(
+        select(func.count(), func.min(DemoRequest.created_at)).where(
             DemoRequest.client_ip == client_ip,
             DemoRequest.request_type == "lead_form",
             DemoRequest.created_at >= hour_ago,
         )
     )
-    count = result.scalar() or 0
+    row = result.one()
+    count = row[0] or 0
+    oldest = row[1]
     if count >= settings.lead_form_ip_rate_limit:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        retry_after = window_seconds
+        if oldest is not None:
+            if oldest.tzinfo is None:
+                oldest = oldest.replace(tzinfo=UTC)
+            retry_after = max(
+                1, int((oldest + timedelta(seconds=window_seconds) - now).total_seconds())
+            )
+        raise_rate_limited(
+            retry_after,
             detail="Rate limit exceeded. Please try again later.",
         )
 
@@ -53,7 +71,7 @@ async def _action_auto_text(lead_source: LeadSource, contact: Contact, db: DB) -
     config = lead_source.action_config or {}
     from_number = config.get("from_phone_number", settings.demo_from_phone_number)
     template = config.get("message_template") or (
-        f"Hi {contact.first_name}! Thanks for your interest. " "We'll be in touch shortly."
+        f"Hi {contact.first_name}! Thanks for your interest. We'll be in touch shortly."
     )
     # Substitute {first_name} placeholder in custom templates
     template = template.replace("{first_name}", contact.first_name or "")
@@ -301,10 +319,10 @@ async def submit_lead(
     )
     db.add(demo_record)
 
-    # Deduplicate: find existing contact by phone in workspace
+    # Deduplicate: find existing contact by phone in workspace — via hash.
     existing_result = await db.execute(
         apply_workspace_scope(select(Contact), Contact, lead_source.workspace_id).where(
-            Contact.phone_number == body.phone_number
+            Contact.phone_hash == hash_phone(body.phone_number)
         )
     )
     existing_contact = existing_result.scalar_one_or_none()
@@ -312,10 +330,12 @@ async def submit_lead(
     is_new_lead = existing_contact is None
 
     if existing_contact:
-        # Update existing contact with new info
+        # Update existing contact with new info. Keep email/email_hash in sync.
         existing_contact.first_name = body.first_name or existing_contact.first_name
         existing_contact.last_name = body.last_name or existing_contact.last_name
-        existing_contact.email = body.email or existing_contact.email
+        if body.email:
+            existing_contact.email = body.email
+            existing_contact.email_hash = hash_value(body.email)
         existing_contact.company_name = body.company_name or existing_contact.company_name
         if body.notes:
             existing_notes = existing_contact.notes or ""
@@ -334,7 +354,9 @@ async def submit_lead(
             first_name=body.first_name,
             last_name=body.last_name,
             phone_number=body.phone_number,
+            phone_hash=hash_phone(body.phone_number),
             email=body.email,
+            email_hash=hash_value_or_none(body.email),
             company_name=body.company_name,
             notes=notes or None,
             source="lead_form",
