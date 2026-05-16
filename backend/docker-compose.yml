@@ -1,15 +1,18 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.2-alpine
     container_name: aicrm-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: aicrm
-      POSTGRES_PASSWORD: aicrm_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aicrm_dev_password}
       POSTGRES_DB: aicrm
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aicrm
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aicrm"]
       interval: 5s
@@ -17,12 +20,15 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: aicrm-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - aicrm
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,3 +38,8 @@ services:
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  aicrm:
+    name: aicrm
+    driver: bridge
