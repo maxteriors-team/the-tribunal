@@ -114,7 +114,7 @@ async def check_rate_limits(
         retry_after = _seconds_until_window_clears(phone_oldest, day_seconds, now)
         raise_rate_limited(
             retry_after,
-            detail=("This phone number has reached its daily limit. " "Please try again tomorrow."),
+            detail=("This phone number has reached its daily limit. Please try again tomorrow."),
         )
 
 

@@ -124,8 +124,7 @@ async def enforce_scraping_rate_limit(
         raise_rate_limited(
             hour_ttl,
             detail=(
-                f"Hourly search limit reached for this workspace. "
-                f"Try again in {hour_ttl} seconds."
+                f"Hourly search limit reached for this workspace. Try again in {hour_ttl} seconds."
             ),
         )
 
@@ -156,7 +155,6 @@ async def enforce_scraping_rate_limit(
         raise_rate_limited(
             day_ttl,
             detail=(
-                f"Daily search limit reached for this workspace. "
-                f"Try again in {day_ttl} seconds."
+                f"Daily search limit reached for this workspace. Try again in {day_ttl} seconds."
             ),
         )

@@ -111,7 +111,7 @@ class GooglePlacesUnavailableError(ProviderUnavailableError):
 
 circuit_breaker_state: Final[Gauge] = Gauge(
     "circuit_breaker_state",
-    "Current state of an external-provider circuit breaker " "(0=closed, 1=half-open, 2=open).",
+    "Current state of an external-provider circuit breaker (0=closed, 1=half-open, 2=open).",
     labelnames=("provider",),
 )
 

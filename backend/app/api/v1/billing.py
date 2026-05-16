@@ -85,9 +85,7 @@ async def _get_user_workspace_id(current_user: CurrentUser, db: DB) -> uuid.UUID
     return membership.workspace_id
 
 
-async def _get_stripe_integration(
-    workspace_id: uuid.UUID, db: DB
-) -> WorkspaceIntegration | None:
+async def _get_stripe_integration(workspace_id: uuid.UUID, db: DB) -> WorkspaceIntegration | None:
     """Fetch the Stripe WorkspaceIntegration for this workspace, or None."""
     result = await db.execute(
         select(WorkspaceIntegration).where(
@@ -360,9 +358,7 @@ async def stripe_webhook(request: Request, db: DB) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-async def _handle_checkout_completed(
-    session: dict[str, Any], db: DB
-) -> None:
+async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
     """Mark workspace as subscribed after a successful checkout."""
     workspace_id_str: str | None = (session.get("metadata") or {}).get("workspace_id")
     customer_id: str | None = session.get("customer")
@@ -397,9 +393,7 @@ async def _handle_checkout_completed(
     )
 
 
-async def _handle_subscription_deleted(
-    subscription: dict[str, Any], db: DB
-) -> None:
+async def _handle_subscription_deleted(subscription: dict[str, Any], db: DB) -> None:
     """Mark workspace as unsubscribed when a subscription is cancelled."""
     customer_id: str | None = subscription.get("customer")
     if not customer_id:
