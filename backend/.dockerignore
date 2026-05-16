@@ -1,0 +1,22 @@
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+scripts/
+docs/
+*.pyc
+__pycache__/
+.git
+.gitignore
+*.md
+# README.md is referenced by pyproject.toml (hatchling) and required at build time.
+!README.md
+.env
+.env.*
+!.env.example
+docker-compose.yml
+Dockerfile
+.dockerignore
