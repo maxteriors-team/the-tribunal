@@ -31,9 +31,7 @@ class WorkspaceInvitation(Base):
 
     __tablename__ = "workspace_invitations"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -51,7 +49,7 @@ class WorkspaceInvitation(Base):
         String(20), nullable=False, default="pending"
     )  # pending, accepted, expired, cancelled
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    invited_by_id: Mapped[int] = mapped_column(
+    invited_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     expires_at: Mapped[datetime] = mapped_column(
@@ -60,9 +58,7 @@ class WorkspaceInvitation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
-    accepted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
