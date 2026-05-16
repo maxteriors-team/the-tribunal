@@ -33,6 +33,7 @@ from app.models.conversation import Conversation
 from app.models.workspace import Workspace
 from app.services.calendar.reminder_service import resolve_from_number
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -141,9 +142,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         db: AsyncSession,
     ) -> None:
         """Send a single appointment reminder SMS for the given offset."""
-        log = self.logger.bind(
-            appointment_id=appt.id, offset_minutes=offset_minutes
-        )
+        log = self.logger.bind(appointment_id=appt.id, offset_minutes=offset_minutes)
         agent = appt.agent
         contact = appt.contact
         workspace = appt.workspace
@@ -183,9 +182,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         agent_id = agent.id if agent is not None else None
 
         # Resolve the from number
-        from_number = await resolve_from_number(
-            db, contact.id, workspace.id, agent_id
-        )
+        from_number = await resolve_from_number(db, contact.id, workspace.id, agent_id)
         if not from_number:
             log.warning("Could not resolve from number, will retry next tick")
             return
@@ -208,6 +205,10 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
         sms_service = TelnyxSMSService(telnyx_key)
         try:
+            # Stable per-(appointment, offset) key so a worker crash between
+            # the Message insert and the Telnyx POST is recoverable on the
+            # next tick without sending the reminder twice.
+            idempotency_key = derive_idempotency_key("reminder", appt.id, offset_minutes)
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,
@@ -215,6 +216,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 db=db,
                 workspace_id=workspace.id,
                 agent_id=agent_id,
+                idempotency_key=idempotency_key,
             )
 
             log.info("Appointment reminder sent", message_id=str(message.id))
@@ -225,7 +227,8 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             # If an agent owns this appointment, assign the conversation to them
             if agent is not None:
                 conv_result = await db.execute(
-                    select(Conversation).where(
+                    select(Conversation)
+                    .where(
                         and_(
                             Conversation.workspace_phone == from_number,
                             Conversation.contact_phone == contact_phone,
@@ -331,13 +334,9 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             return
 
         # Resolve the from number using the same 3-strategy approach
-        from_number = await resolve_from_number(
-            db, contact.id, workspace.id, agent.id
-        )
+        from_number = await resolve_from_number(db, contact.id, workspace.id, agent.id)
         if not from_number:
-            log.warning(
-                "Could not resolve from number for VR message, will retry next tick"
-            )
+            log.warning("Could not resolve from number for VR message, will retry next tick")
             return
 
         # Render the template — value_reinforcement_template is non-None here
@@ -351,6 +350,8 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
         sms_service = TelnyxSMSService(telnyx_key)
         try:
+            # Stable per-appointment key (VR is single-shot per appointment).
+            idempotency_key = derive_idempotency_key("value_reinforcement", appt.id)
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,
@@ -358,6 +359,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 db=db,
                 workspace_id=workspace.id,
                 agent_id=agent.id,
+                idempotency_key=idempotency_key,
             )
 
             log.info("Value-reinforcement message sent", message_id=str(message.id))
@@ -457,9 +459,9 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 from app.services.calendar.calcom import CalComService
 
                 calcom = CalComService(settings.calcom_api_key)
-                contact_name = " ".join(
-                    filter(None, [contact.first_name, contact.last_name])
-                ) or first_name
+                contact_name = (
+                    " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
+                )
                 reschedule_link = calcom.generate_booking_url(
                     event_type_id=agent.calcom_event_type_id,
                     contact_email=contact.email or "",
@@ -538,7 +540,6 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 )
 
         return message
-
 
 
 # Singleton registry

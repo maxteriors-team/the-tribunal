@@ -82,9 +82,7 @@ class ApprovalGateService:
         urgency: str,
     ) -> tuple[str, dict[str, Any] | None]:
         """Core evaluation logic."""
-        result = await db.execute(
-            select(HumanProfile).where(HumanProfile.agent_id == agent_id)
-        )
+        result = await db.execute(select(HumanProfile).where(HumanProfile.agent_id == agent_id))
         profile = result.scalar_one_or_none()
 
         if profile is None:
@@ -95,20 +93,14 @@ class ApprovalGateService:
             )
             return ("auto", None)
 
-        policy: str = profile.action_policies.get(
-            action_type, profile.default_policy
-        )
+        policy: str = profile.action_policies.get(action_type, profile.default_policy)
 
         if policy == "auto":
-            logger.info(
-                "Policy auto-approve for %s on agent %s", action_type, agent_id
-            )
+            logger.info("Policy auto-approve for %s on agent %s", action_type, agent_id)
             return ("auto", None)
 
         if policy == "never":
-            logger.info(
-                "Policy blocked %s on agent %s", action_type, agent_id
-            )
+            logger.info("Policy blocked %s on agent %s", action_type, agent_id)
             return ("blocked", None)
 
         # policy == "ask" (or any unrecognised value falls through to ask)
@@ -174,9 +166,7 @@ class ApprovalGateService:
         channel: str = "web",
     ) -> PendingAction:
         """Mark a pending action as approved."""
-        result = await db.execute(
-            select(PendingAction).where(PendingAction.id == action_id)
-        )
+        result = await db.execute(select(PendingAction).where(PendingAction.id == action_id))
         action = result.scalar_one()
 
         action.status = "approved"
@@ -196,9 +186,7 @@ class ApprovalGateService:
         channel: str = "web",
     ) -> PendingAction:
         """Mark a pending action as rejected."""
-        result = await db.execute(
-            select(PendingAction).where(PendingAction.id == action_id)
-        )
+        result = await db.execute(select(PendingAction).where(PendingAction.id == action_id))
         action = result.scalar_one()
 
         action.status = "rejected"
@@ -302,10 +290,16 @@ class ApprovalGateService:
     ) -> dict[str, Any]:
         """Execute a send_sms action via TelnyxSMSService."""
         from app.core.config import settings
+        from app.services.telephony.idempotency import derive as derive_idempotency_key
         from app.services.telephony.telnyx import TelnyxSMSService
 
         payload = action.action_payload
         sms_service = TelnyxSMSService(api_key=settings.telnyx_api_key)
+        # Stable per-pending-action key. A pending action is executed at
+        # most once on success; the approval_worker retries this method on
+        # transient failure, and the key ensures the SMS isn't sent twice
+        # if the prior attempt reached Telnyx but failed to commit.
+        idempotency_key = derive_idempotency_key("approval_send_sms", action.id)
         try:
             await sms_service.send_message(
                 to_number=payload["to_number"],
@@ -314,6 +308,7 @@ class ApprovalGateService:
                 db=db,
                 workspace_id=action.workspace_id,
                 agent_id=action.agent_id,
+                idempotency_key=idempotency_key,
             )
             return {"status": "sent", "to": payload["to_number"]}
         finally:

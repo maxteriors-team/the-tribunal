@@ -21,6 +21,7 @@ from app.models.campaign import (
     CampaignContactStatus,
     CampaignType,
 )
+from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
@@ -52,10 +53,12 @@ class VoiceCampaignWorker(BaseCampaignWorker):
     def _get_remaining_filter(self, campaign: Campaign) -> Any:
         return and_(
             CampaignContact.campaign_id == campaign.id,
-            CampaignContact.status.in_([
-                CampaignContactStatus.PENDING,
-                CampaignContactStatus.CALLING,
-            ]),
+            CampaignContact.status.in_(
+                [
+                    CampaignContactStatus.PENDING,
+                    CampaignContactStatus.CALLING,
+                ]
+            ),
         )
 
     async def _process_campaign_contacts(
@@ -137,6 +140,16 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                 continue
 
             try:
+                # Stable per-(campaign_contact, attempt) key so a crash
+                # between the Message row insert and Telnyx /calls POST
+                # doesn't double-dial. ``call_attempts`` here is the
+                # 0-indexed next attempt (it's incremented after success).
+                idempotency_key = derive_idempotency_key(
+                    "voice_campaign_call",
+                    campaign_contact.id,
+                    campaign_contact.call_attempts,
+                )
+
                 # Initiate call
                 message = await voice_service.initiate_call(
                     to_number=contact.phone_number,
@@ -149,6 +162,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                     agent_id=campaign.voice_agent_id,
                     enable_machine_detection=campaign.enable_machine_detection,
                     campaign_id=campaign.id,
+                    idempotency_key=idempotency_key,
                 )
 
                 # Update campaign contact
@@ -200,8 +214,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
 
         # Find contacts stuck in calling status
         stuck_result = await db.execute(
-            select(CampaignContact)
-            .where(
+            select(CampaignContact).where(
                 and_(
                     CampaignContact.campaign_id == campaign.id,
                     CampaignContact.status == CampaignContactStatus.CALLING,
@@ -236,9 +249,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
 
         if campaign_id in self._rate_trackers:
             self._rate_trackers[campaign_id] = [
-                call_time
-                for call_time in self._rate_trackers[campaign_id]
-                if call_time > cutoff
+                call_time for call_time in self._rate_trackers[campaign_id] if call_time > cutoff
             ]
             calls_in_last_minute = len(self._rate_trackers[campaign_id])
         else:

@@ -92,9 +92,7 @@ class Conversation(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -142,9 +140,7 @@ class Conversation(Base):
     )
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ai_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    ai_paused_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    ai_paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Message preview (denormalized)
     unread_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -215,9 +211,8 @@ class Message(Base):
 
     __tablename__ = "messages"
     __table_args__ = (
-        UniqueConstraint(
-            "provider_message_id", name="uq_messages_provider_message_id"
-        ),
+        UniqueConstraint("provider_message_id", name="uq_messages_provider_message_id"),
+        UniqueConstraint("idempotency_key", name="uq_messages_idempotency_key"),
         Index(
             "ix_messages_conversation_created_at",
             "conversation_id",
@@ -225,13 +220,26 @@ class Message(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+
+    # Idempotency key for outbound sends. Workers compute a stable UUID5 from
+    # a domain entity (e.g. appointment_id + offset, campaign_contact_id,
+    # drip enrollment step, pending_action_id) so that a worker crash between
+    # row insert and the Telnyx HTTP call doesn't double-send on retry. The
+    # unique constraint guarantees at-most-one Message row per key; the same
+    # value is forwarded to Telnyx as the ``X-Idempotency-Key`` request header
+    # (and as ``client_state`` on Call Control), so the provider also rejects
+    # duplicates if the local row was somehow rolled back after the API call.
+    idempotency_key: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        default=uuid.uuid4,
         index=True,
     )
 
@@ -358,9 +366,7 @@ class Message(Base):
     call_outcome: Mapped["CallOutcome | None"] = relationship(
         "CallOutcome", back_populates="message", uselist=False
     )
-    feedback: Mapped[list["CallFeedback"]] = relationship(
-        "CallFeedback", back_populates="message"
-    )
+    feedback: Mapped[list["CallFeedback"]] = relationship("CallFeedback", back_populates="message")
     appointment: Mapped["Appointment | None"] = relationship(
         "Appointment", back_populates="message", uselist=False
     )

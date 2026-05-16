@@ -1,5 +1,6 @@
 """Telnyx voice service for making and receiving calls."""
 
+import base64
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -7,6 +8,7 @@ from typing import Any
 
 import httpx
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metrics import (
@@ -188,6 +190,7 @@ class TelnyxVoiceService:
         agent_id: uuid.UUID | None = None,
         enable_machine_detection: bool = False,
         campaign_id: uuid.UUID | None = None,
+        idempotency_key: uuid.UUID | None = None,
     ) -> Message:
         """Initiate outbound call via Telnyx Call Control API.
 
@@ -202,16 +205,47 @@ class TelnyxVoiceService:
             agent_id: Optional agent ID if call is agent-assisted
             enable_machine_detection: If True, enables voicemail/machine detection
             campaign_id: Optional campaign ID for tracking
+            idempotency_key: Optional stable UUID for crash-safe retries.
+                Workers compute this from a domain entity (e.g. campaign
+                contact id + call attempt) so a crash between the Message
+                row insert and the Telnyx /calls request is recoverable on
+                retry without double-dialling. If a Message already exists
+                for this key it is returned unchanged. The key is also
+                forwarded to Telnyx as both ``client_state`` (base64) and
+                the ``X-Idempotency-Key`` header.
 
         Returns:
-            Created Message record with channel="voice"
+            Created (or pre-existing) Message record with channel="voice".
         """
         # Normalize phone numbers to E.164 format
         to_number = self._normalize_e164(to_number)
         from_number = self._normalize_e164(from_number)
 
         log = self.logger.bind(to=to_number, from_=from_number)
-        log.info("initiating_call")
+
+        # Idempotency: if a Message row already exists for this key, the
+        # call was already initiated on a prior attempt that survived its
+        # DB commit. Return it unchanged unless the prior attempt rolled
+        # back to QUEUED (DB row written but Telnyx call never made), in
+        # which case we resume the dial with the same id + client_state.
+        if idempotency_key is not None:
+            existing_result = await db.execute(
+                select(Message).where(Message.idempotency_key == idempotency_key)
+            )
+            existing = existing_result.scalar_one_or_none()
+            if existing is not None and existing.status != MessageStatus.QUEUED:
+                log.info(
+                    "call_initiate_idempotent_skip",
+                    idempotency_key=str(idempotency_key),
+                    message_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing
+
+        log.info(
+            "initiating_call",
+            idempotency_key=str(idempotency_key) if idempotency_key else None,
+        )
 
         # Auto-discover connection ID if not provided
         if not connection_id:
@@ -226,22 +260,40 @@ class TelnyxVoiceService:
             workspace_id=workspace_id,
         )
 
-        # Create message record for call
-        message = Message(
-            conversation_id=conversation.id,
-            direction="outbound",
-            channel="voice",
-            body="",  # Voice calls don't have body text
-            status="queued",
-            agent_id=agent_id,
-            is_ai=agent_id is not None,
-            campaign_id=campaign_id,
-        )
-        db.add(message)
-        await db.flush()
+        # Resume or create the Message row. ``effective_key`` is what we
+        # send to Telnyx so the provider also rejects duplicates if the
+        # local row was rolled back after the API call.
+        effective_key = idempotency_key or uuid.uuid4()
+
+        message: Message | None = None
+        if idempotency_key is not None:
+            existing_result = await db.execute(
+                select(Message).where(Message.idempotency_key == idempotency_key)
+            )
+            message = existing_result.scalar_one_or_none()
+
+        if message is None:
+            message = Message(
+                conversation_id=conversation.id,
+                direction="outbound",
+                channel="voice",
+                body="",  # Voice calls don't have body text
+                status="queued",
+                agent_id=agent_id,
+                is_ai=agent_id is not None,
+                campaign_id=campaign_id,
+                idempotency_key=effective_key,
+            )
+            db.add(message)
+            await db.flush()
 
         # Initiate call via Telnyx
         try:
+            # ``client_state`` round-trips through every Telnyx webhook for
+            # this call, so the receiver side can also key on the same UUID
+            # if it needs to dedupe inbound events. Telnyx requires it as a
+            # base64 string.
+            client_state_b64 = base64.b64encode(str(effective_key).encode("ascii")).decode("ascii")
             payload: dict[str, Any] = {
                 "to": to_number,
                 "from": from_number,
@@ -249,6 +301,7 @@ class TelnyxVoiceService:
                 "webhook_url": webhook_url,
                 "webhook_url_method": "POST",
                 "audio_codec": "ulaw",  # μ-law for PSTN compatibility
+                "client_state": client_state_b64,
             }
 
             # Enable machine detection for voicemail/answering machine
@@ -261,7 +314,11 @@ class TelnyxVoiceService:
                 log.info("machine_detection_enabled")
 
             with latency_ms_timer(telnyx_api_latency_ms):
-                response = await self.client.post("/calls", json=payload)
+                response = await self.client.post(
+                    "/calls",
+                    json=payload,
+                    headers={"X-Idempotency-Key": str(effective_key)},
+                )
             response_data = response.json()
 
             log.info(
@@ -651,8 +708,6 @@ class TelnyxVoiceService:
         Returns:
             Updated message or None if not found
         """
-        from sqlalchemy import select
-
         result = await db.execute(
             select(Message).where(Message.provider_message_id == provider_message_id)
         )
@@ -712,8 +767,6 @@ class TelnyxVoiceService:
         Returns:
             Existing or new conversation
         """
-        from sqlalchemy import select
-
         from app.models.contact import Contact
 
         # Look for existing conversation

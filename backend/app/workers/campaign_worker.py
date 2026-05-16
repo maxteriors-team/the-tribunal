@@ -34,6 +34,7 @@ from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.rate_limiting.rate_limiter import RateLimiter
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.rate_limiting.warming_scheduler import WarmingScheduler
+from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
@@ -196,6 +197,11 @@ class CampaignWorker(BaseCampaignWorker):
                     campaign.offer,
                 )
 
+                # Stable per-campaign-contact key for the initial send. A
+                # campaign contact only ever sends one initial message, so
+                # the campaign_contact id alone is unique.
+                initial_key = derive_idempotency_key("campaign_sms_initial", campaign_contact.id)
+
                 # Send SMS with phone number tracking
                 message = await sms_service.send_message(
                     to_number=contact.phone_number,
@@ -205,6 +211,7 @@ class CampaignWorker(BaseCampaignWorker):
                     workspace_id=campaign.workspace_id,
                     agent_id=campaign.agent_id,
                     phone_number_id=from_phone.id,
+                    idempotency_key=initial_key,
                 )
 
                 # Update phone number last_sent_at
@@ -264,6 +271,7 @@ class CampaignWorker(BaseCampaignWorker):
             from sqlalchemy import update
 
             from app.models.conversation import Conversation
+
             await db.execute(
                 update(Conversation)
                 .where(Conversation.id.in_(conversations_to_assign))
@@ -281,7 +289,7 @@ class CampaignWorker(BaseCampaignWorker):
         if sent_count > 0:
             log.info("Initial messages batch complete", sent=sent_count)
 
-    async def _process_follow_ups(  # noqa: PLR0912
+    async def _process_follow_ups(  # noqa: PLR0912, PLR0915
         self,
         campaign: Campaign,
         sms_service: TelnyxSMSService,
@@ -306,10 +314,12 @@ class CampaignWorker(BaseCampaignWorker):
             .where(
                 and_(
                     CampaignContact.campaign_id == campaign.id,
-                    CampaignContact.status.in_([
-                        CampaignContactStatus.SENT,
-                        CampaignContactStatus.DELIVERED,
-                    ]),
+                    CampaignContact.status.in_(
+                        [
+                            CampaignContactStatus.SENT,
+                            CampaignContactStatus.DELIVERED,
+                        ]
+                    ),
                     CampaignContact.next_follow_up_at.is_not(None),
                     CampaignContact.next_follow_up_at <= now,
                     CampaignContact.follow_ups_sent < campaign.max_follow_ups,
@@ -326,7 +336,8 @@ class CampaignWorker(BaseCampaignWorker):
         # Filter by max messages per contact (0 means unlimited)
         if campaign.max_messages_per_contact > 0:
             followup_contacts = [
-                cc for cc in followup_contacts
+                cc
+                for cc in followup_contacts
                 if cc.messages_sent < campaign.max_messages_per_contact
             ]
 
@@ -368,6 +379,15 @@ class CampaignWorker(BaseCampaignWorker):
                     campaign.offer,
                 )
 
+                # Stable per-(campaign_contact, follow_up_index) key. The
+                # current ``follow_ups_sent`` is the next follow-up's index
+                # because it's incremented only after a successful send.
+                followup_key = derive_idempotency_key(
+                    "campaign_sms_followup",
+                    campaign_contact.id,
+                    campaign_contact.follow_ups_sent,
+                )
+
                 message = await sms_service.send_message(
                     to_number=contact.phone_number,
                     from_number=from_phone.phone_number,
@@ -376,6 +396,7 @@ class CampaignWorker(BaseCampaignWorker):
                     workspace_id=campaign.workspace_id,
                     agent_id=campaign.agent_id,
                     phone_number_id=from_phone.id,
+                    idempotency_key=followup_key,
                 )
 
                 # Update phone number and stats
@@ -471,22 +492,24 @@ class CampaignWorker(BaseCampaignWorker):
                         # Unknown discount type - log but continue
                         logger.warning(
                             "unknown_discount_type",
-                            offer_id=str(offer.id) if hasattr(offer, 'id') else "unknown",
+                            offer_id=str(offer.id) if hasattr(offer, "id") else "unknown",
                             discount_type=offer.discount_type,
                         )
                         discount_text = ""
 
-                    replacements.update({
-                        "offer_name": offer.name or "",
-                        "offer_discount": discount_text,
-                        "offer_description": offer.description or "",
-                        "offer_terms": offer.terms or "",
-                    })
+                    replacements.update(
+                        {
+                            "offer_name": offer.name or "",
+                            "offer_discount": discount_text,
+                            "offer_description": offer.description or "",
+                            "offer_terms": offer.terms or "",
+                        }
+                    )
                 except Exception as e:
                     logger.error(
                         "offer_interpolation_error",
                         error=str(e),
-                        offer_id=str(offer.id) if hasattr(offer, 'id') else "unknown",
+                        offer_id=str(offer.id) if hasattr(offer, "id") else "unknown",
                     )
                     # Continue without offer details if error occurs
 

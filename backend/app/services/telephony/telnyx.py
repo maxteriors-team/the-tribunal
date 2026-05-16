@@ -124,6 +124,7 @@ class TelnyxSMSService:
         agent_id: uuid.UUID | None = None,
         campaign_id: uuid.UUID | None = None,
         phone_number_id: uuid.UUID | None = None,
+        idempotency_key: uuid.UUID | None = None,
     ) -> Message:
         """Send an SMS message and store it.
 
@@ -136,16 +137,45 @@ class TelnyxSMSService:
             agent_id: Optional agent ID if sent by AI
             campaign_id: Optional campaign ID if part of campaign
             phone_number_id: Optional phone number ID for tracking
+            idempotency_key: Optional stable UUID for crash-safe retries.
+                Workers compute this from a domain entity (e.g. appointment
+                + offset, campaign_contact) so a crash between row insert
+                and the Telnyx call is recoverable on retry. If a Message
+                already exists for this key it is returned unchanged. The
+                key is also sent to Telnyx as the ``X-Idempotency-Key``
+                header. If omitted, a fresh UUID is generated and the call
+                is effectively non-idempotent across retries.
 
         Returns:
-            Created Message record
+            Created (or pre-existing) Message record.
         """
         # Normalize phone numbers to E.164 format
         to_number = normalize_phone_e164(to_number)
         from_number = normalize_phone_e164(from_number)
 
         log = self.logger.bind(to=to_number, from_=from_number)
-        log.info("sending_sms")
+
+        # Idempotency: if a Message row already exists for this key, this is
+        # a retry of a previous attempt that successfully wrote the row. If
+        # the prior attempt also reached Telnyx (status != QUEUED) we return
+        # immediately — the SMS was already sent. If the row exists but the
+        # send never happened (still QUEUED), we resume the send rather than
+        # inserting a duplicate row, reusing the existing message id.
+        if idempotency_key is not None:
+            existing_result = await db.execute(
+                select(Message).where(Message.idempotency_key == idempotency_key)
+            )
+            existing = existing_result.scalar_one_or_none()
+            if existing is not None and existing.status != MessageStatus.QUEUED:
+                log.info(
+                    "sms_send_idempotent_skip",
+                    idempotency_key=str(idempotency_key),
+                    message_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing
+
+        log.info("sending_sms", idempotency_key=str(idempotency_key) if idempotency_key else None)
 
         # Get or create conversation
         conversation = await self._get_or_create_conversation(
@@ -155,19 +185,32 @@ class TelnyxSMSService:
             workspace_id=workspace_id,
         )
 
-        # Create message record (flush first so short links can reference its id)
-        message = Message(
-            conversation_id=conversation.id,
-            direction="outbound",
-            channel="sms",
-            body=body,
-            status="queued",
-            agent_id=agent_id,
-            is_ai=agent_id is not None,
-            from_phone_number_id=phone_number_id,
-        )
-        db.add(message)
-        await db.flush()
+        # Either resume the half-finished QUEUED row from a prior attempt or
+        # create a fresh one. Either way ``effective_key`` is the value we
+        # send to Telnyx, ensuring the provider also rejects duplicates.
+        effective_key = idempotency_key or uuid.uuid4()
+
+        message: Message | None = None
+        if idempotency_key is not None:
+            existing_result = await db.execute(
+                select(Message).where(Message.idempotency_key == idempotency_key)
+            )
+            message = existing_result.scalar_one_or_none()
+
+        if message is None:
+            message = Message(
+                conversation_id=conversation.id,
+                direction="outbound",
+                channel="sms",
+                body=body,
+                status="queued",
+                agent_id=agent_id,
+                is_ai=agent_id is not None,
+                from_phone_number_id=phone_number_id,
+                idempotency_key=effective_key,
+            )
+            db.add(message)
+            await db.flush()
 
         body = await shorten_urls_in_text(
             body,
@@ -190,7 +233,7 @@ class TelnyxSMSService:
                 "text": body,
                 "type": "SMS",
             }
-            response_data = await self._post_message(payload)
+            response_data = await self._post_message(payload, idempotency_key=effective_key)
             data = response_data.get("data", {})
             message.provider_message_id = data.get("id")
             message.status = MessageStatus.SENT
@@ -204,9 +247,7 @@ class TelnyxSMSService:
                 err_data = {}
             errors = err_data.get("errors", []) if isinstance(err_data, dict) else []
             first_error = errors[0] if errors else {}
-            error_msg = (
-                first_error.get("detail") if first_error else e.response.text
-            )
+            error_msg = first_error.get("detail") if first_error else e.response.text
             message.status = MessageStatus.FAILED
             log.error(
                 "sms_send_failed",
@@ -451,9 +492,7 @@ class TelnyxSMSService:
         if conversation:
             # If conversation exists but has no contact_id, try to link one now
             if not conversation.contact_id:
-                contact = await self._find_contact_by_phone(
-                    db, workspace_id, contact_phone
-                )
+                contact = await self._find_contact_by_phone(db, workspace_id, contact_phone)
                 if contact:
                     conversation.contact_id = contact.id
                     await db.commit()
@@ -488,9 +527,7 @@ class TelnyxSMSService:
                 select(Contact).where(Contact.workspace_id == workspace_id).limit(5)
             )
             sample_contacts = sample_result.scalars().all()
-            sample_phones = [
-                f"{c.phone_number} ({c.full_name})" for c in sample_contacts
-            ]
+            sample_phones = [f"{c.phone_number} ({c.full_name})" for c in sample_contacts]
             log.warning(
                 "contact_not_found_by_phone",
                 looking_for_phone=contact_phone,
@@ -568,24 +605,34 @@ class TelnyxSMSService:
         return contact
 
     @_telnyx_retry
-    async def _post_message(self, payload: dict[str, str]) -> dict[str, Any]:
+    async def _post_message(
+        self,
+        payload: dict[str, str],
+        idempotency_key: uuid.UUID | None = None,
+    ) -> dict[str, Any]:
         """POST to /messages with retry on 5xx/network errors.
+
+        If ``idempotency_key`` is provided, it is sent as the
+        ``X-Idempotency-Key`` HTTP header. Telnyx echoes this header back on
+        retry-safe deduplication so the provider also rejects duplicates if
+        our retry decorator re-issues the request after a transient failure.
 
         Raises ``httpx.HTTPStatusError`` on 4xx (immediately) or 5xx (after
         retries are exhausted) and ``httpx.TransportError`` on persistent
         network failures. The caller maps these to a failed Message row.
         """
+        headers: dict[str, str] | None = None
+        if idempotency_key is not None:
+            headers = {"X-Idempotency-Key": str(idempotency_key)}
         with latency_ms_timer(telnyx_api_latency_ms):
-            response = await self.client.post("/messages", json=payload)
+            response = await self.client.post("/messages", json=payload, headers=headers)
         self.logger.info("telnyx_response", status_code=response.status_code)
         response.raise_for_status()
         try:
             data: dict[str, Any] = response.json()
             return data
         except (ValueError, TypeError):
-            self.logger.error(
-                "telnyx_invalid_json", status_code=response.status_code
-            )
+            self.logger.error("telnyx_invalid_json", status_code=response.status_code)
             return {"errors": [{"detail": "Invalid JSON response"}]}
 
     @_telnyx_retry
@@ -620,9 +667,7 @@ class TelnyxSMSService:
         response.raise_for_status()
 
     @_telnyx_retry
-    async def _patch_phone_number(
-        self, phone_number_id: str, payload: dict[str, str]
-    ) -> None:
+    async def _patch_phone_number(self, phone_number_id: str, payload: dict[str, str]) -> None:
         response = await self.client.patch(
             f"/phone_numbers/{phone_number_id}",
             json=payload,
