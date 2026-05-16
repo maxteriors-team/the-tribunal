@@ -1,0 +1,32 @@
+{
+  "data": {
+    "event_type": "message.sent",
+    "id": "b9c1d2e3-1002-4f8e-9b22-sms000000002",
+    "occurred_at": "2026-05-15T19:00:05.000Z",
+    "record_type": "event",
+    "payload": {
+      "id": "40288a86-msg-contract-outbound-0001",
+      "record_type": "message",
+      "direction": "outbound",
+      "type": "SMS",
+      "text": "Hi! Glad you reached out. When would you like to chat?",
+      "from": {
+        "phone_number": "+12125550101"
+      },
+      "to": [
+        {
+          "phone_number": "+14155552671",
+          "status": "sent",
+          "carrier": "T-Mobile USA, Inc."
+        }
+      ],
+      "messaging_profile_id": "profile-abc-123",
+      "sent_at": "2026-05-15T19:00:05.000Z",
+      "errors": []
+    }
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks/telnyx/sms"
+  }
+}

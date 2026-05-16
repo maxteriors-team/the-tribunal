@@ -1,0 +1,35 @@
+{
+  "data": {
+    "event_type": "message.received",
+    "id": "b9c1d2e3-1001-4f8e-9b22-sms000000001",
+    "occurred_at": "2026-05-15T19:00:00.000Z",
+    "record_type": "event",
+    "payload": {
+      "id": "40288a86-msg-contract-inbound-0001",
+      "record_type": "message",
+      "direction": "inbound",
+      "type": "SMS",
+      "text": "Hi, I'd like to book an appointment",
+      "from": {
+        "phone_number": "+14155552671",
+        "carrier": "T-Mobile USA, Inc.",
+        "line_type": "Wireless"
+      },
+      "to": [
+        {
+          "phone_number": "+12125550101",
+          "status": "webhook_delivered",
+          "carrier": "Telnyx",
+          "line_type": "Wireless"
+        }
+      ],
+      "messaging_profile_id": "profile-abc-123",
+      "received_at": "2026-05-15T19:00:00.000Z",
+      "errors": []
+    }
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks/telnyx/sms"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "triggerEvent": "BOOKING_CANCELLED",
+  "trigger": "BOOKING_CANCELLED",
+  "createdAt": "2026-05-15T12:00:00.000Z",
+  "payload": {
+    "type": "30min",
+    "title": "30 Minute Meeting",
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "uid": "calcom-contract-booking-cancelled-001",
+    "id": 990003,
+    "duration": 30,
+    "eventTypeId": 2098128,
+    "status": "CANCELLED",
+    "cancellationReason": "Need to reschedule",
+    "cancelledBy": "client@example.com",
+    "organizer": {
+      "id": 4242,
+      "name": "Jane Realtor",
+      "email": "jane@realty.example",
+      "timeZone": "America/Los_Angeles"
+    },
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671"
+      }
+    ]
+  },
+  "data": {
+    "type": "30min",
+    "title": "30 Minute Meeting",
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "uid": "calcom-contract-booking-cancelled-001",
+    "id": 990003,
+    "duration": 30,
+    "eventTypeId": 2098128,
+    "status": "CANCELLED",
+    "cancellationReason": "Need to reschedule",
+    "cancelledBy": "client@example.com",
+    "organizer": {
+      "id": 4242,
+      "name": "Jane Realtor",
+      "email": "jane@realty.example",
+      "timeZone": "America/Los_Angeles"
+    },
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671"
+      }
+    ]
+  }
+}

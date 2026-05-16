@@ -1,0 +1,23 @@
+{
+  "data": {
+    "event_type": "call.answered",
+    "id": "b9c1d2e3-0002-4f8e-9b22-call00000002",
+    "occurred_at": "2026-05-15T18:00:05.000Z",
+    "record_type": "event",
+    "payload": {
+      "call_control_id": "v3:contract-call-control-001",
+      "call_leg_id": "leg-contract-001",
+      "call_session_id": "session-contract-001",
+      "client_state": null,
+      "connection_id": "1234567890",
+      "direction": "outgoing",
+      "from": "+12125550100",
+      "to": "+14155552672",
+      "state": "answered"
+    }
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks/telnyx/voice"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "triggerEvent": "MEETING_ENDED",
+  "trigger": "MEETING_ENDED",
+  "createdAt": "2026-05-15T13:30:00.000Z",
+  "uid": "calcom-contract-meeting-ended-001",
+  "id": 990005,
+  "payload": {
+    "uid": "calcom-contract-meeting-ended-001",
+    "id": 990005,
+    "noShowHost": false,
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671",
+        "noShow": false
+      }
+    ],
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "status": "ACCEPTED"
+  },
+  "data": {
+    "uid": "calcom-contract-meeting-ended-001",
+    "id": 990005,
+    "noShowHost": false,
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671",
+        "noShow": false
+      }
+    ],
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "status": "ACCEPTED"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "event_type": "call.hangup",
+    "id": "b9c1d2e3-0003-4f8e-9b22-call00000003",
+    "occurred_at": "2026-05-15T18:01:30.000Z",
+    "record_type": "event",
+    "payload": {
+      "call_control_id": "v3:contract-call-control-001",
+      "call_leg_id": "leg-contract-001",
+      "call_session_id": "session-contract-001",
+      "connection_id": "1234567890",
+      "direction": "outgoing",
+      "from": "+12125550100",
+      "to": "+14155552672",
+      "state": "hangup",
+      "hangup_cause": "NORMAL_CLEARING",
+      "hangup_source": "caller",
+      "duration_seconds": 85,
+      "start_time": "2026-05-15T18:00:00.000Z",
+      "end_time": "2026-05-15T18:01:30.000Z"
+    }
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks/telnyx/voice"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "data": {
+    "event_type": "message.finalized",
+    "id": "b9c1d2e3-1004-4f8e-9b22-sms000000004",
+    "occurred_at": "2026-05-15T19:01:00.000Z",
+    "record_type": "event",
+    "payload": {
+      "id": "40288a86-msg-contract-outbound-0002",
+      "record_type": "message",
+      "direction": "outbound",
+      "type": "SMS",
+      "text": "This won't make it.",
+      "from": {
+        "phone_number": "+12125550101"
+      },
+      "to": [
+        {
+          "phone_number": "+14155552673",
+          "status": "delivery_failed",
+          "carrier": "Unknown"
+        }
+      ],
+      "messaging_profile_id": "profile-abc-123",
+      "completed_at": "2026-05-15T19:01:00.000Z",
+      "errors": [
+        {
+          "code": "30004",
+          "title": "Invalid phone number",
+          "detail": "The phone number is not valid."
+        }
+      ]
+    }
+  },
+  "meta": {
+    "attempt": 1,
+    "delivered_to": "https://example.com/webhooks/telnyx/sms"
+  }
+}

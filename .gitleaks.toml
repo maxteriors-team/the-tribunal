@@ -23,8 +23,10 @@ useDefault = true
 
 # Add an [[allowlists]] block here once a real false positive needs suppressing.
 # Each block must define at least one of: paths, regexes, commits, stopwords.
-#
-# Example:
-# [[allowlists]]
-# description = "Ignore documented dummy keys in tests"
-# paths = ['''backend/tests/fixtures/.*''']
+
+[[allowlists]]
+description = "Webhook contract-test helpers and fixtures contain only synthetic test secrets (ephemeral ed25519 keypairs, fixed HMAC strings, sanitized provider IDs)."
+paths = [
+    '''backend/tests/contract/.*''',
+    '''backend/tests/fixtures/webhooks/.*''',
+]

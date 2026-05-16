@@ -1,0 +1,62 @@
+{
+  "triggerEvent": "BOOKING_CREATED",
+  "trigger": "BOOKING_CREATED",
+  "createdAt": "2026-05-15T10:00:00.000Z",
+  "payload": {
+    "type": "30min",
+    "title": "30 Minute Meeting",
+    "description": "Discovery call",
+    "additionalNotes": "",
+    "customInputs": {},
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "organizer": {
+      "id": 4242,
+      "name": "Jane Realtor",
+      "email": "jane@realty.example",
+      "username": "jane",
+      "timeZone": "America/Los_Angeles",
+      "language": {"locale": "en"}
+    },
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671",
+        "timeZone": "America/Los_Angeles",
+        "language": {"locale": "en"}
+      }
+    ],
+    "uid": "calcom-contract-booking-created-001",
+    "id": 990001,
+    "duration": 30,
+    "eventTypeId": 2098128,
+    "userFieldsResponses": {},
+    "status": "ACCEPTED"
+  },
+  "data": {
+    "type": "30min",
+    "title": "30 Minute Meeting",
+    "startTime": "2026-06-01T15:00:00.000Z",
+    "endTime": "2026-06-01T15:30:00.000Z",
+    "uid": "calcom-contract-booking-created-001",
+    "id": 990001,
+    "duration": 30,
+    "eventTypeId": 2098128,
+    "status": "ACCEPTED",
+    "organizer": {
+      "id": 4242,
+      "name": "Jane Realtor",
+      "email": "jane@realty.example",
+      "timeZone": "America/Los_Angeles"
+    },
+    "attendees": [
+      {
+        "email": "client@example.com",
+        "name": "Test Client",
+        "phoneNumber": "+14155552671",
+        "timeZone": "America/Los_Angeles"
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "type": "email.delivered",
+  "created_at": "2026-05-15T20:00:05.000Z",
+  "data": {
+    "email_id": "ae2014de-c168-4c61-8267-contract0001",
+    "from": "Acme <noreply@acme.example>",
+    "to": ["client@example.com"],
+    "subject": "Welcome to Acme",
+    "created_at": "2026-05-15T20:00:00.000Z"
+  }
+}
