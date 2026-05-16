@@ -13,13 +13,17 @@ SHELL        := /usr/bin/env bash
 
 BACKEND_DIR  := backend
 FRONTEND_DIR := frontend
+BACKUP_DIR   := backend/backups
+DB_USER      := aicrm
+DB_NAME      := aicrm
+DB_CONTAINER := aicrm-postgres
 
 # ─── Help ──────────────────────────────────────────────────────────────────────
 
 .PHONY: help
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage: make \033[36m<target>\033[0m\n\nTargets:\n"} \
-		/^[a-zA-Z_.-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+		/^[a-zA-Z_.-]+:.*##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # ─── Dev loop ──────────────────────────────────────────────────────────────────
 
@@ -102,10 +106,69 @@ install: ## Install backend (uv sync) and frontend (npm ci) deps.
 	cd $(BACKEND_DIR) && uv sync
 	cd $(FRONTEND_DIR) && npm ci
 
+# ─── Audit ─────────────────────────────────────────────────────────────────────
+
 .PHONY: audit
-audit: ## Check for outdated/insecure deps.
-	cd $(BACKEND_DIR) && uv pip list --outdated
-	cd $(FRONTEND_DIR) && npm audit
+audit: audit.deps audit.security audit.secrets ## Run all audit checks (deps + security + secrets).
+
+.PHONY: audit.deps
+audit.deps: ## List outdated backend (uv tree) and frontend (npm) deps.
+	@echo "▶ backend — uv tree --outdated"
+	cd $(BACKEND_DIR) && uv tree --outdated --depth 1
+	@echo
+	@echo "▶ frontend — npm outdated"
+	@cd $(FRONTEND_DIR) && npm outdated || true   # npm outdated exits 1 when results exist
+
+.PHONY: audit.security
+audit.security: ## Scan for known CVEs in backend (pip-audit) and frontend prod deps (npm audit).
+	@echo "▶ backend — pip-audit against the exported lockfile (excludes the editable project itself)"
+	@cd $(BACKEND_DIR) && \
+		tmp=$$(mktemp) && \
+		uv export --no-emit-project --format requirements-txt > "$$tmp" && \
+		trap 'rm -f "$$tmp"' EXIT && \
+		uv run pip-audit --strict -r "$$tmp"
+	@echo
+	@echo "▶ frontend — npm audit --omit=dev"
+	cd $(FRONTEND_DIR) && npm audit --omit=dev
+
+.PHONY: audit.secrets
+audit.secrets: ## Scan the working tree for committed secrets (gitleaks).
+	@if command -v gitleaks >/dev/null 2>&1; then \
+		echo "▶ gitleaks detect (binary)"; \
+		gitleaks detect --no-banner --redact --verbose; \
+	elif command -v pre-commit >/dev/null 2>&1; then \
+		echo "▶ gitleaks (via pre-commit)"; \
+		pre-commit run gitleaks --all-files; \
+	else \
+		echo "✗ neither gitleaks nor pre-commit is installed — see CONTRIBUTING.md#audit"; \
+		exit 1; \
+	fi
+
+# ─── Ops ───────────────────────────────────────────────────────────────────────
+
+.PHONY: rotate.encryption-key
+rotate.encryption-key: ## Interactive rotation of ENCRYPTION_KEY on Railway + re-encrypt rows.
+	@./scripts/rotate_encryption_key.sh
+
+.PHONY: db.backup.local
+db.backup.local: ## pg_dump the local dev Postgres (custom format) into backend/backups/.
+	@mkdir -p $(BACKUP_DIR)
+	@stamp=$$(date +%Y%m%d-%H%M%S); \
+		out="$(BACKUP_DIR)/$(DB_NAME)-$$stamp.dump"; \
+		echo "▶ dumping $(DB_NAME) from container $(DB_CONTAINER) → $$out"; \
+		docker exec $(DB_CONTAINER) pg_dump -Fc -U $(DB_USER) -d $(DB_NAME) > "$$out"; \
+		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1))"
+
+.PHONY: db.restore.local
+db.restore.local: ## Restore a pg_dump file into local dev DB. Usage: make db.restore.local f=backend/backups/<file>.dump
+	@if [ -z "$(f)" ]; then echo "✗ missing file — usage: make db.restore.local f=path/to/dump"; exit 1; fi
+	@if [ ! -f "$(f)" ]; then echo "✗ file not found: $(f)"; exit 1; fi
+	@echo "⚠  this will OVERWRITE the local $(DB_NAME) database with $(f)"
+	@read -r -p "continue? [y/N] " reply; \
+		case "$$reply" in [yY]|[yY][eE][sS]) ;; *) echo "aborted"; exit 1 ;; esac
+	@docker exec -i $(DB_CONTAINER) pg_restore --clean --if-exists \
+		-U $(DB_USER) -d $(DB_NAME) < "$(f)"
+	@echo "✓ restored $(f)"
 
 # ─── Housekeeping ──────────────────────────────────────────────────────────────
 

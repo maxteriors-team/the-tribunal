@@ -151,3 +151,7 @@ test-results/
 # Local databases
 *.sqlite
 *.db
+
+# Local pg_dump output from `make db.backup.local`
+backend/backups/
+*.dump

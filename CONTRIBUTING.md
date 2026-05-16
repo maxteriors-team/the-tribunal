@@ -344,6 +344,59 @@ uv run alembic upgrade head
 
 Review the generated migration by hand — autogenerate is a starting point, not the answer. Never edit a migration that has already shipped; add a new one instead.
 
+## Operational Make Targets
+
+The root [`Makefile`](./Makefile) exposes a small set of operational targets for routine maintenance. Run `make help` for the live list; the operational ones are documented in depth here because they touch dependencies, secrets, or the database.
+
+### `make audit` — deps, CVEs, secrets
+
+`make audit` runs three independent sub-targets. You can run them individually:
+
+| Target              | What it runs                                                                                              | When to run                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `audit.deps`        | `uv tree --outdated --depth 1` on the backend; `npm outdated` on the frontend                              | Weekly. Triage upgrades before they pile up.                 |
+| `audit.security`    | `pip-audit --strict` against the exported uv lockfile; `npm audit --omit=dev` on the frontend prod tree   | Before every release and on a weekly cron.                   |
+| `audit.secrets`     | `gitleaks detect --no-banner --redact --verbose`, falling back to `pre-commit run gitleaks --all-files`   | Before pushing a branch that touched config, CI, or secrets. |
+
+Notes:
+
+- `audit.security` exports `backend/uv.lock` to a temporary requirements file and feeds it to `pip-audit`. The local editable `aicrm-backend` package itself is excluded — we audit its dependencies, not the project under audit.
+- `audit.secrets` prefers a system-installed `gitleaks` binary. If it isn't present, the target falls through to `pre-commit run gitleaks --all-files`, which uses the version pinned in [`.pre-commit-config.yaml`](./.pre-commit-config.yaml). Install one of the two before running:
+  - macOS: `brew install gitleaks`
+  - Linux: download the binary from <https://github.com/gitleaks/gitleaks/releases> or rely on `pipx install pre-commit` + `pre-commit install`.
+- Each sub-target exits non-zero on findings so it can be wired into CI as-is.
+
+### `make rotate.encryption-key` — rotate the Fernet secret
+
+Interactive driver around [`scripts/rotate_encryption_key.sh`](./scripts/rotate_encryption_key.sh). It walks you through four steps:
+
+1. **Generate** a fresh Fernet key with `cryptography` and print it to the terminal **once**. Copy it to your password manager before continuing.
+2. **Confirm** the Railway target via `railway status`. Make sure you've already run `railway login` and `railway link` against the right environment.
+3. **Push** `ENCRYPTION_KEY=<new>` to Railway via `railway variables --set`. Wait for the redeploy to come up healthy before continuing — the live app needs the new key in memory before any rows are re-encrypted.
+4. **Re-encrypt** existing rows by invoking [`scripts/reencrypt_with_old_key.py`](./scripts/reencrypt_with_old_key.py). You'll be prompted (hidden input) for the OLD key. The script:
+   - reads `DATABASE_URL` from `backend/.env` — point this at the DB you intend to migrate (local dev, or a tunneled staging connection) **before** running the step.
+   - offers a `--dry-run` pass first (decrypt + re-encrypt in a transaction that's rolled back) so you can verify counts before committing writes.
+   - is idempotent: rows already encrypted under the new key are skipped, so a re-run after a partial failure is safe.
+   - re-derives `*_hash` lookup columns from plaintext so `email_hash`, `phone_hash`, etc. stay aligned with the new key.
+
+If the live run aborts midway, just re-run the script with the same `OLD_ENCRYPTION_KEY` — already-rotated rows are detected and skipped.
+
+> ⚠  **Never** run this against production without a fresh `make db.backup.local` (or its production equivalent) taken first. The script is designed to be safe, but key rotation is a one-way operation; the old ciphertext is overwritten in place.
+
+### `make db.backup.local` and `make db.restore.local`
+
+Local-only convenience wrappers around `pg_dump` / `pg_restore` against the dockerized Postgres started by `make dev.db`.
+
+```bash
+make db.backup.local                                    # writes backend/backups/aicrm-<timestamp>.dump
+make db.restore.local f=backend/backups/aicrm-20260516-014700.dump
+```
+
+- Dumps use the `-Fc` custom format so they round-trip cleanly through `pg_restore --clean --if-exists`.
+- `backend/backups/` is gitignored — dumps stay on your machine.
+- `db.restore.local` prompts for confirmation because it overwrites the local database.
+- **Production is out of scope** for these targets. Railway Postgres backups are managed through the Railway dashboard; do not point these targets at a production `DATABASE_URL`.
+
 ## Pull Requests
 
 - Fill out every section of the PR template.
