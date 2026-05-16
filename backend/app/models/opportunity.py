@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DATE,
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -51,9 +52,7 @@ class Opportunity(Base):
 
     __tablename__ = "opportunities"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -66,7 +65,7 @@ class Opportunity(Base):
         nullable=False,
         index=True,
     )
-    stage_id: Mapped[uuid.UUID] = mapped_column(
+    stage_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("pipeline_stages.id", ondelete="SET NULL"),
         nullable=True,
@@ -120,7 +119,7 @@ class Opportunity(Base):
         index=True,
     )  # GHL-style status: open, won, lost, abandoned
     lost_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -136,7 +135,9 @@ class Opportunity(Base):
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="opportunities")
     pipeline: Mapped["Pipeline"] = relationship("Pipeline", back_populates="opportunities")
-    stage: Mapped["PipelineStage"] = relationship("PipelineStage", back_populates="opportunities")
+    stage: Mapped["PipelineStage | None"] = relationship(
+        "PipelineStage", back_populates="opportunities"
+    )
     primary_contact: Mapped["Contact | None"] = relationship("Contact")
     assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     closed_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[closed_by_id])
@@ -167,9 +168,7 @@ class OpportunityLineItem(Base):
 
     __tablename__ = "opportunity_line_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     opportunity_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("opportunities.id", ondelete="CASCADE"),
@@ -199,9 +198,7 @@ class OpportunityLineItem(Base):
     )
 
     # Relationships
-    opportunity: Mapped["Opportunity"] = relationship(
-        "Opportunity", back_populates="line_items"
-    )
+    opportunity: Mapped["Opportunity"] = relationship("Opportunity", back_populates="line_items")
 
     def __repr__(self) -> str:
         return f"<OpportunityLineItem(id={self.id}, name={self.name}, total={self.total})>"
@@ -212,9 +209,7 @@ class OpportunityActivity(Base):
 
     __tablename__ = "opportunity_activities"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     opportunity_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("opportunities.id", ondelete="CASCADE"),
@@ -241,9 +236,7 @@ class OpportunityActivity(Base):
     )
 
     # Relationships
-    opportunity: Mapped["Opportunity"] = relationship(
-        "Opportunity", back_populates="activities"
-    )
+    opportunity: Mapped["Opportunity"] = relationship("Opportunity", back_populates="activities")
     user: Mapped["User | None"] = relationship("User")
 
     def __repr__(self) -> str:
