@@ -101,7 +101,7 @@ class Conversation(Base):
     )
     contact_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("contacts.id", ondelete="SET NULL"),
+        ForeignKey("contacts.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
