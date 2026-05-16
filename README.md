@@ -24,7 +24,42 @@ the-tribunal/
 ├── backend/     → FastAPI API (where the magic happens)
 ```
 
-### Fire Up the Backend
+### One-shot: everything at once
+
+A root `Makefile` orchestrates both sides. From the repo root:
+
+```bash
+make install   # uv sync + npm ci
+cp backend/.env.example backend/.env   # configure your secrets
+make migrate   # alembic upgrade head
+make dev       # docker compose + backend uvicorn + frontend dev (parallel)
+```
+
+Dashboard at http://localhost:3000 · API docs at http://localhost:8000/docs.
+
+### Make targets
+
+Run `make help` for the full list. Cheat sheet:
+
+| Target | What it does |
+| --- | --- |
+| `make dev` | Start db (detached) + backend + frontend in parallel. Ctrl-C stops all. |
+| `make dev.backend` | FastAPI with `--reload` on :8000. |
+| `make dev.frontend` | Next.js dev server on :3000. |
+| `make dev.db` | `docker compose up -d` (Postgres + Redis). |
+| `make db.down` | Stop docker compose services (keeps volumes). |
+| `make db.reset` | **Destructive.** Drop volumes, restart, re-migrate. |
+| `make migrate` | `alembic upgrade head`. |
+| `make migrate.new m="..."` | Autogenerate a new Alembic revision. |
+| `make test` / `test.backend` / `test.frontend` | Run tests. |
+| `make lint` | Ruff + ESLint. |
+| `make format` | Ruff format + Prettier. |
+| `make typecheck` | mypy + `tsc --noEmit`. |
+| `make install` | `uv sync` + `npm ci`. |
+| `make audit` | `uv pip list --outdated` + `npm audit`. |
+| `make clean` | Remove caches, build artifacts, coverage. |
+
+### Manual: backend only
 
 ```bash
 cd backend
@@ -35,17 +70,13 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-API docs at http://localhost:8000/docs
-
-### Launch the Frontend
+### Manual: frontend only
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-Dashboard at http://localhost:3000
 
 ## The Arsenal
 
