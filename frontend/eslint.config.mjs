@@ -105,6 +105,12 @@ const eslintConfig = defineConfig([
           message:
             "Inline `queryKey: [...]` literals are not allowed. Use `queryKeys.<resource>.<scope>(...)` from '@/lib/query-keys' instead. Add a new builder there if needed.",
         },
+        {
+          selector:
+            "ImportDeclaration[source.value='react'] > ImportNamespaceSpecifier",
+          message:
+            "Use named imports from 'react' (e.g. `import { useState, type ReactNode } from 'react'`) instead of `import * as React from 'react'`. React 19 + the new JSX transform make the namespace import unnecessary.",
+        },
       ],
       "no-restricted-imports": [
         "error",
@@ -138,6 +144,22 @@ const eslintConfig = defineConfig([
     files: ["src/lib/query-keys.ts"],
     rules: {
       "no-restricted-syntax": "off",
+    },
+  },
+  {
+    // shadcn/ui primitives are vendored from upstream and follow shadcn's
+    // `import * as React` convention. Keep them on the upstream style so future
+    // `npx shadcn add` runs don't fight our lint rule.
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Property[key.name='queryKey'] > ArrayExpression",
+          message:
+            "Inline `queryKey: [...]` literals are not allowed. Use `queryKeys.<resource>.<scope>(...)` from '@/lib/query-keys' instead. Add a new builder there if needed.",
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

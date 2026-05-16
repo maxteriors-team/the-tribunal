@@ -11,7 +11,7 @@ import {
   CalendarX,
   type LucideIcon,
 } from "lucide-react";
-import * as React from "react";
+import { useMemo } from "react";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Badge } from "@/components/ui/badge";
@@ -150,7 +150,7 @@ function RealtorDashboardContent() {
     ...POLL_30S,
   });
 
-  const appointments: Appointment[] = React.useMemo(() => {
+  const appointments: Appointment[] = useMemo(() => {
     const items = appointmentsData?.items ?? [];
     return [...items].sort(
       (a, b) =>

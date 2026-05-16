@@ -1,7 +1,7 @@
 "use client";
 
 import { User, Bot, ChevronDown, ChevronUp, FileText } from "lucide-react";
-import * as React from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -140,7 +140,7 @@ export function TranscriptViewer({
   collapsible = false,
   defaultExpanded = true,
 }: TranscriptViewerProps) {
-  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const entries = parseTranscript(transcript);
 
   if (entries.length === 0) {

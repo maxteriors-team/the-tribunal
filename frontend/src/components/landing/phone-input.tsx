@@ -1,12 +1,12 @@
 "use client";
 
-import * as React from "react";
+import { type ChangeEvent, type ComponentProps } from "react";
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface PhoneInputProps
-  extends Omit<React.ComponentProps<"input">, "onChange" | "value"> {
+  extends Omit<ComponentProps<"input">, "onChange" | "value"> {
   value: string;
   onChange: (value: string) => void;
 }
@@ -55,7 +55,7 @@ export function PhoneInput({
   const digits = extractDigits(value);
   const displayValue = formatPhoneDisplay(digits);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const input = e.target.value;
     const newDigits = extractDigits(input);
     // Pass back the normalized E.164 format

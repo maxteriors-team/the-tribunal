@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import * as React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageEmptyState } from "@/components/ui/page-state";
@@ -66,27 +66,27 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     workspaceId ?? "",
     selectedContact?.id ?? 0,
   );
-  const timeline = React.useMemo(() => timelineData ?? [], [timelineData]);
-  const [message, setMessage] = React.useState("");
-  const [isSending, setIsSending] = React.useState(false);
-  const [selectedFromNumber, setSelectedFromNumber] = React.useState<
+  const timeline = useMemo(() => timelineData ?? [], [timelineData]);
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [selectedFromNumber, setSelectedFromNumber] = useState<
     string | undefined
   >();
-  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Fetch phone numbers for the workspace
   const { data: phoneNumbersData } = usePhoneNumbers(workspaceId ?? "", {
     sms_enabled: true,
     active_only: true,
   });
-  const phoneNumbers = React.useMemo(
+  const phoneNumbers = useMemo(
     () => phoneNumbersData?.items ?? [],
     [phoneNumbersData?.items],
   );
 
   // Fetch agents for the workspace
   const { data: agentsData } = useAgents(workspaceId ?? "");
-  const agents = React.useMemo(
+  const agents = useMemo(
     () => agentsData?.items ?? [],
     [agentsData?.items],
   );
@@ -122,14 +122,14 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const clearHistoryMutation = useClearConversationHistory(workspaceId ?? "");
 
   // Auto-select first phone number when available
-  React.useEffect(() => {
+  useEffect(() => {
     if (phoneNumbers.length > 0 && !selectedFromNumber) {
       setSelectedFromNumber(phoneNumbers[0].phone_number);
     }
   }, [phoneNumbers, selectedFromNumber]);
 
   // Auto-scroll to bottom when new messages arrive
-  React.useEffect(() => {
+  useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
         "[data-radix-scroll-area-viewport]",
@@ -142,7 +142,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
 
   // Group timeline items by date
   type TimelineGroup = { date: Date; items: typeof timeline };
-  const groupedTimeline = React.useMemo(() => {
+  const groupedTimeline = useMemo(() => {
     const groups: TimelineGroup[] = [];
 
     timeline.forEach((item) => {

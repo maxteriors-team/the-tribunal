@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Users, CheckSquare, X, Plus, Upload } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import * as React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { BulkTagDialog } from "@/components/contacts/bulk-tag-dialog";
@@ -39,12 +39,12 @@ import type { Contact, ContactStatus } from "@/types";
 export function ContactsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
-  const [isScrapeDialogOpen, setIsScrapeDialogOpen] = React.useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isScrapeDialogOpen, setIsScrapeDialogOpen] = useState(false);
 
   // Auto-open import dialog when navigated here with ?import=true
-  React.useEffect(() => {
+  useEffect(() => {
     if (searchParams.get("import") === "true") {
       setIsImportDialogOpen(true);
       const urlParams = new URLSearchParams(searchParams.toString());
@@ -54,15 +54,15 @@ export function ContactsPage() {
     }
   }, [searchParams, router]);
 
-  const [isSelectionMode, setIsSelectionMode] = React.useState(false);
-  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
-  const [selectAllMatchingIds, setSelectAllMatchingIds] = React.useState<Set<number> | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-  const [isBulkTagDialogOpen, setIsBulkTagDialogOpen] = React.useState(false);
-  const [lastClickedIndex, setLastClickedIndex] = React.useState<number | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectAllMatchingIds, setSelectAllMatchingIds] = useState<Set<number> | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBulkTagDialogOpen, setIsBulkTagDialogOpen] = useState(false);
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
 
   // Debounced search input: local state updates immediately, store updates after delay
-  const [inputValue, setInputValue] = React.useState("");
+  const [inputValue, setInputValue] = useState("");
 
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -84,7 +84,7 @@ export function ContactsPage() {
   } = useContactStore();
 
   // Build query params from store filter/sort/pagination state
-  const contactsListParams = React.useMemo<ContactsListParams>(() => ({
+  const contactsListParams = useMemo<ContactsListParams>(() => ({
     page: contactsPage,
     page_size: contactsPageSize,
     sort_by: sortBy,
@@ -98,19 +98,19 @@ export function ContactsPage() {
     workspaceId ?? "",
     contactsListParams,
   );
-  const contacts = React.useMemo(() => contactsData?.items ?? [], [contactsData?.items]);
+  const contacts = useMemo(() => contactsData?.items ?? [], [contactsData?.items]);
   const contactsTotal = contactsData?.total ?? 0;
   const contactsTotalPages = contactsData?.pages ?? 1;
 
   // Sync local input value on mount
-  React.useEffect(() => {
+  useEffect(() => {
     setInputValue(searchQuery);
   // Only run on mount to avoid fighting the debounce
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Debounce search: update store query 400ms after user stops typing
-  React.useEffect(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(inputValue);
     }, 400);
@@ -118,7 +118,7 @@ export function ContactsPage() {
   }, [inputValue, setSearchQuery]);
 
   // Build params for the /ids endpoint (for "select all matching")
-  const idsParams = React.useMemo<ContactIdsParams>(() => {
+  const idsParams = useMemo<ContactIdsParams>(() => {
     const params: ContactIdsParams = {};
     if (searchQuery.trim()) params.search = searchQuery.trim();
     if (statusFilter) params.status = statusFilter as ContactStatus;
@@ -129,10 +129,10 @@ export function ContactsPage() {
   // Effective selected IDs: either the explicit set or the "select all matching" set
   const effectiveSelectedIds = selectAllMatchingIds ?? selectedIds;
   const selectedCount = effectiveSelectedIds.size;
-  const selectedArray = React.useMemo(() => Array.from(effectiveSelectedIds), [effectiveSelectedIds]);
+  const selectedArray = useMemo(() => Array.from(effectiveSelectedIds), [effectiveSelectedIds]);
 
   // Status counts from current page contacts (all count uses server total)
-  const statusCounts = React.useMemo<Record<ContactStatus | "all", number>>(() => {
+  const statusCounts = useMemo<Record<ContactStatus | "all", number>>(() => {
     const counts: Record<ContactStatus | "all", number> = {
       all: contactsTotal,
       new: 0,
@@ -212,7 +212,7 @@ export function ContactsPage() {
     }
   };
 
-  const [fetchAllIds, setFetchAllIds] = React.useState(false);
+  const [fetchAllIds, setFetchAllIds] = useState(false);
   const { data: allIdsData, isFetching: isFetchingAllIds } = useContactIds(
     workspaceId ?? "",
     idsParams,
@@ -229,7 +229,7 @@ export function ContactsPage() {
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (fetchAllIds && allIdsData) {
       setSelectAllMatchingIds(new Set(allIdsData.ids));
       setSelectedIds(new Set());

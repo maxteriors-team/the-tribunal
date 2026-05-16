@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import * as React from "react";
+import { useState } from "react";
 
 import { ContactSidebar } from "@/components/contacts/contact-sidebar";
 import { ContactsList } from "@/components/contacts/contacts-list";
@@ -18,7 +18,7 @@ interface UnifiedInboxProps {
 export function UnifiedInbox({ className }: UnifiedInboxProps) {
   const isMobile = useIsMobile();
   const { selectedContact } = useContactStore();
-  const [showSidebar, setShowSidebar] = React.useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
 
   // On mobile, show sidebar as a sheet
   if (isMobile) {

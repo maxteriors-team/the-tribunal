@@ -1,7 +1,15 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import * as React from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { workspacesApi, type WorkspaceWithMembership } from "@/lib/api/workspaces";
 import { queryKeys } from "@/lib/query-keys";
@@ -19,7 +27,7 @@ interface WorkspaceContextType {
   setCurrentWorkspace: (workspaceId: string) => void;
 }
 
-const WorkspaceContext = React.createContext<WorkspaceContextType | undefined>(undefined);
+const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 function getStoredWorkspaceId(): string | null {
   if (typeof window === "undefined") return null;
@@ -41,10 +49,10 @@ function setStoredWorkspaceId(workspaceId: string): void {
   }
 }
 
-export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
-  const [currentWorkspaceId, setCurrentWorkspaceId] = React.useState<string | null>(null);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
 
   const { data: workspaces = [], isPending } = useQuery({
     queryKey: queryKeys.workspaces.all(),
@@ -54,7 +62,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Initialize current workspace from storage or default
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isAuthenticated || workspaces.length === 0) return;
 
     const storedId = getStoredWorkspaceId();
@@ -72,12 +80,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, workspaces, user?.default_workspace_id]);
 
-  const currentWorkspace = React.useMemo(() => {
+  const currentWorkspace = useMemo(() => {
     if (!currentWorkspaceId) return null;
     return workspaces.find((w) => w.workspace.id === currentWorkspaceId) || null;
   }, [workspaces, currentWorkspaceId]);
 
-  const setCurrentWorkspace = React.useCallback(
+  const setCurrentWorkspace = useCallback(
     (workspaceId: string) => {
       setCurrentWorkspaceId(workspaceId);
       setStoredWorkspaceId(workspaceId);
@@ -88,7 +96,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [queryClient]
   );
 
-  const value = React.useMemo(
+  const value = useMemo(
     () => ({
       workspaces,
       currentWorkspace,
@@ -103,7 +111,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useWorkspace() {
-  const context = React.useContext(WorkspaceContext);
+  const context = useContext(WorkspaceContext);
   if (context === undefined) {
     throw new Error("useWorkspace must be used within a WorkspaceProvider");
   }

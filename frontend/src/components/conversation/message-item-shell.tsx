@@ -11,7 +11,7 @@ import {
   FileText,
 } from "lucide-react";
 import { motion } from "motion/react";
-import * as React from "react";
+import { type ReactNode } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/date";
 import type { TimelineItem } from "@/types";
 
-const channelIcons: Record<string, React.ReactNode> = {
+const channelIcons: Record<string, ReactNode> = {
   sms: <MessageSquare className="h-4 w-4" />,
   call: <Phone className="h-4 w-4" />,
   email: <Mail className="h-4 w-4" />,
@@ -32,7 +32,7 @@ interface MessageItemShellProps {
   item: TimelineItem;
   isOutbound: boolean;
   contactName?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 /**

@@ -6,7 +6,7 @@ import {
   Calendar, Zap, Gift, Lightbulb, MapPin, Sparkles, Search,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import * as React from "react";
+import { useCallback, useState } from "react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -32,13 +32,13 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open: controlledOpen, onOpenChange }: CommandPaletteProps = {}) {
-  const [internalOpen, setInternalOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const router = useRouter();
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
 
-  const setOpen = React.useCallback((value: boolean) => {
+  const setOpen = useCallback((value: boolean) => {
     if (!isControlled) setInternalOpen(value);
     onOpenChange?.(value);
   }, [isControlled, onOpenChange]);

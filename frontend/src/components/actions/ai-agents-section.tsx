@@ -2,7 +2,7 @@
 
 import { Bot, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import * as React from "react";
+import { useMemo } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -107,15 +107,15 @@ export function AIAgentsSection() {
   const { selectedContact, contactAgents, assignAgent, toggleContactAgent } = useContactStore();
   const workspaceId = useWorkspaceId();
   const { data: agentsData } = useAgents(workspaceId ?? "");
-  const agents = React.useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
+  const agents = useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
 
   // Find the current assignment for this contact
-  const currentAssignment = React.useMemo(() => {
+  const currentAssignment = useMemo(() => {
     if (!selectedContact) return null;
     return contactAgents.find((ca) => ca.contact_id === selectedContact.id);
   }, [selectedContact, contactAgents]);
 
-  const assignedAgent = React.useMemo(() => {
+  const assignedAgent = useMemo(() => {
     if (!currentAssignment) return null;
     return agents.find((a) => a.id === currentAssignment.agent_id);
   }, [agents, currentAssignment]);

@@ -11,7 +11,7 @@ import {
   PhoneMissed,
   PlayCircle,
 } from "lucide-react";
-import * as React from "react";
+import { type ReactNode } from "react";
 
 import { TranscriptViewer } from "@/components/calls/transcript-viewer";
 import { AudioPlayer } from "@/components/ui/audio-player";
@@ -33,7 +33,7 @@ function formatDuration(seconds?: number): string {
 
 const callStatusConfig: Record<
   string,
-  { icon: React.ReactNode; label: string; color: string }
+  { icon: ReactNode; label: string; color: string }
 > = {
   completed: {
     icon: <Check className="h-3 w-3" />,

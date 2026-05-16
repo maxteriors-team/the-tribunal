@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import * as React from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { PageEmptyState } from "@/components/ui/page-state";
@@ -34,8 +34,8 @@ function getStageColor(probability: number): string {
 
 
 export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
-  const [page] = React.useState(1);
-  const [search] = React.useState("");
+  const [page] = useState(1);
+  const [search] = useState("");
 
   const { data, isPending } = useQuery({
     queryKey: queryKeys.opportunities.list(workspaceId ?? "", page, search),

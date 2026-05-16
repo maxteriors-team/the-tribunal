@@ -8,7 +8,7 @@ import {
   User,
   Trash2,
 } from "lucide-react";
-import * as React from "react";
+import { useState } from "react";
 
 import {
   AlertDialog,
@@ -58,7 +58,7 @@ export function ChatHeader({
   onAssignAgent,
   onClearHistory,
 }: ChatHeaderProps) {
-  const [showClearHistoryDialog, setShowClearHistoryDialog] = React.useState(false);
+  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
   const handleConfirmClear = () => {
     onClearHistory();

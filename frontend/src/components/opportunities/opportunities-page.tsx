@@ -2,7 +2,7 @@
 
 import { Plus, ListIcon, LayoutGrid } from "lucide-react";
 import dynamic from "next/dynamic";
-import * as React from "react";
+import { useState } from "react";
 
 import { CreateOpportunityDialog } from "@/components/opportunities/create-opportunity-dialog";
 import { CreatePipelineDialog } from "@/components/opportunities/create-pipeline-dialog";
@@ -20,8 +20,8 @@ interface OpportunitiesPageProps {
 }
 
 export function OpportunitiesPage({ workspaceId }: OpportunitiesPageProps) {
-  const [createOpportunityOpen, setCreateOpportunityOpen] = React.useState(false);
-  const [createPipelineOpen, setCreatePipelineOpen] = React.useState(false);
+  const [createOpportunityOpen, setCreateOpportunityOpen] = useState(false);
+  const [createPipelineOpen, setCreatePipelineOpen] = useState(false);
 
   return (
     <div className="h-full w-full flex flex-col">

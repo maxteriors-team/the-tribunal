@@ -1,7 +1,7 @@
 "use client";
 
 import { Mail, Sparkles } from "lucide-react";
-import * as React from "react";
+import { type ReactNode } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,7 @@ interface SectionProps {
   title: string;
   importPath: string;
   description?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 function Section({ id, title, importPath, description, children }: SectionProps) {
@@ -66,7 +66,7 @@ function Section({ id, title, importPath, description, children }: SectionProps)
 
 interface ExampleProps {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 function Example({ label, children }: ExampleProps) {

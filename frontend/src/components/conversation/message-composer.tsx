@@ -1,7 +1,7 @@
 "use client";
 
 import { Send, Paperclip, Mic, PhoneOutgoing, Loader2 } from "lucide-react";
-import * as React from "react";
+import { useRef, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,9 +33,9 @@ export function MessageComposer({
   selectedFromNumber,
   onFromNumberChange,
 }: MessageComposerProps) {
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSend();

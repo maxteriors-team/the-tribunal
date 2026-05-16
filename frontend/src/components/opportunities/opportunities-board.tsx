@@ -20,7 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GripVertical, DollarSign, Calendar, CircleDot } from "lucide-react";
-import * as React from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -221,9 +221,9 @@ function StageColumn({
 
 export function OpportunitiesBoard({ workspaceId }: OpportunitiesBoardProps) {
   const queryClient = useQueryClient();
-  const [activeOpportunity, setActiveOpportunity] = React.useState<Opportunity | null>(null);
-  const [selectedOpportunity, setSelectedOpportunity] = React.useState<Opportunity | null>(null);
-  const [detailSheetOpen, setDetailSheetOpen] = React.useState(false);
+  const [activeOpportunity, setActiveOpportunity] = useState<Opportunity | null>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

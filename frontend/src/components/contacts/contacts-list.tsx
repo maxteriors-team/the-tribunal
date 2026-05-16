@@ -2,7 +2,7 @@
 
 import { Search, Plus, User, Phone, Mail, Building2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import * as React from "react";
+import { useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -127,7 +127,7 @@ function ContactItem({ contact, isSelected, onClick }: ContactItemProps) {
 }
 
 export function ContactsList({ className }: ContactsListProps) {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { selectedContact, setSelectedContact, searchQuery, setSearchQuery } = useContactStore();
   const workspaceId = useWorkspaceId();
 

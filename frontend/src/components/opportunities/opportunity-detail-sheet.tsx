@@ -16,7 +16,7 @@ import {
   XCircle,
   Archive,
 } from "lucide-react";
-import * as React from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -133,8 +133,8 @@ export function OpportunityDetailSheet({
   workspaceId,
 }: OpportunityDetailSheetProps) {
   const queryClient = useQueryClient();
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [editData, setEditData] = React.useState({
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
     name: "",
     description: "",
     amount: "",
@@ -169,7 +169,7 @@ export function OpportunityDetailSheet({
   );
 
   // Reset edit data when opportunity changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (opportunity) {
       setEditData({
         name: opportunity.name,

@@ -1,12 +1,12 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import * as React from "react";
+import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
 interface InfoRowProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value?: string | null;
   onClick?: () => void;

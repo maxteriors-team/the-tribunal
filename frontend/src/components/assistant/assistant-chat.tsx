@@ -1,7 +1,7 @@
 "use client";
 
 import { Send, Loader2, Bot, User, Sparkles } from "lucide-react";
-import * as React from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,19 +17,19 @@ import { formatTime } from "@/lib/utils/date";
 export function AssistantChat({ className }: { className?: string }) {
   const { data: history } = useAssistantHistory();
   const chat = useAssistantChat();
-  const [input, setInput] = React.useState("");
-  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const messages = history?.messages ?? [];
 
   // Auto-scroll to bottom on new messages
-  React.useEffect(() => {
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages.length]);
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || chat.isPending) return;

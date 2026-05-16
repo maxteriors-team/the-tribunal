@@ -2,7 +2,6 @@
 
 import { ArrowLeft, X } from "lucide-react";
 import Link from "next/link";
-import * as React from "react";
 import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";

@@ -1,7 +1,6 @@
 "use client";
 
 import { Calendar } from "lucide-react";
-import * as React from "react";
 
 import type { TimelineItem } from "@/types";
 

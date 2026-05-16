@@ -30,7 +30,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import * as React from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 const CommandPalette = dynamic(
   () => import("./command-palette").then((m) => m.CommandPalette),
@@ -258,7 +258,7 @@ function buildBreadcrumbs(pathname: string): BreadcrumbSegment[] {
 
 
 interface AppSidebarProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function AppSidebar({ children }: AppSidebarProps) {
@@ -279,8 +279,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
     ...POLL_60S,
   });
   const breadcrumbs = buildBreadcrumbs(pathname);
-  const [commandOpen, setCommandOpen] = React.useState(false);
-  const [commandMounted, setCommandMounted] = React.useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandMounted, setCommandMounted] = useState(false);
 
   const openCommandPalette = () => {
     setCommandMounted(true);
@@ -288,7 +288,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
   };
 
   // Global ⌘K shortcut — hoisted here so the cmdk bundle stays lazy until first open.
-  React.useEffect(() => {
+  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();

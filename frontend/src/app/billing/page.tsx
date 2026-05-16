@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard, CheckCircle2, Zap, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import * as React from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -41,7 +41,7 @@ function PlanFeature({ text }: { text: string }) {
 
 function BillingContent() {
   const router = useRouter();
-  const [isRedirecting, setIsRedirecting] = React.useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const { data: billingStatus, isPending } = useQuery<BillingStatus>({
     queryKey: queryKeys.billing.status(),

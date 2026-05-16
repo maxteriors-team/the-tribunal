@@ -1,7 +1,15 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import * as React from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { api } from "@/lib/api";
 import { getCurrentUser, login as loginApi, type User, type LoginCredentials } from "@/lib/api/auth";
@@ -15,20 +23,20 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PUBLIC_PATHS = ["/login", "/register"];
 const PUBLIC_PATH_PREFIXES = ["/invite/", "/p/"];
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<User | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   const isAuthenticated = user !== null;
 
-  const fetchUser = React.useCallback(async () => {
+  const fetchUser = useCallback(async () => {
     // Auth tokens live in httpOnly cookies — JS can’t check for them. We just
     // probe /auth/me; if the cookie is missing or expired the response
     // interceptor will attempt a refresh, and a final 401 means signed-out.
@@ -42,11 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isLoading) return;
 
     const isPublicPath =
@@ -61,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, isLoading, pathname, router]);
 
-  const login = React.useCallback(async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     // Backend sets both access_token and refresh_token as httpOnly cookies on
     // the response; the body is ignored here. Subsequent requests carry the
     // cookies automatically (axios is configured with withCredentials).
@@ -71,14 +79,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace("/");
   }, [router]);
 
-  const logout = React.useCallback(() => {
+  const logout = useCallback(() => {
     // Backend clears both auth cookies.
     api.post("/api/v1/auth/logout").catch(() => {});
     setUser(null);
     router.replace("/login");
   }, [router]);
 
-  const value = React.useMemo(
+  const value = useMemo(
     () => ({
       user,
       isLoading,
@@ -94,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth() {
-  const context = React.useContext(AuthContext);
+  const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }

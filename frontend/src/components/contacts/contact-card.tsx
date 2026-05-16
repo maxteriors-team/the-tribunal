@@ -3,7 +3,7 @@
 import { Phone, Mail } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
-import * as React from "react";
+import { type MouseEvent } from "react";
 
 import { TagBadge } from "@/components/tags/tag-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,7 +45,7 @@ export function ContactCard({ contact, isSelected, onSelectChange, isSelectionMo
   const displayName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
   const hasUnread = (contact.unread_count ?? 0) > 0;
 
-  const handleCheckboxClick = (e: React.MouseEvent) => {
+  const handleCheckboxClick = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     onSelectChange(!isSelected, e.shiftKey);

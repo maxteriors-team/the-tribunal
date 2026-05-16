@@ -1,4 +1,4 @@
-import * as React from "react";
+import { Suspense } from "react";
 
 import { ContactsPage } from "@/components/contacts/contacts-page";
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -7,9 +7,9 @@ export default function Home() {
   return (
     <AppSidebar>
       <div className="h-full overflow-hidden">
-        <React.Suspense fallback={null}>
+        <Suspense fallback={null}>
           <ContactsPage />
-        </React.Suspense>
+        </Suspense>
       </div>
     </AppSidebar>
   );

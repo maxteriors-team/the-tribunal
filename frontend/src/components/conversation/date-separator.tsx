@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 
 import { Separator } from "@/components/ui/separator";
 import { formatLongDate, isToday, isYesterday } from "@/lib/utils/date";

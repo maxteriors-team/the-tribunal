@@ -1,8 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import * as React from "react";
-import { use } from "react";
+import { use, useEffect } from "react";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { ConversationLayout } from "@/components/layout/conversation-layout";
@@ -29,7 +28,7 @@ export default function ConversationPage({ params }: PageProps) {
   );
 
   // Set selected contact when loaded; redirect if not found
-  React.useEffect(() => {
+  useEffect(() => {
     if (contact) {
       setSelectedContact(contact);
     } else if (!isLoadingContact && !contact) {

@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Menu, User } from "lucide-react";
 import Link from "next/link";
-import * as React from "react";
+import { useState } from "react";
 
 import { ActionsPanel } from "@/components/actions/actions-panel";
 import { ContactSidebar } from "@/components/contacts/contact-sidebar";
@@ -18,8 +18,8 @@ interface ConversationLayoutProps {
 
 export function ConversationLayout({ className }: ConversationLayoutProps) {
   const isMobile = useIsMobile();
-  const [showActionsPanel, setShowActionsPanel] = React.useState(false);
-  const [showSidebar, setShowSidebar] = React.useState(false);
+  const [showActionsPanel, setShowActionsPanel] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
 
   // On mobile, show sheets for left and right panels
   if (isMobile) {

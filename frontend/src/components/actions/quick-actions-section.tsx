@@ -12,7 +12,7 @@ import {
   MousePointerClick,
 } from "lucide-react";
 import { motion } from "motion/react";
-import * as React from "react";
+import { type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ interface QuickAction {
   id: string;
   label: string;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   variant?: "default" | "outline" | "destructive";
   action: (contactId: number) => void;
 }

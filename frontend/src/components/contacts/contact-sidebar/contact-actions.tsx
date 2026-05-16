@@ -1,12 +1,12 @@
 "use client";
 
 import { Phone, Calendar, Edit2, Bot, Trash2, Loader2 } from "lucide-react";
-import * as React from "react";
+import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
 interface QuickActionProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
   variant?: "default" | "primary" | "destructive";

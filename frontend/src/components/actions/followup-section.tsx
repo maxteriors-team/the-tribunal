@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Send, Sparkles, Clock, RotateCcw, Loader2 } from "lucide-react";
-import * as React from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,7 @@ const MAX_COUNT_OPTIONS = [
 export function FollowupSection() {
   const { selectedContact } = useContactStore();
   const workspaceId = useWorkspaceId();
-  const [generatedMessage, setGeneratedMessage] = React.useState("");
+  const [generatedMessage, setGeneratedMessage] = useState("");
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
@@ -85,7 +85,7 @@ export function FollowupSection() {
   const resetCounter = useResetFollowupCounter(workspaceId ?? "");
 
   // Clear generated message when conversation changes
-  React.useEffect(() => {
+  useEffect(() => {
     setGeneratedMessage("");
   }, [conversationId]);
 
