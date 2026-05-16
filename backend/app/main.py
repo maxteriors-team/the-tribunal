@@ -525,6 +525,9 @@ def _error_payload_from_detail(status_code: int, detail: Any) -> dict[str, Any]:
     - Preserves already-structured payloads (dicts with a ``code`` field).
     - Wraps plain strings / other types into ``{code, message}`` using a slug
       derived from the HTTP status code.
+
+    The ``request_id`` field is attached separately by the response handler
+    (it isn't known here at the payload-shape level).
     """
     if isinstance(detail, dict) and isinstance(detail.get("code"), str):
         payload: dict[str, Any] = {
@@ -540,10 +543,21 @@ def _error_payload_from_detail(status_code: int, detail: Any) -> dict[str, Any]:
     return {"code": code, "message": message}
 
 
+def _request_id_for(request: Request) -> str:
+    """Pull the correlation ID set by :class:`RequestIDMiddleware`.
+
+    Falls back to the empty string when the middleware hasn't run (e.g. an
+    error raised before middleware processing in a stripped-down test app),
+    so the canonical ``{code, message, request_id}`` shape is always present.
+    """
+    return str(getattr(request.state, "request_id", "") or "")
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Return ``HTTPException``s in the canonical ``ErrorResponse`` shape."""
     payload = _error_payload_from_detail(exc.status_code, exc.detail)
+    payload["request_id"] = _request_id_for(request)
     return JSONResponse(
         status_code=exc.status_code,
         content=payload,
@@ -555,9 +569,18 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global handler for unhandled exceptions.
 
-    Logs the full error internally but returns a generic message to the client
-    to avoid leaking internal details.
+    Logs the full error internally but returns the canonical
+    ``{code, message, request_id}`` envelope with a generic message so we
+    don't leak internal details. The ``request_id`` lets a client quote a
+    specific failure when filing a bug.
     """
     logger.error("unhandled_exception", exc_info=exc, path=str(request.url))
     sentry_sdk.capture_exception(exc)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "internal_error",
+            "message": "Internal server error",
+            "request_id": _request_id_for(request),
+        },
+    )

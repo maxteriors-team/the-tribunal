@@ -33,6 +33,7 @@ import app.main as main_module
 from app.core.config import settings as app_settings
 from app.main import (
     _STATUS_CODE_SLUGS,
+    RequestIDMiddleware,
     SecurityHeadersMiddleware,
     _error_payload_from_detail,
     _shannon_entropy_bits,
@@ -64,6 +65,9 @@ def _make_error_handler_app() -> FastAPI:
     * ``/raise/unhandled`` — raise a bare ``RuntimeError``
     """
     app = FastAPI()
+    # Mount the real ``RequestIDMiddleware`` so error handlers can read
+    # ``request.state.request_id`` and embed it in the response envelope.
+    app.add_middleware(RequestIDMiddleware)
     # FastAPI accepts handlers with the narrowed signature at runtime; the
     # static signature on ``add_exception_handler`` insists on the broad
     # Starlette form. Cast to keep mypy happy without weakening the handlers.
@@ -144,25 +148,43 @@ class TestHttpExceptionHandler:
         response = await error_client.get("/raise/string")
         assert response.status_code == 404
         body = response.json()
-        # Status-code-derived slug, no `detail` field, no `details` field.
-        assert body == {"code": "not_found", "message": "missing widget"}
+        # Status-code-derived slug + canonical envelope keys.
+        assert body["code"] == "not_found"
+        assert body["message"] == "missing widget"
+        # ``request_id`` is populated from ``request.state.request_id`` and
+        # round-trips on the ``X-Request-ID`` response header.
+        assert isinstance(body["request_id"], str) and body["request_id"]
+        assert body["request_id"] == response.headers.get("x-request-id")
+        assert "details" not in body
 
     async def test_structured_detail_is_preserved(self, error_client: AsyncClient) -> None:
         response = await error_client.get("/raise/structured")
         assert response.status_code == 409
         body = response.json()
-        assert body == {
-            "code": "widget_locked",
-            "message": "Widget is being edited by someone else",
-            "details": {"locked_by": "alice"},
-        }
+        assert body["code"] == "widget_locked"
+        assert body["message"] == "Widget is being edited by someone else"
+        assert body["details"] == {"locked_by": "alice"}
+        assert body["request_id"] == response.headers.get("x-request-id")
+        assert body["request_id"]
 
     async def test_headers_are_propagated(self, error_client: AsyncClient) -> None:
         """``HTTPException.headers`` (e.g. WWW-Authenticate) must reach the client."""
         response = await error_client.get("/raise/headers")
         assert response.status_code == 401
         assert response.headers.get("www-authenticate") == "Bearer"
-        assert response.json() == {"code": "unauthorized", "message": "bad token"}
+        body = response.json()
+        assert body["code"] == "unauthorized"
+        assert body["message"] == "bad token"
+        assert body["request_id"] == response.headers.get("x-request-id")
+
+    async def test_inbound_request_id_is_echoed(self, error_client: AsyncClient) -> None:
+        """A client-supplied ``X-Request-ID`` propagates into the error body."""
+        rid = "01HZZZZZZZZZZZZZZZZZZZZZZZ"  # 26-char ULID-shaped
+        response = await error_client.get("/raise/string", headers={"X-Request-ID": rid})
+        body = response.json()
+        # Whatever the middleware accepts, the body and header must agree.
+        assert body["request_id"] == response.headers.get("x-request-id")
+        assert body["request_id"]
 
 
 # --------------------------------------------------------------------------- #
@@ -181,8 +203,26 @@ class TestUnhandledExceptionHandler:
         assert response.status_code == 500
         # Body must not leak the internal error string.
         body = response.json()
-        assert body == {"detail": "Internal server error"}
+        assert body["code"] == "internal_error"
+        assert body["message"] == "Internal server error"
+        # ``request_id`` is populated from ``request.state.request_id``
+        # (set by :class:`RequestIDMiddleware`). The outbound
+        # ``X-Request-ID`` response header is owned by Starlette's
+        # ``ServerErrorMiddleware`` on the unhandled-exception path and
+        # may be absent — the body remains the source of truth for clients.
+        assert isinstance(body["request_id"], str) and body["request_id"]
+        # No legacy ``detail`` key — clients must read ``message``.
+        assert "detail" not in body
         assert "boom" not in response.text
+
+    async def test_inbound_request_id_is_echoed(self, error_client: AsyncClient) -> None:
+        """A client-supplied ``X-Request-ID`` propagates into the 500 body."""
+        rid = "01HZZZZZZZZZZZZZZZZZZZZZZZ"
+        with patch.object(sentry_sdk, "capture_exception"):
+            response = await error_client.get("/raise/unhandled", headers={"X-Request-ID": rid})
+        body = response.json()
+        # The inbound ID is accepted (ULID-shaped) and surfaced in the body.
+        assert body["request_id"] == rid
 
     async def test_sentry_capture_is_invoked(self, error_client: AsyncClient) -> None:
         with patch.object(sentry_sdk, "capture_exception") as captured:
