@@ -28,6 +28,7 @@ from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core.config import settings
 from app.core.request_id import sanitize_request_id
+from app.core.telemetry import configure_tracing, instrument_app
 from app.db.redis import close_redis
 from app.db.session import engine
 from app.websockets.voice_bridge import router as voice_bridge_router
@@ -117,23 +118,31 @@ class SecurityHeadersMiddleware:
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        connect_sources = ["'self'", "wss:", "https://api.openai.com", "https://api.telnyx.com", "https://api.elevenlabs.io"]
+        connect_sources = [
+            "'self'",
+            "wss:",
+            "https://api.openai.com",
+            "https://api.telnyx.com",
+            "https://api.elevenlabs.io",
+        ]
         for origin in settings.cors_origins:
             if origin not in connect_sources:
                 connect_sources.append(origin)
         if settings.frontend_url and settings.frontend_url not in connect_sources:
             connect_sources.append(settings.frontend_url)
-        self._csp = "; ".join([
-            "default-src 'self'",
-            "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
-            "font-src 'self'",
-            f"connect-src {' '.join(connect_sources)}",
-            "frame-ancestors 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-        ])
+        self._csp = "; ".join(
+            [
+                "default-src 'self'",
+                "script-src 'self'",
+                "style-src 'self' 'unsafe-inline'",
+                "img-src 'self' data: https:",
+                "font-src 'self'",
+                f"connect-src {' '.join(connect_sources)}",
+                "frame-ancestors 'none'",
+                "base-uri 'self'",
+                "form-action 'self'",
+            ]
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -340,6 +349,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await engine.dispose()
 
 
+# Initialize OpenTelemetry before app creation so auto-instrumentation can
+# patch FastAPI / httpx / SQLAlchemy / Redis as they are imported and wired
+# up below. No-op when ``OTEL_EXPORTER_OTLP_ENDPOINT`` is unset.
+configure_tracing(environment=settings.environment)
+
 # Initialize Sentry before app creation so the SDK can patch ASGI/Starlette
 # internals as FastAPI is constructed. No-op when ``sentry_dsn`` is unset.
 if settings.sentry_dsn:
@@ -361,6 +375,10 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
     openapi_url="/openapi.json" if settings.debug else None,
 )
+
+# OpenTelemetry instrumentation — must run after ``app`` is created but before
+# any requests are served. No-op when tracing wasn't activated above.
+instrument_app(app, engine)
 
 # Security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
@@ -447,9 +465,7 @@ def _verify_metrics_token(
         )
 
     scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token or not secrets.compare_digest(
-        token, expected
-    ):
+    if scheme.lower() != "bearer" or not token or not secrets.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid metrics token",
@@ -526,5 +542,3 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.error("unhandled_exception", exc_info=exc, path=str(request.url))
     sentry_sdk.capture_exception(exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
-
