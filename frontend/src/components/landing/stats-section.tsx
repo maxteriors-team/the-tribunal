@@ -62,15 +62,15 @@ export function StatsSection() {
           {stats.map((stat) => (
             <motion.div
               key={stat.value}
-              className="text-center p-8 bg-[#f3eff8] rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-[#eee9f3]"
+              className="text-center p-8 bg-brand-bg rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-brand-bg-2"
               variants={itemVariants}
               role="listitem"
             >
-              <stat.icon className="size-7 text-[#8b7fa3] mx-auto mb-5" aria-hidden="true" />
-              <div className="text-4xl md:text-5xl font-bold text-[#1a1523] mb-3 font-[family-name:var(--font-serif)]">
+              <stat.icon className="size-7 text-brand-mute mx-auto mb-5" aria-hidden="true" />
+              <div className="text-4xl md:text-5xl font-bold text-brand-ink mb-3 font-[family-name:var(--font-serif)]">
                 {stat.value}
               </div>
-              <p className="text-[#5c566b]">{stat.label}</p>
+              <p className="text-brand-body">{stat.label}</p>
             </motion.div>
           ))}
         </motion.div>

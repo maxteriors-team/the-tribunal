@@ -135,7 +135,7 @@ export function FinalCtaSection() {
                     disabled={isPending}
                     aria-describedby={isError ? "cta-phone-error" : undefined}
                     aria-invalid={isError}
-                    className="h-14 text-lg text-[#1a1523] bg-white"
+                    className="h-14 text-lg text-brand-ink bg-white"
                   />
                 </div>
 
@@ -153,7 +153,7 @@ export function FinalCtaSection() {
                   <Button
                     type="button"
                     size="lg"
-                    className="flex-1 h-12 bg-white hover:bg-gray-100 text-[#1a1523] font-semibold"
+                    className="flex-1 h-12 bg-white hover:bg-gray-100 text-brand-ink font-semibold"
                     disabled={!isPhoneValid || isPending}
                     onClick={handleCall}
                   >

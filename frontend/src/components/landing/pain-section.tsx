@@ -92,7 +92,7 @@ export function PainSection() {
         viewport={{ once: true }}
       >
         <motion.div className="text-center" variants={itemVariants}>
-          <p className="text-sm font-medium text-[#8b7fa3] tracking-widest uppercase mb-8">
+          <p className="text-sm font-medium text-brand-mute tracking-widest uppercase mb-8">
             The Problem
           </p>
           <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white leading-[1.1] font-[family-name:var(--font-serif)] mb-10">

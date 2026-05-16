@@ -81,13 +81,13 @@ export function HeroSection() {
       >
         {/* Left side - Headline */}
         <motion.div className="space-y-6" variants={itemVariants}>
-          <p className="text-sm font-medium text-[#8b7fa3] tracking-widest uppercase">
+          <p className="text-sm font-medium text-brand-mute tracking-widest uppercase">
             AI Voice Agent
           </p>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-[#1a1523] leading-[1.1] font-[family-name:var(--font-serif)]">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-brand-ink leading-[1.1] font-[family-name:var(--font-serif)]">
             Voice AI built for every customer conversation
           </h1>
-          <p className="text-lg text-[#5c566b] max-w-md">
+          <p className="text-lg text-brand-body max-w-md">
             Let our AI handle calls and texts so you can focus on closing deals.
           </p>
         </motion.div>
@@ -97,12 +97,12 @@ export function HeroSection() {
           {/* Decorative abstract shape behind form */}
           <div className="absolute -top-6 -right-6 w-32 h-32 bg-gradient-to-br from-purple-300/30 to-pink-200/20 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-gradient-to-tr from-indigo-200/30 to-purple-200/20 rounded-full blur-xl pointer-events-none" />
-          <div className="bg-[#f3eff8] p-8 rounded-2xl relative border border-purple-200/30">
+          <div className="bg-brand-bg p-8 rounded-2xl relative border border-purple-200/30">
             <div className="space-y-3 mb-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-[#1a1523] font-[family-name:var(--font-serif)]">
+              <h2 className="text-3xl md:text-4xl font-bold text-brand-ink font-[family-name:var(--font-serif)]">
                 Don&apos;t believe us?
               </h2>
-              <p className="text-xl md:text-2xl text-[#5c566b]">
+              <p className="text-xl md:text-2xl text-brand-body">
                 Have our AI give you a call.
               </p>
             </div>
@@ -128,7 +128,7 @@ export function HeroSection() {
                       disabled={isPending}
                       aria-describedby={isError ? "phone-error" : undefined}
                       aria-invalid={isError}
-                      className="h-14 text-lg text-[#1a1523] bg-white"
+                      className="h-14 text-lg text-brand-ink bg-white"
                     />
                   </div>
 
@@ -145,7 +145,7 @@ export function HeroSection() {
                   <Button
                     type="button"
                     size="lg"
-                    className="w-full h-12 bg-[#1a1523] hover:bg-[#2d2838] text-white font-semibold"
+                    className="w-full h-12 bg-brand-ink hover:bg-brand-ink-hover text-white font-semibold"
                     disabled={!isPhoneValid || isPending}
                     onClick={handleCall}
                   >
@@ -165,7 +165,7 @@ export function HeroSection() {
                   <Button
                     type="button"
                     size="lg"
-                    className="w-full h-12 bg-white hover:bg-gray-50 text-[#1a1523] font-semibold border border-[#e5e0eb]"
+                    className="w-full h-12 bg-white hover:bg-gray-50 text-brand-ink font-semibold border border-brand-line"
                     disabled={!isPhoneValid || isPending}
                     onClick={handleText}
                   >

@@ -59,12 +59,12 @@ export function ResultsSection() {
         viewport={{ once: true }}
       >
         <motion.div className="text-center max-w-3xl mx-auto mb-20" variants={itemVariants}>
-          <p className="text-sm font-medium text-[#8b7fa3] tracking-widest uppercase mb-6">
+          <p className="text-sm font-medium text-brand-mute tracking-widest uppercase mb-6">
             Results
           </p>
           <h2
             id="results-heading"
-            className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-[#1a1523] font-[family-name:var(--font-serif)]"
+            className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-brand-ink font-[family-name:var(--font-serif)]"
           >
             Numbers don&apos;t lie.
           </h2>
@@ -84,24 +84,24 @@ export function ResultsSection() {
               className="text-center p-8 bg-white rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-[#f8f6fa]"
             >
               <metric.icon
-                className="size-8 text-[#8b7fa3] mx-auto mb-5"
+                className="size-8 text-brand-mute mx-auto mb-5"
                 aria-hidden="true"
               />
-              <div className="text-4xl md:text-5xl font-bold text-[#1a1523] mb-3 font-[family-name:var(--font-serif)]">
+              <div className="text-4xl md:text-5xl font-bold text-brand-ink mb-3 font-[family-name:var(--font-serif)]">
                 {metric.value}
               </div>
-              <p className="text-[#5c566b]">{metric.label}</p>
+              <p className="text-brand-body">{metric.label}</p>
             </motion.div>
           ))}
         </motion.div>
 
         <motion.figure variants={itemVariants}>
           <blockquote className="max-w-3xl mx-auto text-center">
-            <p className="text-2xl md:text-3xl text-[#1a1523] mb-8 font-[family-name:var(--font-serif)] italic leading-relaxed">
+            <p className="text-2xl md:text-3xl text-brand-ink mb-8 font-[family-name:var(--font-serif)] italic leading-relaxed">
               &quot;We had 8,000 contacts just sitting there. Within 60 days, we booked 340
               appointments and closed $180K in new business.&quot;
             </p>
-            <figcaption className="text-[#5c566b] font-medium text-lg">
+            <figcaption className="text-brand-body font-medium text-lg">
               &mdash; Real Estate Team Lead
             </figcaption>
           </blockquote>

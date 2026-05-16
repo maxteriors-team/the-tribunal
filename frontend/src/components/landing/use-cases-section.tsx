@@ -69,12 +69,12 @@ export function UseCasesSection() {
         viewport={{ once: true }}
       >
         <motion.div className="text-center max-w-4xl mx-auto mb-20" variants={itemVariants}>
-          <p className="text-sm font-medium text-[#8b7fa3] tracking-widest uppercase mb-6">
+          <p className="text-sm font-medium text-brand-mute tracking-widest uppercase mb-6">
             Who It&apos;s For
           </p>
           <h2
             id="use-cases-heading"
-            className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-[#1a1523] font-[family-name:var(--font-serif)] leading-[1.1]"
+            className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-brand-ink font-[family-name:var(--font-serif)] leading-[1.1]"
           >
             If you have a database, you have untapped revenue.
           </h2>
@@ -91,20 +91,20 @@ export function UseCasesSection() {
               key={industry.title}
               variants={itemVariants}
               role="listitem"
-              className="bg-[#f3eff8] rounded-3xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-[#eee9f3]"
+              className="bg-brand-bg rounded-3xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-brand-bg-2"
             >
               <div className="flex items-start gap-5">
                 <div
-                  className="size-14 bg-[#e5e0eb] rounded-2xl flex items-center justify-center shrink-0"
+                  className="size-14 bg-brand-line rounded-2xl flex items-center justify-center shrink-0"
                   aria-hidden="true"
                 >
-                  <industry.icon className="size-7 text-[#6b5b8a]" />
+                  <industry.icon className="size-7 text-brand-mute-2" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-[#1a1523] mb-2 font-[family-name:var(--font-serif)]">
+                  <h3 className="text-xl font-bold text-brand-ink mb-2 font-[family-name:var(--font-serif)]">
                     {industry.title}
                   </h3>
-                  <p className="text-[#5c566b]">{industry.description}</p>
+                  <p className="text-brand-body">{industry.description}</p>
                 </div>
               </div>
             </motion.article>
