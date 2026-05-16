@@ -1,0 +1,105 @@
+name: Load test (manual)
+
+# Manual-only. Load tests must never fire on push/PR/schedule:
+# they hit a live staging environment, generate real DB load, and
+# can trip alarms.
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Which load script to run
+        required: true
+        type: choice
+        default: telnyx_webhook
+        options:
+          - telnyx_webhook
+          - calcom_webhook
+          - auth_login
+          - voice_ws
+          - all
+      base_url:
+        description: "Target base URL (must be a staging host, NOT production)"
+        required: true
+        type: string
+        default: https://staging.thetribunal.app
+      ws_path_template:
+        description: "WS path template for voice_ws (default /voice/stream/{call_id})"
+        required: false
+        type: string
+        default: /voice/stream/{call_id}
+
+concurrency:
+  group: load-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Guard — refuse production hosts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject production URLs
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          case "$BASE_URL" in
+            *staging*|*stg*|*.dev|*localhost*|*127.0.0.1*)
+              echo "Target looks like staging: $BASE_URL"
+              ;;
+            *)
+              echo "::error::Refusing to run load tests against '$BASE_URL'. Set a staging host."
+              exit 1
+              ;;
+          esac
+
+  run:
+    name: k6 ${{ inputs.script }}
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install k6
+        run: |
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Run k6
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          CALCOM_WEBHOOK_SECRET: ${{ secrets.STAGING_CALCOM_WEBHOOK_SECRET }}
+          WS_TICKET: ${{ secrets.STAGING_WS_TICKET }}
+          WS_PATH_TEMPLATE: ${{ inputs.ws_path_template }}
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          set -euo pipefail
+          run_one() {
+            local name="$1"
+            echo "::group::k6 ${name}"
+            k6 run --summary-export "k6-${name}-summary.json" \
+              "backend/tests/load/${name}.js"
+            echo "::endgroup::"
+          }
+          if [ "$SCRIPT" = "all" ]; then
+            run_one telnyx_webhook
+            run_one calcom_webhook
+            run_one auth_login
+            run_one voice_ws
+          else
+            run_one "$SCRIPT"
+          fi
+
+      - name: Upload k6 summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summaries
+          path: k6-*-summary.json
+          if-no-files-found: ignore
