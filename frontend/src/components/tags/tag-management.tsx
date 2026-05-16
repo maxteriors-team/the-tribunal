@@ -25,13 +25,8 @@ import {
 import { TagBadge } from "@/components/tags/tag-badge";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "@/hooks/useTags";
 import { useWorkspaceId } from "@/hooks/use-workspace-id";
+import { TAG_COLORS, DEFAULT_TAG_COLOR } from "@/lib/tag-colors";
 import type { Tag } from "@/types";
-
-const PRESET_COLORS = [
-  "#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6",
-  "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#06b6d4",
-  "#84cc16", "#a855f7",
-];
 
 export function TagManagement() {
   const workspaceId = useWorkspaceId() ?? "";
@@ -44,7 +39,7 @@ export function TagManagement() {
   const [editTag, setEditTag] = useState<Tag | null>(null);
   const [deleteConfirmTag, setDeleteConfirmTag] = useState<Tag | null>(null);
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#6366f1");
+  const [color, setColor] = useState(DEFAULT_TAG_COLOR);
 
   const tags = tagsData?.items ?? [];
 
@@ -55,7 +50,7 @@ export function TagManagement() {
       toast.success("Tag created");
       setCreateOpen(false);
       setName("");
-      setColor("#6366f1");
+      setColor(DEFAULT_TAG_COLOR);
     } catch {
       toast.error("Failed to create tag");
     }
@@ -71,7 +66,7 @@ export function TagManagement() {
       toast.success("Tag updated");
       setEditTag(null);
       setName("");
-      setColor("#6366f1");
+      setColor(DEFAULT_TAG_COLOR);
     } catch {
       toast.error("Failed to update tag");
     }
@@ -96,7 +91,7 @@ export function TagManagement() {
 
   const openCreate = () => {
     setName("");
-    setColor("#6366f1");
+    setColor(DEFAULT_TAG_COLOR);
     setCreateOpen(true);
   };
 
@@ -177,7 +172,7 @@ export function TagManagement() {
             <div>
               <p className="text-sm text-muted-foreground mb-2">Color</p>
               <div className="flex flex-wrap gap-2">
-                {PRESET_COLORS.map((c) => (
+                {TAG_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
@@ -235,7 +230,7 @@ export function TagManagement() {
             <div>
               <p className="text-sm text-muted-foreground mb-2">Color</p>
               <div className="flex flex-wrap gap-2">
-                {PRESET_COLORS.map((c) => (
+                {TAG_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"

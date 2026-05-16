@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DEFAULT_TAG_COLOR } from "@/lib/tag-colors";
 
 interface TagBadgeProps {
   name: string;
@@ -26,7 +27,7 @@ export function TagBadge({ name, color, onRemove, className }: TagBadgeProps) {
   const bgColor = rgb
     ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`
     : "rgba(99, 102, 241, 0.15)";
-  const textColor = color || "#6366f1";
+  const textColor = color || DEFAULT_TAG_COLOR;
 
   return (
     <span

@@ -13,12 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { TagBadge } from "@/components/tags/tag-badge";
 import { useTags, useCreateTag } from "@/hooks/useTags";
 import { cn } from "@/lib/utils";
+import { TAG_COLORS } from "@/lib/tag-colors";
 import type { Tag } from "@/types";
-
-const DEFAULT_COLORS = [
-  "#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6",
-  "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#06b6d4",
-];
 
 interface TagPickerProps {
   workspaceId: string;
@@ -60,7 +56,7 @@ export function TagPicker({
   const handleCreateTag = async () => {
     if (!search.trim() || exactMatch) return;
     const randomColor =
-      DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)];
+      TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
     const newTag = await createTag.mutateAsync({
       name: search.trim(),
       color: randomColor,
