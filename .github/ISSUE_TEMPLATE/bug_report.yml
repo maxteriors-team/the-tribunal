@@ -1,0 +1,113 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug or regression in The Tribunal.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the form below so we can reproduce and fix the issue quickly.
+
+        Before submitting, please search [existing issues](https://github.com/Gahroot/the-tribunal/issues) to avoid duplicates.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before filing.
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can consistently reproduce this bug (or have included logs/screenshots showing it).
+          required: true
+        - label: This is not a security vulnerability (those should be reported privately via the security policy).
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Which part of the app is affected?
+      options:
+        - Frontend (Next.js dashboard)
+        - Backend API (FastAPI)
+        - Background workers
+        - Telephony (Telnyx / voice / SMS)
+        - Calendar (Cal.com)
+        - AI agents / voice
+        - Authentication / onboarding
+        - Database / migrations
+        - Infrastructure / deployment
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear and concise description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps a maintainer can follow to reproduce the bug.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Enter '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include exact error messages, stack traces, or screenshots if helpful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Where did this happen? Include versions, OS, browser, and deployment context.
+      value: |
+        - Deployment: <!-- production / staging / local dev -->
+        - OS: <!-- macOS 14.5 / Ubuntu 24.04 / Windows 11 -->
+        - Browser (if frontend): <!-- Chrome 126 / Safari 17 / Firefox 128 -->
+        - Node version (if local frontend): <!-- node --version -->
+        - Python version (if local backend): <!-- python --version -->
+        - Commit / branch (if local): <!-- git rev-parse --short HEAD -->
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Paste any backend logs, browser console errors, network responses, or screenshots. Redact secrets and PII.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that would help us diagnose this (recent changes, workarounds tried, suspected cause).
+    validations:
+      required: false

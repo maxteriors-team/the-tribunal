@@ -1,0 +1,82 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for The Tribunal.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please describe the problem you're trying to solve before proposing a solution — that helps us evaluate the best approach.
+
+        Before submitting, please search [existing issues](https://github.com/Gahroot/the-tribunal/issues?q=is%3Aissue+label%3Aenhancement) to avoid duplicates.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before filing.
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is a concrete proposal, not a general support question.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Which part of the app would this feature touch?
+      options:
+        - Frontend (Next.js dashboard)
+        - Backend API (FastAPI)
+        - Background workers
+        - Telephony (Telnyx / voice / SMS)
+        - Calendar (Cal.com)
+        - AI agents / voice
+        - Authentication / onboarding
+        - Database / migrations
+        - Infrastructure / deployment
+        - Cross-cutting / multiple
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve? Who is affected, and how often does it come up?
+      placeholder: I'm always frustrated when [...] because [...].
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you'd like. Be as concrete as possible (UI sketch, API shape, example flow).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider, and why did you discard them?
+    validations:
+      required: false
+
+  - type: textarea
+    id: user-impact
+    attributes:
+      label: User impact
+      description: Who benefits from this, and how? Estimate the size of the affected user group if you can.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, links to similar features in other products, or any other relevant context.
+    validations:
+      required: false
