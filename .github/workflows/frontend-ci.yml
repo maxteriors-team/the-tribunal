@@ -54,7 +54,27 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Verify package-lock.json is in sync with package.json
+        # Frozen-lockfile discipline (mirrors `uv lock --check` on the backend). `npm ci`
+        # already refuses to install when the lockfile diverges, but this explicit step
+        # gives a clearer failure message and runs before any install side-effects.
+        run: |
+          set -euo pipefail
+          if [ ! -f package-lock.json ]; then
+            echo "::error file=frontend/package.json::package-lock.json is missing. Run 'cd frontend && npm install' and commit the lockfile."
+            exit 1
+          fi
+          # --package-lock-only + --dry-run would rewrite the lockfile; instead use
+          # `npm ci --dry-run` which exits non-zero on package.json/lockfile drift
+          # without touching node_modules.
+          if ! npm ci --dry-run >/dev/null 2>&1; then
+            echo "::error file=frontend/package-lock.json::package-lock.json is out of sync with package.json. Run 'cd frontend && npm install' and commit the regenerated lockfile."
+            exit 1
+          fi
+
+      - name: Install dependencies (frozen lockfile)
+        # `npm ci` requires package-lock.json and refuses to update it — the npm
+        # equivalent of `uv sync --frozen`. Never replace with `npm install` in CI.
         run: npm ci
 
       - name: Lint
@@ -90,7 +110,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dependencies (frozen lockfile)
+        # `npm ci` enforces the same lockfile guarantee as the build job above;
+        # the explicit sync check there gates the workflow, so this step is safe
+        # to assume an in-sync lockfile.
         run: npm ci
 
       - name: Resolve Playwright version

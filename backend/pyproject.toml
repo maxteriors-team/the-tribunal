@@ -5,61 +5,123 @@ description = "AI-powered CRM backend with voice agents, SMS campaigns, and Cal.
 readme = "README.md"
 requires-python = ">=3.12"
 license = "LicenseRef-Proprietary"
+# Dependency floor policy
+# ------------------------
+# Every floor below carries an intent tag. Bump rules:
+#   * `CVE fix`           — floor exists to dodge a known CVE; never lower it.
+#   * `security hardening` — non-CVE security improvement (defaults, audits); bump freely upward.
+#   * `breaking change floor` — version where an upstream breaking change settled in our favour.
+#   * `runtime requirement` — required for the language/server/protocol version we run.
+#   * `feature floor`     — code in this repo calls APIs added at this version.
+#   * `baseline`          — chosen as the current modern release at the time of pinning; safe to bump.
+# When raising a floor, document the new tag inline; do not delete prior context.
 dependencies = [
     # FastAPI + ASGI
+    # CVE fix: fastapi 0.109.1+ vendors python-multipart fix for CVE-2024-24762 (Content-Type ReDoS).
+    # CVE fix: fastapi >=0.136 pulls starlette >=0.47.2, which patches CVE-2025-54121 (multipart DoS).
     "fastapi>=0.136.1",
+    # baseline: matches httptools/h11 wheels available for Python 3.12+; ASGI lifespan parity with starlette 0.47+.
     "uvicorn[standard]>=0.47.0",
+    # runtime requirement: lower bound only — fastapi pins the effective upper. Kept explicit so a future
+    # fastapi downgrade cannot silently drag in pre-CVE-2025-54121 starlette. Real floor is fastapi's.
     "starlette>=0.40.0",
     # WebSocket client (Grok realtime, audio streaming)
+    # feature floor: websockets 14 introduced the new asyncio API used in app/websockets/voice_bridge.py.
     "websockets>=14.0",
     # YAML (scenario/config loaders)
+    # baseline: 6.0 dropped Python 2 support and is the long-standing LTS line.
     "pyyaml>=6.0",
     # Database
+    # feature floor: SQLAlchemy 2.0.49 carries the AsyncSession.scalars()/Row.tuple typing fixes we rely on.
     "sqlalchemy[asyncio]>=2.0.49",
+    # runtime requirement: 0.30 is the first release with full PostgreSQL 17 protocol support.
     "asyncpg>=0.30.0",
+    # feature floor: Alembic 1.18 added async migration env autogenerate fixes used by our env.py.
     "alembic>=1.18.4",
+    # runtime requirement: greenlet 3.1+ required by sqlalchemy[asyncio] on Python 3.12.
     "greenlet>=3.1.0",
     # Redis
+    # breaking change floor: redis-py 5→7 dropped sync-style decode params and reworked async pubsub.
+    # We rely on the 7.x async cluster client semantics in app/db/redis.py; do not downgrade below 7.4.
     "redis>=7.4.0",
     # Validation
+    # CVE fix: pydantic 2.13.4 patches the serialize_as_any regression chain from 2.12 (no CVE, but
+    # corrupted output qualifies as data-integrity); also required for Python 3.14 forward-compat.
+    # breaking change floor: 2.12 changed model_fields_set behaviour for extras; our schemas assume 2.13+.
     "pydantic>=2.13.4",
+    # runtime requirement: pydantic-settings 2.14 aligns with pydantic 2.13's CoreSchema changes.
     "pydantic-settings>=2.14.1",
+    # security hardening: 2.2 added stricter IDN/RFC 6531 validation used by app/schemas/contact.py.
     "email-validator>=2.2.0",
     # Authentication & Encryption
+    # baseline: 2.8 is the first release with typed Algorithm enum we import in app/core/security.py.
     "pyjwt[crypto]>=2.8.0",
+    # security hardening: 23.1 hardened the default Argon2id parameters (mem cost, parallelism).
     "argon2-cffi>=23.1.0",
+    # baseline: bcrypt 4.x rewrote to Rust; 4.0 is the floor that ships pre-built wheels for 3.12/3.13.
     "bcrypt>=4.0.0",
+    # CVE fix: python-multipart 0.0.28 is the latest 0.x patch carrying the CVE-2024-24762 ReDoS fix
+    # (originally landed in 0.0.7). Newer 1.x is gated by upstream FastAPI; do not lower.
     "python-multipart>=0.0.28",
     # HTTP Client
+    # feature floor: httpx 0.28 made the `proxies=` → `proxy=` rename and is the floor openai 2.x assumes.
     "httpx>=0.28.0",
     # OpenAI
+    # feature floor: openai 2.36 is the first SDK with the Realtime API shape we use in app/services/ai/.
+    # breaking change floor: 2.x dropped the legacy openai.ChatCompletion module our codebase no longer uses.
     "openai>=2.36.0",
     # Logging
+    # feature floor: structlog 24.4 added the `EventRenamer` processor used by app/core/logging.py.
     "structlog>=24.4.0",
     # Utilities
+    # baseline: 8.13 ships up-to-date carrier/region metadata.
     "phonenumbers>=8.13.0",
+    # baseline: resend 2.30.1 is the SDK release matching the current Resend API surface we call.
     "resend>=2.30.1",
+    # security hardening: svix 1.93 ships the rotated signature-verification defaults; older versions
+    # accepted weaker HMAC parameters.
     "svix>=1.93.0",
+    # security hardening: beautifulsoup4 4.14 includes the parser hardening for nested-tag stack overflow.
     "beautifulsoup4>=4.14.3",
     # Audio resampling (anti-aliased sample rate conversion)
+    # feature floor: soxr 0.5 added the Float32 numpy-array signature we pass from the voice bridge.
     "soxr>=0.5.0",
     # Statistics (bandit A/B testing)
+    # runtime requirement: numpy 1.26 is the first release with wheels for Python 3.12.
     "numpy>=1.26.0",
+    # runtime requirement: scipy 1.12 dropped distutils and is the floor compatible with numpy 1.26+/3.12.
     "scipy>=1.12.0",
     # ML (TF-IDF similarity for IVR loop detection)
+    # baseline: scikit-learn 1.5 is the floor that supports numpy 2 / Python 3.12.
     "scikit-learn>=1.5.0",
+    # CVE fix: cryptography >=46.0.7 patches CVE-2026-39892 (non-contiguous buffer overflow); >=46.0.6
+    # patches CVE-2026-34073 (X.509 name-constraint bypass); >=46.0.0 patches CVE-2026-26007 (ECC
+    # subgroup attack via SECT curves). 48.0.0 is the current stable that bundles all three plus
+    # OpenSSL 3.5.x. Do not lower below 46.0.7 under any circumstance.
     "cryptography>=48.0.0",
+    # runtime requirement: stdlib `audioop` was removed in Python 3.13; this is the PyPI backport.
     "audioop-lts>=0.2.1 ; python_full_version >= '3.13'",
+    # feature floor: stripe 15.1 carries the 2025-09 API version pinned in app/services/billing/.
     "stripe>=15.1.0",
+    # security hardening: sentry-sdk 2.60 dropped a leaky breadcrumb path for FastAPI form data.
     "sentry-sdk[fastapi]>=2.60.0",
+    # feature floor: 7.1 added the `inprogress_name` arg we configure in app/main.py.
     "prometheus-fastapi-instrumentator>=7.1.0",
+    # feature floor: tenacity 9.1 introduced the typed `retry_if_exception_type` overloads used in
+    # app/services/telephony/telnyx_sms.py.
     "tenacity>=9.1.4",
+    # runtime requirement: OpenTelemetry 0.62b1 (1.41.x) is the matched pre-1.0 contrib series — all
+    # five `opentelemetry-instrumentation-*` packages must move in lockstep with the SDK to avoid
+    # ABI mismatches at import time. Bump them as a group.
     "opentelemetry-distro>=0.62b1",
     "opentelemetry-instrumentation-fastapi>=0.62b1",
     "opentelemetry-instrumentation-httpx>=0.62b1",
     "opentelemetry-instrumentation-sqlalchemy>=0.62b1",
     "opentelemetry-instrumentation-redis>=0.62b1",
     "opentelemetry-exporter-otlp>=1.41.1",
+    # baseline: pybreaker 1.4 is the first release with typed async support used in our circuit-breaker
+    # wrapper around outbound Telnyx calls.
+    "pybreaker>=1.4.1",
 ]
 
 [project.scripts]
@@ -110,6 +172,28 @@ testpaths = ["tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: integration tests that hit real external services (skipped by default; run with -m integration)",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = [
+    "app/alembic/*",
+    "app/main.py",
+    "*/__init__.py",
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "\\.\\.\\.",
 ]
 
 [dependency-groups]
