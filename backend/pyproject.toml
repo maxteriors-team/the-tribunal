@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AI-powered CRM backend with voice agents, SMS campaigns, and Cal.com integration"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "LicenseRef-Proprietary"
 dependencies = [
     # FastAPI + ASGI
     "fastapi>=0.136.1",
