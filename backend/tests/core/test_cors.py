@@ -43,13 +43,12 @@ def _make_cors_app() -> FastAPI:
         allow_origin_regex=_build_pattern_from_settings(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=[
-            "Authorization",
-            "Content-Type",
-            "Accept",
-            "Origin",
-            "X-Requested-With",
-        ],
+        # Mirror the production allow-list. Auth flows through httpOnly
+        # cookies (gated by ``Access-Control-Allow-Credentials``, not
+        # ``Access-Control-Allow-Headers``), so the only request header the
+        # frontend ever sends cross-origin is ``Content-Type``. See
+        # ``backend/app/main.py`` for the per-header rationale.
+        allow_headers=["Content-Type"],
     )
 
     @app.get("/ping")
@@ -70,39 +69,61 @@ async def cors_client() -> AsyncIterator[AsyncClient]:
         yield ac
 
 
-async def _preflight(client: AsyncClient, origin: str) -> str | None:
+async def _preflight(
+    client: AsyncClient, origin: str, *, request_headers: str = "content-type"
+) -> str | None:
     """Send a CORS preflight and return the echoed ``access-control-allow-origin``.
 
     Returns ``None`` when the middleware refuses to echo the origin (the
-    request is rejected from a CORS standpoint even though Starlette still
-    returns 200 for the OPTIONS handler).
+    origin itself is rejected by the allow-list / regex).
+
+    ``request_headers`` is the value of ``Access-Control-Request-Headers``.
+    Starlette echoes the origin even when a requested header isn't in
+    ``allow_headers`` — it instead returns a 400 status code. Use
+    :func:`_preflight_status` to assert on header-allow-list behaviour.
     """
     response = await client.options(
         "/ping",
         headers={
             "Origin": origin,
             "Access-Control-Request-Method": "GET",
-            "Access-Control-Request-Headers": "authorization",
+            "Access-Control-Request-Headers": request_headers,
         },
     )
     value = response.headers.get("access-control-allow-origin")
     return value if value is None else str(value)
 
 
+async def _preflight_status(client: AsyncClient, origin: str, *, request_headers: str) -> int:
+    """Send a CORS preflight and return the HTTP status code.
+
+    Starlette's ``CORSMiddleware`` returns ``200`` when every requested
+    header is in ``allow_headers`` and ``400`` otherwise. The browser
+    treats anything non-2xx as a failed preflight and blocks the actual
+    request, so asserting on status is the correct way to verify the
+    allow-list shape.
+    """
+    response = await client.options(
+        "/ping",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": request_headers,
+        },
+    )
+    return response.status_code
+
+
 class TestVercelCorsAllowList:
     """The CORS regex only trusts the project's own Vercel team."""
 
-    async def test_team_preview_origin_is_allowed(
-        self, cors_client: AsyncClient
-    ) -> None:
+    async def test_team_preview_origin_is_allowed(self, cors_client: AsyncClient) -> None:
         """A preview under ``ngrout70-6776s-projects`` is echoed back."""
         origin = "https://aicrm-abc123-ngrout70-6776s-projects.vercel.app"
         echoed = await _preflight(cors_client, origin)
         assert echoed == origin
 
-    async def test_foreign_vercel_origin_is_rejected(
-        self, cors_client: AsyncClient
-    ) -> None:
+    async def test_foreign_vercel_origin_is_rejected(self, cors_client: AsyncClient) -> None:
         """A ``*.vercel.app`` origin outside the team is NOT echoed back.
 
         This is the regression case: the old regex
@@ -115,17 +136,13 @@ class TestVercelCorsAllowList:
             f"got Access-Control-Allow-Origin={echoed!r}"
         )
 
-    async def test_foreign_team_preview_is_rejected(
-        self, cors_client: AsyncClient
-    ) -> None:
+    async def test_foreign_team_preview_is_rejected(self, cors_client: AsyncClient) -> None:
         """A preview under a different team slug is NOT echoed back."""
         origin = "https://aicrm-abc123-someoneelses-projects.vercel.app"
         echoed = await _preflight(cors_client, origin)
         assert echoed is None
 
-    async def test_team_slug_as_root_subdomain_is_rejected(
-        self, cors_client: AsyncClient
-    ) -> None:
+    async def test_team_slug_as_root_subdomain_is_rejected(self, cors_client: AsyncClient) -> None:
         """An origin spoofing the team slug as the only subdomain is rejected.
 
         ``https://ngrout70-6776s-projects.vercel.app`` is NOT a real Vercel
@@ -136,13 +153,50 @@ class TestVercelCorsAllowList:
         echoed = await _preflight(cors_client, origin)
         assert echoed is None
 
-    async def test_localhost_origin_still_allowed(
-        self, cors_client: AsyncClient
-    ) -> None:
+    async def test_localhost_origin_still_allowed(self, cors_client: AsyncClient) -> None:
         """The default ``http://localhost:3000`` origin remains allowed."""
         origin = "http://localhost:3000"
         echoed = await _preflight(cors_client, origin)
         assert echoed == origin
+
+
+class TestCorsAllowedHeaders:
+    """The allow-list must be the minimum the frontend actually sends.
+
+    Auth is cookie-based (``access_token`` / ``refresh_token`` httpOnly
+    cookies), so ``Authorization`` is no longer expected on cross-origin
+    requests to this API. Trimming the allow-list shrinks the surface a
+    malicious page can exercise via the browser.
+    """
+
+    async def test_content_type_is_allowed(self, cors_client: AsyncClient) -> None:
+        """``Content-Type`` is the only request header the frontend sets."""
+        origin = "http://localhost:3000"
+        status = await _preflight_status(cors_client, origin, request_headers="content-type")
+        assert status == 200
+
+    async def test_authorization_is_rejected(self, cors_client: AsyncClient) -> None:
+        """Preflights asking for ``Authorization`` fail with 400.
+
+        Regression guard: the previous allow-list included ``Authorization``
+        even though no browser code path sends it to this backend (the two
+        ``Authorization`` headers in the frontend go directly to
+        ``api.openai.com``). Re-adding it without a real need re-opens that
+        surface to any compromised origin.
+        """
+        origin = "http://localhost:3000"
+        status = await _preflight_status(cors_client, origin, request_headers="authorization")
+        assert status == 400, (
+            "Authorization must not be CORS-allowed: the frontend authenticates "
+            "via httpOnly cookies and never sends an Authorization header to "
+            f"this backend. Got preflight status {status}."
+        )
+
+    async def test_x_requested_with_is_rejected(self, cors_client: AsyncClient) -> None:
+        """``X-Requested-With`` was in the old list but nothing sends it."""
+        origin = "http://localhost:3000"
+        status = await _preflight_status(cors_client, origin, request_headers="x-requested-with")
+        assert status == 400
 
 
 class TestProductionAppCorsRegex:
@@ -166,10 +220,27 @@ class TestProductionAppCorsRegex:
         )
 
         compiled = re.compile(pattern_obj)
-        assert compiled.match(
-            "https://aicrm-abc123-ngrout70-6776s-projects.vercel.app"
-        )
+        assert compiled.match("https://aicrm-abc123-ngrout70-6776s-projects.vercel.app")
         assert not compiled.match("https://evil-attacker.vercel.app")
-        assert not compiled.match(
-            "https://aicrm-abc123-someoneelses-projects.vercel.app"
+        assert not compiled.match("https://aicrm-abc123-someoneelses-projects.vercel.app")
+
+    def test_app_allow_headers_is_minimal(self) -> None:
+        """The production app must not re-introduce ``Authorization`` etc.
+
+        Auth flows through httpOnly cookies; ``Content-Type`` is the only
+        request header the frontend ever sets cross-origin. Re-adding
+        ``Authorization``, ``X-Requested-With``, ``Accept``, or ``Origin``
+        without a real need widens the CORS surface.
+        """
+        cors_layers = [
+            m
+            for m in production_app.user_middleware
+            if getattr(m.cls, "__name__", None) == CORSMiddleware.__name__
+        ]
+        assert cors_layers, "Production app must register CORSMiddleware"
+        allow_headers = cors_layers[0].kwargs.get("allow_headers")
+        assert allow_headers == ["Content-Type"], (
+            "Production CORS allow_headers must be exactly ['Content-Type']; "
+            f"got {allow_headers!r}. If you need to add a header, document why "
+            "in app/main.py and update this test."
         )
