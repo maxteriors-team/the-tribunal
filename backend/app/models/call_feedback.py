@@ -46,9 +46,7 @@ class CallFeedback(Base):
 
     __tablename__ = "call_feedback"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Link to the call
     message_id: Mapped[uuid.UUID] = mapped_column(
@@ -87,9 +85,7 @@ class CallFeedback(Base):
     )
 
     # Rating options
-    rating: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )  # 1-5 star rating
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5 star rating
     thumbs: Mapped[ThumbsRating | None] = mapped_column(
         SAEnum(
             ThumbsRating,
@@ -109,9 +105,7 @@ class CallFeedback(Base):
     feedback_signals: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # LLM quality assessment (for auto_quality source)
-    quality_score: Mapped[float | None] = mapped_column(
-        Float, nullable=True
-    )  # 0.0-1.0
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0.0-1.0
     quality_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps

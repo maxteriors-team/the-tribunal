@@ -41,7 +41,8 @@ class FollowupWorker(RetryableWorker, BaseWorker):
 
             # Query conversations that need follow-ups
             result = await db.execute(
-                select(Conversation).where(
+                select(Conversation)
+                .where(
                     and_(
                         Conversation.followup_enabled.is_(True),
                         Conversation.next_followup_at.is_not(None),

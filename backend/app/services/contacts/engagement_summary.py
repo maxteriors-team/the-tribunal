@@ -17,9 +17,7 @@ from app.models.conversation import Conversation, Message
 from app.schemas.contact import ContactEngagementSummary
 from app.utils.phone import normalize_phone_safe
 
-ANSWERED_OUTCOMES = frozenset(
-    {"completed", "appointment_booked", "lead_qualified", "voicemail"}
-)
+ANSWERED_OUTCOMES = frozenset({"completed", "appointment_booked", "lead_qualified", "voicemail"})
 
 
 async def get_engagement_summary(
@@ -32,9 +30,7 @@ async def get_engagement_summary(
     since_7d = now - timedelta(days=7)
     since_30d = now - timedelta(days=30)
 
-    normalized_phone = (
-        normalize_phone_safe(contact.phone_number) if contact.phone_number else None
-    )
+    normalized_phone = normalize_phone_safe(contact.phone_number) if contact.phone_number else None
 
     conv_conditions = [Conversation.contact_id == contact.id]
     if contact.phone_number:
@@ -55,12 +51,8 @@ async def get_engagement_summary(
     # aggregates. AsyncSession is NOT safe for concurrent statements on a single
     # connection (raises InvalidRequestError), so we issue one query per round-trip
     # rather than gathering multiple `db.scalar()` calls in parallel.
-    is_outbound_non_voice = (Message.direction == "outbound") & (
-        Message.channel != "voice"
-    )
-    is_inbound_non_voice = (Message.direction == "inbound") & (
-        Message.channel != "voice"
-    )
+    is_outbound_non_voice = (Message.direction == "outbound") & (Message.channel != "voice")
+    is_inbound_non_voice = (Message.direction == "inbound") & (Message.channel != "voice")
     is_voice = Message.channel == "voice"
 
     msg_stats_stmt = select(
@@ -109,12 +101,14 @@ async def get_engagement_summary(
     last_appt_at: datetime | None = appt_row.last_appt_at
 
     channel_rows = (
-        await db.execute(
-            select(Message.channel)
-            .where(Message.conversation_id.in_(conv_id_subq))
-            .distinct()
+        (
+            await db.execute(
+                select(Message.channel).where(Message.conversation_id.in_(conv_id_subq)).distinct()
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     raw_channels = {c for c in channel_rows if c}
     channels_used: list[str] = []
     if "sms" in raw_channels:

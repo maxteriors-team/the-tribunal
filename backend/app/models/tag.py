@@ -19,9 +19,7 @@ class Tag(Base):
 
     __tablename__ = "tags"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -46,9 +44,7 @@ class Tag(Base):
         "ContactTag", back_populates="tag", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "name", name="uq_tags_workspace_name"),
-    )
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_tags_workspace_name"),)
 
     def __repr__(self) -> str:
         return f"<Tag(id={self.id}, name={self.name}, color={self.color})>"
@@ -59,9 +55,7 @@ class ContactTag(Base):
 
     __tablename__ = "contact_tags"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     contact_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("contacts.id", ondelete="CASCADE"),
@@ -83,9 +77,7 @@ class ContactTag(Base):
     contact: Mapped["Contact"] = relationship("Contact", back_populates="contact_tags")
     tag: Mapped["Tag"] = relationship("Tag", back_populates="contact_tags")
 
-    __table_args__ = (
-        UniqueConstraint("contact_id", "tag_id", name="uq_contact_tags_contact_tag"),
-    )
+    __table_args__ = (UniqueConstraint("contact_id", "tag_id", name="uq_contact_tags_contact_tag"),)
 
     def __repr__(self) -> str:
         return f"<ContactTag(contact_id={self.contact_id}, tag_id={self.tag_id})>"

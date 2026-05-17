@@ -133,9 +133,7 @@ async def validate_refresh_token(db: AsyncSession, jti: str, user_id: int) -> bo
     from app.models.refresh_token import RefreshToken
 
     token_hash = _hash_jti(jti)
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     record = result.scalar_one_or_none()
 
     if record is None:
@@ -155,9 +153,7 @@ async def revoke_refresh_token(db: AsyncSession, jti: str) -> None:
 
     token_hash = _hash_jti(jti)
     await db.execute(
-        update(RefreshToken)
-        .where(RefreshToken.token_hash == token_hash)
-        .values(revoked=True)
+        update(RefreshToken).where(RefreshToken.token_hash == token_hash).values(revoked=True)
     )
 
 
@@ -179,8 +175,6 @@ async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
     from app.models.refresh_token import RefreshToken
 
     result = await db.execute(
-        sa_delete(RefreshToken).where(
-            RefreshToken.expires_at < datetime.now(UTC)
-        )
+        sa_delete(RefreshToken).where(RefreshToken.expires_at < datetime.now(UTC))
     )
     return int(result.rowcount)  # type: ignore[attr-defined]

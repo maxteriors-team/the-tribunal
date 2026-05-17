@@ -39,9 +39,7 @@ class AIImportLeadsResponse(BaseModel):
     total: int = Field(..., description="Total leads submitted")
     imported: int = Field(default=0, description="Successfully imported count (score >= 80)")
     rejected_low_score: int = Field(default=0, description="Leads rejected with score < 80")
-    enrichment_failed: int = Field(
-        default=0, description="Leads where enrichment failed"
-    )
+    enrichment_failed: int = Field(default=0, description="Leads where enrichment failed")
     skipped_duplicates: int = Field(default=0, description="Skipped due to duplicate phone")
     skipped_no_phone: int = Field(default=0, description="Skipped due to missing phone")
     queued_for_enrichment: int = Field(

@@ -21,9 +21,7 @@ router = APIRouter()
 logger = structlog.get_logger()
 
 
-def _verify_signature(
-    payload: bytes, headers: dict[str, str]
-) -> dict[str, Any]:
+def _verify_signature(payload: bytes, headers: dict[str, str]) -> dict[str, Any]:
     """Verify the Svix signature on a Resend webhook and return the parsed event."""
     secret = settings.resend_webhook_secret
 

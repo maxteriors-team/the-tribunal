@@ -20,14 +20,10 @@ class CampaignNumberPool(Base):
 
     __tablename__ = "campaign_number_pools"
     __table_args__ = (
-        UniqueConstraint(
-            "campaign_id", "phone_number_id", name="uq_campaign_phone_number_pool"
-        ),
+        UniqueConstraint("campaign_id", "phone_number_id", name="uq_campaign_phone_number_pool"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("campaigns.id", ondelete="CASCADE"),
@@ -43,15 +39,11 @@ class CampaignNumberPool(Base):
 
     # Pool management
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    priority: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )  # Higher = preferred
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # Higher = preferred
 
     # Usage tracking
     messages_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

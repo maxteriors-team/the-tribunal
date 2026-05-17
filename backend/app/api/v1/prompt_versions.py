@@ -612,9 +612,7 @@ async def compare_versions(
 
     # Run statistical comparison
     stats_service = BanditStatisticsService()
-    comparison = stats_service.compare_versions(
-        active_versions, winner_threshold=winner_threshold
-    )
+    comparison = stats_service.compare_versions(active_versions, winner_threshold=winner_threshold)
 
     # Convert to response format
     version_items = [

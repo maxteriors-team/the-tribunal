@@ -65,9 +65,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                 item_key=f"notify:{action.id}",
             )
 
-    async def _notify_pending_action(
-        self, db: AsyncSession, action: PendingAction
-    ) -> None:
+    async def _notify_pending_action(self, db: AsyncSession, action: PendingAction) -> None:
         """Notify a single pending action; raises on failure for retry."""
         try:
             await self.delivery_service.notify_pending_action(db, action)
@@ -79,9 +77,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
 
     async def _execute_approved_actions(self, db: AsyncSession) -> None:
         """Find approved actions and execute them."""
-        result = await db.execute(
-            select(PendingAction).where(PendingAction.status == "approved")
-        )
+        result = await db.execute(select(PendingAction).where(PendingAction.status == "approved"))
         actions = result.scalars().all()
 
         for action in actions:
@@ -92,9 +88,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                 item_key=f"execute:{action.id}",
             )
 
-    async def _execute_single_action(
-        self, db: AsyncSession, action: PendingAction
-    ) -> None:
+    async def _execute_single_action(self, db: AsyncSession, action: PendingAction) -> None:
         """Execute a single approved action; raises on failure for retry."""
         try:
             await self.gate_service.execute_approved_action(db, action)
@@ -134,17 +128,13 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                     )
                 )
             )
-            profiles_by_agent = {
-                p.agent_id: p for p in profile_result.scalars().all()
-            }
+            profiles_by_agent = {p.agent_id: p for p in profile_result.scalars().all()}
 
             for action in pending_actions:
                 profile = profiles_by_agent.get(action.agent_id)
                 if profile is None:
                     continue
-                timeout_delta = timedelta(
-                    minutes=profile.auto_approve_timeout_minutes
-                )
+                timeout_delta = timedelta(minutes=profile.auto_approve_timeout_minutes)
                 if now >= action.created_at + timeout_delta:
                     action.status = "approved"
                     self.logger.info(

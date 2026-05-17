@@ -17,7 +17,6 @@ Example usage:
     )
 """
 
-
 from typing import Protocol
 
 import httpx
@@ -284,17 +283,17 @@ class MockLLMClient:
         Raises:
             IndexError: If more calls made than responses provided
         """
-        self.calls.append({
-            "system_prompt": system_prompt,
-            "ivr_transcript": ivr_transcript,
-            "conversation_history": conversation_history,
-        })
+        self.calls.append(
+            {
+                "system_prompt": system_prompt,
+                "ivr_transcript": ivr_transcript,
+                "conversation_history": conversation_history,
+            }
+        )
 
         if self.call_count >= len(self.responses):
             self.logger.warning("mock_responses_exhausted", call_count=self.call_count)
-            raise IndexError(
-                f"MockLLMClient exhausted responses after {self.call_count} calls"
-            )
+            raise IndexError(f"MockLLMClient exhausted responses after {self.call_count} calls")
 
         response = self.responses[self.call_count]
         self.call_count += 1

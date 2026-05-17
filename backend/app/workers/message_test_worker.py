@@ -105,9 +105,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
         finally:
             await sms_service.close()
 
-    async def _get_pending_contacts(
-        self, test: MessageTest, db: AsyncSession
-    ) -> list[TestContact]:
+    async def _get_pending_contacts(self, test: MessageTest, db: AsyncSession) -> list[TestContact]:
         """Get pending contacts for the test with row-level locking."""
         pending_result = await db.execute(
             select(TestContact)

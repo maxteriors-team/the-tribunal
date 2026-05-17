@@ -52,9 +52,7 @@ class ReputationTracker:
         log = self.logger.bind(phone_number_id=str(phone_number_id))
 
         # Get phone number
-        result = await db.execute(
-            select(PhoneNumber).where(PhoneNumber.id == phone_number_id)
-        )
+        result = await db.execute(select(PhoneNumber).where(PhoneNumber.id == phone_number_id))
         phone = result.scalar_one_or_none()
         if not phone:
             log.warning("phone_number_not_found")
@@ -65,9 +63,7 @@ class ReputationTracker:
 
         stats_result = await db.execute(
             select(
-                func.coalesce(func.sum(PhoneNumberDailyStats.messages_sent), 0).label(
-                    "sent"
-                ),
+                func.coalesce(func.sum(PhoneNumberDailyStats.messages_sent), 0).label("sent"),
                 func.coalesce(func.sum(PhoneNumberDailyStats.messages_delivered), 0).label(
                     "delivered"
                 ),
@@ -80,9 +76,7 @@ class ReputationTracker:
                 func.coalesce(func.sum(PhoneNumberDailyStats.spam_complaints), 0).label(
                     "complaints"
                 ),
-                func.coalesce(func.sum(PhoneNumberDailyStats.opt_outs), 0).label(
-                    "opt_outs"
-                ),
+                func.coalesce(func.sum(PhoneNumberDailyStats.opt_outs), 0).label("opt_outs"),
             ).where(
                 and_(
                     PhoneNumberDailyStats.phone_number_id == phone_number_id,
@@ -318,9 +312,7 @@ class ReputationTracker:
             phone_number_id: Phone number UUID
             db: Database session
         """
-        await self._atomic_increment(
-            phone_number_id, db, hard_bounces=1, messages_failed=1
-        )
+        await self._atomic_increment(phone_number_id, db, hard_bounces=1, messages_failed=1)
 
     async def increment_soft_bounce(
         self,
@@ -333,9 +325,7 @@ class ReputationTracker:
             phone_number_id: Phone number UUID
             db: Database session
         """
-        await self._atomic_increment(
-            phone_number_id, db, soft_bounces=1, messages_failed=1
-        )
+        await self._atomic_increment(phone_number_id, db, soft_bounces=1, messages_failed=1)
 
     async def increment_spam_complaint(
         self,
@@ -348,9 +338,7 @@ class ReputationTracker:
             phone_number_id: Phone number UUID
             db: Database session
         """
-        await self._atomic_increment(
-            phone_number_id, db, spam_complaints=1, messages_failed=1
-        )
+        await self._atomic_increment(phone_number_id, db, spam_complaints=1, messages_failed=1)
 
     async def increment_opt_out(
         self,
@@ -381,9 +369,7 @@ class ReputationTracker:
         Returns:
             True if released successfully
         """
-        result = await db.execute(
-            select(PhoneNumber).where(PhoneNumber.id == phone_number_id)
-        )
+        result = await db.execute(select(PhoneNumber).where(PhoneNumber.id == phone_number_id))
         phone = result.scalar_one_or_none()
 
         if not phone:
@@ -427,9 +413,7 @@ class ReputationTracker:
         Returns:
             Dictionary with reputation metrics
         """
-        result = await db.execute(
-            select(PhoneNumber).where(PhoneNumber.id == phone_number_id)
-        )
+        result = await db.execute(select(PhoneNumber).where(PhoneNumber.id == phone_number_id))
         phone = result.scalar_one_or_none()
 
         if not phone:

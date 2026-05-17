@@ -34,9 +34,7 @@ async def list_paginated(
     Returns:
         Dict with ``items``, ``total``, ``page``, ``page_size``, ``pages``.
     """
-    result = await paginate(
-        db, query, page=page, page_size=page_size, unique=unique
-    )
+    result = await paginate(db, query, page=page, page_size=page_size, unique=unique)
     return {
         "items": list(result.items),
         "total": result.total,

@@ -19,9 +19,7 @@ class HotLeadNudgeStrategy(NudgeStrategy):
 
     nudge_type = "hot_lead"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         year = now.year
         quarter = (now.month - 1) // 3 + 1

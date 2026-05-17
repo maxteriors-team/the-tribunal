@@ -503,17 +503,17 @@ class ContactService:
             )
             workspace_phone = phone_result.scalar_one_or_none()
             if workspace_phone is None:
-                raise ContactValidationError(
-                    "Specified phone number not found or not SMS-enabled"
-                )
+                raise ContactValidationError("Specified phone number not found or not SMS-enabled")
         else:
             # Use the first available SMS-enabled phone number
             phone_result = await self.db.execute(
-                select(PhoneNumber).where(
+                select(PhoneNumber)
+                .where(
                     PhoneNumber.workspace_id == workspace_id,
                     PhoneNumber.sms_enabled.is_(True),
                     PhoneNumber.is_active.is_(True),
-                ).limit(1)
+                )
+                .limit(1)
             )
             workspace_phone = phone_result.scalar_one_or_none()
             if workspace_phone is None:

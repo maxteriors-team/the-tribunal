@@ -162,9 +162,7 @@ class IVRModeController:
 
         # Update prompt to include IVR navigation guidance
         if self._ivr_detector and self._navigation_goal and self._inject_ivr_context:
-            ivr_prompt = self._ivr_detector.get_ivr_navigation_prompt(
-                self._navigation_goal
-            )
+            ivr_prompt = self._ivr_detector.get_ivr_navigation_prompt(self._navigation_goal)
             await self._inject_ivr_context(ivr_prompt)
 
     async def _switch_to_conversation_mode(self) -> None:

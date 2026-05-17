@@ -85,9 +85,7 @@ async def _claim_webhook_delivery(key: str, log: Any) -> bool:
         client = await get_redis()
         # ``redis-py`` returns ``True`` when the key was set, ``None`` when
         # NX prevented the write because the key already existed.
-        was_set = await client.set(
-            key, "1", nx=True, ex=_IDEMPOTENCY_TTL_SECONDS
-        )
+        was_set = await client.set(key, "1", nx=True, ex=_IDEMPOTENCY_TTL_SECONDS)
         return bool(was_set)
     except Exception as exc:
         log.warning(

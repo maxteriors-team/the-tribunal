@@ -44,7 +44,6 @@ class Settings(BaseSettings):
     # Telnyx Voice
     telnyx_connection_id: str = ""  # Required for outbound calls
 
-
     # Cal.com
     calcom_api_key: str = ""
     calcom_webhook_secret: str = ""

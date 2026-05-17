@@ -76,17 +76,13 @@ class AutomationWorker(RetryableWorker, BaseWorker):
     async def _process_items(self) -> None:
         """Load active automations and evaluate each one."""
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Automation).where(Automation.is_active.is_(True))
-            )
+            result = await db.execute(select(Automation).where(Automation.is_active.is_(True)))
             automations = result.scalars().all()
 
             if not automations:
                 return
 
-            self.logger.debug(
-                "Evaluating automations", count=len(automations)
-            )
+            self.logger.debug("Evaluating automations", count=len(automations))
 
             for automation in automations:
                 await self.execute_with_retry(
@@ -102,9 +98,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
     # Automation evaluation                                                #
     # ------------------------------------------------------------------ #
 
-    async def _evaluate_automation(
-        self, automation: Automation, db: AsyncSession
-    ) -> None:
+    async def _evaluate_automation(self, automation: Automation, db: AsyncSession) -> None:
         """Evaluate a single automation: find matching contacts, run actions."""
         log = self.logger.bind(
             automation_id=str(automation.id),
@@ -161,26 +155,20 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         ]
 
         if trigger in ("appointment_booked", "booking_created"):
-            contacts = await self._contacts_appointment_booked(
-                base_filters, since, db
-            )
+            contacts = await self._contacts_appointment_booked(base_filters, since, db)
 
         elif trigger == "no_show":
             contacts = await self._contacts_no_show(base_filters, since, db)
 
         elif trigger == "contact_tagged":
             tag_name: str = automation.trigger_config.get("tag", "")
-            contacts = await self._contacts_tagged(
-                base_filters, tag_name, since, db
-            )
+            contacts = await self._contacts_tagged(base_filters, tag_name, since, db)
 
         elif trigger == "never_booked":
             inactivity_days: int = int(
                 automation.trigger_config.get("inactivity_days", DEFAULT_NEVER_BOOKED_DAYS)
             )
-            contacts = await self._contacts_never_booked(
-                base_filters, inactivity_days, db
-            )
+            contacts = await self._contacts_never_booked(base_filters, inactivity_days, db)
 
         else:
             self.logger.warning(
@@ -276,9 +264,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         # Must have at least one conversation
         has_conversation = exists(
-            select(Conversation.id).where(
-                Conversation.contact_id == Contact.id
-            )
+            select(Conversation.id).where(Conversation.contact_id == Contact.id)
         )
 
         result = await db.execute(
@@ -351,14 +337,10 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     continue
 
                 if action_type == "send_sms":
-                    await self._action_send_sms(
-                        automation, contact, action_config, db
-                    )
+                    await self._action_send_sms(automation, contact, action_config, db)
 
                 elif action_type == "enroll_campaign":
-                    await self._action_enroll_campaign(
-                        automation, contact, action_config, db
-                    )
+                    await self._action_enroll_campaign(automation, contact, action_config, db)
 
                 elif action_type == "apply_tag":
                     await self._action_apply_tag(contact, action_config, db)
@@ -367,9 +349,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     # Schedule the execution for later — skip remaining actions
                     delay_hours: int = int(action_config.get("hours", 1))
                     execution.status = "scheduled"
-                    execution.scheduled_for = datetime.now(UTC) + timedelta(
-                        hours=delay_hours
-                    )
+                    execution.scheduled_for = datetime.now(UTC) + timedelta(hours=delay_hours)
                     log.info(
                         "Action delayed",
                         delay_hours=delay_hours,
@@ -411,9 +391,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                            {full_name}, {company_name}.
         """
         if not settings.telnyx_api_key:
-            self.logger.warning(
-                "No Telnyx API key configured; cannot send automation SMS"
-            )
+            self.logger.warning("No Telnyx API key configured; cannot send automation SMS")
             return
 
         message_template: str = config.get("message", "")
@@ -433,9 +411,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         message_body = self._render_template(message_template, contact)
 
-        from_number = await self._resolve_from_number(
-            db, contact.id, automation.workspace_id
-        )
+        from_number = await self._resolve_from_number(db, contact.id, automation.workspace_id)
         if not from_number:
             self.logger.warning(
                 "No from-number available for workspace",
@@ -495,10 +471,12 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 and_(
                     Campaign.id == campaign_id,
                     Campaign.workspace_id == automation.workspace_id,
-                    Campaign.status.in_([
-                        CampaignStatus.RUNNING.value,
-                        CampaignStatus.SCHEDULED.value,
-                    ]),
+                    Campaign.status.in_(
+                        [
+                            CampaignStatus.RUNNING.value,
+                            CampaignStatus.SCHEDULED.value,
+                        ]
+                    ),
                 )
             )
         )
@@ -575,9 +553,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
     def _render_template(self, template: str, contact: Contact) -> str:
         """Replace simple {placeholder} tokens in a message template."""
-        full_name = " ".join(
-            filter(None, [contact.first_name, contact.last_name])
-        )
+        full_name = " ".join(filter(None, [contact.first_name, contact.last_name]))
         replacements: dict[str, str] = {
             "first_name": contact.first_name or "",
             "last_name": contact.last_name or "",

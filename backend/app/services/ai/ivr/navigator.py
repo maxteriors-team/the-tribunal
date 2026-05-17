@@ -1,6 +1,5 @@
 """Scripted IVR navigator - extracts menu options and selects DTMF digits without AI."""
 
-
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -66,13 +65,15 @@ class ScriptedNavigator:
     )
 
     # Regex patterns for extracting menu options
-    _MENU_PATTERNS: list[str] = field(default_factory=lambda: [
-        r"press\s+(\d+|star|\*|pound|#)\s+(?:for|to)\s+(.+?)(?:\.|,|$)",
-        r"for\s+(.+?)\s*,?\s*press\s+(\d+|star|\*|pound|#)",
-        r"to\s+(.+?)\s*,?\s*press\s+(\d+|star|\*|pound|#)",
-        r"option\s+(\d+|star|\*|pound|#)\s+(?:for|is|to)\s+(.+?)(?:\.|,|$)",
-        r"(?:say|dial)\s+or\s+press\s+(\d+|star|\*|pound|#)\s+(?:for|to)\s+(.+?)(?:\.|,|$)",
-    ])
+    _MENU_PATTERNS: list[str] = field(
+        default_factory=lambda: [
+            r"press\s+(\d+|star|\*|pound|#)\s+(?:for|to)\s+(.+?)(?:\.|,|$)",
+            r"for\s+(.+?)\s*,?\s*press\s+(\d+|star|\*|pound|#)",
+            r"to\s+(.+?)\s*,?\s*press\s+(\d+|star|\*|pound|#)",
+            r"option\s+(\d+|star|\*|pound|#)\s+(?:for|is|to)\s+(.+?)(?:\.|,|$)",
+            r"(?:say|dial)\s+or\s+press\s+(\d+|star|\*|pound|#)\s+(?:for|to)\s+(.+?)(?:\.|,|$)",
+        ]
+    )
 
     def extract_menu_options(self, transcript: str) -> list[MenuOption]:
         """Extract menu options from an IVR transcript.

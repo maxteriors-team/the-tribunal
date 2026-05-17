@@ -145,9 +145,7 @@ class BanditArmSelector:
                 mean_reward = 0.0
             else:
                 mean_reward = v.total_reward / v.reward_count
-                exploration_bonus = c * math.sqrt(
-                    math.log(total_pulls) / v.reward_count
-                )
+                exploration_bonus = c * math.sqrt(math.log(total_pulls) / v.reward_count)
                 ucb = mean_reward + exploration_bonus
 
             ucb_values.append((v, ucb, mean_reward))
@@ -179,9 +177,7 @@ class BanditArmSelector:
             # Exploit: select best mean reward
             best_version = max(
                 versions,
-                key=lambda v: (v.total_reward / v.reward_count)
-                if v.reward_count > 0
-                else 0.0,
+                key=lambda v: (v.total_reward / v.reward_count) if v.reward_count > 0 else 0.0,
             )
             arm_stats = self._build_arm_stats(best_version, sampled_value=None)
             return best_version, arm_stats, DecisionType.EXPLOIT
@@ -194,9 +190,7 @@ class BanditArmSelector:
     ) -> dict[str, Any]:
         """Build arm statistics snapshot."""
         mean_reward = (
-            version.total_reward / version.reward_count
-            if version.reward_count > 0
-            else 0.0
+            version.total_reward / version.reward_count if version.reward_count > 0 else 0.0
         )
 
         stats: dict[str, Any] = {

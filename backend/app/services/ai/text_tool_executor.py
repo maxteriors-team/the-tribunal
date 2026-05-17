@@ -117,8 +117,7 @@ class TextToolExecutor(BaseToolExecutor):
                     "success": False,
                     "pending_approval": True,
                     "message": (
-                        "I need approval from your operator for this action. "
-                        "They've been notified."
+                        "I need approval from your operator for this action. They've been notified."
                     ),
                 }
             elif decision == "blocked":
@@ -130,11 +129,13 @@ class TextToolExecutor(BaseToolExecutor):
             else:
                 result = await self.execute(function_name, arguments)
 
-            results.append({
-                "tool_call_id": tool_call.id,
-                "role": "tool",
-                "content": json.dumps(result),
-            })
+            results.append(
+                {
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "content": json.dumps(result),
+                }
+            )
 
             self.log.info(
                 "tool_call_completed",
@@ -282,9 +283,7 @@ class TextToolExecutor(BaseToolExecutor):
         for slot in slots:
             if slot.date and slot.time:
                 try:
-                    slot_dt = datetime.strptime(
-                        f"{slot.date} {slot.time}", "%Y-%m-%d %H:%M"
-                    )
+                    slot_dt = datetime.strptime(f"{slot.date} {slot.time}", "%Y-%m-%d %H:%M")
                     formatted = slot_dt.strftime("%A %b %d at %I:%M %p")
                     formatted_slots.append(formatted)
                 except ValueError:
@@ -295,14 +294,9 @@ class TextToolExecutor(BaseToolExecutor):
         if not formatted_slots and slots:
             self.log.warning(
                 "slot_formatting_fallback",
-                raw_slots=[
-                    {"date": s.date, "time": s.time}
-                    for s in slots[:5]
-                ],
+                raw_slots=[{"date": s.date, "time": s.time} for s in slots[:5]],
             )
-            formatted_slots = [
-                f"{s.date} {s.time}" for s in slots[:10]
-            ]
+            formatted_slots = [f"{s.date} {s.time}" for s in slots[:10]]
 
         return {
             "success": True,
@@ -444,10 +438,7 @@ class TextToolExecutor(BaseToolExecutor):
         # Build the pre-filled URL
         name_param = quote(contact.full_name or "", safe="")
         phone_param = quote(contact.phone_number or "", safe="")
-        booking_url = (
-            f"https://cal.com/{username}/{slug}"
-            f"?name={name_param}&phone={phone_param}"
-        )
+        booking_url = f"https://cal.com/{username}/{slug}?name={name_param}&phone={phone_param}"
 
         self.log.info(
             "booking_link_built",
@@ -511,11 +502,7 @@ class TextToolExecutor(BaseToolExecutor):
             self.log.error("calcom_me_failed", status=resp.status_code, body=resp.text[:200])
             return None
         data = resp.json()
-        return (
-            data.get("user", {}).get("username")
-            or data.get("username")
-            or None
-        )
+        return data.get("user", {}).get("username") or data.get("username") or None
 
     async def _fetch_event_slug(
         self,

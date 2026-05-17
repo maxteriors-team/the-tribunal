@@ -185,8 +185,7 @@ class GrokVoiceAgentSession(VoiceAgentBase):
         )
 
         config = (
-            builder
-            .with_voice()
+            builder.with_voice()
             .with_instructions(
                 include_realism=True,
                 include_booking=self._enable_tools,
@@ -286,10 +285,12 @@ class GrokVoiceAgentSession(VoiceAgentBase):
 
         try:
             await self._send_event(event)
-            await self._send_event({
-                "type": "response.create",
-                "response": {"modalities": ["audio", "text"]},
-            })
+            await self._send_event(
+                {
+                    "type": "response.create",
+                    "response": {"modalities": ["audio", "text"]},
+                }
+            )
             self.logger.info("grok_greeting_sent", greeting_length=len(greeting))
         except Exception as e:
             self.logger.exception("grok_send_greeting_error", error=str(e))
@@ -321,10 +322,13 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             base_prompt = self._prompt_builder.get_outbound_opener_prompt()
             # Only add pattern interrupt realism cues for the default sales opener
             if "pattern interrupt" in base_prompt:
-                prompt_text = base_prompt.replace(
-                    "Sound a bit disappointed on 'hang up'.",
-                    "Sigh right before 'hang up' - sound disappointed.",
-                ) + " Little laugh at the end."
+                prompt_text = (
+                    base_prompt.replace(
+                        "Sound a bit disappointed on 'hang up'.",
+                        "Sigh right before 'hang up' - sound disappointed.",
+                    )
+                    + " Little laugh at the end."
+                )
             else:
                 prompt_text = base_prompt
         else:
@@ -572,17 +576,13 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             timezone=self._timezone,
         )
 
-        config = (
-            builder
-            .with_instructions(
-                include_realism=True,
-                include_booking=self._enable_tools,
-                contact_info=contact_info,
-                offer_info=offer_info,
-                is_outbound=is_outbound,
-            )
-            .build()
-        )
+        config = builder.with_instructions(
+            include_realism=True,
+            include_booking=self._enable_tools,
+            contact_info=contact_info,
+            offer_info=offer_info,
+            is_outbound=is_outbound,
+        ).build()
 
         try:
             await self._send_event({"type": "session.update", "session": config})

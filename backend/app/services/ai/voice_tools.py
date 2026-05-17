@@ -301,9 +301,8 @@ def get_tools_from_agent_config(
     # Supports both direct "send_dtmf" in enabled_tools (legacy)
     # and integration-based "call_control" with "send_dtmf" in tool_settings
     call_control_tools = tool_settings.get("call_control", []) or []
-    dtmf_enabled = (
-        "send_dtmf" in enabled_tools
-        or ("call_control" in enabled_tools and "send_dtmf" in call_control_tools)
+    dtmf_enabled = "send_dtmf" in enabled_tools or (
+        "call_control" in enabled_tools and "send_dtmf" in call_control_tools
     )
 
     return build_tools_list(
@@ -383,8 +382,7 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         "date": {
                             "type": "string",
                             "description": (
-                                f"Appointment date in YYYY-MM-DD format. "
-                                f"TODAY IS {today_iso}."
+                                f"Appointment date in YYYY-MM-DD format. TODAY IS {today_iso}."
                             ),
                         },
                         "time": {
@@ -432,8 +430,7 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         "start_date": {
                             "type": "string",
                             "description": (
-                                f"Start date in YYYY-MM-DD format. "
-                                f"TODAY IS {today_iso}."
+                                f"Start date in YYYY-MM-DD format. TODAY IS {today_iso}."
                             ),
                         },
                         "end_date": {

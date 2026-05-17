@@ -49,9 +49,7 @@ class PhoneNumber(Base):
 
     __tablename__ = "phone_numbers"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -137,9 +135,7 @@ class PhoneNumber(Base):
     )
 
     # === Quarantine Tracking ===
-    quarantined_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quarantine_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     quarantine_reviewed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
@@ -159,9 +155,7 @@ class PhoneNumber(Base):
 
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="phone_numbers")
-    assigned_agent: Mapped["Agent | None"] = relationship(
-        "Agent", back_populates="phone_numbers"
-    )
+    assigned_agent: Mapped["Agent | None"] = relationship("Agent", back_populates="phone_numbers")
 
     def __repr__(self) -> str:
         return f"<PhoneNumber(id={self.id}, number={self.phone_number})>"

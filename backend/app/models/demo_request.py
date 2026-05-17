@@ -27,13 +27,9 @@ class DemoRequest(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     phone_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    request_type: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # "call" or "text"
+    request_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "call" or "text"
     client_ip: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
     # Status tracking

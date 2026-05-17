@@ -30,9 +30,7 @@ class AuthRateLimit(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_ip: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(
         String(50), nullable=False
@@ -40,9 +38,7 @@ class AuthRateLimit(Base):
     # SHA-256 hex digest of the lowercased username, or NULL for non-username
     # endpoints. Hashed (not stored plaintext) so the table never enumerates
     # account identifiers on its own.
-    username_hash: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, index=True
-    )
+    username_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -50,7 +46,4 @@ class AuthRateLimit(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<AuthRateLimit(id={self.id}, ip={self.client_ip}, "
-            f"endpoint={self.endpoint})>"
-        )
+        return f"<AuthRateLimit(id={self.id}, ip={self.client_ip}, endpoint={self.endpoint})>"

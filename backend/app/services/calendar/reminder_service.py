@@ -160,9 +160,9 @@ def render_reminder_body(
             from app.services.calendar.calcom import CalComService
 
             calcom = CalComService(settings.calcom_api_key)
-            contact_name = " ".join(
-                filter(None, [contact.first_name, contact.last_name])
-            ) or first_name
+            contact_name = (
+                " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
+            )
             reschedule_link = calcom.generate_booking_url(
                 event_type_id=agent.calcom_event_type_id,
                 contact_email=contact.email or "",
@@ -270,9 +270,7 @@ async def send_appointment_reminder(
         # Update reminder_sent_at without touching reminders_sent (offset tracking)
         now = datetime.now(UTC)
         await db.execute(
-            text(
-                "UPDATE appointments SET reminder_sent_at = :now WHERE id = :appt_id"
-            ),
+            text("UPDATE appointments SET reminder_sent_at = :now WHERE id = :appt_id"),
             {"now": now, "appt_id": appointment.id},
         )
         appointment.reminder_sent_at = now

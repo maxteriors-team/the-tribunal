@@ -131,11 +131,21 @@ class BaseToolExecutor:
                 return self.format_booking_failure(result, time_str)
 
             await self.post_booking_success(
-                result, date_str, time_str, email, duration_minutes, notes,
+                result,
+                date_str,
+                time_str,
+                email,
+                duration_minutes,
+                notes,
             )
 
             return self.format_booking_success(
-                result, contact_name, date_str, time_str, email, duration_minutes,
+                result,
+                contact_name,
+                date_str,
+                time_str,
+                email,
+                duration_minutes,
             )
 
         finally:

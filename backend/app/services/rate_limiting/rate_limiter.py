@@ -197,9 +197,7 @@ class RateLimiter:
         key = f"rate_limit:daily:{phone_number_id}:{day_key}"
 
         # Calculate seconds until midnight
-        midnight = (now + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         expire_seconds = int((midnight - now).total_seconds())
 
         try:

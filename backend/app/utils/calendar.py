@@ -31,7 +31,7 @@ def generate_booking_url(
         ...     event_type_id=123456,
         ...     contact_email="john@example.com",
         ...     contact_name="John Doe",
-        ...     contact_phone="+15551234567"
+        ...     contact_phone="+15551234567",
         ... )
         >>> url
         'https://cal.com/event/123456?email=john%40example.com&name=John+Doe&phone=%2B15551234567'

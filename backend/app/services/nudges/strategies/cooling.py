@@ -23,9 +23,7 @@ class CoolingNudgeStrategy(NudgeStrategy):
 
     nudge_type = "cooling"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         cutoff = now - timedelta(days=context.cooling_days)
         year = now.year
@@ -63,7 +61,9 @@ class CoolingNudgeStrategy(NudgeStrategy):
             days_silent: int = (now - conv.last_message_at).days
 
             title, message, suggested_action = build_nudge_message(
-                contact, "cooling", days_until=days_silent,
+                contact,
+                "cooling",
+                days_until=days_silent,
             )
 
             nudge = HumanNudge(

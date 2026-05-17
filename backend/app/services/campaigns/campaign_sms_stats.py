@@ -128,9 +128,7 @@ async def update_campaign_sms_delivery(
     # ``campaign.messages_delivered += 1`` avoids the read-modify-write race
     # when multiple webhooks for different messages of the same campaign
     # arrive concurrently and load stale snapshots of the counter.
-    counter_column = (
-        Campaign.messages_delivered if delivered else Campaign.messages_failed
-    )
+    counter_column = Campaign.messages_delivered if delivered else Campaign.messages_failed
     await db.execute(
         update(Campaign)
         .where(Campaign.id == campaign.id)

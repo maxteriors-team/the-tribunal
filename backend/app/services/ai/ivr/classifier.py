@@ -1,6 +1,5 @@
 """Rule-based IVR, human, and voicemail classifier."""
 
-
 import re
 
 import structlog
@@ -117,18 +116,10 @@ class IVRClassifier:
         self._exclusive_ivr_patterns = [
             re.compile(p, re.IGNORECASE) for p in self.EXCLUSIVE_IVR_PATTERNS
         ]
-        self._ivr_error_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.IVR_ERROR_PATTERNS
-        ]
-        self._ivr_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.IVR_PATTERNS
-        ]
-        self._human_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.HUMAN_PATTERNS
-        ]
-        self._voicemail_patterns = [
-            re.compile(p, re.IGNORECASE) for p in self.VOICEMAIL_PATTERNS
-        ]
+        self._ivr_error_patterns = [re.compile(p, re.IGNORECASE) for p in self.IVR_ERROR_PATTERNS]
+        self._ivr_patterns = [re.compile(p, re.IGNORECASE) for p in self.IVR_PATTERNS]
+        self._human_patterns = [re.compile(p, re.IGNORECASE) for p in self.HUMAN_PATTERNS]
+        self._voicemail_patterns = [re.compile(p, re.IGNORECASE) for p in self.VOICEMAIL_PATTERNS]
         self.logger = logger.bind(service="ivr_classifier")
 
     def classify(self, transcript: str) -> tuple[IVRMode, float]:

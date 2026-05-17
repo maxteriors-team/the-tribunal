@@ -18,13 +18,9 @@ class PhoneNumberDailyStats(Base):
     """Daily statistics for phone number sending and reputation tracking."""
 
     __tablename__ = "phone_number_daily_stats"
-    __table_args__ = (
-        UniqueConstraint("phone_number_id", "date", name="uq_phone_daily_stats"),
-    )
+    __table_args__ = (UniqueConstraint("phone_number_id", "date", name="uq_phone_daily_stats"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     phone_number_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("phone_numbers.id", ondelete="CASCADE"),

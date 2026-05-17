@@ -56,9 +56,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     log.info("processing_inbound_with_ai")
 
     # Get conversation with agent
-    result = await db.execute(
-        select(Conversation).where(Conversation.id == conversation_id)
-    )
+    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
     conversation = result.scalar_one_or_none()
 
     if not conversation:
@@ -74,9 +72,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         return
 
     # Get agent
-    agent_result = await db.execute(
-        select(Agent).where(Agent.id == conversation.assigned_agent_id)
-    )
+    agent_result = await db.execute(select(Agent).where(Agent.id == conversation.assigned_agent_id))
     agent = agent_result.scalar_one_or_none()
 
     if not agent or not agent.is_active:

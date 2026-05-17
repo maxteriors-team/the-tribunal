@@ -100,14 +100,14 @@ class DashboardService:
         two_weeks_ago = now - timedelta(days=14)
 
         total_contacts_result = await self.db.execute(
-            select(func.count()).select_from(Contact).where(
-                Contact.workspace_id == workspace.id
-            )
+            select(func.count()).select_from(Contact).where(Contact.workspace_id == workspace.id)
         )
         total_contacts = total_contacts_result.scalar() or 0
 
         contacts_last_week_result = await self.db.execute(
-            select(func.count()).select_from(Contact).where(
+            select(func.count())
+            .select_from(Contact)
+            .where(
                 Contact.workspace_id == workspace.id,
                 Contact.created_at < week_ago,
                 Contact.created_at >= two_weeks_ago,
@@ -116,7 +116,9 @@ class DashboardService:
         contacts_last_week = contacts_last_week_result.scalar() or 0
 
         contacts_this_week_result = await self.db.execute(
-            select(func.count()).select_from(Contact).where(
+            select(func.count())
+            .select_from(Contact)
+            .where(
                 Contact.workspace_id == workspace.id,
                 Contact.created_at >= week_ago,
             )
@@ -124,7 +126,9 @@ class DashboardService:
         contacts_this_week = contacts_this_week_result.scalar() or 0
 
         active_campaigns_result = await self.db.execute(
-            select(func.count()).select_from(Campaign).where(
+            select(func.count())
+            .select_from(Campaign)
+            .where(
                 Campaign.workspace_id == workspace.id,
                 Campaign.status.in_(["running", "scheduled"]),
             )
@@ -132,7 +136,9 @@ class DashboardService:
         active_campaigns = active_campaigns_result.scalar() or 0
 
         campaigns_this_week_result = await self.db.execute(
-            select(func.count()).select_from(Campaign).where(
+            select(func.count())
+            .select_from(Campaign)
+            .where(
                 Campaign.workspace_id == workspace.id,
                 Campaign.created_at >= week_ago,
             )
@@ -140,7 +146,9 @@ class DashboardService:
         campaigns_this_week = campaigns_this_week_result.scalar() or 0
 
         campaigns_last_week_result = await self.db.execute(
-            select(func.count()).select_from(Campaign).where(
+            select(func.count())
+            .select_from(Campaign)
+            .where(
                 Campaign.workspace_id == workspace.id,
                 Campaign.created_at < week_ago,
                 Campaign.created_at >= two_weeks_ago,
@@ -151,12 +159,14 @@ class DashboardService:
         campaigns_diff = campaigns_this_week - campaigns_last_week
         campaigns_change = f"{'+' if campaigns_diff >= 0 else ''}{campaigns_diff}"
 
-        workspace_conversations = select(Conversation.id).where(
-            Conversation.workspace_id == workspace.id
-        ).subquery()
+        workspace_conversations = (
+            select(Conversation.id).where(Conversation.workspace_id == workspace.id).subquery()
+        )
 
         calls_today_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.channel == "voice",
                 Message.created_at >= today_start,
@@ -165,7 +175,9 @@ class DashboardService:
         calls_today = calls_today_result.scalar() or 0
 
         calls_yesterday_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.channel == "voice",
                 Message.created_at >= yesterday_start,
@@ -175,7 +187,9 @@ class DashboardService:
         calls_yesterday = calls_yesterday_result.scalar() or 0
 
         messages_sent_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.channel == "sms",
                 Message.direction == "outbound",
@@ -184,7 +198,9 @@ class DashboardService:
         messages_sent = messages_sent_result.scalar() or 0
 
         messages_this_week_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.channel == "sms",
                 Message.direction == "outbound",
@@ -194,7 +210,9 @@ class DashboardService:
         messages_this_week = messages_this_week_result.scalar() or 0
 
         messages_last_week_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.channel == "sms",
                 Message.direction == "outbound",
@@ -321,12 +339,14 @@ class DashboardService:
         now = datetime.now(UTC)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        workspace_conversations = select(Conversation.id).where(
-            Conversation.workspace_id == workspace.id
-        ).subquery()
+        workspace_conversations = (
+            select(Conversation.id).where(Conversation.workspace_id == workspace.id).subquery()
+        )
 
         completed_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.created_at >= today_start,
                 Message.status.in_(["delivered", "completed", "sent"]),
@@ -335,7 +355,9 @@ class DashboardService:
         completed = completed_result.scalar() or 0
 
         pending_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.created_at >= today_start,
                 Message.status.in_(["queued", "sending"]),
@@ -344,7 +366,9 @@ class DashboardService:
         pending = pending_result.scalar() or 0
 
         failed_result = await self.db.execute(
-            select(func.count()).select_from(Message).where(
+            select(func.count())
+            .select_from(Message)
+            .where(
                 Message.conversation_id.in_(select(workspace_conversations)),
                 Message.created_at >= today_start,
                 Message.status == "failed",
@@ -367,7 +391,9 @@ class DashboardService:
         thirty_days_ago = now - timedelta(days=30)
 
         today_result = await self.db.execute(
-            select(func.count()).select_from(Appointment).where(
+            select(func.count())
+            .select_from(Appointment)
+            .where(
                 Appointment.workspace_id == workspace.id,
                 Appointment.scheduled_at >= today_start,
                 Appointment.scheduled_at < today_end,
@@ -377,7 +403,9 @@ class DashboardService:
         appointments_today = today_result.scalar() or 0
 
         week_result = await self.db.execute(
-            select(func.count()).select_from(Appointment).where(
+            select(func.count())
+            .select_from(Appointment)
+            .where(
                 Appointment.workspace_id == workspace.id,
                 Appointment.scheduled_at >= now,
                 Appointment.scheduled_at < week_end,
@@ -387,7 +415,9 @@ class DashboardService:
         appointments_this_week = week_result.scalar() or 0
 
         completed_result = await self.db.execute(
-            select(func.count()).select_from(Appointment).where(
+            select(func.count())
+            .select_from(Appointment)
+            .where(
                 Appointment.workspace_id == workspace.id,
                 Appointment.scheduled_at >= thirty_days_ago,
                 Appointment.status == "completed",
@@ -396,7 +426,9 @@ class DashboardService:
         completed_30d = completed_result.scalar() or 0
 
         no_shows_result = await self.db.execute(
-            select(func.count()).select_from(Appointment).where(
+            select(func.count())
+            .select_from(Appointment)
+            .where(
                 Appointment.workspace_id == workspace.id,
                 Appointment.scheduled_at >= thirty_days_ago,
                 Appointment.status == "no_show",

@@ -28,9 +28,7 @@ async def _get_message_for_workspace(
 ) -> Message:
     """Get a message and verify it belongs to the workspace."""
     result = await db.execute(
-        select(Message)
-        .options(selectinload(Message.conversation))
-        .where(Message.id == message_id)
+        select(Message).options(selectinload(Message.conversation)).where(Message.id == message_id)
     )
     message = result.scalar_one_or_none()
 
@@ -108,9 +106,7 @@ async def update_call_outcome(
     """Update or reclassify a call outcome."""
     await _get_message_for_workspace(db, workspace_id, message_id)
 
-    result = await db.execute(
-        select(CallOutcome).where(CallOutcome.message_id == message_id)
-    )
+    result = await db.execute(select(CallOutcome).where(CallOutcome.message_id == message_id))
     outcome = result.scalar_one_or_none()
 
     if not outcome:

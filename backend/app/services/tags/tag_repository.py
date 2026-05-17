@@ -50,9 +50,7 @@ async def get_tag_by_id(
     db: AsyncSession,
 ) -> Tag | None:
     """Get a specific tag by ID."""
-    result = await db.execute(
-        select(Tag).where(Tag.id == tag_id, Tag.workspace_id == workspace_id)
-    )
+    result = await db.execute(select(Tag).where(Tag.id == tag_id, Tag.workspace_id == workspace_id))
     return result.scalar_one_or_none()
 
 
@@ -173,10 +171,12 @@ async def bulk_remove_tags(
     # Count existing entries first
     count_result = await db.execute(
         select(func.count()).select_from(
-            select(ContactTag.id).where(
+            select(ContactTag.id)
+            .where(
                 ContactTag.contact_id.in_(valid_contact_ids),
                 ContactTag.tag_id.in_(tag_ids),
-            ).subquery()
+            )
+            .subquery()
         )
     )
     count = count_result.scalar() or 0

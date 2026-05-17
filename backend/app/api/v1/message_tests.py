@@ -317,9 +317,7 @@ async def select_winner(
 ) -> MessageTest:
     """Select a winning variant for the test."""
     try:
-        return await MessageTestService(db).select_winner(
-            test_id, workspace_id, request.variant_id
-        )
+        return await MessageTestService(db).select_winner(test_id, workspace_id, request.variant_id)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -335,9 +333,7 @@ async def convert_to_campaign(
 ) -> dict[str, str]:
     """Convert a message test to a full campaign."""
     try:
-        return await MessageTestService(db).convert_to_campaign(
-            test_id, workspace_id, request
-        )
+        return await MessageTestService(db).convert_to_campaign(test_id, workspace_id, request)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValidationError as e:

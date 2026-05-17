@@ -19,13 +19,9 @@ class OfferLeadMagnet(Base):
     """Association between offers and lead magnets for value stacking."""
 
     __tablename__ = "offer_lead_magnets"
-    __table_args__ = (
-        UniqueConstraint("offer_id", "lead_magnet_id", name="uq_offer_lead_magnet"),
-    )
+    __table_args__ = (UniqueConstraint("offer_id", "lead_magnet_id", name="uq_offer_lead_magnet"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     offer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("offers.id", ondelete="CASCADE"),

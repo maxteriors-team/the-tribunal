@@ -27,15 +27,12 @@ def _make_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     if "properties" in result:
         result["required"] = list(result["properties"].keys())
         result["additionalProperties"] = False
-        result["properties"] = {
-            k: _make_strict_schema(v) for k, v in result["properties"].items()
-        }
+        result["properties"] = {k: _make_strict_schema(v) for k, v in result["properties"].items()}
     if "items" in result and isinstance(result["items"], dict):
         result["items"] = _make_strict_schema(result["items"])
     if "anyOf" in result:
         result["anyOf"] = [
-            _make_strict_schema(v) if isinstance(v, dict) else v
-            for v in result["anyOf"]
+            _make_strict_schema(v) if isinstance(v, dict) else v for v in result["anyOf"]
         ]
     return result
 

@@ -35,8 +35,7 @@ MAX_CONTACTS_PER_TICK = 20
 
 # Default templates used when the agent has not configured a custom one
 _DEFAULT_DAY3_TEMPLATE = (
-    "Hey {first_name}, we'd still love to connect. "
-    "Want to reschedule? {reschedule_link}"
+    "Hey {first_name}, we'd still love to connect. Want to reschedule? {reschedule_link}"
 )
 _DEFAULT_DAY7_TEMPLATE = (
     "Hi {first_name}, we're offering 300 free video ads to qualified businesses. "
@@ -275,9 +274,10 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
             from app.services.calendar.calcom import CalComService
 
             calcom = CalComService(settings.calcom_api_key)
-            contact_name = " ".join(
-                filter(None, [contact.first_name, contact.last_name])
-            ) or contact.first_name
+            contact_name = (
+                " ".join(filter(None, [contact.first_name, contact.last_name]))
+                or contact.first_name
+            )
             return calcom.generate_booking_url(
                 event_type_id=agent.calcom_event_type_id,
                 contact_email=contact.email or "",

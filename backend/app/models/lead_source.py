@@ -29,9 +29,7 @@ class LeadSource(Base):
 
     __tablename__ = "lead_sources"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -44,9 +42,7 @@ class LeadSource(Base):
     public_key: Mapped[str] = mapped_column(
         String(20), unique=True, nullable=False, index=True, default=generate_lead_source_key
     )
-    allowed_domains: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), default=list, nullable=False
-    )
+    allowed_domains: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Post-capture action

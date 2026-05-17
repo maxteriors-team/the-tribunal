@@ -23,7 +23,6 @@ Example YAML format:
         is_terminal: true
 """
 
-
 from pathlib import Path
 from typing import Any
 
@@ -182,9 +181,7 @@ class ScenarioLoader:
 
         # Validate initial state exists
         if data["initial_state"] not in states:
-            raise ScenarioLoadError(
-                f"Initial state '{data['initial_state']}' not found in states"
-            )
+            raise ScenarioLoadError(f"Initial state '{data['initial_state']}' not found in states")
 
         return IVRScenario(
             name=data.get("name", default_name),
@@ -250,9 +247,7 @@ class ScenarioLoader:
         required = {"digit", "next_state"}
         missing = required - set(data.keys())
         if missing:
-            raise ScenarioLoadError(
-                f"Option in state '{state_id}' missing fields: {missing}"
-            )
+            raise ScenarioLoadError(f"Option in state '{state_id}' missing fields: {missing}")
 
         return IVRMenuOption(
             digit=str(data["digit"]),

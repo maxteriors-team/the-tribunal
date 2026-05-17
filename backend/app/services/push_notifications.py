@@ -128,9 +128,7 @@ class PushNotificationService:
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(
-                    EXPO_PUSH_URL, json=messages, headers=headers
-                )
+                response = await client.post(EXPO_PUSH_URL, json=messages, headers=headers)
                 response.raise_for_status()
 
                 result = response.json()

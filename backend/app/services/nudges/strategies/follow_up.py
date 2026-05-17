@@ -23,9 +23,7 @@ class FollowUpNudgeStrategy(NudgeStrategy):
 
     nudge_type = "follow_up"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         window_start = now - timedelta(days=7)
         window_end = now - timedelta(days=2)
@@ -49,12 +47,14 @@ class FollowUpNudgeStrategy(NudgeStrategy):
                 continue
 
             conv_result = await db.execute(
-                select(Conversation).where(
+                select(Conversation)
+                .where(
                     Conversation.workspace_id == context.workspace_id,
                     Conversation.contact_id == contact_id,
                     Conversation.last_message_at > appt.scheduled_at,
                     Conversation.last_message_direction == "outbound",
-                ).limit(1)
+                )
+                .limit(1)
             )
             if conv_result.scalar_one_or_none() is not None:
                 continue

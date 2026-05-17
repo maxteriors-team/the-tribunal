@@ -23,9 +23,7 @@ class ReferralAskNudgeStrategy(NudgeStrategy):
 
     nudge_type = "referral_ask"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         year = now.year
         quarter = (now.month - 1) // 3 + 1
@@ -63,11 +61,13 @@ class ReferralAskNudgeStrategy(NudgeStrategy):
             is_happy_client = contact.status == "converted"
             if not is_happy_client:
                 won_result = await db.execute(
-                    select(Opportunity.id).where(
+                    select(Opportunity.id)
+                    .where(
                         Opportunity.workspace_id == context.workspace_id,
                         Opportunity.primary_contact_id == contact_id,
                         Opportunity.status == "won",
-                    ).limit(1)
+                    )
+                    .limit(1)
                 )
                 is_happy_client = won_result.scalar_one_or_none() is not None
 

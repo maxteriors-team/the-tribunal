@@ -32,9 +32,7 @@ class PendingAction(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -70,18 +68,12 @@ class PendingAction(Base):
     reviewed_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    review_channel: Mapped[str | None] = mapped_column(
-        String(20), nullable=True
-    )  # web, sms, push
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_channel: Mapped[str | None] = mapped_column(String(20), nullable=True)  # web, sms, push
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Execution tracking
-    executed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     execution_result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Expiration
@@ -90,9 +82,7 @@ class PendingAction(Base):
     )
 
     # Notification tracking
-    notification_sent: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    notification_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notification_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -15,18 +15,14 @@ class ShortLink(Base):
 
     __tablename__ = "short_links"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    short_code: Mapped[str] = mapped_column(
-        String(16), nullable=False, unique=True, index=True
-    )
+    short_code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
     target_url: Mapped[str] = mapped_column(Text, nullable=False)
     contact_id: Mapped[int | None] = mapped_column(
         BigInteger,
@@ -47,9 +43,7 @@ class ShortLink(Base):
         index=True,
     )
     click_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_clicked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_clicked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

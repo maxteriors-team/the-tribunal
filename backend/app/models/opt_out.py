@@ -22,9 +22,7 @@ class GlobalOptOut(Base):
         UniqueConstraint("workspace_id", "phone_number", name="uq_workspace_opt_out"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -62,7 +60,4 @@ class GlobalOptOut(Base):
     workspace: Mapped["Workspace"] = relationship("Workspace")
 
     def __repr__(self) -> str:
-        return (
-            f"<GlobalOptOut(workspace_id={self.workspace_id}, "
-            f"phone_number={self.phone_number})>"
-        )
+        return f"<GlobalOptOut(workspace_id={self.workspace_id}, phone_number={self.phone_number})>"

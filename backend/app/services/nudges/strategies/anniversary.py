@@ -16,9 +16,7 @@ class AnniversaryNudgeStrategy(NudgeStrategy):
 
     nudge_type = "anniversary"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         count = 0
         for contact in context.date_contacts:
             dates = contact.important_dates

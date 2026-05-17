@@ -75,9 +75,7 @@ class Campaign(Base):
 
     __tablename__ = "campaigns"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -139,12 +137,8 @@ class Campaign(Base):
     qualification_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Scheduling
-    scheduled_start: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    scheduled_end: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    scheduled_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Sending windows
     sending_hours_start: Mapped[datetime | None] = mapped_column(Time, nullable=True)
@@ -172,22 +166,14 @@ class Campaign(Base):
         index=True,
     )
     voice_connection_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    enable_machine_detection: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
-    )
-    max_call_duration_seconds: Mapped[int] = mapped_column(
-        Integer, default=120, nullable=False
-    )
+    enable_machine_detection: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    max_call_duration_seconds: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
     calls_per_minute: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
 
     # SMS fallback settings (for voice campaigns)
-    sms_fallback_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False
-    )
+    sms_fallback_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sms_fallback_template: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sms_fallback_use_ai: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
+    sms_fallback_use_ai: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     sms_fallback_agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agents.id", ondelete="SET NULL"),
@@ -251,9 +237,7 @@ class Campaign(Base):
     agent: Mapped["Agent | None"] = relationship(
         "Agent", foreign_keys=[agent_id], back_populates="campaigns"
     )
-    voice_agent: Mapped["Agent | None"] = relationship(
-        "Agent", foreign_keys=[voice_agent_id]
-    )
+    voice_agent: Mapped["Agent | None"] = relationship("Agent", foreign_keys=[voice_agent_id])
     sms_fallback_agent: Mapped["Agent | None"] = relationship(
         "Agent", foreign_keys=[sms_fallback_agent_id]
     )
@@ -278,9 +262,7 @@ class CampaignContact(Base):
         Index("ix_campaign_contacts_campaign_status", "campaign_id", "status"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("campaigns.id", ondelete="CASCADE"),
@@ -341,9 +323,7 @@ class CampaignContact(Base):
 
     # Call tracking (for voice campaigns)
     call_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_call_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_call_status: Mapped[str | None] = mapped_column(
         String(50), nullable=True
     )  # answered, no_answer, busy, voicemail, rejected

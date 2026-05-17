@@ -198,9 +198,7 @@ class MessageTestService:
                 update_data["sending_hours_start"]
             )
         if "sending_hours_end" in update_data:
-            update_data["sending_hours_end"] = parse_time_string(
-                update_data["sending_hours_end"]
-            )
+            update_data["sending_hours_end"] = parse_time_string(update_data["sending_hours_end"])
 
         for field, value in update_data.items():
             setattr(message_test, field, value)
@@ -219,9 +217,7 @@ class MessageTestService:
         message_test = await self._get_test(test_id, workspace_id)
 
         if message_test.status == "running":
-            raise MessageTestValidationError(
-                "Cannot delete running test. Pause it first."
-            )
+            raise MessageTestValidationError("Cannot delete running test. Pause it first.")
 
         await self.db.delete(message_test)
         await self.db.commit()
@@ -347,9 +343,7 @@ class MessageTestService:
 
         # Get existing test contacts
         existing_result = await self.db.execute(
-            select(TestContact.contact_id).where(
-                TestContact.message_test_id == test_id
-            )
+            select(TestContact.contact_id).where(TestContact.message_test_id == test_id)
         )
         existing_ids = {row[0] for row in existing_result.all()}
 
@@ -409,9 +403,7 @@ class MessageTestService:
 
         # Check if test has contacts
         contact_count_result = await self.db.execute(
-            select(func.count(TestContact.id)).where(
-                TestContact.message_test_id == test_id
-            )
+            select(func.count(TestContact.id)).where(TestContact.message_test_id == test_id)
         )
         contact_count = contact_count_result.scalar() or 0
 
@@ -420,9 +412,7 @@ class MessageTestService:
 
         # Check if test has at least 2 variants
         variant_count_result = await self.db.execute(
-            select(func.count(TestVariant.id)).where(
-                TestVariant.message_test_id == test_id
-            )
+            select(func.count(TestVariant.id)).where(TestVariant.message_test_id == test_id)
         )
         variant_count = variant_count_result.scalar() or 0
 
@@ -463,9 +453,7 @@ class MessageTestService:
         message_test = await self._get_test(test_id, workspace_id)
 
         if message_test.status not in ("running", "paused"):
-            raise MessageTestValidationError(
-                "Can only complete running or paused tests"
-            )
+            raise MessageTestValidationError("Can only complete running or paused tests")
 
         message_test.status = MessageTestStatus.COMPLETED
         message_test.completed_at = datetime.now(UTC)
@@ -584,9 +572,7 @@ class MessageTestService:
             initial_message = best_variant.message_template
 
         if not initial_message:
-            raise MessageTestValidationError(
-                "No message template available for campaign"
-            )
+            raise MessageTestValidationError("No message template available for campaign")
 
         # Create the campaign
         campaign = Campaign(

@@ -25,9 +25,7 @@ async def redirect_short_link(
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     """Resolve a short code, log the click, and 302 to the target URL."""
-    result = await db.execute(
-        select(ShortLink).where(ShortLink.short_code == short_code)
-    )
+    result = await db.execute(select(ShortLink).where(ShortLink.short_code == short_code))
     short_link = result.scalar_one_or_none()
     if short_link is None:
         raise HTTPException(status_code=404, detail="Short link not found")

@@ -63,9 +63,7 @@ class NudgeWorker(RetryableWorker, BaseWorker):
         # Un-snooze expired nudges first
         await self._expire_snoozed_nudges(db)
 
-        result = await db.execute(
-            select(Workspace).where(Workspace.is_active.is_(True))
-        )
+        result = await db.execute(select(Workspace).where(Workspace.is_active.is_(True)))
         workspaces = result.scalars().all()
 
         for workspace in workspaces:
@@ -73,13 +71,9 @@ class NudgeWorker(RetryableWorker, BaseWorker):
             if not nudge_settings.get("enabled", True):
                 continue
 
-            await self.execute_with_retry(
-                self._process_single_workspace, db, workspace
-            )
+            await self.execute_with_retry(self._process_single_workspace, db, workspace)
 
-    async def _process_single_workspace(
-        self, db: AsyncSession, workspace: Workspace
-    ) -> None:
+    async def _process_single_workspace(self, db: AsyncSession, workspace: Workspace) -> None:
         """Generate and deliver nudges for a single workspace."""
         # Phase 1: Generate nudges
         generated = await self.generator.generate_for_workspace(db, workspace)

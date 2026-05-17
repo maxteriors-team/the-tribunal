@@ -55,9 +55,7 @@ def _parse_occurred_at(value: Any) -> datetime:
     return datetime.now(UTC)
 
 
-async def _find_message(
-    db: AsyncSession, data: dict[str, Any]
-) -> Message | None:
+async def _find_message(db: AsyncSession, data: dict[str, Any]) -> Message | None:
     """Locate the Message (with eager-loaded conversation) for a Resend event."""
     provider_id = data.get("email_id") or data.get("id")
     if not provider_id:
@@ -96,9 +94,7 @@ async def handle_event(
     # Idempotency: if we've already processed this svix-id, skip it.
     if provider_event_id:
         existing = await db.execute(
-            select(EmailEvent.id).where(
-                EmailEvent.provider_event_id == provider_event_id
-            )
+            select(EmailEvent.id).where(EmailEvent.provider_event_id == provider_event_id)
         )
         if existing.scalar_one_or_none() is not None:
             log.info(
@@ -140,11 +136,7 @@ async def handle_event(
             message.sent_at = event_row.occurred_at
 
     counter_field = _CAMPAIGN_COUNTER_FIELDS.get(mapped)
-    if (
-        counter_field is not None
-        and message is not None
-        and message.campaign_id is not None
-    ):
+    if counter_field is not None and message is not None and message.campaign_id is not None:
         await db.execute(
             update(Campaign)
             .where(Campaign.id == message.campaign_id)

@@ -12,7 +12,6 @@ Usage:
     await service.close()
 """
 
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -100,18 +99,14 @@ class BookingService:
         """
         try:
             tz = self._get_timezone()
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
-                tzinfo=tz
-            )
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=tz)
             end_date = (
                 datetime.strptime(end_date_str, "%Y-%m-%d").replace(tzinfo=tz)
                 if end_date_str
                 else start_date
             )
         except ValueError as e:
-            return AvailabilityResult(
-                success=False, error=f"Invalid date format: {e}"
-            )
+            return AvailabilityResult(success=False, error=f"Invalid date format: {e}")
 
         try:
             raw_slots = await self._calcom.get_availability(
@@ -136,9 +131,7 @@ class BookingService:
 
         except Exception as e:
             self._log.exception("check_availability_error", error=str(e))
-            return AvailabilityResult(
-                success=False, error=f"Failed to check availability: {e!s}"
-            )
+            return AvailabilityResult(success=False, error=f"Failed to check availability: {e!s}")
 
     async def book_appointment(
         self,
@@ -170,13 +163,9 @@ class BookingService:
         """
         try:
             tz = self._get_timezone()
-            start_date = datetime.strptime(date_str, "%Y-%m-%d").replace(
-                tzinfo=tz
-            )
+            start_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=tz)
         except ValueError as e:
-            return BookingResult(
-                success=False, error=f"Invalid date format: {e}"
-            )
+            return BookingResult(success=False, error=f"Invalid date format: {e}")
 
         if pre_validate:
             # Re-check availability to confirm the slot still exists
@@ -187,9 +176,7 @@ class BookingService:
                 timezone=self._timezone,
             )
 
-            matched_slot = next(
-                (s for s in raw_slots if s.get("time") == time_str), None
-            )
+            matched_slot = next((s for s in raw_slots if s.get("time") == time_str), None)
 
             if not matched_slot:
                 # Slot gone — return alternatives
@@ -248,9 +235,7 @@ class BookingService:
 
         except Exception as e:
             self._log.exception("book_appointment_error", error=str(e))
-            return BookingResult(
-                success=False, error=f"Failed to book appointment: {e!s}"
-            )
+            return BookingResult(success=False, error=f"Failed to book appointment: {e!s}")
 
     async def close(self) -> None:
         """Close the underlying CalComService if we own it."""

@@ -6,7 +6,6 @@ transcription + regex classification + scripted DTMF navigation.
 Returns when a human is detected, voicemail is found, or timeout.
 """
 
-
 import asyncio
 import base64
 import contextlib
@@ -82,9 +81,9 @@ class IVRGate:
         self._log = (log or logger).bind(service="ivr_gate", call_id=call_control_id)
 
         config = agent_config or {}
-        self._post_dtmf_cooldown = config.get(
-            "post_dtmf_cooldown_ms", int(POST_DTMF_COOLDOWN_SECONDS * 1000)
-        ) / 1000.0
+        self._post_dtmf_cooldown = (
+            config.get("post_dtmf_cooldown_ms", int(POST_DTMF_COOLDOWN_SECONDS * 1000)) / 1000.0
+        )
         loop_threshold = config.get("loop_threshold", 2)
         max_attempts = loop_threshold * 4  # More generous than loop threshold
 
@@ -193,9 +192,7 @@ class IVRGate:
                 self._log.info("ivr_gate_stream_started", stream_id=self._stream_id)
 
                 # Start keepalive to prevent Telnyx from closing
-                self._keepalive_task = asyncio.create_task(
-                    self._send_keepalive(websocket)
-                )
+                self._keepalive_task = asyncio.create_task(self._send_keepalive(websocket))
 
             elif event == "media" and self._stream_started:
                 media = data.get("media", {})
@@ -206,8 +203,7 @@ class IVRGate:
 
                     # Check if buffer is full
                     buffer_target = (
-                        FIRST_BUFFER_SECONDS if self._is_first_buffer
-                        else NORMAL_BUFFER_SECONDS
+                        FIRST_BUFFER_SECONDS if self._is_first_buffer else NORMAL_BUFFER_SECONDS
                     )
                     # At 8kHz mu-law, 1 byte per sample -> 8000 bytes/sec
                     target_bytes = int(buffer_target * 8000)
@@ -310,17 +306,19 @@ class IVRGate:
         Telnyx may close the media stream if no audio is sent for too long.
         This sends mu-law silence frames at regular intervals.
         """
-        silence_frame = base64.b64encode(
-            bytes([MULAW_SILENCE_BYTE] * KEEPALIVE_FRAME_SIZE)
-        ).decode("utf-8")
+        silence_frame = base64.b64encode(bytes([MULAW_SILENCE_BYTE] * KEEPALIVE_FRAME_SIZE)).decode(
+            "utf-8"
+        )
 
         try:
             while True:
                 await asyncio.sleep(KEEPALIVE_INTERVAL_SECONDS)
-                msg = json.dumps({
-                    "event": "media",
-                    "media": {"payload": silence_frame},
-                })
+                msg = json.dumps(
+                    {
+                        "event": "media",
+                        "media": {"payload": silence_frame},
+                    }
+                )
                 try:
                     await websocket.send_text(msg)
                 except (RuntimeError, OSError):

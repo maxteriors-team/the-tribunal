@@ -1,6 +1,5 @@
 """IVR loop detection using TF-IDF transcript similarity."""
 
-
 from typing import Any
 
 import structlog

@@ -138,9 +138,7 @@ class CallOutcomeService:
         """
         log = logger.bind(service="call_outcome", outcome_id=str(outcome_id))
 
-        result = await db.execute(
-            select(CallOutcome).where(CallOutcome.id == outcome_id)
-        )
+        result = await db.execute(select(CallOutcome).where(CallOutcome.id == outcome_id))
         outcome = result.scalar_one_or_none()
         if not outcome:
             raise ValueError(f"CallOutcome {outcome_id} not found")
@@ -187,9 +185,7 @@ class CallOutcomeService:
         Returns:
             CallOutcome or None
         """
-        result = await db.execute(
-            select(CallOutcome).where(CallOutcome.message_id == message_id)
-        )
+        result = await db.execute(select(CallOutcome).where(CallOutcome.message_id == message_id))
         return result.scalar_one_or_none()
 
     async def _update_version_counters(

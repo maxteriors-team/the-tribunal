@@ -403,9 +403,7 @@ AVAILABILITY ACCURACY RULES:
             "The customer called you. Listen to what they need and assist them.",
         ]
 
-    def _build_contact_section(
-        self, contact_info: dict[str, Any], is_outbound: bool
-    ) -> list[str]:
+    def _build_contact_section(self, contact_info: dict[str, Any], is_outbound: bool) -> list[str]:
         """Build contact information section."""
         header = "\n## Customer You Are Calling:" if is_outbound else "\n## Customer Information:"
         parts = [header]
@@ -420,9 +418,7 @@ AVAILABILITY ACCURACY RULES:
             )
         return parts
 
-    def _build_offer_section(
-        self, offer_info: dict[str, Any], is_outbound: bool
-    ) -> list[str]:
+    def _build_offer_section(self, offer_info: dict[str, Any], is_outbound: bool) -> list[str]:
         """Build offer information section."""
         header = "\n## What You Are Calling About:" if is_outbound else "\n## Offer Information:"
         parts = [header]
@@ -470,9 +466,7 @@ AVAILABILITY ACCURACY RULES:
         # Get base prompt
         if base_prompt is None:
             base_prompt = (
-                self.agent.system_prompt
-                if self.agent
-                else "You are a helpful AI voice assistant."
+                self.agent.system_prompt if self.agent else "You are a helpful AI voice assistant."
             )
 
         parts = []
@@ -530,9 +524,7 @@ AVAILABILITY ACCURACY RULES:
         agent_name = full_name.split("|")[0].split("-")[0].strip().split()[0]
 
         # Check if system prompt has custom opener instructions
-        system_prompt = (
-            self.agent.system_prompt if self.agent else ""
-        ) or ""
+        system_prompt = (self.agent.system_prompt if self.agent else "") or ""
         if "Opening the Call" in system_prompt:
             return (
                 "You just called someone and they answered. "
@@ -597,8 +589,7 @@ AVAILABILITY ACCURACY RULES:
         parts.append("# IVR NAVIGATION MODE ACTIVE")
         parts.append("")
         parts.append(
-            "You are navigating an automated phone menu (IVR system). "
-            "Follow these critical rules:"
+            "You are navigating an automated phone menu (IVR system). Follow these critical rules:"
         )
         parts.append("")
 

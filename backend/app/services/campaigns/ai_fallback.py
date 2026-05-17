@@ -51,9 +51,7 @@ async def generate_sms_fallback_message(
     # Get the agent's system prompt if configured
     agent = None
     if campaign.sms_fallback_agent_id:
-        result = await db.execute(
-            select(Agent).where(Agent.id == campaign.sms_fallback_agent_id)
-        )
+        result = await db.execute(select(Agent).where(Agent.id == campaign.sms_fallback_agent_id))
         agent = result.scalar_one_or_none()
 
     # Build context for AI
@@ -63,14 +61,10 @@ async def generate_sms_fallback_message(
         "voicemail": "We reached their voicemail.",
         "rejected": "They declined or rejected our call.",
     }
-    call_context = call_context_map.get(
-        call_outcome, "We couldn't reach them by phone."
-    )
+    call_context = call_context_map.get(call_outcome, "We couldn't reach them by phone.")
 
     # Build contact name
-    contact_name = " ".join(
-        filter(None, [contact.first_name, contact.last_name])
-    ) or "there"
+    contact_name = " ".join(filter(None, [contact.first_name, contact.last_name])) or "there"
 
     # Build system prompt for SMS generation
     agent_context = ""
@@ -81,8 +75,8 @@ async def generate_sms_fallback_message(
 
 Contact Information:
 - Name: {contact_name}
-- Company: {contact.company_name or 'Unknown'}
-- Email: {contact.email or 'Not provided'}
+- Company: {contact.company_name or "Unknown"}
+- Email: {contact.email or "Not provided"}
 
 Campaign: {campaign.name}
 {f"Campaign description: {campaign.description}" if campaign.description else ""}

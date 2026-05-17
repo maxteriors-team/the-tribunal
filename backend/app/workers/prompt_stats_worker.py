@@ -43,9 +43,7 @@ class PromptStatsWorker(RetryableWorker, BaseWorker):
                 item_key=f"aggregate:{yesterday.isoformat()}",
             )
 
-    async def _aggregate_and_commit(
-        self, db: AsyncSession, stat_date: date
-    ) -> int:
+    async def _aggregate_and_commit(self, db: AsyncSession, stat_date: date) -> int:
         """Aggregate for a date and commit; raises on failure to trigger retry."""
         processed = await self._aggregate_for_date(db, stat_date)
         await db.commit()
@@ -74,45 +72,35 @@ class PromptStatsWorker(RetryableWorker, BaseWorker):
             select(
                 CallOutcome.prompt_version_id,
                 func.count(CallOutcome.id).label("total_calls"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type.in_([
-                        OutcomeType.COMPLETED.value,
-                        OutcomeType.APPOINTMENT_BOOKED.value,
-                        OutcomeType.LEAD_QUALIFIED.value,
-                    ])
-                ).label("completed_calls"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.FAILED.value
-                ).label("failed_calls"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.APPOINTMENT_BOOKED.value
-                ).label("appointments_booked"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.LEAD_QUALIFIED.value
-                ).label("leads_qualified"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.NO_ANSWER.value
-                ).label("no_answer_count"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.REJECTED.value
-                ).label("rejected_count"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.outcome_type == OutcomeType.VOICEMAIL.value
-                ).label("voicemail_count"),
+                func.count(CallOutcome.id)
+                .filter(
+                    CallOutcome.outcome_type.in_(
+                        [
+                            OutcomeType.COMPLETED.value,
+                            OutcomeType.APPOINTMENT_BOOKED.value,
+                            OutcomeType.LEAD_QUALIFIED.value,
+                        ]
+                    )
+                )
+                .label("completed_calls"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.FAILED.value)
+                .label("failed_calls"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.APPOINTMENT_BOOKED.value)
+                .label("appointments_booked"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.LEAD_QUALIFIED.value)
+                .label("leads_qualified"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.NO_ANSWER.value)
+                .label("no_answer_count"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.REJECTED.value)
+                .label("rejected_count"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.outcome_type == OutcomeType.VOICEMAIL.value)
+                .label("voicemail_count"),
                 # Duration from signals JSON
                 func.avg(
                     cast(
@@ -133,16 +121,12 @@ class PromptStatsWorker(RetryableWorker, BaseWorker):
                         Numeric,
                     )
                 ).label("avg_quality"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    CallOutcome.signals["quality_score"].isnot(None)
-                ).label("feedback_count"),
-                func.count(
-                    CallOutcome.id
-                ).filter(
-                    cast(CallOutcome.signals["quality_score"].astext, Numeric) >= 4
-                ).label("positive_feedback_count"),
+                func.count(CallOutcome.id)
+                .filter(CallOutcome.signals["quality_score"].isnot(None))
+                .label("feedback_count"),
+                func.count(CallOutcome.id)
+                .filter(cast(CallOutcome.signals["quality_score"].astext, Numeric) >= 4)
+                .label("positive_feedback_count"),
             )
             .where(
                 and_(

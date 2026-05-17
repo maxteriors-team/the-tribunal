@@ -246,9 +246,10 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
             from app.services.calendar.calcom import CalComService
 
             calcom = CalComService(settings.calcom_api_key)
-            contact_name = " ".join(
-                filter(None, [contact.first_name, contact.last_name])
-            ) or contact.first_name
+            contact_name = (
+                " ".join(filter(None, [contact.first_name, contact.last_name]))
+                or contact.first_name
+            )
             return calcom.generate_booking_url(
                 event_type_id=agent.calcom_event_type_id,
                 contact_email=contact.email or "",

@@ -84,9 +84,7 @@ async def _lookup_call_context_wrapper(
 VoiceSessionType = VoiceAgentSession | GrokVoiceAgentSession | ElevenLabsVoiceAgentSession
 
 
-async def _save_call_transcript_wrapper(
-    call_id: str, transcript_json: str, log: Any
-) -> None:
+async def _save_call_transcript_wrapper(call_id: str, transcript_json: str, log: Any) -> None:
     """Save transcript - wrapper around call_context.save_call_transcript."""
     await save_call_transcript(call_id, transcript_json, log)
 
@@ -103,9 +101,7 @@ async def _save_call_duration(call_id: str, duration_seconds: int, log: Any) -> 
         log.info("streaming_duration_saved", call_id=call_id, duration_seconds=duration_seconds)
 
 
-async def _stamp_prompt_version_on_message(
-    call_id: str, prompt_version_id: str, log: Any
-) -> None:
+async def _stamp_prompt_version_on_message(call_id: str, prompt_version_id: str, log: Any) -> None:
     """Stamp prompt version ID on the message record for attribution."""
     try:
         async with AsyncSessionLocal() as db:
@@ -310,9 +306,7 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
         # Per-tenant cap (Redis-backed). Fails open on Redis outage so a cache
         # blip can't drop live calls. Heartbeat watchdog + duration backstop
         # run inside this scope so they're armed for the entire phase block.
-        async with acquire_workspace_slot(
-            websocket, workspace_id, log
-        ) as (ws_ok, _session_id):
+        async with acquire_workspace_slot(websocket, workspace_id, log) as (ws_ok, _session_id):
             if not ws_ok:
                 return
 
@@ -405,9 +399,7 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
     # Phase 1 gate (Whisper transcription + regex classification) before
     # connecting the expensive AI provider.
     ivr_gate_active = (
-        is_outbound
-        and agent is not None
-        and getattr(agent, "enable_ivr_navigation", False)
+        is_outbound and agent is not None and getattr(agent, "enable_ivr_navigation", False)
     )
 
     gate_result: GateResult | None = None
@@ -697,15 +689,18 @@ async def _relay_audio(
     # Create tasks for bidirectional streaming
     send_task = asyncio.create_task(
         _receive_from_telnyx_and_send_to_provider(
-            websocket, voice_session, log, greeting_triggered, stream_id_holder,
+            websocket,
+            voice_session,
+            log,
+            greeting_triggered,
+            stream_id_holder,
             is_outbound=is_outbound,
             stream_already_started=stream_already_started,
         )
     )
     recv_task = asyncio.create_task(
         _receive_from_provider_and_send_to_telnyx(
-            websocket, voice_session, log, greeting_triggered, stream_id_holder,
-            interruption_event
+            websocket, voice_session, log, greeting_triggered, stream_id_holder, interruption_event
         )
     )
 
@@ -1012,10 +1007,12 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
 
         audio_b64 = base64.b64encode(audio_data).decode("utf-8")
         # Telnyx format: NO stream_id needed (unlike Twilio)
-        message = json.dumps({
-            "event": "media",
-            "media": {"payload": audio_b64},
-        })
+        message = json.dumps(
+            {
+                "event": "media",
+                "media": {"payload": audio_b64},
+            }
+        )
         await websocket.send_text(message)
 
         audio_chunks_sent += 1

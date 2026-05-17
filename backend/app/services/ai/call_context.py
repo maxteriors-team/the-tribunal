@@ -211,9 +211,7 @@ async def lookup_call_context(
         if campaign_contact and campaign_contact.campaign:
             campaign = campaign_contact.campaign
             if campaign.offer_id:
-                offer_result = await db.execute(
-                    select(Offer).where(Offer.id == campaign.offer_id)
-                )
+                offer_result = await db.execute(select(Offer).where(Offer.id == campaign.offer_id))
                 offer = offer_result.scalar_one_or_none()
                 if offer:
                     context.offer_info = {

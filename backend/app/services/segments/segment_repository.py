@@ -20,9 +20,7 @@ async def list_segments(
 ) -> list[Segment]:
     """List all segments for a workspace."""
     result = await db.execute(
-        select(Segment)
-        .where(Segment.workspace_id == workspace_id)
-        .order_by(Segment.name)
+        select(Segment).where(Segment.workspace_id == workspace_id).order_by(Segment.name)
     )
     return list(result.scalars().all())
 

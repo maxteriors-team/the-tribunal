@@ -15,18 +15,14 @@ class DeviceToken(Base):
 
     __tablename__ = "device_tokens"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    expo_push_token: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False
-    )
+    expo_push_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

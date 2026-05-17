@@ -97,9 +97,7 @@ class BaseCampaignWorker(RetryableWorker, BaseWorker):
                     item_key=f"campaign:{campaign.id}",
                 )
 
-    async def _process_campaign(
-        self, campaign: Campaign, db: AsyncSession
-    ) -> None:
+    async def _process_campaign(self, campaign: Campaign, db: AsyncSession) -> None:
         """Process a single campaign with common checks then delegate."""
         log = self.logger.bind(
             campaign_id=str(campaign.id),
@@ -168,9 +166,7 @@ class BaseCampaignWorker(RetryableWorker, BaseWorker):
     ) -> None:
         """Check if campaign is complete based on remaining contacts."""
         remaining_result = await db.execute(
-            select(func.count(CampaignContact.id)).where(
-                self._get_remaining_filter(campaign)
-            )
+            select(func.count(CampaignContact.id)).where(self._get_remaining_filter(campaign))
         )
         remaining = remaining_result.scalar() or 0
 

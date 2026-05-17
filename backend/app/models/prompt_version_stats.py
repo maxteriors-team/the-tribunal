@@ -23,14 +23,10 @@ class PromptVersionStats(Base):
 
     __tablename__ = "prompt_version_stats"
     __table_args__ = (
-        UniqueConstraint(
-            "prompt_version_id", "stat_date", name="uq_prompt_version_stats_date"
-        ),
+        UniqueConstraint("prompt_version_id", "stat_date", name="uq_prompt_version_stats_date"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     prompt_version_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

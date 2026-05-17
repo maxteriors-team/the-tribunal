@@ -349,12 +349,14 @@ class VoiceAgentSession(VoiceAgentBase):
             # Trigger response generation with audio modality
             # This tells OpenAI to respond to the conversation item we just created
             self.logger.info("sending_response_create_event", modalities=["text", "audio"])
-            await self._send_event({
-                "type": "response.create",
-                "response": {
-                    "modalities": ["text", "audio"],
-                },
-            })
+            await self._send_event(
+                {
+                    "type": "response.create",
+                    "response": {
+                        "modalities": ["text", "audio"],
+                    },
+                }
+            )
             self.logger.info(
                 "response_create_sent_successfully",
                 hint="AI should now generate audio response",
@@ -553,8 +555,7 @@ class VoiceAgentSession(VoiceAgentBase):
                     # response.create event (if any) before resetting state.
                     if self._pending_response_create_at is not None:
                         openai_realtime_latency_ms.observe(
-                            (time.monotonic() - self._pending_response_create_at)
-                            * 1000.0
+                            (time.monotonic() - self._pending_response_create_at) * 1000.0
                         )
                         self._pending_response_create_at = None
                     # Handle new response - resets interrupted flag using base class
@@ -775,4 +776,3 @@ class VoiceAgentSession(VoiceAgentBase):
         except Exception as e:
             self.logger.exception("send_event_error", error=str(e))
             raise
-

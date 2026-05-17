@@ -25,18 +25,14 @@ logger = logging.getLogger(__name__)
 class ApprovalDeliveryService:
     """Delivers approval request notifications via SMS + push."""
 
-    async def notify_pending_action(
-        self, db: AsyncSession, action: PendingAction
-    ) -> bool:
+    async def notify_pending_action(self, db: AsyncSession, action: PendingAction) -> bool:
         """Send SMS + push notification about a pending action.
 
         Returns True if at least one notification channel succeeded.
         """
         # Look up HumanProfile for the agent
         result = await db.execute(
-            select(HumanProfile).where(
-                HumanProfile.agent_id == action.agent_id
-            )
+            select(HumanProfile).where(HumanProfile.agent_id == action.agent_id)
         )
         profile = result.scalar_one_or_none()
         if profile is None:
@@ -48,9 +44,7 @@ class ApprovalDeliveryService:
             return False
 
         # Load agent name for the SMS message
-        agent_result = await db.execute(
-            select(Agent).where(Agent.id == action.agent_id)
-        )
+        agent_result = await db.execute(select(Agent).where(Agent.id == action.agent_id))
         agent = agent_result.scalar_one_or_none()
         agent_name = agent.name if agent else "AI Agent"
 
@@ -116,10 +110,7 @@ class ApprovalDeliveryService:
             return False
         from_number = phone.phone_number
 
-        message = (
-            f"[{agent_name}] wants to: {description}. "
-            "Reply Y to approve, N to reject."
-        )
+        message = f"[{agent_name}] wants to: {description}. Reply Y to approve, N to reject."
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
@@ -165,9 +156,8 @@ class ApprovalDeliveryService:
             )
             return True
         except Exception:
-            logger.exception(
-                "Failed to send approval push for action %s", action.id
-            )
+            logger.exception("Failed to send approval push for action %s", action.id)
             return False
+
 
 approval_delivery_service = ApprovalDeliveryService()

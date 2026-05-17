@@ -176,9 +176,7 @@ async def get_drip_campaign_stats(
         .where(DripEnrollment.drip_campaign_id == campaign_id)
         .group_by(DripEnrollment.status)
     )
-    counts: dict[str, int] = {
-        row[0]: row[1] for row in status_counts.all()
-    }
+    counts: dict[str, int] = {row[0]: row[1] for row in status_counts.all()}
 
     total = campaign.total_enrolled or 1  # avoid division by zero
     responded = counts.get(DripEnrollmentStatus.RESPONDED, 0)

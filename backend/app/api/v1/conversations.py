@@ -155,9 +155,7 @@ async def assign_agent(
     )
 
 
-@router.delete(
-    "/{conversation_id}/messages", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/{conversation_id}/messages", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_conversation_history(
     workspace_id: uuid.UUID,
     conversation_id: uuid.UUID,

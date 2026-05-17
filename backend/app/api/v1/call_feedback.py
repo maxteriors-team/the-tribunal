@@ -29,9 +29,7 @@ async def _get_message_for_workspace(
 ) -> Message:
     """Get a message and verify it belongs to the workspace."""
     result = await db.execute(
-        select(Message)
-        .options(selectinload(Message.conversation))
-        .where(Message.id == message_id)
+        select(Message).options(selectinload(Message.conversation)).where(Message.id == message_id)
     )
     message = result.scalar_one_or_none()
 
@@ -129,18 +127,12 @@ async def get_feedback_summary(
             func.count(CallFeedback.id).label("total"),
             func.avg(CallFeedback.rating).label("avg_rating"),
             func.avg(CallFeedback.quality_score).label("avg_quality"),
-            func.sum(
-                func.case((CallFeedback.thumbs == "up", 1), else_=0)
-            ).label("thumbs_up"),
-            func.sum(
-                func.case((CallFeedback.thumbs == "down", 1), else_=0)
-            ).label("thumbs_down"),
-            func.sum(
-                func.case((CallFeedback.source == "user", 1), else_=0)
-            ).label("user_count"),
-            func.sum(
-                func.case((CallFeedback.source == "auto_quality", 1), else_=0)
-            ).label("auto_count"),
+            func.sum(func.case((CallFeedback.thumbs == "up", 1), else_=0)).label("thumbs_up"),
+            func.sum(func.case((CallFeedback.thumbs == "down", 1), else_=0)).label("thumbs_down"),
+            func.sum(func.case((CallFeedback.source == "user", 1), else_=0)).label("user_count"),
+            func.sum(func.case((CallFeedback.source == "auto_quality", 1), else_=0)).label(
+                "auto_count"
+            ),
         ).where(CallFeedback.message_id == message_id)
     )
     row = result.one()

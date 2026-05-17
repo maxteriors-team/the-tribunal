@@ -58,7 +58,9 @@ class RealtorCampaignResponse(BaseModel):
 class ParseCalcomUrlRequest(BaseModel):
     """Request body for the parse-calcom-url endpoint."""
 
-    url: str = Field(..., min_length=1, description="Cal.com booking URL, e.g. https://cal.com/johndoe/30min")
+    url: str = Field(
+        ..., min_length=1, description="Cal.com booking URL, e.g. https://cal.com/johndoe/30min"
+    )
     api_key: str | None = Field(
         None,
         min_length=1,

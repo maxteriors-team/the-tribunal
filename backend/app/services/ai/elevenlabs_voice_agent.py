@@ -420,9 +420,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             session_config["instructions"] = enhanced
 
         if any([turn_detection_mode, turn_detection_threshold, silence_duration_ms]):
-            turn_detection: dict[str, Any] = {
-                "type": turn_detection_mode or "server_vad"
-            }
+            turn_detection: dict[str, Any] = {"type": turn_detection_mode or "server_vad"}
             if turn_detection_threshold is not None:
                 turn_detection["threshold"] = turn_detection_threshold
             if silence_duration_ms is not None:
@@ -511,6 +509,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             self.grok_ws = None
         except Exception as e:
             self.logger.exception("send_audio_error", error=str(e))
+
     # Note: Can't use base _send_audio_base64 since this uses grok_ws not ws
 
     async def receive_audio_stream(self) -> AsyncIterator[bytes]:

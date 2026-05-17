@@ -130,12 +130,14 @@ class VoiceToolExecutor(BaseToolExecutor):
         """Format slots for voice response with 12-hour display times."""
         slots_dicts = []
         for slot in slots:
-            slots_dicts.append({
-                "date": slot.date,
-                "time": slot.time,
-                "iso": slot.iso,
-                "display_time": _format_time_12h(slot.time),
-            })
+            slots_dicts.append(
+                {
+                    "date": slot.date,
+                    "time": slot.time,
+                    "iso": slot.iso,
+                    "display_time": _format_time_12h(slot.time),
+                }
+            )
 
         # Build voice-friendly message (limit to 5 for speaking)
         slot_descriptions = [s["display_time"] for s in slots_dicts[:5]]

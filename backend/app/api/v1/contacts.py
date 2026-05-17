@@ -283,9 +283,7 @@ async def bulk_update_status(
     """Update the status of multiple contacts at once."""
     service = ContactService(db)
     try:
-        result = await service.bulk_update_status(
-            request.ids, workspace.id, request.status
-        )
+        result = await service.bulk_update_status(request.ids, workspace.id, request.status)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -317,9 +315,7 @@ async def send_message_to_contact(
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ServiceUnavailableError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -392,9 +388,7 @@ async def get_contact_engagement_summary(
     try:
         contact = await service.get_contact(contact_id, workspace.id)
     except NotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     return await get_engagement_summary(
         db=db,
@@ -533,9 +527,7 @@ async def import_contacts_csv(
         failed=result.failed,
         skipped_duplicates=result.skipped_duplicates,
         errors=result.errors,
-        created_contacts=[
-            ContactResponse.model_validate(c) for c in result.created_contacts
-        ],
+        created_contacts=[ContactResponse.model_validate(c) for c in result.created_contacts],
     )
 
 

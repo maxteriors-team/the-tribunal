@@ -57,9 +57,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
     attendee = attendees[0]
     email: str = attendee.get("email", "") or ""
     # Cal.com may supply the attendee phone as "phoneNumber" or "phone"
-    attendee_phone: str | None = (
-        attendee.get("phoneNumber") or attendee.get("phone") or None
-    )
+    attendee_phone: str | None = attendee.get("phoneNumber") or attendee.get("phone") or None
 
     log = log.bind(
         booking_uid=booking_uid,
@@ -132,7 +130,10 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
             appointment.sync_error = None  # Clear any previous sync errors
         else:
             message_id = await find_recent_voice_message(
-                db, contact.id, agent.id if agent else None, log,
+                db,
+                contact.id,
+                agent.id if agent else None,
+                log,
             )
 
             # Create new appointment
@@ -168,9 +169,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
         # returns 200 regardless of SMS outcome.
         if is_new_booking:
             # Fetch workspace to resolve timezone for time formatting
-            ws_result = await db.execute(
-                select(Workspace).where(Workspace.id == workspace_id)
-            )
+            ws_result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
             workspace = ws_result.scalar_one_or_none()
 
             confirmation_body = build_confirmation_body(
@@ -199,8 +198,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 if owner:
                     realtor_email, realtor_name = owner
                     contact_name = (
-                        " ".join(filter(None, [contact.first_name, contact.last_name]))
-                        or "Unknown"
+                        " ".join(filter(None, [contact.first_name, contact.last_name])) or "Unknown"
                     )
                     spawn_background_task(
                         send_appointment_booked_notification(
@@ -223,8 +221,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
         # Push notification for new appointment
         try:
             contact_name = (
-                " ".join(filter(None, [contact.first_name, contact.last_name]))
-                or "Unknown"
+                " ".join(filter(None, [contact.first_name, contact.last_name])) or "Unknown"
             )
             await push_notification_service.send_to_workspace_members(
                 db=db,
@@ -246,11 +243,13 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
         # Double-booking detection — alert if contact has multiple scheduled appointments
         try:
             existing_scheduled = await db.execute(
-                select(Appointment).where(
+                select(Appointment)
+                .where(
                     Appointment.contact_id == contact.id,
                     Appointment.status == "scheduled",
                     Appointment.id != appointment.id,
-                ).order_by(Appointment.created_at.asc())
+                )
+                .order_by(Appointment.created_at.asc())
             )
             other_appointments = existing_scheduled.scalars().all()
 
@@ -263,8 +262,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 new_time = appointment.scheduled_at.strftime("%b %d at %I:%M %p")
                 total = len(other_appointments) + 1
                 body_msg = (
-                    f"{contact_name} has {total} appointments. "
-                    f"First: {first_time}, New: {new_time}"
+                    f"{contact_name} has {total} appointments. First: {first_time}, New: {new_time}"
                 )
 
                 await push_notification_service.send_to_workspace_members(
@@ -372,9 +370,7 @@ async def handle_booking_rescheduled(data: dict[str, Any], log: Any) -> None:  #
                 workspace = ws_result.scalar_one_or_none()
 
                 # Format new date/time in workspace timezone
-                tz_name = (
-                    ((workspace.settings if workspace else None) or {}).get("timezone", "UTC")
-                )
+                tz_name = ((workspace.settings if workspace else None) or {}).get("timezone", "UTC")
                 try:
                     tz = zoneinfo.ZoneInfo(str(tz_name))
                 except (KeyError, zoneinfo.ZoneInfoNotFoundError):
@@ -382,7 +378,7 @@ async def handle_booking_rescheduled(data: dict[str, Any], log: Any) -> None:  #
 
                 local_dt = appointment.scheduled_at.astimezone(tz)
                 new_date = local_dt.strftime("%A, %B %-d")  # e.g. "Monday, March 24"
-                new_time = local_dt.strftime("%-I:%M %p")   # e.g. "3:00 PM"
+                new_time = local_dt.strftime("%-I:%M %p")  # e.g. "3:00 PM"
 
                 first_name = contact.first_name or "there"
                 rescheduled_body = (
@@ -417,7 +413,7 @@ async def handle_booking_rescheduled(data: dict[str, Any], log: Any) -> None:  #
                     " ".join(filter(None, [push_contact.first_name, push_contact.last_name]))
                     or "Unknown"
                 )
-                rescheduled_time = scheduled_at.strftime('%b %d at %I:%M %p')
+                rescheduled_time = scheduled_at.strftime("%b %d at %I:%M %p")
                 await push_notification_service.send_to_workspace_members(
                     db=db,
                     workspace_id=str(appointment.workspace_id),
@@ -532,12 +528,15 @@ async def handle_booking_cancelled(data: dict[str, Any], log: Any) -> None:  # n
                             from app.services.calendar.calcom import CalComService
 
                             calcom = CalComService(settings.calcom_api_key)
-                            contact_name = " ".join(
-                                filter(
-                                    None,
-                                    [cancelled_contact.first_name, cancelled_contact.last_name],
+                            contact_name = (
+                                " ".join(
+                                    filter(
+                                        None,
+                                        [cancelled_contact.first_name, cancelled_contact.last_name],
+                                    )
                                 )
-                            ) or first_name
+                                or first_name
+                            )
                             rebook_url = calcom.generate_booking_url(
                                 event_type_id=cancelled_agent.calcom_event_type_id,
                                 contact_email=cancelled_contact.email or "",
@@ -657,9 +656,7 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
 
             # Update campaign guarantee tracking
             if appointment.campaign_id:
-                await increment_completed_and_check_guarantee(
-                    db, appointment.campaign_id, log
-                )
+                await increment_completed_and_check_guarantee(db, appointment.campaign_id, log)
 
         appointment.sync_status = "synced"
         appointment.last_synced_at = datetime.now(UTC)
@@ -709,9 +706,7 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
 
                     # Respect agent-level toggle (default True when no agent)
                     sms_enabled = (
-                        noshow_agent.noshow_sms_enabled
-                        if noshow_agent is not None
-                        else True
+                        noshow_agent.noshow_sms_enabled if noshow_agent is not None else True
                     )
                     if not sms_enabled:
                         log.info(
@@ -732,12 +727,15 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
                                 from app.services.calendar.calcom import CalComService
 
                                 calcom = CalComService(settings.calcom_api_key)
-                                contact_name = " ".join(
-                                    filter(
-                                        None,
-                                        [noshow_contact.first_name, noshow_contact.last_name],
+                                contact_name = (
+                                    " ".join(
+                                        filter(
+                                            None,
+                                            [noshow_contact.first_name, noshow_contact.last_name],
+                                        )
                                     )
-                                ) or first_name
+                                    or first_name
+                                )
                                 booking_url = calcom.generate_booking_url(
                                     event_type_id=noshow_agent.calcom_event_type_id,
                                     contact_email=noshow_contact.email or "",
@@ -757,9 +755,7 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
                         if noshow_agent is not None and noshow_agent.noshow_template:
                             noshow_body = noshow_agent.noshow_template.replace(
                                 "{first_name}", first_name
-                            ).replace(
-                                "{reschedule_link}", booking_url or ""
-                            )
+                            ).replace("{reschedule_link}", booking_url or "")
                         elif booking_url:
                             noshow_body = (
                                 f"Hi {first_name}, we missed you at your appointment today. "
@@ -814,10 +810,8 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
                         and completed_agent.post_meeting_template
                     ):
                         first_name = completed_contact.first_name or "there"
-                        post_meeting_body = (
-                            completed_agent.post_meeting_template.replace(
-                                "{first_name}", first_name
-                            )
+                        post_meeting_body = completed_agent.post_meeting_template.replace(
+                            "{first_name}", first_name
                         )
                         log.info(
                             "sending_post_meeting_sms",

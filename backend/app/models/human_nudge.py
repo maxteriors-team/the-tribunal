@@ -28,9 +28,7 @@ class HumanNudge(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -59,9 +57,7 @@ class HumanNudge(Base):
     )  # low, medium, high
 
     # Scheduling
-    due_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
-    )
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     source_date_field: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )  # e.g. "birthday", "anniversary"
@@ -70,20 +66,12 @@ class HumanNudge(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending", index=True
     )  # pending, sent, acted, dismissed, snoozed
-    snoozed_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Delivery tracking
-    delivered_via: Mapped[str | None] = mapped_column(
-        String(20), nullable=True
-    )  # sms, push, both
-    delivered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    acted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    delivered_via: Mapped[str | None] = mapped_column(String(20), nullable=True)  # sms, push, both
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Assignment (nullable = all workspace members)
     assigned_to_user_id: Mapped[int | None] = mapped_column(

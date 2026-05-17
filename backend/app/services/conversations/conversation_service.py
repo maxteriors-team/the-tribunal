@@ -68,9 +68,7 @@ class ConversationService:
         unread_only: bool = False,
     ) -> PaginatedConversations:
         """List conversations in a workspace with batch campaign sync."""
-        query = select(Conversation).where(
-            Conversation.workspace_id == workspace_id
-        )
+        query = select(Conversation).where(Conversation.workspace_id == workspace_id)
 
         if status_filter:
             query = query.where(Conversation.status == status_filter)
@@ -117,9 +115,7 @@ class ConversationService:
                 await self.db.commit()
 
         return PaginatedConversations(
-            items=[
-                ConversationResponse.model_validate(c) for c in conversations
-            ],
+            items=[ConversationResponse.model_validate(c) for c in conversations],
             total=result.total,
             page=result.page,
             page_size=result.page_size,
@@ -133,9 +129,7 @@ class ConversationService:
         limit: int = 50,
     ) -> ConversationWithMessages:
         """Get a conversation with its messages."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         # Sync campaign agent (campaign always takes precedence)
         await self._syncer.sync_conversation(self.db, conversation, self.log)
@@ -165,9 +159,7 @@ class ConversationService:
         body: str,
     ) -> Message:
         """Send a message in a conversation via Telnyx SMS."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         telnyx_api_key = settings.telnyx_api_key
         if not telnyx_api_key:
@@ -196,9 +188,7 @@ class ConversationService:
         enabled: bool,
     ) -> dict[str, bool]:
         """Toggle AI for a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
         conversation.ai_enabled = enabled
         await self.db.commit()
         return {"ai_enabled": conversation.ai_enabled}
@@ -209,9 +199,7 @@ class ConversationService:
         workspace_id: uuid.UUID,
     ) -> dict[str, bool]:
         """Pause AI for a conversation (temporary)."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
         conversation.ai_paused = True
         await self.db.commit()
         return {"ai_paused": True}
@@ -222,9 +210,7 @@ class ConversationService:
         workspace_id: uuid.UUID,
     ) -> dict[str, bool]:
         """Resume AI for a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
         conversation.ai_paused = False
         await self.db.commit()
         return {"ai_paused": False}
@@ -236,9 +222,7 @@ class ConversationService:
         agent_id: uuid.UUID | None,
     ) -> dict[str, uuid.UUID | None]:
         """Assign an agent to a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         if agent_id:
             agent_result = await self.db.execute(
@@ -264,15 +248,9 @@ class ConversationService:
         workspace_id: uuid.UUID,
     ) -> None:
         """Clear all messages in a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
-        await self.db.execute(
-            delete(Message).where(
-                Message.conversation_id == conversation_id
-            )
-        )
+        await self.db.execute(delete(Message).where(Message.conversation_id == conversation_id))
 
         conversation.last_message_preview = None
         conversation.last_message_at = None
@@ -286,9 +264,7 @@ class ConversationService:
         workspace_id: uuid.UUID,
     ) -> FollowupSettingsResponse:
         """Get follow-up settings and status for a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
         return FollowupSettingsResponse(
             enabled=conversation.followup_enabled,
             delay_hours=conversation.followup_delay_hours,
@@ -307,16 +283,14 @@ class ConversationService:
         max_count: int | None = None,
     ) -> FollowupSettingsResponse:
         """Update follow-up settings for a conversation."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         if enabled is not None:
             conversation.followup_enabled = enabled
             if enabled and not conversation.next_followup_at:
-                conversation.next_followup_at = datetime.now(
-                    UTC
-                ) + timedelta(hours=conversation.followup_delay_hours)
+                conversation.next_followup_at = datetime.now(UTC) + timedelta(
+                    hours=conversation.followup_delay_hours
+                )
 
         if delay_hours is not None:
             conversation.followup_delay_hours = delay_hours
@@ -343,9 +317,7 @@ class ConversationService:
         custom_instructions: str | None = None,
     ) -> FollowupGenerateResponse:
         """Generate a follow-up message preview (does not send)."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         openai_key = settings.openai_api_key
         if not openai_key:
@@ -380,9 +352,7 @@ class ConversationService:
         custom_instructions: str | None = None,
     ) -> FollowupSendResponse:
         """Send a follow-up message. Generates one if not provided."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         message_body = message
         if not message_body:
@@ -430,12 +400,11 @@ class ConversationService:
             # Schedule next follow-up if still within limits
             if (
                 conversation.followup_enabled
-                and conversation.followup_count_sent
-                < conversation.followup_max_count
+                and conversation.followup_count_sent < conversation.followup_max_count
             ):
-                conversation.next_followup_at = datetime.now(
-                    UTC
-                ) + timedelta(hours=conversation.followup_delay_hours)
+                conversation.next_followup_at = datetime.now(UTC) + timedelta(
+                    hours=conversation.followup_delay_hours
+                )
             else:
                 conversation.next_followup_at = None
 
@@ -462,9 +431,7 @@ class ConversationService:
         workspace_id: uuid.UUID,
     ) -> dict[str, int]:
         """Reset the follow-up counter to 0."""
-        conversation = await self._get_conversation(
-            conversation_id, workspace_id
-        )
+        conversation = await self._get_conversation(conversation_id, workspace_id)
 
         conversation.followup_count_sent = 0
 

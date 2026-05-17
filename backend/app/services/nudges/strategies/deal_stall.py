@@ -26,16 +26,12 @@ class DealStallNudgeStrategy(NudgeStrategy):
 
     nudge_type = "deal_milestone"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         count = await self._generate_stalls(db, context)
         count += await self._generate_overdue(db, context)
         return count
 
-    async def _generate_stalls(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def _generate_stalls(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         cutoff = now - timedelta(days=DEAL_STALL_DAYS)
         year = now.year
@@ -67,9 +63,7 @@ class DealStallNudgeStrategy(NudgeStrategy):
             stage_name = "unknown stage"
             if opp.stage_id is not None:
                 stage_result = await db.execute(
-                    select(PipelineStage.name).where(
-                        PipelineStage.id == opp.stage_id
-                    ).limit(1)
+                    select(PipelineStage.name).where(PipelineStage.id == opp.stage_id).limit(1)
                 )
                 stage_name = stage_result.scalar_one_or_none() or "unknown stage"
 
@@ -100,9 +94,7 @@ class DealStallNudgeStrategy(NudgeStrategy):
 
         return count
 
-    async def _generate_overdue(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def _generate_overdue(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         today = now.date()
         year = now.year

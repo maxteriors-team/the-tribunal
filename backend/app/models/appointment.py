@@ -118,9 +118,7 @@ class Appointment(Base):
         DateTime(timezone=True), nullable=True
     )
     # Multi-touch reminder tracking — list of offsets (minutes) already sent
-    reminders_sent: Mapped[list[int]] = mapped_column(
-        ARRAY(Integer), default=list, nullable=False
-    )
+    reminders_sent: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, nullable=False)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -142,6 +140,5 @@ class Appointment(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<Appointment(id={self.id}, scheduled_at={self.scheduled_at}, "
-            f"status={self.status})>"
+            f"<Appointment(id={self.id}, scheduled_at={self.scheduled_at}, status={self.status})>"
         )

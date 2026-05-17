@@ -40,9 +40,7 @@ async def get_workspace_timezone(
     Returns:
         Timezone string (e.g., "America/New_York")
     """
-    result = await db.execute(
-        select(Workspace).where(Workspace.id == workspace_id)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
     workspace = result.scalar_one_or_none()
     if workspace and workspace.settings:
         tz = workspace.settings.get("timezone")
@@ -190,9 +188,7 @@ async def get_booking_url(
 
     # Load contact if conversation has one
     if conversation.contact_id:
-        result = await db.execute(
-            select(Contact).where(Contact.id == conversation.contact_id)
-        )
+        result = await db.execute(select(Contact).where(Contact.id == conversation.contact_id))
         contact = result.scalar_one_or_none()
         if contact:
             contact_email = contact.email

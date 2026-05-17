@@ -19,6 +19,7 @@ def generate_public_id() -> str:
     random_part = "".join(secrets.choice(chars) for _ in range(8))
     return f"ag_{random_part}"
 
+
 if TYPE_CHECKING:
     from app.models.appointment import Appointment
     from app.models.campaign import Campaign
@@ -34,9 +35,7 @@ class Agent(Base):
 
     __tablename__ = "agents"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -159,9 +158,7 @@ class Agent(Base):
         String(20), unique=True, nullable=True, index=True
     )
     embed_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    allowed_domains: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), default=list, nullable=False
-    )
+    allowed_domains: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
     embed_settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # Stats (denormalized)
@@ -210,9 +207,7 @@ class Agent(Base):
     phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
         "PhoneNumber", back_populates="assigned_agent"
     )
-    message_tests: Mapped[list["MessageTest"]] = relationship(
-        "MessageTest", back_populates="agent"
-    )
+    message_tests: Mapped[list["MessageTest"]] = relationship("MessageTest", back_populates="agent")
     prompt_versions: Mapped[list["PromptVersion"]] = relationship(
         "PromptVersion",
         back_populates="agent",

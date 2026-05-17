@@ -69,9 +69,7 @@ async def list_api_keys(
 ) -> list[APIKey]:
     """List all API keys for this workspace (redacted)."""
     result = await db.execute(
-        select(APIKey)
-        .where(APIKey.workspace_id == workspace.id)
-        .order_by(APIKey.created_at.desc())
+        select(APIKey).where(APIKey.workspace_id == workspace.id).order_by(APIKey.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -92,9 +90,7 @@ async def revoke_api_key(
     )
     api_key = result.scalar_one_or_none()
     if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
     api_key.is_active = False
     await db.commit()

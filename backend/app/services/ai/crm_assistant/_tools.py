@@ -75,7 +75,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "send_sms",
             "description": "Send an SMS to a contact by id. Confirm with the user first "
-                           "unless they already gave a clear directive.",
+            "unless they already gave a clear directive.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -132,7 +132,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_dashboard_stats",
             "description": "Current totals: contacts, campaigns, conversations, "
-                           "upcoming appointments.",
+            "upcoming appointments.",
             "parameters": {"type": "object", "properties": {}},
         },
     },

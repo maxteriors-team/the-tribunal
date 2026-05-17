@@ -32,9 +32,7 @@ MAX_REQUEST_ID_LENGTH = 128
 # Allowed characters in a caller-supplied request ID: alphanumerics and a small
 # set of separators commonly used by tracing frameworks. Everything else is
 # rejected and we generate a fresh ULID instead.
-_ALLOWED_CHARS = frozenset(
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_."
-)
+_ALLOWED_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.")
 
 
 def generate_ulid() -> str:

@@ -236,9 +236,7 @@ class VoiceSessionFactory:
             return bool(self.settings.xai_api_key)
 
         if provider_lower == "elevenlabs":
-            return bool(self.settings.elevenlabs_api_key) and bool(
-                self.settings.xai_api_key
-            )
+            return bool(self.settings.elevenlabs_api_key) and bool(self.settings.xai_api_key)
 
         return False
 

@@ -18,7 +18,6 @@ Example usage:
         print(report.to_markdown())
 """
 
-
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -287,9 +286,7 @@ class IVRTestHarness:
                 # Update conversation history
                 conversation_history.append({"role": "user", "content": ivr_transcript})
                 stripped_response = self._dtmf_parser.strip_dtmf_tags(agent_response)
-                conversation_history.append(
-                    {"role": "assistant", "content": stripped_response}
-                )
+                conversation_history.append({"role": "assistant", "content": stripped_response})
 
             # Max turns exceeded
             duration = time.time() - start_time

@@ -8,9 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.phone_number import PhoneNumber
 
 
-async def get_workspace_sms_number(
-    db: AsyncSession, workspace_id: uuid.UUID
-) -> PhoneNumber | None:
+async def get_workspace_sms_number(db: AsyncSession, workspace_id: uuid.UUID) -> PhoneNumber | None:
     """Return the workspace's primary outbound SMS number, or None.
 
     Picks the oldest active, SMS-enabled phone number owned by the workspace.

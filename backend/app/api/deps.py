@@ -84,9 +84,7 @@ async def get_current_user(
     # Bind the resolved user (and the API-key-scoped workspace, if any) to
     # structlog contextvars so the rest of the request's log lines are
     # automatically tagged. The middleware already bound ``request_id``.
-    api_key_workspace_id: uuid.UUID | None = getattr(
-        request.state, "api_key_workspace_id", None
-    )
+    api_key_workspace_id: uuid.UUID | None = getattr(request.state, "api_key_workspace_id", None)
     _bind_identity_to_logs(user_id=user.id, workspace_id=api_key_workspace_id)
     return user
 
@@ -159,9 +157,7 @@ def _enforce_api_key_workspace(request: Request, workspace_id: uuid.UUID) -> Non
     issued for workspace A must not authorize access to workspace B, even when the
     underlying user is a member of both. Raises 403 on mismatch.
     """
-    api_key_workspace_id: uuid.UUID | None = getattr(
-        request.state, "api_key_workspace_id", None
-    )
+    api_key_workspace_id: uuid.UUID | None = getattr(request.state, "api_key_workspace_id", None)
     if api_key_workspace_id is not None and api_key_workspace_id != workspace_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

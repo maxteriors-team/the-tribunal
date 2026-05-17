@@ -22,9 +22,7 @@ class UnresponsiveNudgeStrategy(NudgeStrategy):
 
     nudge_type = "unresponsive"
 
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         now = context.now
         cutoff = now - timedelta(days=5)
         year = now.year
@@ -50,10 +48,12 @@ class UnresponsiveNudgeStrategy(NudgeStrategy):
                 continue
 
             contact_result = await db.execute(
-                select(Contact).where(
+                select(Contact)
+                .where(
                     Contact.id == contact_id,
                     Contact.status.in_(["new", "contacted"]),
-                ).limit(1)
+                )
+                .limit(1)
             )
             contact = contact_result.scalar_one_or_none()
             if contact is None:
@@ -75,8 +75,7 @@ class UnresponsiveNudgeStrategy(NudgeStrategy):
                 nudge_type="unresponsive",
                 title=f"Re-engage {name}",
                 message=(
-                    f"{name} hasn't replied in {days_silent} days. "
-                    f"Try a different angle or offer."
+                    f"{name} hasn't replied in {days_silent} days. Try a different angle or offer."
                 ),
                 suggested_action="text",
                 priority="medium",

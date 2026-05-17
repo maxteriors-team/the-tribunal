@@ -21,7 +21,6 @@ Example usage:
     )
 """
 
-
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -114,9 +113,7 @@ class IVRTestResult:
 
     def to_markdown(self) -> str:
         """Generate markdown summary of this result."""
-        status_icon = {"success": "✅", "failure": "❌", "error": "⚠️"}.get(
-            self.status, "❓"
-        )
+        status_icon = {"success": "✅", "failure": "❌", "error": "⚠️"}.get(self.status, "❓")
 
         lines = [
             f"### {status_icon} {self.scenario_name}",

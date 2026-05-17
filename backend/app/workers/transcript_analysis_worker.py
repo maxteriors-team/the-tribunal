@@ -33,9 +33,7 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
     backoff_base_seconds = 2.0
 
     async def _process_items(self) -> None:
-        await self.execute_with_retry(
-            self._process_batch, item_key="transcript_batch"
-        )
+        await self.execute_with_retry(self._process_batch, item_key="transcript_batch")
 
     async def _process_batch(self) -> None:
         async with AsyncSessionLocal() as db:
@@ -70,16 +68,12 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
                 log = self.logger.bind(message_id=str(msg.id))
                 current: dict[str, object] = dict(outcome.signals or {})
                 if isinstance(analysis, BaseException):
-                    log.exception(
-                        "transcript_analysis_failed", exc_info=analysis
-                    )
+                    log.exception("transcript_analysis_failed", exc_info=analysis)
                     current["analyzed"] = "error"
                 else:
                     current.update(analysis)
                     current["analyzed"] = True
-                    log.info(
-                        "transcript_analyzed", sentiment=analysis.get("sentiment")
-                    )
+                    log.info("transcript_analyzed", sentiment=analysis.get("sentiment"))
                 outcome.signals = current
 
             await db.commit()

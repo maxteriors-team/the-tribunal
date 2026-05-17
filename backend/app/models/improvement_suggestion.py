@@ -25,9 +25,7 @@ class ImprovementSuggestion(Base):
 
     __tablename__ = "improvement_suggestions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     agent_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agents.id", ondelete="CASCADE"),
@@ -53,12 +51,8 @@ class ImprovementSuggestion(Base):
     expected_improvement: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Queue status: pending, approved, rejected, expired
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", nullable=False, index=True
-    )
-    reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )

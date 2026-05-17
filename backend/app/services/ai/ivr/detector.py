@@ -1,6 +1,5 @@
 """IVR detection orchestrator."""
 
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 

@@ -36,9 +36,7 @@ class BanditDecision(Base):
 
     __tablename__ = "bandit_decisions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Link to the agent
     agent_id: Mapped[uuid.UUID] = mapped_column(
@@ -82,15 +80,11 @@ class BanditDecision(Base):
 
     # Arm statistics at decision time
     # Example: {"alpha": 5.0, "beta": 3.0, "sampled_value": 0.625}
-    arm_statistics: Mapped[dict[str, object]] = mapped_column(
-        JSONB, default=dict, nullable=False
-    )
+    arm_statistics: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # Context snapshot at decision time
     # Example: {"time_of_day": "morning", "day_of_week": "monday", "lead_score_bucket": "high"}
-    context_snapshot: Mapped[dict[str, object]] = mapped_column(
-        JSONB, default=dict, nullable=False
-    )
+    context_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # Reward observation (filled after call outcome)
     observed_reward: Mapped[float | None] = mapped_column(Float, nullable=True)

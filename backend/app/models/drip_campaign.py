@@ -74,9 +74,7 @@ class DripCampaign(Base):
 
     __tablename__ = "drip_campaigns"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -125,9 +123,7 @@ class DripCampaign(Base):
     sending_days: Mapped[list[int] | None] = mapped_column(
         ARRAY(Integer), nullable=True
     )  # 0=Mon, 6=Sun
-    timezone: Mapped[str] = mapped_column(
-        String(50), default="America/New_York", nullable=False
-    )
+    timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
 
     # Rate limiting
     messages_per_minute: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
@@ -138,17 +134,11 @@ class DripCampaign(Base):
     total_responded: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_cancelled: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_messages_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    total_appointments_booked: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
+    total_appointments_booked: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timestamps
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -175,9 +165,7 @@ class DripEnrollment(Base):
 
     __tablename__ = "drip_enrollments"
     __table_args__ = (
-        UniqueConstraint(
-            "drip_campaign_id", "contact_id", name="uq_drip_enrollment"
-        ),
+        UniqueConstraint("drip_campaign_id", "contact_id", name="uq_drip_enrollment"),
         Index(
             "ix_drip_enrollment_next_step",
             "status",
@@ -185,9 +173,7 @@ class DripEnrollment(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     drip_campaign_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("drip_campaigns.id", ondelete="CASCADE"),
@@ -237,20 +223,14 @@ class DripEnrollment(Base):
     messages_received: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timing
-    last_sent_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_reply_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
     enrolled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

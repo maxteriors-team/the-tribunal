@@ -49,9 +49,7 @@ class NudgeStrategy(ABC):
     nudge_type: str
 
     @abstractmethod
-    async def generate(
-        self, db: AsyncSession, context: NudgeContext
-    ) -> int:
+    async def generate(self, db: AsyncSession, context: NudgeContext) -> int:
         """Create HumanNudge rows for this strategy's nudge type."""
 
 
@@ -65,9 +63,7 @@ async def dedup_exists(db: AsyncSession, dedup_key: str) -> bool:
 
 async def load_contact(db: AsyncSession, contact_id: int) -> Contact | None:
     """Load a single Contact by id, or None."""
-    result = await db.execute(
-        select(Contact).where(Contact.id == contact_id).limit(1)
-    )
+    result = await db.execute(select(Contact).where(Contact.id == contact_id).limit(1))
     return result.scalar_one_or_none()
 
 
@@ -115,8 +111,7 @@ def build_nudge_message(
     if nudge_type == "cooling":
         return (
             f"\U0001f504 Re-engage {name}",
-            f"\U0001f504 Haven't heard from {name} in {days_until} days. "
-            f"Time to reach out?",
+            f"\U0001f504 Haven't heard from {name} in {days_until} days. Time to reach out?",
             "call",
         )
     event_label = label or "Event"

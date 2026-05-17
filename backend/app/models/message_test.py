@@ -59,9 +59,7 @@ class MessageTest(Base):
 
     __tablename__ = "message_tests"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
@@ -105,9 +103,7 @@ class MessageTest(Base):
     sending_days: Mapped[list[int] | None] = mapped_column(
         ARRAY(Integer), nullable=True
     )  # 0=Mon, 6=Sun
-    timezone: Mapped[str] = mapped_column(
-        String(50), default="America/New_York", nullable=False
-    )
+    timezone: Mapped[str] = mapped_column(String(50), default="America/New_York", nullable=False)
 
     # Rate limiting
     messages_per_minute: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
@@ -138,12 +134,8 @@ class MessageTest(Base):
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timestamps
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -182,9 +174,7 @@ class TestVariant(Base):
 
     __tablename__ = "test_variants"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     message_test_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("message_tests.id", ondelete="CASCADE"),
@@ -249,13 +239,9 @@ class TestContact(Base):
     """Contact enrollment in a message test."""
 
     __tablename__ = "test_contacts"
-    __table_args__ = (
-        UniqueConstraint("message_test_id", "contact_id", name="uq_test_contact"),
-    )
+    __table_args__ = (UniqueConstraint("message_test_id", "contact_id", name="uq_test_contact"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     message_test_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("message_tests.id", ondelete="CASCADE"),
@@ -301,17 +287,11 @@ class TestContact(Base):
 
     # Opt-out
     opted_out: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    opted_out_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    opted_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    first_sent_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_reply_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    first_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     variant_assigned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

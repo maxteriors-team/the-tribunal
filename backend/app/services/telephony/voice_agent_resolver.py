@@ -135,9 +135,7 @@ class VoiceAgentResolver:
 
         # Priority 2: Campaign's general agent (if it supports voice)
         if campaign.agent_id:
-            result = await self._check_agent(
-                db, campaign.agent_id, "campaign_agent", log
-            )
+            result = await self._check_agent(db, campaign.agent_id, "campaign_agent", log)
             if result:
                 return result
 

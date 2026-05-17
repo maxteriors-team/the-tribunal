@@ -1,6 +1,5 @@
 """IVR type definitions: enums and dataclasses."""
 
-
 from dataclasses import dataclass, field
 from enum import Enum
 

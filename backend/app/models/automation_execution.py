@@ -37,9 +37,7 @@ class AutomationExecution(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     automation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("automations.id", ondelete="CASCADE"),
@@ -54,9 +52,7 @@ class AutomationExecution(Base):
     )
 
     # Status: "pending" | "completed" | "failed" | "scheduled"
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="pending", index=True
-    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
 
     # For delayed actions — worker re-checks executions where this is <= now
     scheduled_for: Mapped[datetime | None] = mapped_column(
@@ -72,14 +68,10 @@ class AutomationExecution(Base):
         default=lambda: datetime.now(UTC),
         nullable=False,
     )
-    executed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    automation: Mapped["Automation"] = relationship(
-        "Automation", back_populates="executions"
-    )
+    automation: Mapped["Automation"] = relationship("Automation", back_populates="executions")
     contact: Mapped["Contact"] = relationship("Contact")
 
     def __repr__(self) -> str:

@@ -256,9 +256,7 @@ class AudioCodecService:
         self.logger = logger.bind(service="audio_codec")
 
     # Conversion dispatch table: (source, target) -> converter function
-    _CONVERTERS: dict[
-        tuple[AudioFormat, AudioFormat], Callable[[bytes], bytes]
-    ] = {
+    _CONVERTERS: dict[tuple[AudioFormat, AudioFormat], Callable[[bytes], bytes]] = {
         (AudioFormat.MULAW_8K, AudioFormat.PCM16_24K): convert_telnyx_to_openai,
         (AudioFormat.PCM16_24K, AudioFormat.MULAW_8K): convert_openai_to_telnyx,
         (AudioFormat.MULAW_8K, AudioFormat.PCM16_8K): mulaw_to_pcm,

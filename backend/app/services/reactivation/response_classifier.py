@@ -28,41 +28,102 @@ logger = structlog.get_logger()
 
 _KEYWORD_RULES: dict[ResponseCategory, list[str]] = {
     ResponseCategory.OPT_OUT: [
-        "stop", "unsubscribe", "opt out", "optout", "remove me",
-        "take me off", "don't text", "dont text", "don't contact",
-        "dont contact", "leave me alone", "wrong number", "wrong person",
-        "spam", "reported", "do not contact",
+        "stop",
+        "unsubscribe",
+        "opt out",
+        "optout",
+        "remove me",
+        "take me off",
+        "don't text",
+        "dont text",
+        "don't contact",
+        "dont contact",
+        "leave me alone",
+        "wrong number",
+        "wrong person",
+        "spam",
+        "reported",
+        "do not contact",
     ],
     ResponseCategory.NOT_INTERESTED: [
-        "not interested", "no thanks", "no thank you", "no thx",
-        "not looking", "pass", "nope", "not right now",
-        "don't need", "dont need", "already sold", "already have an agent",
-        "already working with", "go away",
+        "not interested",
+        "no thanks",
+        "no thank you",
+        "no thx",
+        "not looking",
+        "pass",
+        "nope",
+        "not right now",
+        "don't need",
+        "dont need",
+        "already sold",
+        "already have an agent",
+        "already working with",
+        "go away",
     ],
     ResponseCategory.APPOINTMENT_REQUEST: [
-        "book", "schedule", "set up a call", "set up a meeting",
-        "let's meet", "lets meet", "when are you free",
-        "what times", "available", "appointment",
-        "i'd like to meet", "can we talk", "call me",
+        "book",
+        "schedule",
+        "set up a call",
+        "set up a meeting",
+        "let's meet",
+        "lets meet",
+        "when are you free",
+        "what times",
+        "available",
+        "appointment",
+        "i'd like to meet",
+        "can we talk",
+        "call me",
     ],
     ResponseCategory.INTERESTED: [
-        "yes", "yeah", "yep", "sure", "send it", "send me",
-        "i'd love", "id love", "i'd like", "id like",
-        "sounds good", "sounds great", "interested",
-        "tell me more", "more info", "please do",
-        "that would be great", "love to", "absolutely",
-        "yes please", "for sure",
+        "yes",
+        "yeah",
+        "yep",
+        "sure",
+        "send it",
+        "send me",
+        "i'd love",
+        "id love",
+        "i'd like",
+        "id like",
+        "sounds good",
+        "sounds great",
+        "interested",
+        "tell me more",
+        "more info",
+        "please do",
+        "that would be great",
+        "love to",
+        "absolutely",
+        "yes please",
+        "for sure",
     ],
     ResponseCategory.TIMING: [
-        "not now", "maybe later", "next year", "in a few months",
-        "not yet", "down the road", "later", "not ready yet",
-        "check back", "reach out later", "after the holidays",
+        "not now",
+        "maybe later",
+        "next year",
+        "in a few months",
+        "not yet",
+        "down the road",
+        "later",
+        "not ready yet",
+        "check back",
+        "reach out later",
+        "after the holidays",
     ],
     ResponseCategory.QUESTION: [
-        "how much", "what's my home worth", "what would",
-        "how does", "what do you", "can you explain",
-        "what's the market", "whats the market",
-        "how long", "what area", "which neighborhood",
+        "how much",
+        "what's my home worth",
+        "what would",
+        "how does",
+        "what do you",
+        "can you explain",
+        "what's the market",
+        "whats the market",
+        "how long",
+        "what area",
+        "which neighborhood",
     ],
 }
 
@@ -125,16 +186,14 @@ async def classify_by_llm(
     """Classify a message using LLM when keyword matching is ambiguous."""
     client = AsyncOpenAI(api_key=openai_api_key)
 
-    user_content = f"Contact's reply: \"{message}\""
+    user_content = f'Contact\'s reply: "{message}"'
     if conversation_context:
         recent = conversation_context[-4:]
         context_str = "\n".join(
-            f"{'Agent' if m['role'] == 'assistant' else 'Contact'}: {m['content']}"
-            for m in recent
+            f"{'Agent' if m['role'] == 'assistant' else 'Contact'}: {m['content']}" for m in recent
         )
         user_content = (
-            f"Recent conversation:\n{context_str}\n\n"
-            f"Contact's latest reply: \"{message}\""
+            f'Recent conversation:\n{context_str}\n\nContact\'s latest reply: "{message}"'
         )
 
     try:

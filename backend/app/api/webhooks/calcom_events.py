@@ -224,7 +224,7 @@ def build_confirmation_body(
 
     local_dt = appointment.scheduled_at.astimezone(tz)
     date_str = local_dt.strftime("%A, %B %-d")  # e.g. "Monday, March 24"
-    time_str = local_dt.strftime("%-I:%M %p")   # e.g. "3:00 PM"
+    time_str = local_dt.strftime("%-I:%M %p")  # e.g. "3:00 PM"
 
     first_name = contact.first_name or "there"
     template = agent.reminder_template if agent is not None else None
@@ -243,9 +243,9 @@ def build_confirmation_body(
             from app.services.calendar.calcom import CalComService
 
             calcom = CalComService(settings.calcom_api_key)
-            contact_name = " ".join(
-                filter(None, [contact.first_name, contact.last_name])
-            ) or first_name
+            contact_name = (
+                " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
+            )
             reschedule_link = calcom.generate_booking_url(
                 event_type_id=agent.calcom_event_type_id,
                 contact_email=contact.email or "",

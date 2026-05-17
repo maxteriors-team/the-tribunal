@@ -95,9 +95,7 @@ def phone_lookup_variants(phone_input: str, country: str = DEFAULT_COUNTRY) -> l
 
     e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
     national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
-    international = phonenumbers.format_number(
-        parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL
-    )
+    international = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
     rfc3966 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.RFC3966)
 
     _add(e164)

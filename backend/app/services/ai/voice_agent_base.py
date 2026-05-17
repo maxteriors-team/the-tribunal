@@ -63,9 +63,7 @@ class VoiceAgentBase(ABC):
     SERVICE_NAME: str = "voice_agent"
     BASE_URL: str = ""
 
-    def __init__(
-        self, agent: Agent | None = None, timezone: str = "America/New_York"
-    ) -> None:
+    def __init__(self, agent: Agent | None = None, timezone: str = "America/New_York") -> None:
         """Initialize voice agent base.
 
         Args:
@@ -152,10 +150,12 @@ class VoiceAgentBase(ABC):
         """
         if text:
             self._user_transcript = text
-            self._transcript_entries.append({
-                "role": "user",
-                "text": text,
-            })
+            self._transcript_entries.append(
+                {
+                    "role": "user",
+                    "text": text,
+                }
+            )
             self.logger.info("user_transcript_completed", user_said=text)
 
     def _add_agent_transcript(self, text: str) -> None:
@@ -165,10 +165,12 @@ class VoiceAgentBase(ABC):
             text: Agent's spoken text
         """
         if text:
-            self._transcript_entries.append({
-                "role": "agent",
-                "text": text,
-            })
+            self._transcript_entries.append(
+                {
+                    "role": "agent",
+                    "text": text,
+                }
+            )
             self.logger.info("agent_turn_completed", agent_said=text[:200])
 
     def _save_current_agent_transcript(self) -> None:

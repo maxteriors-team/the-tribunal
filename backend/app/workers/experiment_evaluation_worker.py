@@ -50,9 +50,7 @@ class ExperimentEvaluationWorker(RetryableWorker, BaseWorker):
                 .having(func.count() >= 2)
             ).subquery()
 
-            result = await db.execute(
-                select(Agent).where(Agent.id.in_(select(subq.c.agent_id)))
-            )
+            result = await db.execute(select(Agent).where(Agent.id.in_(select(subq.c.agent_id))))
             agents = list(result.scalars().all())
 
             if not agents:
@@ -124,9 +122,7 @@ class ExperimentEvaluationWorker(RetryableWorker, BaseWorker):
         if not winner_id:
             return
 
-        winner_version = next(
-            (v for v in versions if v.id == winner_id), None
-        )
+        winner_version = next((v for v in versions if v.id == winner_id), None)
         if not winner_version:
             return
 
@@ -158,9 +154,7 @@ class ExperimentEvaluationWorker(RetryableWorker, BaseWorker):
 
         # comparison.versions is sorted by probability_best descending
         worst_stats = comparison.versions[-1]
-        worst_version = next(
-            (v for v in versions if v.id == worst_stats.version_id), None
-        )
+        worst_version = next((v for v in versions if v.id == worst_stats.version_id), None)
         if not worst_version:
             return
 

@@ -59,9 +59,7 @@ class NumberPoolManager:
         # Legacy mode: single number per campaign
         if not campaign.use_number_pool:
             result = await db.execute(
-                select(PhoneNumber).where(
-                    PhoneNumber.phone_number == campaign.from_phone_number
-                )
+                select(PhoneNumber).where(PhoneNumber.phone_number == campaign.from_phone_number)
             )
             phone = result.scalar_one_or_none()
 
@@ -166,9 +164,7 @@ class NumberPoolManager:
             return False
 
         # Check daily limit
-        daily_ok, _ = await self.rate_limiter.check_and_increment_daily(
-            phone.id, phone.daily_limit
-        )
+        daily_ok, _ = await self.rate_limiter.check_and_increment_daily(phone.id, phone.daily_limit)
         return daily_ok
 
     async def add_number_to_campaign_pool(
@@ -330,9 +326,7 @@ class NumberPoolManager:
                     "priority": entry.priority,
                     "is_active": entry.is_active,
                     "messages_sent": entry.messages_sent,
-                    "last_used_at": entry.last_used_at.isoformat()
-                    if entry.last_used_at
-                    else None,
+                    "last_used_at": entry.last_used_at.isoformat() if entry.last_used_at else None,
                     "health_status": phone.health_status,
                     "hourly_used": counts["hourly"],
                     "hourly_limit": phone.hourly_limit,
@@ -361,9 +355,7 @@ class NumberPoolManager:
             Number of phone numbers added
         """
         # Enable pool mode on campaign
-        result = await db.execute(
-            select(Campaign).where(Campaign.id == campaign_id)
-        )
+        result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
         campaign = result.scalar_one_or_none()
 
         if not campaign:
@@ -417,9 +409,7 @@ class NumberPoolManager:
 
         # Get the phone number configured for the test
         result = await db.execute(
-            select(PhoneNumber).where(
-                PhoneNumber.phone_number == test.from_phone_number
-            )
+            select(PhoneNumber).where(PhoneNumber.phone_number == test.from_phone_number)
         )
         phone = result.scalar_one_or_none()
 

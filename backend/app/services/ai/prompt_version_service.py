@@ -70,9 +70,7 @@ class PromptVersionService:
 
         # Get next version number
         max_version_result = await db.execute(
-            select(func.max(PromptVersion.version_number)).where(
-                PromptVersion.agent_id == agent_id
-            )
+            select(func.max(PromptVersion.version_number)).where(PromptVersion.agent_id == agent_id)
         )
         max_version = max_version_result.scalar() or 0
         next_version = max_version + 1
@@ -287,9 +285,7 @@ class PromptVersionService:
 
         # Check if any version exists
         any_version_result = await db.execute(
-            select(PromptVersion)
-            .where(PromptVersion.agent_id == agent_id)
-            .limit(1)
+            select(PromptVersion).where(PromptVersion.agent_id == agent_id).limit(1)
         )
         existing = any_version_result.scalar_one_or_none()
         if existing:
@@ -567,9 +563,7 @@ class PromptVersionService:
         valid_transitions = ARM_STATUS_TRANSITIONS.get(current_status, [])
 
         if new_status != current_status and new_status not in valid_transitions:
-            raise ValueError(
-                f"Cannot transition from {current_status} to {new_status}"
-            )
+            raise ValueError(f"Cannot transition from {current_status} to {new_status}")
 
         if new_status == "active":
             return await self.resume_version(db, version_id)

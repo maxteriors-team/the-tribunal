@@ -70,6 +70,4 @@ async def paginate(
     # Calculate pages
     pages = (total + page_size - 1) // page_size if total > 0 else 1
 
-    return PaginationResult(
-        items=items, total=total, page=page, page_size=page_size, pages=pages
-    )
+    return PaginationResult(items=items, total=total, page=page, page_size=page_size, pages=pages)

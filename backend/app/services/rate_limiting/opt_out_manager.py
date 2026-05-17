@@ -202,9 +202,7 @@ class OptOutManager:
         from sqlalchemy import func
 
         result = await db.execute(
-            select(func.count(GlobalOptOut.id)).where(
-                GlobalOptOut.workspace_id == workspace_id
-            )
+            select(func.count(GlobalOptOut.id)).where(GlobalOptOut.workspace_id == workspace_id)
         )
         return result.scalar() or 0
 

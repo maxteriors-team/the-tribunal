@@ -28,9 +28,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_LEAD_DAYS = 3
 DEFAULT_COOLING_DAYS = 30
 ALL_NUDGE_TYPES = [
-    "birthday", "anniversary", "custom", "cooling",
-    "follow_up", "deal_milestone", "noshow_recovery",
-    "unresponsive", "hot_lead", "referral_ask",
+    "birthday",
+    "anniversary",
+    "custom",
+    "cooling",
+    "follow_up",
+    "deal_milestone",
+    "noshow_recovery",
+    "unresponsive",
+    "hot_lead",
+    "referral_ask",
 ]
 
 # Order matters: the orchestrator preserves legacy query ordering for tests
@@ -54,9 +61,7 @@ _DATE_NUDGE_TYPES = frozenset({"birthday", "anniversary", "custom"})
 class NudgeGeneratorService:
     """Generates HumanNudge rows by dispatching to per-type strategy classes."""
 
-    async def generate_for_workspace(
-        self, db: AsyncSession, workspace: Workspace
-    ) -> int:
+    async def generate_for_workspace(self, db: AsyncSession, workspace: Workspace) -> int:
         """Generate nudges for all contacts in workspace. Returns count of new nudges."""
         nudge_settings = workspace.settings.get("nudge_settings", {})
         if not isinstance(nudge_settings, dict):
@@ -68,9 +73,7 @@ class NudgeGeneratorService:
         raw_lead = nudge_settings.get("lead_days", DEFAULT_LEAD_DAYS)
         lead_days = int(raw_lead) if raw_lead is not None else DEFAULT_LEAD_DAYS
         raw_cooling = nudge_settings.get("cooling_days", DEFAULT_COOLING_DAYS)
-        cooling_days = (
-            int(raw_cooling) if raw_cooling is not None else DEFAULT_COOLING_DAYS
-        )
+        cooling_days = int(raw_cooling) if raw_cooling is not None else DEFAULT_COOLING_DAYS
         enabled_types: list[str] = nudge_settings.get("nudge_types", ALL_NUDGE_TYPES)
 
         # Date strategies share this pre-fetched candidate set so we don't
@@ -101,9 +104,7 @@ class NudgeGeneratorService:
 
         if count > 0:
             await db.commit()
-            logger.info(
-                "Generated %d nudges for workspace %s", count, workspace.id
-            )
+            logger.info("Generated %d nudges for workspace %s", count, workspace.id)
 
         return count
 

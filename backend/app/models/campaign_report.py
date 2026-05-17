@@ -16,9 +16,7 @@ class CampaignReport(Base):
 
     __tablename__ = "campaign_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     campaign_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("campaigns.id", ondelete="CASCADE"),
@@ -51,9 +49,7 @@ class CampaignReport(Base):
 
     generated_suggestion_ids: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
-    generated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -66,6 +62,5 @@ class CampaignReport(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<CampaignReport(id={self.id}, "
-            f"campaign_id={self.campaign_id}, status={self.status})>"
+            f"<CampaignReport(id={self.id}, campaign_id={self.campaign_id}, status={self.status})>"
         )

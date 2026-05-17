@@ -37,7 +37,6 @@ Example usage:
     print(simulator.is_terminal())  # True
 """
 
-
 from dataclasses import dataclass, field
 from enum import Enum
 

@@ -117,19 +117,13 @@ class BaseWorker(ABC):
             max_concurrency if max_concurrency is not None else self.MAX_CONCURRENCY
         )
         if resolved_concurrency < 1:
-            raise ValueError(
-                f"max_concurrency must be >= 1, got {resolved_concurrency}"
-            )
+            raise ValueError(f"max_concurrency must be >= 1, got {resolved_concurrency}")
         self._max_concurrency = resolved_concurrency
         self._semaphore = asyncio.Semaphore(resolved_concurrency)
 
-        resolved_drain = (
-            drain_timeout if drain_timeout is not None else self.DRAIN_TIMEOUT_SECONDS
-        )
+        resolved_drain = drain_timeout if drain_timeout is not None else self.DRAIN_TIMEOUT_SECONDS
         if resolved_drain < 0:
-            raise ValueError(
-                f"drain_timeout must be >= 0, got {resolved_drain}"
-            )
+            raise ValueError(f"drain_timeout must be >= 0, got {resolved_drain}")
         self._drain_timeout = float(resolved_drain)
 
         # Tracks per-item tasks spawned via :meth:`run_concurrently` so
@@ -245,9 +239,7 @@ class BaseWorker(ABC):
             async with self._semaphore:
                 return await coro
 
-        tasks: list[asyncio.Task[_T]] = [
-            asyncio.create_task(_bounded(coro)) for coro in coros_list
-        ]
+        tasks: list[asyncio.Task[_T]] = [asyncio.create_task(_bounded(coro)) for coro in coros_list]
         # Track for graceful shutdown. ``discard`` so already-removed tasks
         # don't raise on the completion callback.
         for task in tasks:

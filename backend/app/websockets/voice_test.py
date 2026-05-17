@@ -192,10 +192,12 @@ async def _handle_start_message(
     """
     if not await voice_session.connect():
         log.error("failed_to_connect_to_voice_provider")
-        await websocket.send_json({
-            "type": "error",
-            "message": f"Failed to connect to {voice_provider}",
-        })
+        await websocket.send_json(
+            {
+                "type": "error",
+                "message": f"Failed to connect to {voice_provider}",
+            }
+        )
         return None
 
     log.info("voice_session_connected")
@@ -207,10 +209,12 @@ async def _handle_start_message(
         temperature=agent.temperature,
     )
 
-    await websocket.send_json({
-        "type": "connected",
-        "audio_format": {"encoding": "pcm16", "sampleRate": 24000, "channels": 1},
-    })
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "audio_format": {"encoding": "pcm16", "sampleRate": 24000, "channels": 1},
+        }
+    )
 
     # Start receiving audio from provider
     receive_task = asyncio.create_task(
@@ -398,9 +402,7 @@ async def voice_test_endpoint(
                 return
 
             # Determine voice provider
-            voice_provider = (
-                agent.voice_provider.lower() if agent.voice_provider else "openai"
-            )
+            voice_provider = agent.voice_provider.lower() if agent.voice_provider else "openai"
             log.info("using_voice_provider", provider=voice_provider)
 
             # Create voice session
@@ -491,10 +493,12 @@ async def _receive_from_provider(
         async for audio_data in voice_session.receive_audio_stream():
             normalized = _normalize_audio_to_pcm16_24k(audio_data, voice_provider)
             audio_b64 = base64.b64encode(normalized).decode("utf-8")
-            await websocket.send_json({
-                "type": "audio",
-                "data": audio_b64,
-            })
+            await websocket.send_json(
+                {
+                    "type": "audio",
+                    "data": audio_b64,
+                }
+            )
     except asyncio.CancelledError:
         log.info("receive_task_cancelled")
     except Exception as e:

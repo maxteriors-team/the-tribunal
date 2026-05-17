@@ -18,9 +18,7 @@ async def increment_completed_and_check_guarantee(
 
     Does NOT commit — caller must commit.
     """
-    result = await db.execute(
-        select(Campaign).where(Campaign.id == campaign_id)
-    )
+    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if not campaign:
         log.warning("guarantee_check_campaign_not_found", campaign_id=str(campaign_id))
@@ -56,9 +54,7 @@ async def check_guarantee_expiry(
 
     Does NOT commit — caller must commit.
     """
-    result = await db.execute(
-        select(Campaign).where(Campaign.id == campaign_id)
-    )
+    result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if not campaign:
         return

@@ -20,13 +20,13 @@ class WarmingScheduler:
 
     # 7-day warming schedule: stage -> max daily messages
     WARMING_SCHEDULE: dict[int, int] = {
-        1: 10,    # Day 1: 10 messages max
-        2: 25,    # Day 2: 25 messages
-        3: 50,    # Day 3: 50 messages
-        4: 100,   # Day 4: 100 messages
-        5: 200,   # Day 5: 200 messages
-        6: 400,   # Day 6: 400 messages
-        7: 800,   # Day 7: 800 messages
+        1: 10,  # Day 1: 10 messages max
+        2: 25,  # Day 2: 25 messages
+        3: 50,  # Day 3: 50 messages
+        4: 100,  # Day 4: 100 messages
+        5: 200,  # Day 5: 200 messages
+        6: 400,  # Day 6: 400 messages
+        7: 800,  # Day 7: 800 messages
         # After day 7, use full daily_limit
     }
 
@@ -200,9 +200,7 @@ class WarmingScheduler:
 
         count = 0
         for phone_id in phone_number_ids:
-            result = await db.execute(
-                select(PhoneNumber).where(PhoneNumber.id == phone_id)
-            )
+            result = await db.execute(select(PhoneNumber).where(PhoneNumber.id == phone_id))
             phone = result.scalar_one_or_none()
 
             if phone and phone.warming_stage == 0:

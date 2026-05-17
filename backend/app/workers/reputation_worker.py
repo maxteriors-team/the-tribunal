@@ -37,9 +37,7 @@ class ReputationWorker(RetryableWorker, BaseWorker):
         """Update reputation for all active phone numbers."""
         async with AsyncSessionLocal() as db:
             # Get all active phone numbers
-            result = await db.execute(
-                select(PhoneNumber).where(PhoneNumber.is_active.is_(True))
-            )
+            result = await db.execute(select(PhoneNumber).where(PhoneNumber.is_active.is_(True)))
             phones = result.scalars().all()
 
             updated_count = 0
@@ -69,19 +67,14 @@ class ReputationWorker(RetryableWorker, BaseWorker):
                 newly_quarantined=quarantined_count,
             )
 
-    async def _update_one_phone(
-        self, phone: PhoneNumber, db: AsyncSession
-    ) -> tuple[bool, bool]:
+    async def _update_one_phone(self, phone: PhoneNumber, db: AsyncSession) -> tuple[bool, bool]:
         """Update reputation for a single phone. Returns (advanced, quarantined)."""
         old_status = phone.health_status
 
         await self.tracker.update_phone_reputation(phone.id, db)
         await db.refresh(phone)
 
-        was_quarantined = (
-            old_status != "quarantined"
-            and phone.health_status == "quarantined"
-        )
+        was_quarantined = old_status != "quarantined" and phone.health_status == "quarantined"
         if was_quarantined:
             self.logger.warning(
                 "phone_number_quarantined",
@@ -92,9 +85,7 @@ class ReputationWorker(RetryableWorker, BaseWorker):
 
         was_advanced = False
         if phone.warming_stage > 0:
-            was_advanced = bool(
-                await self.warming.advance_warming_stage(phone, db)
-            )
+            was_advanced = bool(await self.warming.advance_warming_stage(phone, db))
 
         return was_advanced, was_quarantined
 

@@ -383,9 +383,7 @@ class BanditStatisticsService:
             elimination_candidates = self.get_elimination_candidates(
                 versions, elimination_threshold, num_samples
             )
-            recommended_action = (
-                "eliminate_worst" if elimination_candidates else "continue"
-            )
+            recommended_action = "eliminate_worst" if elimination_candidates else "continue"
 
         return ComparisonResult(
             versions=version_stats,

@@ -84,9 +84,7 @@ async def create_campaign(
             campaign_data["sending_hours_start"]
         )
     if "sending_hours_end" in campaign_data:
-        campaign_data["sending_hours_end"] = parse_time_string(
-            campaign_data["sending_hours_end"]
-        )
+        campaign_data["sending_hours_end"] = parse_time_string(campaign_data["sending_hours_end"])
 
     campaign = Campaign(
         workspace_id=workspace_id,
@@ -135,13 +133,9 @@ async def update_campaign(
 
     # Convert time strings to datetime.time objects
     if "sending_hours_start" in update_data:
-        update_data["sending_hours_start"] = parse_time_string(
-            update_data["sending_hours_start"]
-        )
+        update_data["sending_hours_start"] = parse_time_string(update_data["sending_hours_start"])
     if "sending_hours_end" in update_data:
-        update_data["sending_hours_end"] = parse_time_string(
-            update_data["sending_hours_end"]
-        )
+        update_data["sending_hours_end"] = parse_time_string(update_data["sending_hours_end"])
 
     for field, value in update_data.items():
         setattr(campaign, field, value)
@@ -171,9 +165,7 @@ async def start_campaign(
 
     # Check if campaign has contacts
     count_result = await db.execute(
-        select(func.count(CampaignContact.id)).where(
-            CampaignContact.campaign_id == campaign_id
-        )
+        select(func.count(CampaignContact.id)).where(CampaignContact.campaign_id == campaign_id)
     )
     contact_count = count_result.scalar() or 0
 
@@ -291,9 +283,7 @@ async def add_contacts(
 
     # Get existing campaign contacts
     existing_result = await db.execute(
-        select(CampaignContact.contact_id).where(
-            CampaignContact.campaign_id == campaign_id
-        )
+        select(CampaignContact.contact_id).where(CampaignContact.campaign_id == campaign_id)
     )
     existing_ids = {row[0] for row in existing_result.all()}
 
@@ -357,9 +347,7 @@ async def get_analytics(
         campaign.replies_received / campaign.messages_sent if campaign.messages_sent > 0 else 0.0
     )
     delivery_rate = (
-        campaign.messages_delivered / campaign.messages_sent
-        if campaign.messages_sent > 0
-        else 0.0
+        campaign.messages_delivered / campaign.messages_sent if campaign.messages_sent > 0 else 0.0
     )
     qualification_rate = (
         campaign.contacts_qualified / campaign.total_contacts

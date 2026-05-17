@@ -29,17 +29,13 @@ class NudgeDeliveryService:
     async def deliver_nudge(self, db: AsyncSession, nudge: HumanNudge) -> bool:
         """Deliver a single nudge. Returns True if delivered."""
         # Load workspace for settings
-        result = await db.execute(
-            select(Workspace).where(Workspace.id == nudge.workspace_id)
-        )
+        result = await db.execute(select(Workspace).where(Workspace.id == nudge.workspace_id))
         workspace = result.scalar_one_or_none()
         if workspace is None:
             logger.warning("Workspace %s not found for nudge %s", nudge.workspace_id, nudge.id)
             return False
 
-        nudge_settings: dict[str, object] = workspace.settings.get(
-            "nudge_settings", {}
-        )
+        nudge_settings: dict[str, object] = workspace.settings.get("nudge_settings", {})
         delivery_channels: list[str] = nudge_settings.get("delivery_channels", ["sms", "push"])  # type: ignore[assignment]
 
         # Resolve target users
@@ -91,9 +87,7 @@ class NudgeDeliveryService:
         await db.commit()
         return True
 
-    async def deliver_pending_nudges(
-        self, db: AsyncSession, workspace_id: uuid.UUID
-    ) -> int:
+    async def deliver_pending_nudges(self, db: AsyncSession, workspace_id: uuid.UUID) -> int:
         """Deliver all pending nudges for a workspace. Returns count delivered."""
         result = await db.execute(
             select(HumanNudge).where(
@@ -113,9 +107,7 @@ class NudgeDeliveryService:
                 logger.exception("Failed to deliver nudge %s", nudge.id)
 
         if count > 0:
-            logger.info(
-                "Delivered %d nudges for workspace %s", count, workspace_id
-            )
+            logger.info("Delivered %d nudges for workspace %s", count, workspace_id)
         return count
 
     async def _deliver_sms(
@@ -151,19 +143,13 @@ class NudgeDeliveryService:
                     )
                     sms_sent = True
                 except Exception:
-                    logger.exception(
-                        "Failed to send nudge SMS to user %s", user.id
-                    )
+                    logger.exception("Failed to send nudge SMS to user %s", user.id)
         return sms_sent
 
-    async def _resolve_target_users(
-        self, db: AsyncSession, nudge: HumanNudge
-    ) -> list[User]:
+    async def _resolve_target_users(self, db: AsyncSession, nudge: HumanNudge) -> list[User]:
         """Get the user(s) who should receive this nudge."""
         if nudge.assigned_to_user_id is not None:
-            result = await db.execute(
-                select(User).where(User.id == nudge.assigned_to_user_id)
-            )
+            result = await db.execute(select(User).where(User.id == nudge.assigned_to_user_id))
             user = result.scalar_one_or_none()
             return [user] if user and user.is_active else []
 
@@ -173,18 +159,10 @@ class NudgeDeliveryService:
             .options(selectinload(WorkspaceMembership.user))
             .where(WorkspaceMembership.workspace_id == nudge.workspace_id)
         )
-        memberships: list[WorkspaceMembership] = list(
-            membership_result.scalars().all()
-        )
-        return [
-            m.user
-            for m in memberships
-            if m.user and m.user.is_active
-        ]
+        memberships: list[WorkspaceMembership] = list(membership_result.scalars().all())
+        return [m.user for m in memberships if m.user and m.user.is_active]
 
-    async def _send_sms_to_user(
-        self, user: User, nudge: HumanNudge, from_number: str
-    ) -> bool:
+    async def _send_sms_to_user(self, user: User, nudge: HumanNudge, from_number: str) -> bool:
         """Send SMS nudge to a single user."""
         if not user.notification_sms or not user.phone_number:
             return False
@@ -211,9 +189,7 @@ class NudgeDeliveryService:
 
     def _is_quiet_hours(self, workspace: Workspace) -> bool:
         """Check if current time is within quiet hours."""
-        nudge_settings: dict[str, object] = workspace.settings.get(
-            "nudge_settings", {}
-        )
+        nudge_settings: dict[str, object] = workspace.settings.get("nudge_settings", {})
         quiet_hours: dict[str, str] = nudge_settings.get("quiet_hours", {})  # type: ignore[assignment]
         start_str = quiet_hours.get("start", DEFAULT_QUIET_START)
         end_str = quiet_hours.get("end", DEFAULT_QUIET_END)
@@ -234,5 +210,6 @@ class NudgeDeliveryService:
             return current_minutes >= start_minutes or current_minutes < end_minutes
         else:
             return start_minutes <= current_minutes < end_minutes
+
 
 nudge_delivery_service = NudgeDeliveryService()

@@ -5,8 +5,7 @@ _FRONT_STYLE = (
     "justify-content:center;font-family:Georgia,serif;"
 )
 _BACK_STYLE = (
-    "width:6in;height:4in;padding:0.5in;"
-    "font-family:Georgia,serif;font-size:14px;color:#1f2937;"
+    "width:6in;height:4in;padding:0.5in;font-family:Georgia,serif;font-size:14px;color:#1f2937;"
 )
 
 CARD_TEMPLATES: dict[str, dict[str, str]] = {
@@ -57,9 +56,7 @@ CARD_TEMPLATES: dict[str, dict[str, str]] = {
 }
 
 
-def render_template(
-    template_key: str, first_name: str, from_name: str
-) -> tuple[str, str]:
+def render_template(template_key: str, first_name: str, from_name: str) -> tuple[str, str]:
     """Render a card template with variable substitution.
 
     Returns (front_html, back_html).

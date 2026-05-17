@@ -74,9 +74,7 @@ async def build_decision_context(
         return context
 
     # Fetch contact data
-    contact_result = await db.execute(
-        select(Contact).where(Contact.id == contact_id)
-    )
+    contact_result = await db.execute(select(Contact).where(Contact.id == contact_id))
     contact = contact_result.scalar_one_or_none()
 
     if contact is None:
