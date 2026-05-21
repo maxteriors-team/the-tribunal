@@ -175,16 +175,13 @@ class OutboundComplianceService:
         duplicate_result = await db.execute(duplicate_query)
         return bool(duplicate_result.scalar())
 
-    def _evaluate_quiet_hours(
-        self, request: OutboundComplianceRequest) -> OutboundComplianceResult:
+    def _evaluate_quiet_hours(self, request: OutboundComplianceRequest) -> OutboundComplianceResult:
         start = request.campaign.quiet_hours_start
         end = request.campaign.quiet_hours_end
         if start is None or end is None:
             return OutboundComplianceResult(allowed=True)
 
-        timezone_name = (
-            request.campaign.quiet_hours_timezone or request.campaign.timezone or "UTC"
-        )
+        timezone_name = request.campaign.quiet_hours_timezone or request.campaign.timezone or "UTC"
         try:
             local_now = request.now.astimezone(ZoneInfo(timezone_name))
         except ZoneInfoNotFoundError:

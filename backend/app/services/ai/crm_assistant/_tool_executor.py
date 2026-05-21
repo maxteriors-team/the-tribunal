@@ -138,9 +138,8 @@ class CRMToolExecutor:
         if not handler:
             return {"success": False, "error": f"Unknown function: {function_name}"}
         try:
-            if (
-                function_name in _APPROVAL_GATED_TOOLS
-                and not self._is_explicitly_confirmed(arguments)
+            if function_name in _APPROVAL_GATED_TOOLS and not self._is_explicitly_confirmed(
+                arguments
             ):
                 return await self._queue_pending_action(function_name, arguments)
             return await handler(arguments)  # type: ignore[no-any-return]

@@ -200,11 +200,12 @@ class CampaignWorker(BaseCampaignWorker):
                 continue
 
             if campaign.max_messages_per_campaign is not None:
-                cap_ok, campaign_daily_count = (
-                    await self.rate_limiter.check_and_increment_campaign_daily(
-                        campaign.id,
-                        campaign.max_messages_per_campaign,
-                    )
+                (
+                    cap_ok,
+                    campaign_daily_count,
+                ) = await self.rate_limiter.check_and_increment_campaign_daily(
+                    campaign.id,
+                    campaign.max_messages_per_campaign,
                 )
                 if not cap_ok:
                     cap_result = OutboundComplianceResult(
@@ -433,11 +434,12 @@ class CampaignWorker(BaseCampaignWorker):
                 continue
 
             if campaign.max_messages_per_campaign is not None:
-                cap_ok, campaign_daily_count = (
-                    await self.rate_limiter.check_and_increment_campaign_daily(
-                        campaign.id,
-                        campaign.max_messages_per_campaign,
-                    )
+                (
+                    cap_ok,
+                    campaign_daily_count,
+                ) = await self.rate_limiter.check_and_increment_campaign_daily(
+                    campaign.id,
+                    campaign.max_messages_per_campaign,
                 )
                 if not cap_ok:
                     cap_result = OutboundComplianceResult(

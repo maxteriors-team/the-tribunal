@@ -456,8 +456,7 @@ def _build_campaign_plan(intent: str, offer: Offer, segment: Segment) -> Campaig
     headline = offer.headline or offer.name
     angle = f"Lead with {headline} for {segment.name}, then ask for a low-friction booking reply."
     initial_message = (
-        f"Hi {{first_name}}, quick note — {headline}. "
-        f"Would you like me to help you {cta.lower()}?"
+        f"Hi {{first_name}}, quick note — {headline}. Would you like me to help you {cta.lower()}?"
     )
     follow_up_message = (
         f"Hi {{first_name}}, just bumping this in case {offer.name} would be useful. "

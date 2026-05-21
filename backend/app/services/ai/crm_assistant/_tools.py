@@ -99,8 +99,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "send_initial_message",
             "description": (
-                "Send a campaign's initial message to one contact. "
-                "Requires explicit confirmation."
+                "Send a campaign's initial message to one contact. Requires explicit confirmation."
             ),
             "parameters": {
                 "type": "object",
@@ -269,8 +268,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "assign_ai_responder",
             "description": (
-                "Assign an AI agent to respond in a conversation. "
-                "Requires explicit confirmation."
+                "Assign an AI agent to respond in a conversation. Requires explicit confirmation."
             ),
             "parameters": {
                 "type": "object",

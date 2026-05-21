@@ -15054,9 +15054,16 @@
             "type": "string"
           },
           "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
           },
           "context": {
             "additionalProperties": true,
@@ -39467,7 +39474,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Readiness probe — Postgres + Redis reachable within 2s each.\n\nReturns HTTP 503 when either dependency fails or times out so upstream\nload balancers stop sending traffic to this instance.",
+        "description": "Readiness probe — startup complete + Postgres + Redis reachable.\n\nReturns HTTP 503 when:\n\n* ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished\n  validating config and starting workers yet (or shutdown is in progress).\n* Either Postgres or Redis fails / times out (2s budget each).\n* Any expected worker is missing a fresh heartbeat key.\n\nOrchestrators (Railway, Kubernetes) use this to hold traffic on the\nprevious container until the new one finishes booting and to drain a\ncontainer before it stops accepting requests.",
         "operationId": "readyz_readyz_get",
         "responses": {
           "200": {
@@ -39538,6 +39545,60 @@
           }
         },
         "summary": "Calcom Booking Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/webhooks/mac-relay/messages": {
+      "post": {
+        "description": "Handle inbound message events forwarded by the Mac relay daemon.",
+        "operationId": "mac_relay_messages_webhook_webhooks_mac_relay_messages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Mac Relay Messages Webhook Webhooks Mac Relay Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mac Relay Messages Webhook",
         "tags": [
           "webhooks"
         ]
