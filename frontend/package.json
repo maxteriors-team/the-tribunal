@@ -4,7 +4,7 @@
   "private": true,
   "license": "LicenseRef-Proprietary",
   "engines": {
-    "node": ">=20.9.0",
+    "node": "20.x",
     "npm": ">=10.0.0"
   },
   "packageManager": "npm@10.9.0",
