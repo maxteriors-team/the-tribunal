@@ -1,11 +1,12 @@
 name: Migrations
 
+# Triggers on every PR so the required status check is always reported.
+# A path filter in the job (``changes`` step) decides whether to actually
+# spin up Postgres + alembic, or short-circuit with success. This pattern
+# avoids GitHub's "required check is missing" deadlock on dependabot /
+# docs / CI-only PRs that never touch the migration surface.
 on:
   pull_request:
-    paths:
-      - "backend/alembic/**"
-      - "backend/app/models/**"
-      - ".github/workflows/migrations.yml"
 
 concurrency:
   group: migrations-${{ github.workflow }}-${{ github.ref }}
@@ -40,22 +41,44 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Filter paths needs the PR base ref to diff against.
+          fetch-depth: 0
+
+      - name: Detect migration-relevant changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            migrations:
+              - 'backend/alembic/**'
+              - 'backend/app/models/**'
+              - '.github/workflows/migrations.yml'
+
+      - name: Skip notice
+        if: steps.changes.outputs.migrations != 'true'
+        run: |
+          echo "::notice::No migration-relevant paths changed; skipping alembic reversibility run."
 
       - name: Set up Python
+        if: steps.changes.outputs.migrations == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Install uv
+        if: steps.changes.outputs.migrations == 'true'
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: "backend/uv.lock"
 
       - name: Install dependencies
+        if: steps.changes.outputs.migrations == 'true'
         run: uv sync --frozen
 
       - name: Wait for Postgres
+        if: steps.changes.outputs.migrations == 'true'
         run: |
           for i in {1..30}; do
             if pg_isready -h localhost -p 5432 -U aicrm -d aicrm; then
@@ -69,15 +92,19 @@ jobs:
           exit 1
 
       - name: Upgrade to head
+        if: steps.changes.outputs.migrations == 'true'
         run: uv run alembic upgrade head
 
       - name: Check for model drift
         # Fails if SQLAlchemy models have changed without a corresponding
         # Alembic migration (i.e. autogenerate would produce a non-empty diff).
+        if: steps.changes.outputs.migrations == 'true'
         run: uv run alembic check
 
       - name: Downgrade one revision
+        if: steps.changes.outputs.migrations == 'true'
         run: uv run alembic downgrade -1
 
       - name: Upgrade to head again
+        if: steps.changes.outputs.migrations == 'true'
         run: uv run alembic upgrade head
