@@ -30,7 +30,20 @@ from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
 from app.models.invitation import WorkspaceInvitation
 from app.models.knowledge_document import KnowledgeDocument
+from app.models.lead_discovery_job import (
+    DiscoveryJobStatus,
+    DiscoverySourceType,
+    LeadDiscoveryJob,
+)
 from app.models.lead_magnet import LeadMagnet
+from app.models.lead_prospect import (
+    EnrichmentProvider,
+    EnrichmentResultStatus,
+    LeadEnrichmentResult,
+    LeadProspect,
+    ProspectIdentityKind,
+    ProspectStatus,
+)
 from app.models.lead_source import LeadSource
 from app.models.link_click import LinkClick
 from app.models.message_template import MessageTemplate
@@ -46,6 +59,16 @@ from app.models.offer_lead_magnet import OfferLeadMagnet
 from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityLineItem
 from app.models.opt_out import GlobalOptOut
 from app.models.outbound_action_audit_log import OutboundActionAuditLog
+from app.models.outbound_mission import MissionStatus, OutboundMission
+from app.models.outbound_sequence import (
+    OutboundSequence,
+    OutboundSequenceEnrollment,
+    OutboundSequenceStatus,
+    OutboundSequenceStepAttempt,
+    SequenceEnrollmentStatus,
+    SequenceStepAttemptStatus,
+    SequenceStepChannel,
+)
 from app.models.pending_action import PendingAction
 from app.models.phone_number import PhoneNumber, PhoneNumberProvider
 from app.models.phone_number_stats import PhoneNumberDailyStats
@@ -81,6 +104,24 @@ __all__ = [
     "PhoneNumberDailyStats",
     "GlobalOptOut",
     "OutboundActionAuditLog",
+    "OutboundMission",
+    "MissionStatus",
+    "OutboundSequence",
+    "OutboundSequenceStatus",
+    "OutboundSequenceEnrollment",
+    "OutboundSequenceStepAttempt",
+    "SequenceStepChannel",
+    "SequenceEnrollmentStatus",
+    "SequenceStepAttemptStatus",
+    "LeadDiscoveryJob",
+    "DiscoverySourceType",
+    "DiscoveryJobStatus",
+    "LeadProspect",
+    "LeadEnrichmentResult",
+    "ProspectStatus",
+    "ProspectIdentityKind",
+    "EnrichmentProvider",
+    "EnrichmentResultStatus",
     "Offer",
     "LeadMagnet",
     "LeadSource",

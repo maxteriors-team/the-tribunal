@@ -1,6 +1,35 @@
 """Pydantic schemas."""
 
 from app.schemas.contact import ContactCreate, ContactResponse, ContactUpdate
+from app.schemas.lead_discovery_job import (
+    LeadDiscoveryJobCreate,
+    LeadDiscoveryJobResponse,
+    LeadDiscoveryJobUpdate,
+    PaginatedLeadDiscoveryJobs,
+)
+from app.schemas.lead_prospect import (
+    LeadEnrichmentResultCreate,
+    LeadEnrichmentResultResponse,
+    LeadProspectCreate,
+    LeadProspectResponse,
+    LeadProspectUpdate,
+    PaginatedLeadProspects,
+)
+from app.schemas.outbound_mission import (
+    OutboundMissionCreate,
+    OutboundMissionResponse,
+    OutboundMissionStatsResponse,
+    OutboundMissionUpdate,
+    PaginatedOutboundMissions,
+)
+from app.schemas.outbound_sequence import (
+    OutboundSequenceCreate,
+    OutboundSequenceEnrollmentResponse,
+    OutboundSequenceResponse,
+    OutboundSequenceStep,
+    OutboundSequenceStepAttemptResponse,
+    OutboundSequenceUpdate,
+)
 from app.schemas.user import Token, UserCreate, UserResponse
 from app.schemas.workspace import (
     WorkspaceCreate,
@@ -20,4 +49,25 @@ __all__ = [
     "ContactCreate",
     "ContactUpdate",
     "ContactResponse",
+    "OutboundMissionCreate",
+    "OutboundMissionUpdate",
+    "OutboundMissionResponse",
+    "OutboundMissionStatsResponse",
+    "PaginatedOutboundMissions",
+    "LeadDiscoveryJobCreate",
+    "LeadDiscoveryJobUpdate",
+    "LeadDiscoveryJobResponse",
+    "PaginatedLeadDiscoveryJobs",
+    "LeadProspectCreate",
+    "LeadProspectUpdate",
+    "LeadProspectResponse",
+    "PaginatedLeadProspects",
+    "LeadEnrichmentResultCreate",
+    "LeadEnrichmentResultResponse",
+    "OutboundSequenceCreate",
+    "OutboundSequenceUpdate",
+    "OutboundSequenceResponse",
+    "OutboundSequenceStep",
+    "OutboundSequenceEnrollmentResponse",
+    "OutboundSequenceStepAttemptResponse",
 ]
