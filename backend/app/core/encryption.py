@@ -13,6 +13,8 @@ from typing import Any
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.types import TEXT, TypeDecorator
 
 from app.core.config import settings
 
@@ -38,6 +40,53 @@ def _get_fernet() -> Fernet:
     """Get a Fernet instance using the configured encryption key."""
     key = _derive_fernet_key(settings.encryption_key)
     return Fernet(key)
+
+
+def hash_value(value: str) -> str:
+    """Return a deterministic keyed lookup hash for sensitive values."""
+    normalized = value.strip().lower()
+    return hashlib.blake2b(
+        normalized.encode(),
+        key=settings.encryption_key.encode(),
+        digest_size=32,
+    ).hexdigest()
+
+
+def hash_phone(phone_number: str) -> str:
+    """Return a deterministic lookup hash for a phone number."""
+    normalized = "".join(char for char in phone_number if char.isdigit() or char == "+")
+    return hash_value(normalized)
+
+
+def hash_value_or_none(value: str | None) -> str | None:
+    """Return a lookup hash for a value, preserving missing values."""
+    if value is None:
+        return None
+    return hash_value(value)
+
+
+class EncryptedString(TypeDecorator[str]):
+    """SQLAlchemy type that encrypts string values with Fernet at rest."""
+
+    impl = TEXT
+    cache_ok = True
+
+    def process_bind_param(self, value: str | None, dialect: Dialect) -> str | None:
+        if value is None:
+            return None
+        return _get_fernet().encrypt(value.encode()).decode()
+
+    def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
+        if value is None:
+            return None
+        return _get_fernet().decrypt(value.encode()).decode()
+
+
+class LookupHash(TypeDecorator[str]):
+    """SQLAlchemy marker type for deterministic lookup hashes."""
+
+    impl = TEXT
+    cache_ok = True
 
 
 def encrypt_json(data: dict[str, Any]) -> str:
@@ -70,4 +119,13 @@ def decrypt_json(encrypted: str) -> dict[str, Any]:
     return result
 
 
-__all__ = ["InvalidToken", "decrypt_json", "encrypt_json"]
+__all__ = [
+    "EncryptedString",
+    "InvalidToken",
+    "LookupHash",
+    "decrypt_json",
+    "encrypt_json",
+    "hash_phone",
+    "hash_value",
+    "hash_value_or_none",
+]

@@ -36,7 +36,6 @@ from sqlalchemy import and_, exists, not_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.automation import Automation
 from app.models.automation_execution import AutomationExecution
@@ -45,7 +44,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
 from app.services.approval.approval_gate_service import approval_gate_service
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -390,10 +389,6 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             message (str): Template string; supports {first_name}, {last_name},
                            {full_name}, {company_name}.
         """
-        if not settings.telnyx_api_key:
-            self.logger.warning("No Telnyx API key configured; cannot send automation SMS")
-            return
-
         message_template: str = config.get("message", "")
         if not message_template:
             self.logger.warning(
@@ -419,7 +414,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
-        sms_service = TelnyxSMSService(settings.telnyx_api_key)
+        sms_service = get_text_message_provider()
         try:
             await sms_service.send_message(
                 to_number=contact.phone_number,

@@ -33,14 +33,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+# Constraint name follows the project naming convention defined in
+# ``app/db/base.py``: ``fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s``.
+_FK_NAME = "fk_conversations_contact_id_contacts"
+
+
 def upgrade() -> None:
-    op.drop_constraint(
-        "conversations_contact_id_fkey",
-        "conversations",
-        type_="foreignkey",
-    )
+    op.drop_constraint(_FK_NAME, "conversations", type_="foreignkey")
     op.create_foreign_key(
-        "conversations_contact_id_fkey",
+        _FK_NAME,
         "conversations",
         "contacts",
         ["contact_id"],
@@ -50,13 +51,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "conversations_contact_id_fkey",
-        "conversations",
-        type_="foreignkey",
-    )
+    op.drop_constraint(_FK_NAME, "conversations", type_="foreignkey")
     op.create_foreign_key(
-        "conversations_contact_id_fkey",
+        _FK_NAME,
         "conversations",
         "contacts",
         ["contact_id"],

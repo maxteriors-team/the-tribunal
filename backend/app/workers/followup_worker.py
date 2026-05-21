@@ -12,12 +12,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.conversation import Conversation
 from app.services.ai.openai_credentials import get_openai_bearer_token
 from app.services.ai.text_response_generator import generate_followup_message
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -91,14 +90,8 @@ class FollowupWorker(RetryableWorker, BaseWorker):
 
         # Check for required credentials
         openai_key = get_openai_bearer_token()
-        telnyx_key = settings.telnyx_api_key
-
         if not openai_key:
             log.warning("No OpenAI credential configured")
-            return False
-
-        if not telnyx_key:
-            log.warning("No Telnyx API key configured")
             return False
 
         # Generate follow-up message
@@ -118,7 +111,7 @@ class FollowupWorker(RetryableWorker, BaseWorker):
             return False
 
         # Send the follow-up via SMS
-        sms_service = TelnyxSMSService(telnyx_key)
+        sms_service = get_text_message_provider()
         try:
             message = await sms_service.send_message(
                 to_number=conversation.contact_phone,

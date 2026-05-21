@@ -21,6 +21,9 @@ from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
 from app.workers.nudge_worker import _registry as nudge_registry
+from app.workers.outbound_improvement_suggestion_worker import (
+    _registry as outbound_improvement_suggestion_registry,
+)
 from app.workers.prompt_improvement_worker import _registry as prompt_improvement_registry
 from app.workers.prompt_stats_worker import _registry as prompt_stats_registry
 from app.workers.reminder_worker import _registry as reminder_registry
@@ -41,6 +44,7 @@ ALL_REGISTRIES: list[WorkerRegistry[BaseWorker]] = [
     enrichment_registry,
     prompt_stats_registry,
     prompt_improvement_registry,
+    outbound_improvement_suggestion_registry,
     experiment_evaluation_registry,
     automation_registry,
     noshow_reengagement_registry,

@@ -45,8 +45,9 @@ from app.models.offer import Offer
 from app.models.offer_lead_magnet import OfferLeadMagnet
 from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityLineItem
 from app.models.opt_out import GlobalOptOut
+from app.models.outbound_action_audit_log import OutboundActionAuditLog
 from app.models.pending_action import PendingAction
-from app.models.phone_number import PhoneNumber
+from app.models.phone_number import PhoneNumber, PhoneNumberProvider
 from app.models.phone_number_stats import PhoneNumberDailyStats
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.prompt_version import PromptVersion
@@ -76,8 +77,10 @@ __all__ = [
     "CampaignReport",
     "Appointment",
     "PhoneNumber",
+    "PhoneNumberProvider",
     "PhoneNumberDailyStats",
     "GlobalOptOut",
+    "OutboundActionAuditLog",
     "Offer",
     "LeadMagnet",
     "LeadSource",

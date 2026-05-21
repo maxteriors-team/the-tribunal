@@ -163,6 +163,8 @@ export const queryKeys = {
     all: (workspaceId: string) => ["dashboard", workspaceId] as const,
     stats: (workspaceId: string) => ["dashboard", workspaceId, "stats"] as const,
     activity: (workspaceId: string) => ["dashboard", workspaceId, "activity"] as const,
+    outboundGrowth: (workspaceId: string) =>
+      ["dashboard", workspaceId, "outbound-growth"] as const,
   },
   findLeadsAi: resource("find-leads-ai"),
   humanProfiles: resource("human-profiles"),

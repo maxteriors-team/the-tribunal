@@ -15,8 +15,13 @@ NOT NULL / UNIQUE constraints. Existing rows aren't tied to any worker
 retry path, so a fresh random key is the safe default.
 
 Revision ID: e0f1a2b3c4d5
-Revises: d9e8c7b6a5f4
+Revises: b4819c8748a9
 Create Date: 2026-05-15 12:30:00.000000
+
+Note (2026-05-20): ``down_revision`` originally pointed at the dangling rev
+``d9e8c7b6a5f4`` (never created), so ``alembic upgrade head`` could not
+resolve the graph. Re-pointed at ``b4819c8748a9`` (the merge that was the
+head at the time this migration was authored, May 15 2026).
 """
 
 from collections.abc import Sequence
@@ -28,7 +33,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "e0f1a2b3c4d5"
-down_revision: str | None = "d9e8c7b6a5f4"
+down_revision: str | None = "b4819c8748a9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -30,7 +30,7 @@ from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.rate_limiting.rate_limiter import RateLimiter
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.text_provider import TextMessageProvider, get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -89,12 +89,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
             test_name=test.name,
         )
 
-        # Get SMS service
-        if not settings.telnyx_api_key:
-            log.warning("No Telnyx API key configured")
-            return
-
-        sms_service = TelnyxSMSService(settings.telnyx_api_key)
+        sms_service = get_text_message_provider()
         try:
             await self._process_pending_contacts(test, sms_service, db, log)
 
@@ -129,7 +124,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
         test_contact: TestContact,
         variant: Any,
         from_phone: Any,
-        sms_service: TelnyxSMSService,
+        sms_service: TextMessageProvider,
         db: AsyncSession,
         log: Any,
     ) -> bool:
@@ -189,7 +184,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
     async def _process_pending_contacts(
         self,
         test: MessageTest,
-        sms_service: TelnyxSMSService,
+        sms_service: TextMessageProvider,
         db: AsyncSession,
         log: Any,
     ) -> None:
@@ -230,7 +225,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
         test: MessageTest,
         test_contact: TestContact,
         variants: list[Any],
-        sms_service: TelnyxSMSService,
+        sms_service: TextMessageProvider,
         db: AsyncSession,
         log: Any,
     ) -> str:

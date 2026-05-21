@@ -221,6 +221,46 @@ class RateLimiter:
 
         return allowed, current_count
 
+    async def check_and_increment_campaign_daily(
+        self,
+        campaign_id: uuid.UUID,
+        daily_limit: int,
+    ) -> tuple[bool, int]:
+        """Check campaign daily send cap and increment if allowed."""
+        redis_client = await get_redis()
+        now = datetime.now(UTC)
+        day_key = now.strftime("%Y%m%d")
+        key = f"rate_limit:campaign_daily:{campaign_id}:{day_key}"
+        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        expire_seconds = int((midnight - now).total_seconds())
+
+        try:
+            sha = await self._get_increment_sha()
+            result = await redis_client.evalsha(sha, 1, key, daily_limit, expire_seconds)  # type: ignore[misc]
+        except Exception:
+            result = await redis_client.eval(  # type: ignore[misc]
+                INCREMENT_WITH_LIMIT_SCRIPT, 1, key, daily_limit, expire_seconds
+            )
+
+        allowed = bool(int(result[0]))
+        current_count = int(result[1])
+        if not allowed:
+            self.logger.debug(
+                "campaign_daily_rate_limit_hit",
+                campaign_id=str(campaign_id),
+                limit=daily_limit,
+                current=current_count,
+            )
+        return allowed, current_count
+
+    async def get_campaign_daily_count(self, campaign_id: uuid.UUID) -> int:
+        """Get the current UTC-day campaign send count."""
+        redis_client = await get_redis()
+        day_key = datetime.now(UTC).strftime("%Y%m%d")
+        key = f"rate_limit:campaign_daily:{campaign_id}:{day_key}"
+        value = await redis_client.get(key)
+        return int(value) if value else 0
+
     async def check_campaign_rate_limit(
         self,
         campaign_id: uuid.UUID,

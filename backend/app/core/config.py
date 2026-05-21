@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     # Telnyx Voice
     telnyx_connection_id: str = ""  # Required for outbound calls
 
+    # Text messaging provider selection
+    text_message_provider: str = "telnyx"  # telnyx | mac_relay
+
+    # Self-hosted Mac iMessage relay
+    mac_relay_base_url: str = ""
+    mac_relay_token: str = ""
+    mac_relay_webhook_token: str = ""
+    mac_relay_backend_webhook_url: str = ""
+    mac_relay_default_service: str = "imessage"  # imessage | sms | auto
+
     # Cal.com
     calcom_api_key: str = ""
     calcom_webhook_secret: str = ""

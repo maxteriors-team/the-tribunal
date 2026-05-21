@@ -29,13 +29,18 @@ from app.models.campaign import (
 )
 from app.models.contact import Contact
 from app.models.offer import Offer
+from app.services.compliance.outbound_compliance import (
+    OutboundComplianceRequest,
+    OutboundComplianceResult,
+    OutboundComplianceService,
+)
 from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.rate_limiting.rate_limiter import RateLimiter
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.rate_limiting.warming_scheduler import WarmingScheduler
 from app.services.telephony.idempotency import derive as derive_idempotency_key
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.text_provider import TextMessageProvider, get_text_message_provider
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
 
@@ -63,6 +68,7 @@ class CampaignWorker(BaseCampaignWorker):
         self.number_pool = NumberPoolManager()
         self.rate_limiter = RateLimiter()
         self.opt_out_manager = OptOutManager()
+        self.compliance_service = OutboundComplianceService(self.opt_out_manager)
         self.warming_scheduler = WarmingScheduler()
         self.reputation_tracker = ReputationTracker()
 
@@ -93,7 +99,7 @@ class CampaignWorker(BaseCampaignWorker):
         log: Any,
     ) -> None:
         """Process SMS campaign contacts: send initial messages and follow-ups."""
-        sms_service = TelnyxSMSService(settings.telnyx_api_key)
+        sms_service = get_text_message_provider()
         try:
             await self._process_initial_messages(campaign, sms_service, db, log)
 
@@ -106,10 +112,10 @@ class CampaignWorker(BaseCampaignWorker):
         finally:
             await sms_service.close()
 
-    async def _process_initial_messages(  # noqa: PLR0915
+    async def _process_initial_messages(  # noqa: PLR0912, PLR0915
         self,
         campaign: Campaign,
-        sms_service: TelnyxSMSService,
+        sms_service: TextMessageProvider,
         db: AsyncSession,
         log: Any,
     ) -> None:
@@ -165,26 +171,68 @@ class CampaignWorker(BaseCampaignWorker):
                 campaign_contact.last_error = "missing_phone_number"
                 continue
 
-            # Check global opt-out list
-            is_opted_out = await self.opt_out_manager.check_opt_out(
-                campaign.workspace_id,
-                contact.phone_number,
+            compliance_result = await self.compliance_service.evaluate(
+                OutboundComplianceRequest(
+                    workspace_id=campaign.workspace_id,
+                    campaign=campaign,
+                    campaign_contact=campaign_contact,
+                    contact=contact,
+                    channel="sms",
+                    action_type="campaign_initial_sms",
+                    now=datetime.now(UTC),
+                ),
                 db,
             )
-            if is_opted_out:
-                campaign_contact.status = CampaignContactStatus.OPTED_OUT
-                campaign_contact.opted_out = True
-                campaign_contact.opted_out_at = datetime.now(UTC)
-                campaign.contacts_opted_out += 1
-                log.info("Contact on global opt-out list", contact_id=contact.id)
+            self.compliance_service.apply_suppression(
+                campaign_contact, compliance_result, datetime.now(UTC)
+            )
+            if not compliance_result.allowed:
+                if compliance_result.reason == "global_opt_out":
+                    campaign.contacts_opted_out += 1
+                log.info(
+                    "compliance_suppressed_campaign_contact",
+                    campaign_id=str(campaign.id),
+                    campaign_contact_id=str(campaign_contact.id),
+                    contact_id=contact.id,
+                    reason=compliance_result.reason,
+                    action_type="campaign_initial_sms",
+                )
                 continue
 
-            # Get next available number from pool (handles all rate limits internally)
-            from_phone = await self.number_pool.get_next_available_number(campaign, db)
+            if campaign.max_messages_per_campaign is not None:
+                cap_ok, campaign_daily_count = (
+                    await self.rate_limiter.check_and_increment_campaign_daily(
+                        campaign.id,
+                        campaign.max_messages_per_campaign,
+                    )
+                )
+                if not cap_ok:
+                    cap_result = OutboundComplianceResult(
+                        allowed=False,
+                        reason="campaign_send_cap_reached",
+                        details={"campaign_daily_count": campaign_daily_count},
+                    )
+                    self.compliance_service.apply_suppression(
+                        campaign_contact, cap_result, datetime.now(UTC)
+                    )
+                    log.info(
+                        "compliance_suppressed_campaign_contact",
+                        campaign_id=str(campaign.id),
+                        campaign_contact_id=str(campaign_contact.id),
+                        contact_id=contact.id,
+                        reason=cap_result.reason,
+                        action_type="campaign_initial_sms",
+                    )
+                    continue
 
+            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
             if not from_phone:
                 log.warning("No available numbers in pool, pausing sending")
-                break  # Exit loop, try again next tick
+                break
+
+            if not await self.number_pool.reserve_number_for_send(from_phone, db):
+                log.warning("Selected number became rate limited, retrying next tick")
+                break
 
             try:
                 # Skip if no initial message template
@@ -296,7 +344,7 @@ class CampaignWorker(BaseCampaignWorker):
     async def _process_follow_ups(  # noqa: PLR0912, PLR0915
         self,
         campaign: Campaign,
-        sms_service: TelnyxSMSService,
+        sms_service: TextMessageProvider,
         db: AsyncSession,
         log: Any,
     ) -> None:
@@ -356,24 +404,68 @@ class CampaignWorker(BaseCampaignWorker):
             if not contact or not contact.phone_number:
                 continue
 
-            # Check global opt-out
-            is_opted_out = await self.opt_out_manager.check_opt_out(
-                campaign.workspace_id,
-                contact.phone_number,
+            compliance_result = await self.compliance_service.evaluate(
+                OutboundComplianceRequest(
+                    workspace_id=campaign.workspace_id,
+                    campaign=campaign,
+                    campaign_contact=campaign_contact,
+                    contact=contact,
+                    channel="sms",
+                    action_type="campaign_follow_up_sms",
+                    now=datetime.now(UTC),
+                ),
                 db,
             )
-            if is_opted_out:
-                campaign_contact.status = CampaignContactStatus.OPTED_OUT
-                campaign_contact.opted_out = True
-                campaign_contact.opted_out_at = datetime.now(UTC)
-                campaign.contacts_opted_out += 1
+            self.compliance_service.apply_suppression(
+                campaign_contact, compliance_result, datetime.now(UTC)
+            )
+            if not compliance_result.allowed:
+                if compliance_result.reason == "global_opt_out":
+                    campaign.contacts_opted_out += 1
+                log.info(
+                    "compliance_suppressed_campaign_contact",
+                    campaign_id=str(campaign.id),
+                    campaign_contact_id=str(campaign_contact.id),
+                    contact_id=contact.id,
+                    reason=compliance_result.reason,
+                    action_type="campaign_follow_up_sms",
+                )
                 continue
 
-            # Get next available number from pool
-            from_phone = await self.number_pool.get_next_available_number(campaign, db)
+            if campaign.max_messages_per_campaign is not None:
+                cap_ok, campaign_daily_count = (
+                    await self.rate_limiter.check_and_increment_campaign_daily(
+                        campaign.id,
+                        campaign.max_messages_per_campaign,
+                    )
+                )
+                if not cap_ok:
+                    cap_result = OutboundComplianceResult(
+                        allowed=False,
+                        reason="campaign_send_cap_reached",
+                        details={"campaign_daily_count": campaign_daily_count},
+                    )
+                    self.compliance_service.apply_suppression(
+                        campaign_contact, cap_result, datetime.now(UTC)
+                    )
+                    log.info(
+                        "compliance_suppressed_campaign_contact",
+                        campaign_id=str(campaign.id),
+                        campaign_contact_id=str(campaign_contact.id),
+                        contact_id=contact.id,
+                        reason=cap_result.reason,
+                        action_type="campaign_follow_up_sms",
+                    )
+                    continue
+
+            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
 
             if not from_phone:
                 log.warning("No available numbers for follow-ups")
+                break
+
+            if not await self.number_pool.reserve_number_for_send(from_phone, db):
+                log.warning("Selected follow-up number became rate limited")
                 break
 
             try:

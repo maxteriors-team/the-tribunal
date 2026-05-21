@@ -30,7 +30,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
 from app.services.rate_limiting.opt_out_manager import OptOutManager
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -149,11 +149,6 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
         """Send a single never-booked re-engagement SMS."""
         log = self.logger.bind(contact_id=contact.id, agent_id=str(agent.id))
 
-        telnyx_key = settings.telnyx_api_key
-        if not telnyx_key:
-            log.warning("No Telnyx API key configured")
-            return
-
         contact_phone = contact.phone_number
         if not contact_phone:
             log.warning("Contact has no phone number")
@@ -180,7 +175,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
         template = agent.never_booked_template or _DEFAULT_NEVER_BOOKED_TEMPLATE
         body = self._render_template(template, contact, agent)
 
-        sms_service = TelnyxSMSService(telnyx_key)
+        sms_service = get_text_message_provider()
         try:
             message = await sms_service.send_message(
                 to_number=contact_phone,

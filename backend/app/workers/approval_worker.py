@@ -117,7 +117,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
         pending_actions = pending_result.scalars().all()
 
         # Batch-load human profiles for all relevant agent IDs
-        agent_ids = {a.agent_id for a in pending_actions}
+        agent_ids = {a.agent_id for a in pending_actions if a.agent_id is not None}
         if agent_ids:
             profile_result = await db.execute(
                 select(HumanProfile).where(
@@ -131,6 +131,8 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
             profiles_by_agent = {p.agent_id: p for p in profile_result.scalars().all()}
 
             for action in pending_actions:
+                if action.agent_id is None:
+                    continue
                 profile = profiles_by_agent.get(action.agent_id)
                 if profile is None:
                     continue

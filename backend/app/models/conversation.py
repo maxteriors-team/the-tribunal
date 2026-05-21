@@ -64,6 +64,7 @@ class MessageChannel(StrEnum):
     """Message channel."""
 
     SMS = "sms"
+    IMESSAGE = "imessage"
     VOICE = "voice"
     VOICEMAIL = "voicemail"
 

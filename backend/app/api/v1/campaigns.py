@@ -6,7 +6,7 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.api.crud import get_or_404
 from app.api.deps import DB, CurrentUser, get_workspace
@@ -26,6 +26,18 @@ from app.schemas.campaign import (
     PaginatedCampaigns,
 )
 from app.services.campaigns.campaign_filters import apply_campaign_filters
+from app.services.campaigns.campaign_lifecycle import (
+    CampaignLifecycleError,
+)
+from app.services.campaigns.campaign_lifecycle import (
+    pause_campaign as pause_campaign_lifecycle,
+)
+from app.services.campaigns.campaign_lifecycle import (
+    resume_campaign as resume_campaign_lifecycle,
+)
+from app.services.campaigns.campaign_lifecycle import (
+    start_campaign as start_campaign_lifecycle,
+)
 from app.services.campaigns.guarantee_tracker import check_guarantee_expiry
 from app.utils.datetime import parse_time_string
 
@@ -157,31 +169,17 @@ async def start_campaign(
     """Start a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
-    if campaign.status not in ("draft", "paused", "scheduled"):
+    try:
+        lifecycle_result = await start_campaign_lifecycle(db, campaign)
+    except CampaignLifecycleError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot start campaign with status: {campaign.status}",
-        )
+            detail=str(exc),
+        ) from exc
 
-    # Check if campaign has contacts
-    count_result = await db.execute(
-        select(func.count(CampaignContact.id)).where(CampaignContact.campaign_id == campaign_id)
-    )
-    contact_count = count_result.scalar() or 0
-
-    if contact_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Campaign has no contacts",
-        )
-
-    campaign.status = CampaignStatus.RUNNING
-    campaign.started_at = datetime.now(UTC)
-    if campaign.guarantee_target and campaign.guarantee_target > 0:
-        campaign.guarantee_status = "pending"
     await db.commit()
 
-    return {"status": "running", "message": f"Campaign started with {contact_count} contacts"}
+    return {"status": lifecycle_result.status.value, "message": lifecycle_result.message}
 
 
 @router.post("/{campaign_id}/pause")
@@ -195,16 +193,17 @@ async def pause_campaign(
     """Pause a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
-    if campaign.status != "running":
+    try:
+        lifecycle_result = await pause_campaign_lifecycle(campaign)
+    except CampaignLifecycleError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Can only pause running campaigns",
-        )
+            detail=str(exc),
+        ) from exc
 
-    campaign.status = CampaignStatus.PAUSED
     await db.commit()
 
-    return {"status": "paused"}
+    return {"status": lifecycle_result.status.value}
 
 
 @router.post("/{campaign_id}/resume")
@@ -218,16 +217,17 @@ async def resume_campaign(
     """Resume a paused campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
-    if campaign.status != "paused":
+    try:
+        lifecycle_result = await resume_campaign_lifecycle(db, campaign)
+    except CampaignLifecycleError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Can only resume paused campaigns",
-        )
+            detail=str(exc),
+        ) from exc
 
-    campaign.status = CampaignStatus.RUNNING
     await db.commit()
 
-    return {"status": "running", "message": "Campaign resumed"}
+    return {"status": lifecycle_result.status.value, "message": lifecycle_result.message}
 
 
 @router.post("/{campaign_id}/cancel")

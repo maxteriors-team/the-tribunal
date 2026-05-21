@@ -130,6 +130,16 @@ class Contact(Base):
         index=True,
     )
 
+    # SMS consent tracking
+    sms_consent_status: Mapped[str] = mapped_column(
+        String(50), default="unknown", server_default="unknown", nullable=False, index=True
+    )
+    sms_consent_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sms_consent_collected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sms_consent_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Engagement tracking
     last_engaged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True

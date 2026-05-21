@@ -39,10 +39,10 @@ class PendingAction(Base):
         nullable=False,
         index=True,
     )
-    agent_id: Mapped[uuid.UUID] = mapped_column(
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 
@@ -102,7 +102,7 @@ class PendingAction(Base):
 
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
-    agent: Mapped["Agent"] = relationship("Agent")
+    agent: Mapped["Agent | None"] = relationship("Agent")
     reviewed_by: Mapped["User | None"] = relationship("User")
 
     def __repr__(self) -> str:

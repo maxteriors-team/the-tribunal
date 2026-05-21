@@ -44,8 +44,15 @@ class PhoneNumberHealthStatus(StrEnum):
     QUARANTINED = "quarantined"
 
 
+class PhoneNumberProvider(StrEnum):
+    """Provider backing a workspace sender identity."""
+
+    TELNYX = "telnyx"
+    MAC_RELAY = "mac_relay"
+
+
 class PhoneNumber(Base):
-    """Telnyx phone number assigned to a workspace."""
+    """Phone number or sender identity assigned to a workspace."""
 
     __tablename__ = "phone_numbers"
 
@@ -63,14 +70,29 @@ class PhoneNumber(Base):
     )  # E.164 format
     friendly_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Telnyx identifiers
+    # Provider identifiers
+    provider: Mapped[PhoneNumberProvider] = mapped_column(
+        SAEnum(
+            PhoneNumberProvider,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+        default=PhoneNumberProvider.TELNYX,
+        index=True,
+    )
     telnyx_phone_number_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telnyx_messaging_profile_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mac_relay_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Capabilities
     sms_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     voice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     mms_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    imessage_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    mac_relay_service: Mapped[str] = mapped_column(String(20), default="imessage", nullable=False)
 
     # Agent assignment
     assigned_agent_id: Mapped[uuid.UUID | None] = mapped_column(

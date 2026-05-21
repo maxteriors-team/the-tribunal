@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.metrics import observe_sms_bounce
 from app.db.session import AsyncSessionLocal
+from app.models.conversation import Message, MessageChannel
 from app.models.phone_number import PhoneNumber
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
@@ -14,6 +15,7 @@ from app.services.ai.text_agent import schedule_ai_response
 from app.services.approval.command_processor_service import command_processor_service
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.push_notifications import push_notification_service
+from app.services.telephony.inbound_text import InboundTextEvent, process_inbound_text_event
 from app.services.telephony.telnyx import TelnyxSMSService
 
 _conversation_syncer = CampaignConversationSyncer()
@@ -52,35 +54,6 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
 
         workspace_id = phone_record.workspace_id
 
-        # Check if this is an approval command (Y/N/approve/reject)
-        is_command = await command_processor_service.try_process_command(
-            db=db,
-            from_number=from_number,
-            to_number=to_number,
-            body=body,
-        )
-        if is_command:
-            log.info("processed_approval_command", from_number=from_number)
-            return
-
-        # Check if sender is a workspace operator (member texting their own number)
-        operator_user = await _check_operator(db, from_number, workspace_id)
-        if operator_user:
-            log.info("detected_operator_sms", user_id=operator_user.id)
-            from app.services.ai.crm_assistant import process_assistant_message
-
-            await process_assistant_message(
-                db=db,
-                workspace_id=workspace_id,
-                user_id=operator_user.id,
-                message=body,
-                response_channel="sms",
-                sms_from_number=to_number,
-                sms_to_number=from_number,
-            )
-            return
-
-        # Process inbound message
         telnyx_api_key = settings.telnyx_api_key
         if not telnyx_api_key:
             log.error("no_telnyx_api_key")
@@ -88,99 +61,38 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
 
         sms_service = TelnyxSMSService(telnyx_api_key)
         try:
-            message = await sms_service.process_inbound_message(
-                db=db,
+            event = InboundTextEvent(
                 provider_message_id=message_id,
                 from_number=from_number,
                 to_number=to_number,
                 body=body,
                 workspace_id=workspace_id,
+                channel=MessageChannel.SMS,
             )
 
-            # Schedule AI response with debounce
-            if message.conversation_id:
-                from app.models.conversation import Conversation
-
-                conv_result = await db.execute(
-                    select(Conversation).where(Conversation.id == message.conversation_id)
-                )
-                conversation = conv_result.scalar_one_or_none()
-
-                if conversation:
-                    # Sync campaign agent and AI settings
-                    await _conversation_syncer.sync_conversation(db, conversation, log)
-
-                    if conversation.ai_enabled and not conversation.ai_paused:
-                        # Use agent's delay setting or default
-                        delay_ms = settings.ai_response_delay_ms
-                        if conversation.assigned_agent_id:
-                            from app.models.agent import Agent
-
-                            agent_result = await db.execute(
-                                select(Agent).where(Agent.id == conversation.assigned_agent_id)
-                            )
-                            agent = agent_result.scalar_one_or_none()
-                            if agent:
-                                delay_ms = agent.text_response_delay_ms
-
-                        await schedule_ai_response(
-                            conversation_id=message.conversation_id,
-                            workspace_id=workspace_id,
-                            delay_ms=delay_ms,
-                        )
-
-            # Pause any active drip enrollments for this contact
-            if message.conversation_id:
-                try:
-                    from app.models.conversation import Conversation as Conv
-                    from app.services.reactivation.drip_runner import handle_inbound_reply
-
-                    conv_for_drip = await db.execute(
-                        select(Conv).where(Conv.id == message.conversation_id)
-                    )
-                    drip_conv = conv_for_drip.scalar_one_or_none()
-                    if drip_conv and drip_conv.contact_id:
-                        await handle_inbound_reply(
-                            contact_id=drip_conv.contact_id,
-                            workspace_id=workspace_id,
-                            db=db,
-                        )
-                except Exception as e:
-                    log.exception("drip_pause_on_reply_failed", error=str(e))
-
-            # Update campaign reply stats
-            if message.conversation_id:
-                try:
-                    from app.services.campaigns.campaign_sms_stats import update_campaign_sms_reply
-
-                    await update_campaign_sms_reply(
-                        db=db,
-                        conversation_id=message.conversation_id,
-                        log=log,
-                    )
-                except Exception as e:
-                    log.exception("campaign_reply_stats_failed", error=str(e))
-
-            log.info("inbound_sms_processed", message_id=str(message.id))
-
-            # Push notification for inbound SMS
-            try:
-                truncated_body = body[:100] + "..." if len(body) > 100 else body
-                await push_notification_service.send_to_workspace_members(
+            async def ingest_message(db: Any, inbound_event: InboundTextEvent) -> Message:
+                return await sms_service.process_inbound_message(
                     db=db,
-                    workspace_id=str(workspace_id),
-                    title="New Message",
-                    body=truncated_body,
-                    data={
-                        "type": "message",
-                        "conversationId": str(message.conversation_id),
-                        "screen": f"/(tabs)/messages/{message.conversation_id}",
-                    },
-                    notification_type="message",
-                    channel_id="messages",
+                    provider_message_id=inbound_event.provider_message_id,
+                    from_number=inbound_event.from_number,
+                    to_number=inbound_event.to_number,
+                    body=inbound_event.body,
+                    workspace_id=inbound_event.workspace_id,
                 )
-            except Exception as e:
-                log.exception("push_notification_failed", error=str(e))
+
+            message = await process_inbound_text_event(
+                db=db,
+                event=event,
+                ingest_message=ingest_message,
+                log=log,
+                command_processor=command_processor_service,
+                conversation_syncer=_conversation_syncer,
+                schedule_ai_response_fn=schedule_ai_response,
+                push_service=push_notification_service,
+                check_operator_fn=_check_operator,
+            )
+            if message is not None:
+                log.info("inbound_sms_processed", message_id=str(message.id))
         finally:
             await sms_service.close()
 

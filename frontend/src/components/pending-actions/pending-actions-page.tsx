@@ -22,8 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PageEmptyState } from "@/components/ui/page-state";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -328,23 +327,10 @@ function ActionEmptyState({ status }: { status: string }) {
 
 function ActionListSkeleton() {
   return (
-    <div className="space-y-3">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Card key={i}>
-          <CardContent className="flex items-start gap-4 p-4">
-            <Skeleton className="h-10 w-10 rounded-lg" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-3 w-72" />
-              <Skeleton className="h-3 w-32" />
-            </div>
-            <div className="flex gap-1">
-              <Skeleton className="h-8 w-20" />
-              <Skeleton className="h-8 w-18" />
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <Card>
+      <CardContent className="py-4">
+        <PageLoadingState message="Loading pending actions…" />
+      </CardContent>
+    </Card>
   );
 }

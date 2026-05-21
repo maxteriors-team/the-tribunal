@@ -1,7 +1,7 @@
 """Campaign models."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -141,8 +141,8 @@ class Campaign(Base):
     scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Sending windows
-    sending_hours_start: Mapped[datetime | None] = mapped_column(Time, nullable=True)
-    sending_hours_end: Mapped[datetime | None] = mapped_column(Time, nullable=True)
+    sending_hours_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    sending_hours_end: Mapped[time | None] = mapped_column(Time, nullable=True)
     sending_days: Mapped[list[int] | None] = mapped_column(
         ARRAY(Integer), nullable=True
     )  # 0=Mon, 6=Sun
@@ -151,6 +151,10 @@ class Campaign(Base):
     # Rate limiting
     messages_per_minute: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     max_messages_per_contact: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    max_messages_per_campaign: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quiet_hours_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    quiet_hours_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+    quiet_hours_timezone: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Follow-up settings
     follow_up_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -349,6 +353,14 @@ class CampaignContact(Base):
 
     # Error tracking
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Compliance tracking
+    suppressed_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    suppressed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    compliance_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_compliance_result: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

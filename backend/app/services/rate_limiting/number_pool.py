@@ -37,6 +37,7 @@ class NumberPoolManager:
         self,
         campaign: Campaign,
         db: AsyncSession,
+        consume_rate_limit: bool = True,
     ) -> PhoneNumber | None:
         """Get next available number from campaign pool using strict round-robin.
 
@@ -63,7 +64,10 @@ class NumberPoolManager:
             )
             phone = result.scalar_one_or_none()
 
-            if phone and await self._check_all_rate_limits(phone):
+            if phone and await self._phone_has_capacity(phone):
+                if consume_rate_limit and not await self.reserve_number_for_send(phone, db):
+                    log.debug("single_number_rate_limited", phone=campaign.from_phone_number)
+                    return None
                 return phone
 
             log.debug("single_number_rate_limited", phone=campaign.from_phone_number)
@@ -123,47 +127,69 @@ class NumberPoolManager:
                     )
                     continue
 
-            # Check all rate limits
-            if await self._check_all_rate_limits(phone):
-                # Update pool entry usage tracking
-                pool_entry.last_used_at = datetime.now(UTC)
-                pool_entry.messages_sent += 1
-                await db.flush()
+            # Check all rate limits without consuming counters unless requested.
+            if await self._phone_has_capacity(phone):
+                if consume_rate_limit and not await self.reserve_number_for_send(phone, db):
+                    continue
+
+                if consume_rate_limit:
+                    pool_entry.last_used_at = datetime.now(UTC)
+                    pool_entry.messages_sent += 1
+                    await db.flush()
 
                 log.info(
                     "selected_number_from_pool",
                     phone=phone.phone_number,
                     health=phone.health_status,
                     priority=pool_entry.priority,
+                    consume_rate_limit=consume_rate_limit,
                 )
                 return phone
 
         log.warning("all_numbers_rate_limited")
         return None
 
+    async def peek_next_available_number(
+        self,
+        campaign: Campaign,
+        db: AsyncSession,
+    ) -> PhoneNumber | None:
+        """Get the next number with capacity without consuming Redis counters."""
+        return await self.get_next_available_number(campaign, db, consume_rate_limit=False)
+
+    async def reserve_number_for_send(self, phone: PhoneNumber, db: AsyncSession) -> bool:
+        """Consume send counters for a selected phone number immediately before send."""
+        if not await self._check_all_rate_limits(phone):
+            return False
+
+        pool_result = await db.execute(
+            select(CampaignNumberPool).where(CampaignNumberPool.phone_number_id == phone.id)
+        )
+        for pool_entry in pool_result.scalars().all():
+            pool_entry.last_used_at = datetime.now(UTC)
+            pool_entry.messages_sent += 1
+        await db.flush()
+        return True
+
+    async def _phone_has_capacity(self, phone: PhoneNumber) -> bool:
+        counts = await self.rate_limiter.get_current_counts(phone.id)
+        if counts["hourly"] >= phone.hourly_limit:
+            return False
+        return counts["daily"] < phone.daily_limit
+
     async def _check_all_rate_limits(self, phone: PhoneNumber) -> bool:
-        """Check if phone number passes all rate limits.
-
-        Args:
-            phone: Phone number model
-
-        Returns:
-            True if all rate limits pass
-        """
-        # Check per-second throttle
+        """Check if phone number passes all rate limits and consume counters."""
         if not await self.rate_limiter.check_and_increment_per_second(
             phone.id, phone.messages_per_second
         ):
             return False
 
-        # Check hourly limit
         hourly_ok, _ = await self.rate_limiter.check_and_increment_hourly(
             phone.id, phone.hourly_limit
         )
         if not hourly_ok:
             return False
 
-        # Check daily limit
         daily_ok, _ = await self.rate_limiter.check_and_increment_daily(phone.id, phone.daily_limit)
         return daily_ok
 

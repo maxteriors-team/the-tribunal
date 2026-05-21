@@ -2,10 +2,10 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -50,6 +50,11 @@ class GlobalOptOut(Base):
         nullable=True,
         index=True,
     )
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_actor_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_actor_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

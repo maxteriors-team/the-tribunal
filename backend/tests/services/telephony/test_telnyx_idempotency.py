@@ -145,18 +145,18 @@ class TestSendMessageDedupe:
         db = mock_db_with_existing(existing)
 
         post_mock = AsyncMock(return_value={"data": {"id": "telnyx-m1"}})
+        conversation = MagicMock(
+            id=existing.conversation_id,
+            contact_id=None,
+            last_message_preview=None,
+            last_message_at=None,
+            last_message_direction=None,
+        )
         with (
             patch.object(
                 svc,
                 "_get_or_create_conversation",
-                AsyncMock(
-                    return_value=MagicMock(
-                        id=existing.conversation_id,
-                        contact_id=None,
-                        last_message_preview=None,
-                        last_message_at=None,
-                    )
-                ),
+                AsyncMock(return_value=conversation),
             ),
             patch.object(svc, "_post_message", post_mock),
             patch(
@@ -176,6 +176,7 @@ class TestSendMessageDedupe:
             # Reused the same Message row, no duplicate insert.
             assert result is existing
             db.add.assert_not_called()
+            assert conversation.last_message_direction == "outbound"
             # Telnyx received the same key as header.
             post_mock.assert_awaited_once()
             forwarded = post_mock.call_args.kwargs["idempotency_key"]

@@ -4,7 +4,7 @@ import uuid
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
@@ -84,6 +84,44 @@ async def delete_segment(
     await db.commit()
 
 
+def build_segment_contacts_query(
+    workspace_id: uuid.UUID,
+    definition: dict[str, Any],
+) -> Any:
+    """Build a contact query for a segment definition."""
+    filter_rules = definition.get("rules", [])
+    filter_logic = definition.get("logic", "and")
+
+    query = select(Contact).where(Contact.workspace_id == workspace_id)
+    if filter_rules:
+        query = apply_contact_filters(
+            query,
+            workspace_id,
+            filter_rules=filter_rules,
+            filter_logic=filter_logic,
+        )
+
+    return query
+
+
+async def preview_segment_contacts(
+    workspace_id: uuid.UUID,
+    definition: dict[str, Any],
+    db: AsyncSession,
+    *,
+    limit: int = 10,
+) -> tuple[list[Contact], int]:
+    """Preview contacts that match a segment definition with total count."""
+    base_query = build_segment_contacts_query(workspace_id, definition)
+    count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
+    total = await db.scalar(count_query)
+
+    result = await db.execute(
+        base_query.order_by(Contact.created_at.desc(), Contact.id.desc()).limit(limit)
+    )
+    return list(result.scalars().all()), total or 0
+
+
 async def resolve_segment_contacts(
     segment: Segment,
     db: AsyncSession,
@@ -92,21 +130,10 @@ async def resolve_segment_contacts(
 
     Builds a query using apply_contact_filters and returns matching contact IDs.
     """
-    definition = segment.definition
-    filter_rules = definition.get("rules", [])
-    filter_logic = definition.get("logic", "and")
-
-    query = select(Contact.id).where(Contact.workspace_id == segment.workspace_id)
-
-    # Apply the segment's filter rules
-    if filter_rules:
-        query = apply_contact_filters(
-            query,
-            segment.workspace_id,
-            filter_rules=filter_rules,
-            filter_logic=filter_logic,
-        )
-
+    query = build_segment_contacts_query(
+        segment.workspace_id,
+        segment.definition,
+    ).with_only_columns(Contact.id)
     query = query.order_by(Contact.created_at.desc(), Contact.id.desc())
 
     result = await db.execute(query)

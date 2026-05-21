@@ -11,7 +11,7 @@ class PendingActionResponse(BaseModel):
 
     id: uuid.UUID
     workspace_id: uuid.UUID
-    agent_id: uuid.UUID
+    agent_id: uuid.UUID | None
     action_type: str
     action_payload: dict[str, Any]
     description: str

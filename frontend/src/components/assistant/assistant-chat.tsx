@@ -3,6 +3,7 @@
 import { Send, Loader2, Bot, User, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { OutboundWorkflowCard } from "@/components/assistant/outbound-workflow-card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -104,6 +105,7 @@ function MessageBubble({ message }: { message: AssistantMessageResponse }) {
 
   const isUser = message.role === "user";
   const isLoading = message.content === "…" && message.role === "assistant";
+  const workflowPayload = !isUser && !isLoading ? parseWorkflowPayload(message.content) : null;
 
   return (
     <div
@@ -126,15 +128,21 @@ function MessageBubble({ message }: { message: AssistantMessageResponse }) {
       <div
         className={cn(
           "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground",
+          workflowPayload && "max-w-[92%] bg-transparent p-0",
+          !workflowPayload &&
+            (isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-foreground"),
           isLoading && "animate-pulse",
         )}
       >
-        <p className="whitespace-pre-wrap">
-          {isLoading ? "Thinking…" : message.content}
-        </p>
+        {workflowPayload ? (
+          <OutboundWorkflowCard payload={workflowPayload} />
+        ) : (
+          <p className="whitespace-pre-wrap">
+            {isLoading ? "Thinking…" : message.content}
+          </p>
+        )}
         <p
           className={cn(
             "mt-1 text-[10px]",
@@ -148,4 +156,29 @@ function MessageBubble({ message }: { message: AssistantMessageResponse }) {
       </div>
     </div>
   );
+}
+
+function parseWorkflowPayload(content: string): Record<string, unknown> | null {
+  if (!content.trim().startsWith("{")) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+    const record = parsed as Record<string, unknown>;
+    if (
+      record.type === "outbound_workflow" ||
+      record.outbound_workflow === true ||
+      record.segment_preview ||
+      record.message_previews ||
+      record.launch_status ||
+      record.warm_lead_handoff
+    ) {
+      return record;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }

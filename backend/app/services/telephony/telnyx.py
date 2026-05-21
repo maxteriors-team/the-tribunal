@@ -24,7 +24,7 @@ from app.core.metrics import (
     telnyx_api_latency_ms,
 )
 from app.models.contact import Contact
-from app.models.conversation import Conversation, Message, MessageStatus
+from app.models.conversation import Conversation, Message, MessageChannel, MessageStatus
 from app.services.messaging.link_shortener import shorten_urls_in_text
 from app.utils.phone import normalize_phone_e164, phone_lookup_variants
 from app.utils.pii import mask_phone
@@ -83,15 +83,30 @@ class TelnyxSMSService:
 
     BASE_URL = "https://api.telnyx.com/v2"
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        message_channel: MessageChannel = MessageChannel.SMS,
+        conversation_channel: str = MessageChannel.SMS.value,
+        service_name: str = "telnyx_sms",
+        provider_payload_type: str = "SMS",
+    ) -> None:
         """Initialize SMS service.
 
         Args:
             api_key: Telnyx API key
+            message_channel: Channel stored on created message rows.
+            conversation_channel: Channel stored on newly created conversations.
+            service_name: Structured-log service label.
+            provider_payload_type: Telnyx message type payload value.
         """
         self.api_key = api_key
+        self.message_channel = message_channel
+        self.conversation_channel = conversation_channel
+        self.provider_payload_type = provider_payload_type
         self._client: httpx.AsyncClient | None = None
-        self.logger = logger.bind(service="telnyx_sms")
+        self.logger = logger.bind(service=service_name)
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -113,6 +128,17 @@ class TelnyxSMSService:
         if self._client:
             await self._client.aclose()
             self._client = None
+
+    async def _find_message_by_idempotency_key(
+        self,
+        db: AsyncSession,
+        idempotency_key: uuid.UUID | None,
+    ) -> Message | None:
+        """Return an existing outbound message for an idempotency key."""
+        if idempotency_key is None:
+            return None
+        result = await db.execute(select(Message).where(Message.idempotency_key == idempotency_key))
+        return result.scalar_one_or_none()
 
     async def send_message(
         self,
@@ -149,9 +175,9 @@ class TelnyxSMSService:
         Returns:
             Created (or pre-existing) Message record.
         """
-        # Normalize phone numbers to E.164 format
-        to_number = normalize_phone_e164(to_number)
-        from_number = normalize_phone_e164(from_number)
+        # Normalize outbound addresses before persistence/provider handoff.
+        to_number = self._normalize_outbound_to(to_number)
+        from_number = self._normalize_outbound_from(from_number)
 
         log = self.logger.bind(to=to_number, from_=from_number)
 
@@ -161,21 +187,21 @@ class TelnyxSMSService:
         # immediately — the SMS was already sent. If the row exists but the
         # send never happened (still QUEUED), we resume the send rather than
         # inserting a duplicate row, reusing the existing message id.
-        if idempotency_key is not None:
-            existing_result = await db.execute(
-                select(Message).where(Message.idempotency_key == idempotency_key)
+        existing = await self._find_message_by_idempotency_key(db, idempotency_key)
+        if existing is not None and existing.status != MessageStatus.QUEUED:
+            log.info(
+                "text_send_idempotent_skip",
+                idempotency_key=str(idempotency_key),
+                message_id=str(existing.id),
+                status=existing.status,
             )
-            existing = existing_result.scalar_one_or_none()
-            if existing is not None and existing.status != MessageStatus.QUEUED:
-                log.info(
-                    "sms_send_idempotent_skip",
-                    idempotency_key=str(idempotency_key),
-                    message_id=str(existing.id),
-                    status=existing.status,
-                )
-                return existing
+            return existing
 
-        log.info("sending_sms", idempotency_key=str(idempotency_key) if idempotency_key else None)
+        log.info(
+            "sending_text_message",
+            channel=self.message_channel.value,
+            idempotency_key=str(idempotency_key) if idempotency_key else None,
+        )
 
         # Get or create conversation
         conversation = await self._get_or_create_conversation(
@@ -190,18 +216,13 @@ class TelnyxSMSService:
         # send to Telnyx, ensuring the provider also rejects duplicates.
         effective_key = idempotency_key or uuid.uuid4()
 
-        message: Message | None = None
-        if idempotency_key is not None:
-            existing_result = await db.execute(
-                select(Message).where(Message.idempotency_key == idempotency_key)
-            )
-            message = existing_result.scalar_one_or_none()
+        message = await self._find_message_by_idempotency_key(db, idempotency_key)
 
         if message is None:
             message = Message(
                 conversation_id=conversation.id,
                 direction="outbound",
-                channel="sms",
+                channel=self.message_channel,
                 body=body,
                 status="queued",
                 agent_id=agent_id,
@@ -227,19 +248,19 @@ class TelnyxSMSService:
         # 4xx (bad request, invalid number, auth) raises immediately and is
         # mapped to MessageStatus.FAILED below.
         try:
-            payload: dict[str, str] = {
-                "to": to_number,
-                "from": from_number,
-                "text": body,
-                "type": "SMS",
-            }
+            payload = self._build_message_payload(
+                to_number=to_number,
+                from_number=from_number,
+                body=body,
+                idempotency_key=effective_key,
+            )
             response_data = await self._post_message(payload, idempotency_key=effective_key)
             data = response_data.get("data", {})
             message.provider_message_id = data.get("id")
             message.status = MessageStatus.SENT
             message.sent_at = datetime.now(UTC)
             observe_sms_sent(workspace_id, direction="outbound")
-            log.info("sms_sent", message_id=message.provider_message_id)
+            log.info("text_message_sent", message_id=message.provider_message_id)
         except httpx.HTTPStatusError as e:
             try:
                 err_data = e.response.json()
@@ -249,23 +270,34 @@ class TelnyxSMSService:
             first_error = errors[0] if errors else {}
             error_msg = first_error.get("detail") if first_error else e.response.text
             message.status = MessageStatus.FAILED
+            message.error_message = error_msg
             log.error(
-                "sms_send_failed",
+                "text_send_failed",
                 status_code=e.response.status_code,
                 error=error_msg,
             )
         except Exception as e:
             message.status = MessageStatus.FAILED
-            log.exception("sms_send_exception", error=str(e))
+            message.error_message = str(e)
+            log.exception("text_send_exception", error=str(e))
 
         # Update conversation
         conversation.last_message_preview = body[:255]
         conversation.last_message_at = datetime.now(UTC)
+        conversation.last_message_direction = "outbound"
 
         await db.commit()
         await db.refresh(message)
 
         return message
+
+    def _normalize_outbound_to(self, to_number: str) -> str:
+        """Normalize an outbound recipient address for this provider."""
+        return normalize_phone_e164(to_number)
+
+    def _normalize_outbound_from(self, from_number: str) -> str:
+        """Normalize an outbound sender address for this provider."""
+        return normalize_phone_e164(from_number)
 
     async def process_inbound_message(
         self,
@@ -330,7 +362,7 @@ class TelnyxSMSService:
             conversation_id=conversation.id,
             provider_message_id=provider_message_id,
             direction="inbound",
-            channel="sms",
+            channel=self.message_channel,
             body=body,
             status="received",
         )
@@ -340,6 +372,7 @@ class TelnyxSMSService:
         # Update conversation
         conversation.last_message_preview = body[:255]
         conversation.last_message_at = datetime.now(UTC)
+        conversation.last_message_direction = "inbound"
         conversation.unread_count += 1
 
         # NOTE: Opt-out detection has been moved to process_inbound_with_ai()
@@ -541,7 +574,7 @@ class TelnyxSMSService:
             contact_id=contact.id if contact else None,
             workspace_phone=workspace_phone,
             contact_phone=contact_phone,
-            channel="sms",
+            channel=self.conversation_channel,
             ai_enabled=True,  # Default to AI enabled
         )
         db.add(conversation)
@@ -603,6 +636,22 @@ class TelnyxSMSService:
                 contact_id=contact.id,
             )
         return contact
+
+    def _build_message_payload(
+        self,
+        *,
+        to_number: str,
+        from_number: str,
+        body: str,
+        idempotency_key: uuid.UUID,
+    ) -> dict[str, str]:
+        """Build provider payload for a Telnyx text message."""
+        return {
+            "to": to_number,
+            "from": from_number,
+            "text": body,
+            "type": self.provider_payload_type,
+        }
 
     @_telnyx_retry
     async def _post_message(

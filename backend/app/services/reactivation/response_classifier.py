@@ -5,12 +5,11 @@ Two-layer approach:
 2. LLM fallback for ambiguous replies
 
 Each classification maps to an action:
-- interested / hand_raiser → pause drip, AI agent takes over
-- not_interested / opt_out → cancel drip
-- timing → pause drip, re-enroll in long-term nurture later
-- question → pause drip, AI agent responds
-- appointment_request → pause drip, AI agent books appointment
-- unknown → pause drip, AI agent handles
+- interested / question / objection → pause drip, create warm follow-up
+- not_now → pause drip, re-enroll in long-term nurture later
+- wrong_person / opt_out / angry → cancel drip and flag risk
+- booked → pause drip and mark booking intent
+- human_needed / unknown → pause drip for human review
 """
 
 import asyncio
@@ -39,13 +38,29 @@ _KEYWORD_RULES: dict[ResponseCategory, list[str]] = {
         "don't contact",
         "dont contact",
         "leave me alone",
-        "wrong number",
-        "wrong person",
         "spam",
         "reported",
         "do not contact",
     ],
-    ResponseCategory.NOT_INTERESTED: [
+    ResponseCategory.ANGRY: [
+        "fuck",
+        "shit",
+        "sue",
+        "lawsuit",
+        "harass",
+        "harassment",
+        "reported you",
+        "reporting you",
+        "go away",
+    ],
+    ResponseCategory.WRONG_PERSON: [
+        "wrong number",
+        "wrong person",
+        "not me",
+        "who is this",
+        "you have the wrong",
+    ],
+    ResponseCategory.OBJECTION: [
         "not interested",
         "no thanks",
         "no thank you",
@@ -53,17 +68,19 @@ _KEYWORD_RULES: dict[ResponseCategory, list[str]] = {
         "not looking",
         "pass",
         "nope",
-        "not right now",
         "don't need",
         "dont need",
         "already sold",
         "already have an agent",
         "already working with",
-        "go away",
+        "too expensive",
+        "not selling",
     ],
-    ResponseCategory.APPOINTMENT_REQUEST: [
+    ResponseCategory.BOOKED: [
         "book",
+        "booked",
         "schedule",
+        "scheduled",
         "set up a call",
         "set up a meeting",
         "let's meet",
@@ -99,8 +116,9 @@ _KEYWORD_RULES: dict[ResponseCategory, list[str]] = {
         "yes please",
         "for sure",
     ],
-    ResponseCategory.TIMING: [
+    ResponseCategory.NOT_NOW: [
         "not now",
+        "not right now",
         "maybe later",
         "next year",
         "in a few months",
@@ -132,10 +150,15 @@ def classify_by_keywords(message: str) -> ResponseCategory | None:
     """Classify a message using keyword matching. Returns None if ambiguous."""
     text = message.lower().strip()
 
-    # Check opt-out first (highest priority)
-    for keyword in _KEYWORD_RULES[ResponseCategory.OPT_OUT]:
-        if keyword in text:
-            return ResponseCategory.OPT_OUT
+    # Check high-risk and compliance categories first.
+    for category in (
+        ResponseCategory.OPT_OUT,
+        ResponseCategory.ANGRY,
+        ResponseCategory.WRONG_PERSON,
+    ):
+        for keyword in _KEYWORD_RULES[category]:
+            if keyword in text:
+                return category
 
     # Short affirmative replies are almost always "interested"
     if text in {"yes", "yeah", "yep", "sure", "ok", "okay", "y", "yea"}:
@@ -144,7 +167,11 @@ def classify_by_keywords(message: str) -> ResponseCategory | None:
     # Check remaining categories
     scores: dict[ResponseCategory, int] = {}
     for category, keywords in _KEYWORD_RULES.items():
-        if category == ResponseCategory.OPT_OUT:
+        if category in {
+            ResponseCategory.OPT_OUT,
+            ResponseCategory.ANGRY,
+            ResponseCategory.WRONG_PERSON,
+        }:
             continue
         matches = sum(1 for kw in keywords if kw in text)
         if matches > 0:
@@ -167,12 +194,15 @@ _CLASSIFY_SYSTEM_PROMPT = (
     "reactivation SMS campaign.\n\n"
     "Classify the contact's reply into exactly ONE of "
     "these categories:\n"
-    "- interested: Want to learn more or engage\n"
-    "- not_interested: Don't want to be contacted\n"
-    "- timing: Interested but not right now\n"
-    "- question: Asking about real estate or the offer\n"
-    "- appointment_request: Want to schedule a call/meeting\n"
-    "- opt_out: Want to stop receiving messages\n"
+    "- interested: Wants to learn more, asks to continue, or shows buying/selling intent\n"
+    "- objection: Declines, raises a blocker, has help, or says no without compliance risk\n"
+    "- question: Asks a factual question about real estate, the company, or the offer\n"
+    "- not_now: Interested or possibly interested, but asks for later timing\n"
+    "- wrong_person: Says this is the wrong number/person or they are not the lead\n"
+    "- opt_out: Clearly asks to stop, unsubscribe, remove, or not be contacted\n"
+    "- angry: Hostile, threatening, spam complaint, legal threat, or reputational risk\n"
+    "- booked: Wants a call/meeting/appointment or says one is scheduled\n"
+    "- human_needed: Needs a human for warm, sensitive, complex, or unsafe automation\n"
     "- unknown: Cannot determine intent\n\n"
     "Respond with ONLY the category name, nothing else."
 )
@@ -215,11 +245,17 @@ async def classify_by_llm(
         # Map to enum
         category_map: dict[str, ResponseCategory] = {
             "interested": ResponseCategory.INTERESTED,
-            "not_interested": ResponseCategory.NOT_INTERESTED,
-            "timing": ResponseCategory.TIMING,
+            "objection": ResponseCategory.OBJECTION,
+            "not_interested": ResponseCategory.OBJECTION,
             "question": ResponseCategory.QUESTION,
-            "appointment_request": ResponseCategory.APPOINTMENT_REQUEST,
+            "not_now": ResponseCategory.NOT_NOW,
+            "timing": ResponseCategory.NOT_NOW,
+            "wrong_person": ResponseCategory.WRONG_PERSON,
             "opt_out": ResponseCategory.OPT_OUT,
+            "angry": ResponseCategory.ANGRY,
+            "booked": ResponseCategory.BOOKED,
+            "appointment_request": ResponseCategory.BOOKED,
+            "human_needed": ResponseCategory.HUMAN_NEEDED,
             "unknown": ResponseCategory.UNKNOWN,
         }
         return category_map.get(result, ResponseCategory.UNKNOWN)

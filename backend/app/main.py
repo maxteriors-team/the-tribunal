@@ -25,6 +25,7 @@ from app.api.redirects import router as redirects_router
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.api.webhooks.calcom import router as calcom_webhook_router
+from app.api.webhooks.mac_relay import router as mac_relay_webhook_router
 from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core.config import settings
@@ -487,6 +488,7 @@ app.include_router(redirects_router)
 
 # Include webhook routers
 app.include_router(telnyx_webhook_router, prefix="/webhooks/telnyx", tags=["webhooks"])
+app.include_router(mac_relay_webhook_router, prefix="/webhooks/mac-relay", tags=["webhooks"])
 app.include_router(calcom_webhook_router, prefix="/webhooks/calcom", tags=["webhooks"])
 app.include_router(resend_webhook_router, prefix="/webhooks/resend", tags=["webhooks"])
 

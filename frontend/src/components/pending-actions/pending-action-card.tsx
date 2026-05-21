@@ -2,6 +2,10 @@
 
 import { Check, X, Clock, Loader2 } from "lucide-react";
 
+import {
+  isOutboundWorkflowAction,
+  OutboundWorkflowCard,
+} from "@/components/assistant/outbound-workflow-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -72,6 +76,18 @@ export function PendingActionCard({
   isRejecting,
 }: PendingActionCardProps) {
   const isPending = action.status === "pending";
+
+  if (isOutboundWorkflowAction(action)) {
+    return (
+      <OutboundWorkflowCard
+        action={action}
+        onApprove={onApprove}
+        onReject={onReject}
+        isApproving={isApproving}
+        isRejecting={isRejecting}
+      />
+    );
+  }
 
   return (
     <Card>

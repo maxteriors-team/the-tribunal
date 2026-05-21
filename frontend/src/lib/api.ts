@@ -27,6 +27,14 @@ export function logout(): void {
   // Fire-and-forget: ask backend to clear the auth cookies.
   api.post("/api/v1/auth/logout").catch(() => {});
   try {
+    // Don't hard-reload back into /login when we're already there. The
+    // auth interceptor calls this on a failed refresh, which happens on
+    // first paint of /login (no cookie yet). Reloading the same URL
+    // restarts the probe → 401 → refresh → 401 chain and turns the
+    // login page into an infinite reload loop.
+    if (typeof window !== "undefined" && window.location.pathname === "/login") {
+      return;
+    }
     window.location.href = "/login";
   } catch (navError) {
     if (process.env.NODE_ENV !== "production") {
@@ -93,11 +101,15 @@ api.interceptors.response.use(
         // Retry original request — the browser will attach the new access cookie.
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh failed, logout
+        // Refresh failed — most common cause is an unauthenticated visit
+        // (no refresh cookie present), e.g. first paint of /login while the
+        // AuthProvider probes /auth/me. Drain the queue, redirect, and emit
+        // a debug-level log so we don't trip the Next.js dev error overlay
+        // (it promotes console.error to a visible overlay).
         processQueue(error);
         isRefreshing = false;
         if (process.env.NODE_ENV !== "production") {
-          console.error("Token refresh failed - redirecting to login");
+          console.debug("[auth] token refresh failed — redirecting to /login");
         }
         logout();
         return Promise.reject(refreshError);

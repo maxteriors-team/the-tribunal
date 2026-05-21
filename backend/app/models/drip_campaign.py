@@ -61,12 +61,20 @@ class ResponseCategory(StrEnum):
     """Classification of a contact's reply."""
 
     INTERESTED = "interested"
+    OBJECTION = "objection"
+    QUESTION = "question"
+    NOT_NOW = "not_now"
+    WRONG_PERSON = "wrong_person"
+    OPT_OUT = "opt_out"
+    ANGRY = "angry"
+    BOOKED = "booked"
+    HUMAN_NEEDED = "human_needed"
+    UNKNOWN = "unknown"
+
+    # Legacy reactivation names retained for older callers/data.
     NOT_INTERESTED = "not_interested"
     TIMING = "timing"
-    QUESTION = "question"
     APPOINTMENT_REQUEST = "appointment_request"
-    OPT_OUT = "opt_out"
-    UNKNOWN = "unknown"
 
 
 class DripCampaign(Base):
