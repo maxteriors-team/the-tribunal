@@ -1999,6 +1999,18 @@
       "AssistantChatRequest": {
         "description": "Request to send a message to the CRM assistant.",
         "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -2021,6 +2033,17 @@
             "title": "Actions Taken",
             "type": "array"
           },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "response": {
             "title": "Response",
             "type": "string"
@@ -2030,6 +2053,42 @@
           "response"
         ],
         "title": "AssistantChatResponse",
+        "type": "object"
+      },
+      "AssistantConversationMetaResponse": {
+        "description": "Assistant conversation list item.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message_count": {
+            "title": "Message Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "message_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AssistantConversationMetaResponse",
         "type": "object"
       },
       "AssistantConversationResponse": {
@@ -2050,12 +2109,18 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "messages",
-          "created_at"
+          "created_at",
+          "updated_at"
         ],
         "title": "AssistantConversationResponse",
         "type": "object"
@@ -2077,6 +2142,11 @@
             "type": "string"
           },
           "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "tool"
+            ],
             "title": "Role",
             "type": "string"
           },
@@ -25706,9 +25776,228 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/assistant/chat/stream": {
+      "post": {
+        "description": "Stream an assistant response as server-sent events.",
+        "operationId": "stream_chat_with_assistant_api_v1_workspaces__workspace_id__assistant_chat_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Stream Chat With Assistant",
+        "tags": [
+          "CRM Assistant"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/assistant/conversations": {
+      "get": {
+        "description": "List assistant conversations for the current workspace and user.",
+        "operationId": "list_assistant_conversations_api_v1_workspaces__workspace_id__assistant_conversations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssistantConversationMetaResponse"
+                  },
+                  "title": "Response List Assistant Conversations Api V1 Workspaces  Workspace Id  Assistant Conversations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Assistant Conversations",
+        "tags": [
+          "CRM Assistant"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/assistant/conversations/{conversation_id}": {
+      "delete": {
+        "description": "Delete one assistant conversation for the current workspace and user.",
+        "operationId": "delete_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Assistant Conversation",
+        "tags": [
+          "CRM Assistant"
+        ]
+      },
+      "get": {
+        "description": "Load one assistant conversation with messages.",
+        "operationId": "get_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantConversationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Assistant Conversation",
+        "tags": [
+          "CRM Assistant"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/assistant/history": {
       "get": {
-        "description": "Get conversation history with the CRM assistant.",
+        "description": "Get the latest conversation history with the CRM assistant.",
         "operationId": "get_assistant_history_api_v1_workspaces__workspace_id__assistant_history_get",
         "parameters": [
           {

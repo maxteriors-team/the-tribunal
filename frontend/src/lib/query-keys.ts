@@ -59,6 +59,11 @@ export const queryKeys = {
       ["agent-embed", workspaceId, agentId] as const,
   },
   assistant: {
+    all: (workspaceId: string) => ["assistant", workspaceId] as const,
+    conversations: (workspaceId: string) =>
+      ["assistant", workspaceId, "conversations"] as const,
+    conversation: (workspaceId: string, conversationId: string) =>
+      ["assistant", workspaceId, "conversation", conversationId] as const,
     history: (workspaceId: string) => ["assistant", workspaceId, "history"] as const,
   },
   appointments: {

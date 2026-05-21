@@ -4,7 +4,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 export default function AssistantPage() {
   return (
     <AppSidebar>
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="border-b px-6 py-4">
           <h1 className="text-xl font-semibold">CRM Assistant</h1>
           <p className="text-sm text-muted-foreground">
@@ -12,7 +12,7 @@ export default function AssistantPage() {
             conversations.
           </p>
         </div>
-        <AssistantChat className="flex-1" />
+        <AssistantChat className="min-h-0 flex-1" />
       </div>
     </AppSidebar>
   );

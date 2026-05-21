@@ -1618,6 +1618,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/assistant/chat/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stream Chat With Assistant
+         * @description Stream an assistant response as server-sent events.
+         */
+        post: operations["stream_chat_with_assistant_api_v1_workspaces__workspace_id__assistant_chat_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/assistant/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assistant Conversations
+         * @description List assistant conversations for the current workspace and user.
+         */
+        get: operations["list_assistant_conversations_api_v1_workspaces__workspace_id__assistant_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/assistant/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Assistant Conversation
+         * @description Load one assistant conversation with messages.
+         */
+        get: operations["get_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Assistant Conversation
+         * @description Delete one assistant conversation for the current workspace and user.
+         */
+        delete: operations["delete_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/assistant/history": {
         parameters: {
             query?: never;
@@ -1627,7 +1691,7 @@ export interface paths {
         };
         /**
          * Get Assistant History
-         * @description Get conversation history with the CRM assistant.
+         * @description Get the latest conversation history with the CRM assistant.
          */
         get: operations["get_assistant_history_api_v1_workspaces__workspace_id__assistant_history_get"];
         put?: never;
@@ -4973,10 +5037,18 @@ export interface paths {
         };
         /**
          * Readyz
-         * @description Readiness probe — Postgres + Redis reachable within 2s each.
+         * @description Readiness probe — startup complete + Postgres + Redis reachable.
          *
-         *     Returns HTTP 503 when either dependency fails or times out so upstream
-         *     load balancers stop sending traffic to this instance.
+         *     Returns HTTP 503 when:
+         *
+         *     * ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished
+         *       validating config and starting workers yet (or shutdown is in progress).
+         *     * Either Postgres or Redis fails / times out (2s budget each).
+         *     * Any expected worker is missing a fresh heartbeat key.
+         *
+         *     Orchestrators (Railway, Kubernetes) use this to hold traffic on the
+         *     previous container until the new one finishes booting and to drain a
+         *     container before it stops accepting requests.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -5029,6 +5101,26 @@ export interface paths {
          *     All webhooks are signature-verified before processing.
          */
         post: operations["calcom_booking_webhook_webhooks_calcom_booking_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/webhooks/mac-relay/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mac Relay Messages Webhook
+         * @description Handle inbound message events forwarded by the Mac relay daemon.
+         */
+        post: operations["mac_relay_messages_webhook_webhooks_mac_relay_messages_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5923,6 +6015,8 @@ export interface components {
          * @description Request to send a message to the CRM assistant.
          */
         AssistantChatRequest: {
+            /** Conversation Id */
+            conversation_id?: string | null;
             /** Message */
             message: string;
         };
@@ -5936,8 +6030,32 @@ export interface components {
              * @default []
              */
             actions_taken: components["schemas"]["ActionSummary"][];
+            /** Conversation Id */
+            conversation_id?: string | null;
             /** Response */
             response: string;
+        };
+        /**
+         * AssistantConversationMetaResponse
+         * @description Assistant conversation list item.
+         */
+        AssistantConversationMetaResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Message Count */
+            message_count: number;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * AssistantConversationResponse
@@ -5953,6 +6071,11 @@ export interface components {
             id: string;
             /** Messages */
             messages: components["schemas"]["AssistantMessageResponse"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * AssistantMessageResponse
@@ -5968,8 +6091,11 @@ export interface components {
             created_at: string;
             /** Id */
             id: string;
-            /** Role */
-            role: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant" | "tool";
             /** Tool Call Id */
             tool_call_id?: string | null;
             /** Tool Calls */
@@ -10817,11 +10943,8 @@ export interface components {
             };
             /** Action Type */
             action_type: string;
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
+            /** Agent Id */
+            agent_id: string | null;
             /** Context */
             context: {
                 [key: string]: unknown;
@@ -15963,6 +16086,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AssistantChatResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_chat_with_assistant_api_v1_workspaces__workspace_id__assistant_chat_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assistant_conversations_api_v1_workspaces__workspace_id__assistant_conversations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationMetaResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assistant_conversation_api_v1_workspaces__workspace_id__assistant_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -23055,6 +23306,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    mac_relay_messages_webhook_webhooks_mac_relay_messages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                Authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

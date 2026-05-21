@@ -20,6 +20,59 @@ export function useAssistantHistory() {
   });
 }
 
+export function useAssistantConversations() {
+  const workspaceId = useWorkspaceId();
+
+  return useQuery({
+    queryKey: queryKeys.assistant.conversations(workspaceId ?? ""),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return assistantApi.listConversations(workspaceId);
+    },
+    enabled: !!workspaceId,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useAssistantConversation(conversationId: string | null) {
+  const workspaceId = useWorkspaceId();
+
+  return useQuery({
+    queryKey: queryKeys.assistant.conversation(workspaceId ?? "", conversationId ?? ""),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      if (!conversationId) throw new Error("No assistant conversation");
+      return assistantApi.getConversation(workspaceId, conversationId);
+    },
+    enabled: !!workspaceId && !!conversationId,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDeleteAssistantConversation() {
+  const workspaceId = useWorkspaceId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (conversationId: string) => {
+      if (!workspaceId) throw new Error("No workspace");
+      return assistantApi.deleteConversation(workspaceId, conversationId);
+    },
+    onSuccess: (_data, conversationId) => {
+      if (!workspaceId) return;
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.assistant.conversations(workspaceId),
+      });
+      queryClient.removeQueries({
+        queryKey: queryKeys.assistant.conversation(workspaceId, conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.assistant.history(workspaceId),
+      });
+    },
+  });
+}
+
 export function useAssistantChat() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -60,6 +113,7 @@ export function useAssistantChat() {
               },
             ],
             created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           };
         }
         return {
