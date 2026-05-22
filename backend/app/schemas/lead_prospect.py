@@ -170,6 +170,7 @@ class PaginatedLeadProspects(BaseModel):
     total: int
     page: int
     page_size: int
+    pages: int
 
 
 # --- LeadEnrichmentResult -------------------------------------------------

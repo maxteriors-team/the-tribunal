@@ -36,6 +36,7 @@ from app.api.v1 import (
     nudges,
     offers,
     opportunities,
+    outbound_missions,
     pending_actions,
     phone_numbers,
     prompt_versions,
@@ -195,6 +196,11 @@ api_router.include_router(
     find_leads_ai.router,
     prefix="/workspaces/{workspace_id}/find-leads-ai",
     tags=["Find Leads AI"],
+)
+api_router.include_router(
+    outbound_missions.router,
+    prefix="/workspaces/{workspace_id}/outbound-missions",
+    tags=["Outbound Missions"],
 )
 # Public invitation endpoints (token-based)
 api_router.include_router(
