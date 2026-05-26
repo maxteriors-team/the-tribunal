@@ -24,6 +24,8 @@ Create Date: 2026-05-16 00:00:00.000000
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -38,25 +40,47 @@ depends_on: str | Sequence[str] | None = None
 _FK_NAME = "fk_conversations_contact_id_contacts"
 
 
-def upgrade() -> None:
-    op.drop_constraint(_FK_NAME, "conversations", type_="foreignkey")
+def _existing_contact_fk_name() -> str | None:
+    result = op.get_bind().execute(
+        sa.text(
+            """
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+            JOIN pg_attribute att
+              ON att.attrelid = rel.oid
+             AND att.attnum = ANY (con.conkey)
+            JOIN pg_class ref_rel ON ref_rel.oid = con.confrelid
+            WHERE con.contype = 'f'
+              AND nsp.nspname = current_schema()
+              AND rel.relname = 'conversations'
+              AND att.attname = 'contact_id'
+              AND ref_rel.relname = 'contacts'
+            LIMIT 1
+            """
+        )
+    ).scalar_one_or_none()
+    return str(result) if result is not None else None
+
+
+def _replace_contact_fk(*, ondelete: str) -> None:
+    existing_fk_name = _existing_contact_fk_name()
+    if existing_fk_name is not None:
+        op.drop_constraint(existing_fk_name, "conversations", type_="foreignkey")
     op.create_foreign_key(
         _FK_NAME,
         "conversations",
         "contacts",
         ["contact_id"],
         ["id"],
-        ondelete="CASCADE",
+        ondelete=ondelete,
     )
+
+
+def upgrade() -> None:
+    _replace_contact_fk(ondelete="CASCADE")
 
 
 def downgrade() -> None:
-    op.drop_constraint(_FK_NAME, "conversations", type_="foreignkey")
-    op.create_foreign_key(
-        _FK_NAME,
-        "conversations",
-        "contacts",
-        ["contact_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    _replace_contact_fk(ondelete="SET NULL")
