@@ -1,7 +1,7 @@
 """add outbound compliance controls
 
-Revision ID: 20260519_outbound_compliance_controls
-Revises: 20260519_approval_pending_actions_nullable_agent
+Revision ID: 20260519_outbound_compliance
+Revises: 20260519_pending_agent_nullable
 Create Date: 2026-05-19 00:00:01.000000
 """
 
@@ -12,9 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-
-revision: str = "20260519_outbound_compliance_controls"
-down_revision: str | Sequence[str] | None = "20260519_approval_pending_actions_nullable_agent"
+revision: str = "20260519_outbound_compliance"
+down_revision: str | Sequence[str] | None = "20260519_pending_agent_nullable"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -50,7 +49,10 @@ def upgrade() -> None:
         sa.Column("source_context", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     )
 
-    op.add_column("campaign_contacts", sa.Column("suppressed_reason", sa.String(100), nullable=True))
+    op.add_column(
+        "campaign_contacts",
+        sa.Column("suppressed_reason", sa.String(100), nullable=True),
+    )
     op.add_column(
         "campaign_contacts",
         sa.Column("suppressed_at", sa.DateTime(timezone=True), nullable=True),
@@ -153,7 +155,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_outbound_action_audit_contact_id", table_name="outbound_action_audit_logs")
     op.drop_index("ix_outbound_action_audit_campaign_id", table_name="outbound_action_audit_logs")
-    op.drop_index("ix_outbound_action_audit_pending_action_id", table_name="outbound_action_audit_logs")
+    op.drop_index(
+        "ix_outbound_action_audit_pending_action_id",
+        table_name="outbound_action_audit_logs",
+    )
     op.drop_index(
         "ix_outbound_action_audit_workspace_created_at",
         table_name="outbound_action_audit_logs",

@@ -15,7 +15,7 @@ DDL touches tables created by later feature branches (``invitations``,
 ``opportunities``, etc.); running them on the merged schema is the only
 order that satisfies their references.
 
-Revision ID: 20260520_merge_post_assistant_heads
+Revision ID: 20260520_merge_post_heads
 Revises: 20260520_mac_relay_sender_fields, 9a01178f7789, dlq01a1b2c3d4
 Create Date: 2026-05-20 17:00:00.000000
 """
@@ -23,7 +23,7 @@ Create Date: 2026-05-20 17:00:00.000000
 from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "20260520_merge_post_assistant_heads"
+revision: str = "20260520_merge_post_heads"
 down_revision: tuple[str, ...] | None = (
     "20260520_mac_relay_sender_fields",
     "9a01178f7789",

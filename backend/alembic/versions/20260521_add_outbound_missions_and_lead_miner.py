@@ -17,7 +17,7 @@ Pure additive migration: no existing tables are altered. ``contacts`` keeps
 ``phone_number`` NOT NULL; partial-identity leads live on
 ``lead_prospects`` and only promote into ``contacts`` once they carry a phone.
 
-Revision ID: 20260521_add_outbound_missions_and_lead_miner
+Revision ID: 20260521_outbound_missions
 Revises: b5c6d7e8f9a0
 Create Date: 2026-05-21
 """
@@ -29,8 +29,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-
-revision: str = "20260521_add_outbound_missions_and_lead_miner"
+revision: str = "20260521_outbound_missions"
 down_revision: str | Sequence[str] | None = "b5c6d7e8f9a0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -69,7 +68,7 @@ def _timestamps() -> list[sa.Column[sa.types.TypeEngine]]:  # pragma: no cover
 # --- upgrade --------------------------------------------------------------
 
 
-def upgrade() -> None:
+def upgrade() -> None:  # noqa: PLR0915
     # ------------------------------------------------------------------
     # 1) outbound_sequences
     # ------------------------------------------------------------------
@@ -873,7 +872,7 @@ def upgrade() -> None:
 # --- downgrade ------------------------------------------------------------
 
 
-def downgrade() -> None:
+def downgrade() -> None:  # noqa: PLR0915
     # 7) outbound_sequence_step_attempts
     op.drop_index(
         "ix_outbound_step_attempts_status_scheduled_at",

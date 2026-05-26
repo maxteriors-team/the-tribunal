@@ -1,6 +1,6 @@
 """allow assistant pending actions without agent
 
-Revision ID: 20260519_approval_pending_actions_nullable_agent
+Revision ID: 20260519_pending_agent_nullable
 Revises: c9e1a2b3d4f5
 Create Date: 2026-05-19 00:00:00.000000
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "20260519_approval_pending_actions_nullable_agent"
+revision: str = "20260519_pending_agent_nullable"
 down_revision: str | Sequence[str] | None = "c9e1a2b3d4f5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

@@ -1,13 +1,13 @@
 """Add missing FK column indexes across models.
 
 Revision ID: bb1c2d3e4f5a
-Revises: 20260520_merge_post_assistant_heads
+Revises: 20260520_merge_post_heads
 Create Date: 2026-05-15 12:00:00.000000
 
 Note (2026-05-20): renamed from duplicate ``a9b0c1d2e3f4`` to ``bb1c2d3e4f5a``
 to resolve a triple-collision on that revision id (the original is
 ``a9b0c1d2e3f4_add_assistant_conversation_tables.py``). Re-parented to chain
-after ``20260520_merge_post_assistant_heads`` because the DDL touches tables
+after ``20260520_merge_post_heads`` because the DDL touches tables
 (``invitations``, ``opportunities``, ``message_tests``, etc.) created by
 feature migrations that landed after ``z8a9b0c1d2e3``.
 
@@ -23,7 +23,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "bb1c2d3e4f5a"
-down_revision: str | None = "20260520_merge_post_assistant_heads"
+down_revision: str | None = "20260520_merge_post_heads"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -79,12 +79,16 @@ def upgrade() -> None:
     # ``invitations`` -> ``workspace_invitations`` rename) skip cleanly instead
     # of aborting the entire upgrade transaction.
     for index_name, table_name, column_name in _INDEXES:
+        create_index_sql = (
+            f'CREATE INDEX IF NOT EXISTS "{index_name}" '
+            f'ON "{table_name}" ("{column_name}")'
+        )
         op.execute(
             f"""
             DO $$
             BEGIN
                 IF to_regclass('public.{table_name}') IS NOT NULL THEN
-                    EXECUTE 'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ("{column_name}")';
+                    EXECUTE '{create_index_sql}';
                 END IF;
             END $$;
             """

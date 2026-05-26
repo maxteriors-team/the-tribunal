@@ -1,7 +1,7 @@
 """add mac relay sender fields
 
 Revision ID: 20260520_mac_relay_sender_fields
-Revises: 20260519_outbound_compliance_controls
+Revises: 20260519_outbound_compliance
 Create Date: 2026-05-20 00:00:01.000000
 """
 
@@ -11,9 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-
 revision: str = "20260520_mac_relay_sender_fields"
-down_revision: str | Sequence[str] | None = "20260519_outbound_compliance_controls"
+down_revision: str | Sequence[str] | None = "20260519_outbound_compliance"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
