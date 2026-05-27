@@ -79,7 +79,12 @@ class EncryptedString(TypeDecorator[str]):
     def process_result_value(self, value: str | None, dialect: Dialect) -> str | None:
         if value is None:
             return None
-        return _get_fernet().decrypt(value.encode()).decode()
+        try:
+            return _get_fernet().decrypt(value.encode()).decode()
+        except InvalidToken:
+            if not value.startswith("gAAAAA"):
+                return value
+            raise
 
 
 class LookupHash(TypeDecorator[str]):
@@ -102,21 +107,41 @@ def encrypt_json(data: dict[str, Any]) -> str:
     return _get_fernet().encrypt(plaintext).decode()
 
 
-def decrypt_json(encrypted: str) -> dict[str, Any]:
+def _coerce_json_object(value: Any) -> dict[str, Any]:
+    """Return a decoded JSON object with string keys."""
+    if not isinstance(value, dict):
+        raise ValueError("Encrypted JSON payload must decode to an object")
+    return {str(key): item for key, item in value.items()}
+
+
+def decrypt_json(encrypted: str | dict[str, Any]) -> dict[str, Any]:
     """Decrypt a Fernet-encrypted string back to a dict.
 
+    Legacy plaintext JSON values are accepted so older integration rows can be
+    read and repaired instead of crashing settings pages during migration drift.
+
     Args:
-        encrypted: Fernet token string produced by encrypt_json.
+        encrypted: Fernet token string produced by encrypt_json, a legacy
+            plaintext JSON object string, or a legacy JSONB dict.
 
     Returns:
         The original dictionary.
 
     Raises:
-        InvalidToken: If the token is invalid or the key doesn't match.
+        InvalidToken: If a Fernet-looking token is invalid or the key doesn't match.
+        ValueError: If the decrypted or legacy JSON payload is not an object.
     """
-    plaintext = _get_fernet().decrypt(encrypted.encode())
-    result: dict[str, Any] = json.loads(plaintext)
-    return result
+    if isinstance(encrypted, dict):
+        return _coerce_json_object(encrypted)
+
+    try:
+        plaintext = _get_fernet().decrypt(encrypted.encode())
+    except InvalidToken:
+        if encrypted.startswith("gAAAAA"):
+            raise
+        return _coerce_json_object(json.loads(encrypted))
+
+    return _coerce_json_object(json.loads(plaintext))
 
 
 __all__ = [
