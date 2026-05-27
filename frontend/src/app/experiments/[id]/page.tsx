@@ -109,7 +109,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
   if (isPending) {
     return (
       <AppSidebar>
-        <PageLoadingState className="h-screen" />
+        <PageLoadingState className="min-h-full" />
       </AppSidebar>
     );
   }
@@ -118,7 +118,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     return (
       <AppSidebar>
         <PageErrorState
-          className="h-screen"
+          className="min-h-full"
           message="Experiment not found"
           onRetry={() => router.push("/experiments")}
           retryLabel="Back to Experiments"

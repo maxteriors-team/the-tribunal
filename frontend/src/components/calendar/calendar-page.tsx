@@ -243,16 +243,17 @@ export function CalendarPage() {
   // Compute week bounds before the data fetch so they drive the query key + params
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekStartIso = weekStart.toISOString();
+  const weekEndIso = weekEnd.toISOString();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  const queryParams = useMemo(() => ({
+  const queryParams = {
     page: 1,
     page_size: 100,
-    date_from: weekStart.toISOString(),
-    date_to: weekEnd.toISOString(),
+    date_from: weekStartIso,
+    date_to: weekEndIso,
     ...(statusFilter ? { status_filter: statusFilter } : {}),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [weekStart.toISOString(), weekEnd.toISOString(), statusFilter]);
+  };
 
   const { data: appointmentsData, isPending, error, refetch } = useAppointments(
     workspaceId ?? "",

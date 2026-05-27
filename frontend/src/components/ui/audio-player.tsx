@@ -24,7 +24,9 @@ function formatTime(seconds: number): string {
 
 export function AudioPlayer({ url, duration: preloadedDuration, className }: AudioPlayerProps) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
-  const [playerState, setPlayerState] = React.useState<PlayerState>("idle");
+  const [playerState, setPlayerState] = React.useState<PlayerState>(() =>
+    preloadedDuration ? "ready" : "idle"
+  );
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(preloadedDuration ?? 0);
 
@@ -62,11 +64,6 @@ export function AudioPlayer({ url, duration: preloadedDuration, className }: Aud
     audio.addEventListener("playing", handlePlaying);
     audio.addEventListener("pause", handlePause);
 
-    // If we have a preloaded duration, set state to ready
-    if (preloadedDuration && playerState === "idle") {
-      setPlayerState("ready");
-    }
-
     return () => {
       audio.removeEventListener("loadstart", handleLoadStart);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
@@ -77,7 +74,7 @@ export function AudioPlayer({ url, duration: preloadedDuration, className }: Aud
       audio.removeEventListener("playing", handlePlaying);
       audio.removeEventListener("pause", handlePause);
     };
-  }, [preloadedDuration, playerState]);
+  }, [playerState]);
 
   const togglePlayback = async () => {
     const audio = audioRef.current;

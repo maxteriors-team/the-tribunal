@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
@@ -87,7 +87,7 @@ export function CreateOpportunityDialog({
     defaultValues,
   });
 
-  const pipelineId = form.watch("pipeline_id");
+  const pipelineId = useWatch({ control: form.control, name: "pipeline_id" });
 
   const { data: pipelines } = useQuery({
     queryKey: queryKeys.opportunities.pipelines(workspaceId ?? ""),

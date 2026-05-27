@@ -109,7 +109,7 @@ api.interceptors.response.use(
         processQueue(error);
         isRefreshing = false;
         if (process.env.NODE_ENV !== "production") {
-          console.debug("[auth] token refresh failed — redirecting to /login");
+          console.warn("[auth] token refresh failed — redirecting to /login");
         }
         logout();
         return Promise.reject(refreshError);

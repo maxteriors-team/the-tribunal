@@ -83,6 +83,8 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     () => phoneNumbersData?.items ?? [],
     [phoneNumbersData?.items],
   );
+  const fallbackFromNumber = phoneNumbers[0]?.phone_number;
+  const activeFromNumber = selectedFromNumber ?? fallbackFromNumber;
 
   // Fetch agents for the workspace
   const { data: agentsData } = useAgents(workspaceId ?? "");
@@ -120,13 +122,6 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
   const assignAgentMutation = useAssignAgent(workspaceId ?? "");
   const clearHistoryMutation = useClearConversationHistory(workspaceId ?? "");
-
-  // Auto-select first phone number when available
-  useEffect(() => {
-    if (phoneNumbers.length > 0 && !selectedFromNumber) {
-      setSelectedFromNumber(phoneNumbers[0].phone_number);
-    }
-  }, [phoneNumbers, selectedFromNumber]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -171,7 +166,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         workspaceId,
         selectedContact.id,
         messageBody,
-        selectedFromNumber,
+        activeFromNumber
       );
 
       // Invalidate timeline so the sent message appears immediately
@@ -326,7 +321,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         onSend={handleSendMessage}
         isSending={isSending}
         phoneNumbers={phoneNumbers}
-        selectedFromNumber={selectedFromNumber}
+        selectedFromNumber={activeFromNumber}
         onFromNumberChange={setSelectedFromNumber}
       />
     </div>

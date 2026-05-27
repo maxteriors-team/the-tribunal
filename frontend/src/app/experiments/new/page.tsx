@@ -98,14 +98,14 @@ export default function NewExperimentPage() {
   if (isPending) {
     return (
       <AppSidebar>
-        <PageLoadingState className="h-screen" />
+        <PageLoadingState className="min-h-full" />
       </AppSidebar>
     );
   }
 
   return (
     <AppSidebar>
-      <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="flex h-full min-h-0 flex-col">
         {/* Header */}
         <div className="flex items-center gap-4 px-6 py-4 border-b">
           <Button

@@ -4,10 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { Play, Square, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -185,11 +186,14 @@ export default function VoiceTestPage() {
     defaultValues: defaultVoiceTestSettings,
   });
 
-  const selectedAgentId = form.watch("selected_agent_id");
-  const voice = form.watch("voice");
-  const threshold = form.watch("threshold");
-  const silenceDuration = form.watch("silence_duration");
-  const editedSystemPrompt = form.watch("system_prompt");
+  const selectedAgentId = useWatch({ control: form.control, name: "selected_agent_id" });
+  const voice = useWatch({ control: form.control, name: "voice" });
+  const threshold = useWatch({ control: form.control, name: "threshold" });
+  const silenceDuration = useWatch({
+    control: form.control,
+    name: "silence_duration",
+  });
+  const editedSystemPrompt = useWatch({ control: form.control, name: "system_prompt" });
 
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -457,9 +461,10 @@ export default function VoiceTestPage() {
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] md:-m-6 lg:-m-8">
-      {/* Left - Transcript */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+    <AppSidebar>
+      <div className="flex h-full min-h-0">
+        {/* Left - Transcript */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
         <ScrollArea className="min-h-0 flex-1 p-4 pb-20">
           {transcript.length === 0 ? (
             <PageEmptyState
@@ -540,9 +545,9 @@ export default function VoiceTestPage() {
         </div>
       </div>
 
-      {/* Right - Settings Panel */}
-      <div className="flex w-full md:w-[320px] shrink-0 flex-col border-l bg-muted/20">
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {/* Right - Settings Panel */}
+        <div className="flex w-full shrink-0 flex-col border-l bg-muted/20 md:w-[320px]">
+          <div className="app-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
           <Form {...form}>
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
               {/* Agent Selection */}
@@ -676,7 +681,8 @@ export default function VoiceTestPage() {
             </form>
           </Form>
         </div>
+        </div>
       </div>
-    </div>
+    </AppSidebar>
   );
 }

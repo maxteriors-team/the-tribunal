@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Send, Sparkles, Clock, RotateCcw, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,8 @@ const MAX_COUNT_OPTIONS = [
 export function FollowupSection() {
   const { selectedContact } = useContactStore();
   const workspaceId = useWorkspaceId();
-  const [generatedMessage, setGeneratedMessage] = useState("");
+  const [generatedMessagesByConversation, setGeneratedMessagesByConversation] =
+    useState<Record<string, string>>({});
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
@@ -73,6 +74,16 @@ export function FollowupSection() {
   );
 
   const conversationId = contactConversation?.id ?? "";
+  const generatedMessage = generatedMessagesByConversation[conversationId] ?? "";
+
+  const setGeneratedMessage = (message: string) => {
+    if (!conversationId) return;
+
+    setGeneratedMessagesByConversation((currentMessages) => ({
+      ...currentMessages,
+      [conversationId]: message,
+    }));
+  };
 
   // Hooks for followup management
   const { data: settings, isPending: isLoadingSettings } = useFollowupSettings(
@@ -83,11 +94,6 @@ export function FollowupSection() {
   const generateFollowup = useGenerateFollowup(workspaceId ?? "");
   const sendFollowup = useSendFollowup(workspaceId ?? "");
   const resetCounter = useResetFollowupCounter(workspaceId ?? "");
-
-  // Clear generated message when conversation changes
-  useEffect(() => {
-    setGeneratedMessage("");
-  }, [conversationId]);
 
   const handleToggleEnabled = async (enabled: boolean) => {
     if (!conversationId) return;

@@ -30,7 +30,8 @@ interface ChatEmbedPageProps {
 function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   const { publicId } = use(params);
   const searchParams = useSearchParams();
-  const theme = (searchParams.get("theme") as "light" | "dark" | "auto") ?? "auto";
+  const themeParam = searchParams.get("theme");
+  const theme = themeParam === "light" || themeParam === "dark" ? themeParam : "auto";
   const position = searchParams.get("position") ?? "bottom-right";
   const autostart = searchParams.get("autostart") === "true";
 
@@ -44,18 +45,20 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   useEffect(() => {
     if (theme === "auto") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      setResolvedTheme(mediaQuery.matches ? "dark" : "light");
       const handler = (e: MediaQueryListEvent) =>
-        setResolvedTheme(e.matches ? "dark" : "light");
+        setSystemTheme(e.matches ? "dark" : "light");
       mediaQuery.addEventListener("change", handler);
       return () => mediaQuery.removeEventListener("change", handler);
     }
-    setResolvedTheme(theme);
+
     return undefined;
   }, [theme]);
 
@@ -201,7 +204,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     "top-left": "top-5 left-5",
   };
 
-  const isDark = resolvedTheme === "dark";
+  const isDark = (theme === "auto" ? systemTheme : theme) === "dark";
   const primaryColor = config?.primary_color ?? "#6366f1";
 
   if (error && !config) {

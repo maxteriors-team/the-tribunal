@@ -36,6 +36,7 @@ import {
   KnowledgeBaseTab,
 } from "@/components/agents/tabs";
 import { VoiceTestDialog } from "@/components/agents/voice-test-dialog";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -200,7 +201,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
   }, []);
 
   // Watch voice provider to show appropriate voices
-  const voiceProvider = form.watch("voiceProvider");
+  const voiceProvider = useWatch({ control: form.control, name: "voiceProvider" });
   const voices =
     voiceProvider === "grok"
       ? GROK_VOICES
@@ -316,7 +317,11 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
   }
 
   if (isPending) {
-    return <PageLoadingState className="py-16" />;
+    return (
+      <AppSidebar>
+        <PageLoadingState className="min-h-full py-16" />
+      </AppSidebar>
+    );
   }
 
   if (error || !agent) {
@@ -327,28 +332,35 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       (error as { response?: { status?: number } }).response?.status === 404;
 
     if (is404) {
-      return <PageLoadingState className="py-16" />;
+      return (
+        <AppSidebar>
+          <PageLoadingState className="min-h-full py-16" />
+        </AppSidebar>
+      );
     }
 
     return (
-      <div className="space-y-6 p-6">
+      <AppSidebar>
+        <div className="min-h-full space-y-6 p-6">
         <Button variant="ghost" asChild>
           <Link href="/agents">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Agents
           </Link>
         </Button>
-        <PageErrorState
-          message={error instanceof Error ? error.message : "Failed to load agent details"}
-          onRetry={() => router.push("/agents")}
-          retryLabel="Return to Agents"
-        />
-      </div>
+          <PageErrorState
+            message={error instanceof Error ? error.message : "Failed to load agent details"}
+            onRetry={() => router.push("/agents")}
+            retryLabel="Return to Agents"
+          />
+        </div>
+      </AppSidebar>
     );
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <AppSidebar>
+      <div className="min-h-full space-y-4 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
@@ -531,6 +543,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
           </div>
         </form>
       </Form>
-    </div>
+      </div>
+    </AppSidebar>
   );
 }

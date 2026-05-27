@@ -51,7 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetchUser();
+    const timer = window.setTimeout(() => {
+      void fetchUser();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [fetchUser]);
 
   useEffect(() => {

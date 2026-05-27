@@ -85,10 +85,19 @@ export function useBulkUpdateStatus(workspaceId: string) {
 /**
  * Fetch all contact IDs matching current filters (for select-all)
  */
-export function useContactIds(workspaceId: string, params: ContactIdsParams, enabled: boolean) {
+export function useContactIds(
+  workspaceId: string,
+  params: ContactIdsParams,
+  enabled: boolean,
+  onSuccess?: (data: Awaited<ReturnType<typeof contactsApi.listIds>>) => void
+) {
   return useQuery({
     queryKey: queryKeys.contacts.ids(workspaceId, params),
-    queryFn: () => contactsApi.listIds(workspaceId, params),
+    queryFn: async () => {
+      const data = await contactsApi.listIds(workspaceId, params);
+      onSuccess?.(data);
+      return data;
+    },
     enabled: !!workspaceId && enabled,
   });
 }

@@ -19,6 +19,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { CalculatorBuilder } from "@/components/lead-magnets/calculator-builder";
 import { QuizBuilder } from "@/components/lead-magnets/quiz-builder";
 import { Button } from "@/components/ui/button";
@@ -531,15 +532,18 @@ export default function NewLeadMagnetPage() {
 
   if (!workspaceId) {
     return (
-      <PageEmptyState
-        className="h-full"
-        title="Please select a workspace"
-      />
+      <AppSidebar>
+        <PageEmptyState
+          className="min-h-full"
+          title="Please select a workspace"
+        />
+      </AppSidebar>
     );
   }
 
   return (
-    <div className="container max-w-4xl py-8">
+    <AppSidebar>
+      <div className="mx-auto min-h-full w-full max-w-4xl p-6 md:py-8">
       <div className="mb-8">
         <Button variant="ghost" onClick={() => router.push("/lead-magnets")} className="mb-4">
           <ChevronLeft className="size-4 mr-1" />
@@ -603,6 +607,7 @@ export default function NewLeadMagnetPage() {
           </Button>
         )}
       </div>
-    </div>
+      </div>
+    </AppSidebar>
   );
 }

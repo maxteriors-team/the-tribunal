@@ -56,18 +56,7 @@ export function VoiceTestDialog({
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
-  // Clean up on unmount or dialog close
-  useEffect(() => {
-    if (!open) {
-      disconnect();
-    }
-    return () => {
-      disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const disconnect = useCallback(() => {
+  const cleanupConnection = useCallback(() => {
     // Stop audio processing
     if (processorRef.current) {
       processorRef.current.disconnect();
@@ -99,13 +88,32 @@ export function VoiceTestDialog({
       wsRef.current = null;
     }
 
+    playbackQueueRef.current = [];
+    isPlayingRef.current = false;
+  }, []);
+
+  const disconnect = useCallback(() => {
+    cleanupConnection();
     setConnectionStatus("disconnected");
     setIsMuted(false);
     setError(null);
-    playbackQueueRef.current = [];
-    isPlayingRef.current = false;
     setIsPlaying(false);
-  }, []);
+  }, [cleanupConnection]);
+
+  // Clean up on unmount or dialog close
+  useEffect(() => {
+    if (!open) {
+      const timer = window.setTimeout(() => disconnect(), 0);
+      return () => {
+        window.clearTimeout(timer);
+        cleanupConnection();
+      };
+    }
+
+    return () => {
+      cleanupConnection();
+    };
+  }, [cleanupConnection, disconnect, open]);
 
   const playAudioQueue = useCallback(async () => {
     if (isPlayingRef.current || playbackQueueRef.current.length === 0) {

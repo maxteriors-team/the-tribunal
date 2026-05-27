@@ -109,6 +109,11 @@
   --sidebar-accent-foreground: #1a1a2e;
   --sidebar-border: rgba(112, 88, 227, 0.15);
   --sidebar-ring: #7058e3;
+  /* Scrollbars */
+  --scrollbar-track: rgba(237, 233, 251, 0.55);
+  --scrollbar-thumb: rgba(112, 88, 227, 0.35);
+  --scrollbar-thumb-hover: rgba(112, 88, 227, 0.6);
+  --scrollbar-corner: #f5f4fe;
   /* Landing page brand purples */
   --brand-ink: #1a1523;
   --brand-ink-hover: #2d2838;
@@ -171,6 +176,11 @@
   --sidebar-accent-foreground: #ececec;
   --sidebar-border: rgba(112, 88, 227, 0.12);
   --sidebar-ring: #7058e3;
+  /* Scrollbars */
+  --scrollbar-track: rgba(26, 26, 40, 0.55);
+  --scrollbar-thumb: rgba(112, 88, 227, 0.45);
+  --scrollbar-thumb-hover: rgba(112, 88, 227, 0.75);
+  --scrollbar-corner: #08080f;
 }
 
 /* ── Animations ──────────────────────────────────────────────── */
@@ -283,6 +293,28 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 2px solid var(--scrollbar-track);
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-corner {
+    background: var(--scrollbar-corner);
   }
   body {
     @apply bg-background text-foreground antialiased;
@@ -294,5 +326,37 @@
   h5,
   h6 {
     font-family: var(--font-manrope), sans-serif;
+  }
+}
+
+@layer utilities {
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  .app-scrollbar::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 2px solid var(--scrollbar-track);
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: content-box;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-corner {
+    background: var(--scrollbar-corner);
   }
 }

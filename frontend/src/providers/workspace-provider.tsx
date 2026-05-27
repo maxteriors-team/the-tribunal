@@ -5,7 +5,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -50,9 +49,11 @@ function setStoredWorkspaceId(workspaceId: string): void {
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() =>
+    getStoredWorkspaceId()
+  );
 
   const { data: workspaces = [], isPending } = useQuery({
     queryKey: queryKeys.workspaces.all(),
@@ -61,33 +62,21 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     ...STATIC,
   });
 
-  // Initialize current workspace from storage or default
-  useEffect(() => {
-    if (!isAuthenticated || workspaces.length === 0) return;
-
-    const storedId = getStoredWorkspaceId();
-    const storedWorkspace = workspaces.find((w) => w.workspace.id === storedId);
-
-    if (storedWorkspace) {
-      setCurrentWorkspaceId(storedId);
-    } else {
-      // Fall back to default workspace or first workspace
-      const defaultWorkspace = workspaces.find((w) => w.is_default) || workspaces[0];
-      if (defaultWorkspace) {
-        setCurrentWorkspaceId(defaultWorkspace.workspace.id);
-        setStoredWorkspaceId(defaultWorkspace.workspace.id);
-      }
-    }
-  }, [isAuthenticated, workspaces, user?.default_workspace_id]);
-
   const currentWorkspace = useMemo(() => {
-    if (!currentWorkspaceId) return null;
-    return workspaces.find((w) => w.workspace.id === currentWorkspaceId) || null;
-  }, [workspaces, currentWorkspaceId]);
+    if (!isAuthenticated || workspaces.length === 0) return null;
+
+    const selectedWorkspace = selectedWorkspaceId
+      ? workspaces.find((w) => w.workspace.id === selectedWorkspaceId)
+      : null;
+
+    return selectedWorkspace ?? workspaces.find((w) => w.is_default) ?? workspaces[0] ?? null;
+  }, [isAuthenticated, selectedWorkspaceId, workspaces]);
+
+  const currentWorkspaceId = currentWorkspace?.workspace.id ?? null;
 
   const setCurrentWorkspace = useCallback(
     (workspaceId: string) => {
-      setCurrentWorkspaceId(workspaceId);
+      setSelectedWorkspaceId(workspaceId);
       setStoredWorkspaceId(workspaceId);
       // Clear all cached queries when switching workspaces to ensure fresh data
       // Using clear() instead of invalidateQueries() to remove stale workspace data

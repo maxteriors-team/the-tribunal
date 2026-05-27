@@ -40,19 +40,23 @@ export function ContactsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isScrapeDialogOpen, setIsScrapeDialogOpen] = useState(false);
+
+  const importRequested = searchParams.get("import") === "true";
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(importRequested);
 
   // Auto-open import dialog when navigated here with ?import=true
   useEffect(() => {
-    if (searchParams.get("import") === "true") {
-      setIsImportDialogOpen(true);
-      const urlParams = new URLSearchParams(searchParams.toString());
-      urlParams.delete("import");
-      const newUrl = urlParams.size > 0 ? `/?${urlParams.toString()}` : "/";
-      router.replace(newUrl, { scroll: false });
-    }
-  }, [searchParams, router]);
+    if (!importRequested) return undefined;
+
+    const timer = window.setTimeout(() => setIsImportDialogOpen(true), 0);
+    const urlParams = new URLSearchParams(searchParams.toString());
+    urlParams.delete("import");
+    const newUrl = urlParams.size > 0 ? `/?${urlParams.toString()}` : "/";
+    router.replace(newUrl, { scroll: false });
+
+    return () => window.clearTimeout(timer);
+  }, [importRequested, searchParams, router]);
 
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -60,9 +64,6 @@ export function ContactsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkTagDialogOpen, setIsBulkTagDialogOpen] = useState(false);
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
-
-  // Debounced search input: local state updates immediately, store updates after delay
-  const [inputValue, setInputValue] = useState("");
 
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -83,6 +84,9 @@ export function ContactsPage() {
     setContactsPage,
   } = useContactStore();
 
+  // Debounced search input: local state updates immediately, store updates after delay
+  const [inputValue, setInputValue] = useState(searchQuery);
+
   // Build query params from store filter/sort/pagination state
   const contactsListParams = useMemo<ContactsListParams>(() => ({
     page: contactsPage,
@@ -101,13 +105,6 @@ export function ContactsPage() {
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData?.items]);
   const contactsTotal = contactsData?.total ?? 0;
   const contactsTotalPages = contactsData?.pages ?? 1;
-
-  // Sync local input value on mount
-  useEffect(() => {
-    setInputValue(searchQuery);
-  // Only run on mount to avoid fighting the debounce
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Debounce search: update store query 400ms after user stops typing
   useEffect(() => {
@@ -217,6 +214,11 @@ export function ContactsPage() {
     workspaceId ?? "",
     idsParams,
     fetchAllIds,
+    (data) => {
+      setSelectAllMatchingIds(new Set(data.ids));
+      setSelectedIds(new Set());
+      setFetchAllIds(false);
+    }
   );
 
   const handleSelectAllMatching = () => {
@@ -228,14 +230,6 @@ export function ContactsPage() {
       setFetchAllIds(true);
     }
   };
-
-  useEffect(() => {
-    if (fetchAllIds && allIdsData) {
-      setSelectAllMatchingIds(new Set(allIdsData.ids));
-      setSelectedIds(new Set());
-      setFetchAllIds(false);
-    }
-  }, [fetchAllIds, allIdsData]);
 
   const handleClearSelection = () => {
     setSelectedIds(new Set());

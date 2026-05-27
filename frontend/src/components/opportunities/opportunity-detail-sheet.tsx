@@ -16,7 +16,7 @@ import {
   XCircle,
   Archive,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,30 @@ interface OpportunityDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   opportunity: Opportunity | null;
   workspaceId: string;
+}
+
+interface OpportunityEditData {
+  name: string;
+  description: string;
+  amount: string;
+  currency: string;
+  expected_close_date: string;
+  source: string;
+  status: OpportunityStatus;
+  lost_reason: string;
+}
+
+function getOpportunityEditData(opportunity: Opportunity | null): OpportunityEditData {
+  return {
+    name: opportunity?.name ?? "",
+    description: opportunity?.description ?? "",
+    amount: opportunity?.amount?.toString() ?? "",
+    currency: opportunity?.currency ?? "USD",
+    expected_close_date: opportunity?.expected_close_date ?? "",
+    source: opportunity?.source ?? "",
+    status: opportunity?.status ?? "open",
+    lost_reason: opportunity?.lost_reason ?? "",
+  };
 }
 
 function formatCurrency(amount: number | undefined, currency: string) {
@@ -134,16 +158,11 @@ export function OpportunityDetailSheet({
 }: OpportunityDetailSheetProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({
-    name: "",
-    description: "",
-    amount: "",
-    currency: "USD",
-    expected_close_date: "",
-    source: "",
-    status: "open" as OpportunityStatus,
-    lost_reason: "",
-  });
+  const initialEditData = useMemo(
+    () => getOpportunityEditData(opportunity),
+    [opportunity]
+  );
+  const [editData, setEditData] = useState(initialEditData);
 
   // Fetch full opportunity details with activities
   const { data: opportunityDetail } = useQuery({
@@ -168,22 +187,15 @@ export function OpportunityDetailSheet({
     (s) => s.id === opportunity?.stage_id
   );
 
-  // Reset edit data when opportunity changes
-  useEffect(() => {
-    if (opportunity) {
-      setEditData({
-        name: opportunity.name,
-        description: opportunity.description || "",
-        amount: opportunity.amount?.toString() || "",
-        currency: opportunity.currency,
-        expected_close_date: opportunity.expected_close_date || "",
-        source: opportunity.source || "",
-        status: opportunity.status,
-        lost_reason: opportunity.lost_reason || "",
-      });
-    }
+  const startEditing = () => {
+    setEditData(initialEditData);
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setEditData(initialEditData);
     setIsEditing(false);
-  }, [opportunity]);
+  };
 
   const updateMutation = useMutation({
     mutationFn: (data: Parameters<typeof opportunitiesApi.update>[2]) =>
@@ -256,7 +268,7 @@ export function OpportunityDetailSheet({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                <DropdownMenuItem onClick={startEditing}>
                   <Edit2 className="h-4 w-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
@@ -489,7 +501,7 @@ export function OpportunityDetailSheet({
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setIsEditing(false)}
+                      onClick={cancelEditing}
                     >
                       <X className="h-4 w-4 mr-1" />
                       Cancel
