@@ -267,7 +267,7 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
     Args:
         websocket: WebSocket connection from Telnyx
         call_id: Telnyx call control ID
-        is_outbound: If True, this is an outbound call - don't greet first
+        is_outbound: If True, this is an outbound call and the AI uses an outbound opener
     """
     connection_start = time.time()
     log = logger.bind(endpoint="voice_stream_bridge", call_id=call_id, is_outbound=is_outbound)
@@ -679,7 +679,7 @@ async def _relay_audio(
         websocket: Telnyx WebSocket connection
         voice_session: Voice provider session (OpenAI or Grok)
         log: Logger instance
-        is_outbound: If True, this is an outbound call - don't greet first
+        is_outbound: If True, this is an outbound call and the AI uses an outbound opener
         stream_already_started: If True, Phase 1 gate already consumed the start event
     """
     # Event to synchronize greeting trigger with audio sending
@@ -789,7 +789,7 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
         log: Logger instance
         greeting_triggered: Event to signal when greeting has been triggered
         stream_id_holder: Dict to store stream_id for use in outbound messages
-        is_outbound: If True, this is an outbound call - don't greet first
+        is_outbound: If True, this is an outbound call and the AI uses an outbound opener
         stream_already_started: If True, Phase 1 gate already consumed the start event
     """
     import json
@@ -804,13 +804,7 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
         log.info("stream_already_started_from_phase1_gate", triggering_greeting=True)
         await asyncio.sleep(0.3)
         try:
-            session_types = (GrokVoiceAgentSession, ElevenLabsVoiceAgentSession)
-            if isinstance(voice_session, session_types):
-                await voice_session.trigger_initial_response(is_outbound=is_outbound)
-            elif not is_outbound:
-                await voice_session.trigger_initial_response()
-            else:
-                log.info("skipping_greeting_for_outbound_call_phase2")
+            await voice_session.trigger_initial_response(is_outbound=is_outbound)
             greeting_triggered.set()
             log.info("greeting_triggered_after_phase1_gate")
         except Exception as e:
@@ -855,9 +849,8 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                         stream_id_stored=True,
                     )
 
-                    # Trigger initial greeting - no artificial delay needed
-                    # The stream is ready when we receive the "start" event
-                    # For OUTBOUND calls, we DON'T greet first - we wait for the person to speak
+                    # Trigger the initial assistant response once Telnyx is ready.
+                    # Outbound calls use the provider's outbound opener prompt.
                     ws_status = "unknown"
                     if hasattr(voice_session, "is_connected"):
                         ws_status = str(voice_session.is_connected())
@@ -873,20 +866,7 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                     await asyncio.sleep(0.3)
 
                     try:
-                        # Pass is_outbound to control greeting behavior
-                        # Grok and ElevenLabs accept is_outbound, OpenAI doesn't
-                        session_types = (GrokVoiceAgentSession, ElevenLabsVoiceAgentSession)
-                        if isinstance(voice_session, session_types):
-                            await voice_session.trigger_initial_response(is_outbound=is_outbound)
-                        elif not is_outbound:
-                            # Only trigger greeting for inbound calls on OpenAI provider
-                            await voice_session.trigger_initial_response()
-                        else:
-                            # Outbound call on OpenAI provider - skip greeting
-                            log.info(
-                                "skipping_greeting_for_outbound_call",
-                                voice_session_type=type(voice_session).__name__,
-                            )
+                        await voice_session.trigger_initial_response(is_outbound=is_outbound)
                         greeting_triggered.set()
                         log.info(
                             "initial_greeting_triggered_successfully",

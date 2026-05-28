@@ -43,6 +43,69 @@ DEFAULT_OPENAI_REALTIME_VOICE: OpenAIRealtimeVoice = "ash"
 DEFAULT_INPUT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 DEFAULT_AUDIO_FORMAT = "g711_ulaw"
 
+OPENAI_REALTIME_TRANSCRIPTION_LANGUAGE_CODES = frozenset(
+    {
+        "af",
+        "ar",
+        "az",
+        "be",
+        "bg",
+        "bs",
+        "ca",
+        "cs",
+        "cy",
+        "da",
+        "de",
+        "el",
+        "en",
+        "es",
+        "et",
+        "fa",
+        "fi",
+        "fr",
+        "gl",
+        "he",
+        "hi",
+        "hr",
+        "hu",
+        "hy",
+        "id",
+        "is",
+        "it",
+        "iw",
+        "ja",
+        "kk",
+        "kn",
+        "ko",
+        "lt",
+        "lv",
+        "mi",
+        "mk",
+        "mr",
+        "ms",
+        "ne",
+        "nl",
+        "no",
+        "pl",
+        "pt",
+        "ro",
+        "ru",
+        "sk",
+        "sl",
+        "sr",
+        "sv",
+        "sw",
+        "ta",
+        "th",
+        "tl",
+        "tr",
+        "uk",
+        "ur",
+        "vi",
+        "zh",
+    }
+)
+
 GA_AUDIO_FORMAT_BY_LEGACY_NAME: dict[str, str] = {
     "g711_ulaw": "audio/pcmu",
     "g711-ulaw": "audio/pcmu",
@@ -172,6 +235,25 @@ def normalize_realtime_audio_format(format_name: str | None = None) -> AudioForm
     return audio_format
 
 
+def normalize_transcription_language(language: str | None) -> str | None:
+    """Normalize app locale values to OpenAI Realtime transcription language codes."""
+    if not language:
+        return None
+
+    normalized = language.strip().lower().replace("_", "-")
+    if not normalized:
+        return None
+
+    if normalized in OPENAI_REALTIME_TRANSCRIPTION_LANGUAGE_CODES:
+        return normalized
+
+    primary_subtag = normalized.split("-", maxsplit=1)[0]
+    if primary_subtag in OPENAI_REALTIME_TRANSCRIPTION_LANGUAGE_CODES:
+        return primary_subtag
+
+    return None
+
+
 def build_server_vad_turn_detection(
     *,
     threshold: float | None = None,
@@ -237,8 +319,9 @@ def build_realtime_audio_config(
 ) -> AudioConfig:
     """Build nested GA Realtime audio config."""
     transcription: dict[str, str] = {"model": transcription_model}
-    if language:
-        transcription["language"] = language
+    normalized_language = normalize_transcription_language(language)
+    if normalized_language:
+        transcription["language"] = normalized_language
 
     audio_input: AudioInputConfig = {
         "format": normalize_realtime_audio_format(input_audio_format),
