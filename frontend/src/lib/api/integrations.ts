@@ -1,4 +1,4 @@
-import { apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPost } from "@/lib/api";
 
 import { createApiClient } from "./create-api-client";
 
@@ -27,6 +27,24 @@ export interface IntegrationTestResult {
   success: boolean;
   message: string;
   details?: Record<string, unknown>;
+}
+
+export interface OpenAIOAuthStatus {
+  connected: boolean;
+  account_id?: string | null;
+  email?: string | null;
+  expires_at?: number | null;
+  saved_at?: string | null;
+  auth_method?: string | null;
+  plan_type?: string | null;
+  api_key_configured: boolean;
+  realtime_model: string;
+}
+
+export interface OpenAIOAuthStartResponse {
+  authorization_url: string;
+  redirect_uri: string;
+  expires_at: number;
 }
 
 // Base API client using the factory for standard CRUD operations
@@ -68,6 +86,24 @@ export const integrationsApi = {
   ): Promise<IntegrationTestResult> => {
     return apiPost<IntegrationTestResult>(
       `/api/v1/workspaces/${workspaceId}/integrations/${integrationType}/test`
+    );
+  },
+
+  getOpenAIOAuthStatus: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
+    return apiGet<OpenAIOAuthStatus>(
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/status`
+    );
+  },
+
+  startOpenAIOAuth: async (workspaceId: string): Promise<OpenAIOAuthStartResponse> => {
+    return apiPost<OpenAIOAuthStartResponse>(
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/start`
+    );
+  },
+
+  disconnectOpenAIOAuth: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
+    return apiDelete<OpenAIOAuthStatus>(
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth`
     );
   },
 };

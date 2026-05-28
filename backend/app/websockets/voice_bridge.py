@@ -36,7 +36,7 @@ from app.services.ai.openai_credentials import is_openai_configured
 from app.services.ai.protocols import supports_tools
 from app.services.ai.tool_executor import create_tool_callback
 from app.services.ai.voice_agent import VoiceAgentSession
-from app.services.ai.voice_session_factory import create_voice_session
+from app.services.ai.voice_session_factory import create_workspace_voice_session
 from app.services.audio import (
     TELNYX_MIN_CHUNK_BYTES,
     convert_openai_to_telnyx,
@@ -339,6 +339,7 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
                     offer_info=offer_info,
                     timezone=timezone,
                     prompt_version_id=prompt_version_id,
+                    workspace_id=workspace_id,
                 )
             finally:
                 await heartbeat.stop()
@@ -359,6 +360,7 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
     offer_info: dict[str, Any] | None,
     timezone: str,
     prompt_version_id: str | None,
+    workspace_id: str | None,
 ) -> None:
     """Core bridge handler running inside the capacity-guard scope.
 
@@ -484,7 +486,24 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
 
     # Create appropriate voice session based on provider
     log.info("creating_voice_session", provider=voice_provider)
-    voice_session, error = create_voice_session(voice_provider, agent, timezone)
+    if workspace_id is None:
+        log.error(
+            "voice_session_creation_failed",
+            provider=voice_provider,
+            error="Workspace not found",
+        )
+        await websocket.send_json({"error": "Workspace not found"})
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    async with AsyncSessionLocal() as db:
+        voice_session, error = await create_workspace_voice_session(
+            db,
+            uuid.UUID(workspace_id),
+            voice_provider,
+            agent,
+            timezone,
+        )
     if voice_session is None:
         log.error(
             "voice_session_creation_failed",

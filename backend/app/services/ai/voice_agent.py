@@ -52,6 +52,7 @@ class VoiceAgentSession(VoiceAgentBase):
         agent: Agent | None = None,
         *,
         model: str | None = None,
+        additional_headers: dict[str, str] | None = None,
     ) -> None:
         """Initialize voice agent session.
 
@@ -62,6 +63,7 @@ class VoiceAgentSession(VoiceAgentBase):
         super().__init__(agent)
         self.api_key = api_key
         self.model = model or settings.openai_realtime_model
+        self.additional_headers = additional_headers or {}
         self._connection_task: asyncio.Task[None] | None = None
         self._tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
         self._tool_tasks: set[asyncio.Task[None]] = set()
@@ -89,6 +91,7 @@ class VoiceAgentSession(VoiceAgentBase):
                 url,
                 additional_headers={
                     "Authorization": f"Bearer {self.api_key}",
+                    **self.additional_headers,
                 },
             )
 

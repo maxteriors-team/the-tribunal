@@ -185,6 +185,7 @@ export const queryKeys = {
   integrations: {
     ...resource("integrations"),
     bare: (workspaceId: string) => ["integrations", workspaceId] as const,
+    openAIOAuth: (workspaceId: string) => ["integrations", workspaceId, "openai-oauth"] as const,
   },
   invitations: {
     ...resource("invitations"),

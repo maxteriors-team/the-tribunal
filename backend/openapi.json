@@ -14367,6 +14367,120 @@
         "title": "OfferUpdate",
         "type": "object"
       },
+      "OpenAIOAuthStartResponse": {
+        "description": "Browser sign-in URL for OpenAI Codex OAuth.",
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url",
+          "redirect_uri",
+          "expires_at"
+        ],
+        "title": "OpenAIOAuthStartResponse",
+        "type": "object"
+      },
+      "OpenAIOAuthStatusResponse": {
+        "description": "Safe OpenAI subscription login status.",
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "api_key_configured": {
+            "default": false,
+            "title": "Api Key Configured",
+            "type": "boolean"
+          },
+          "auth_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Method"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Type"
+          },
+          "realtime_model": {
+            "title": "Realtime Model",
+            "type": "string"
+          },
+          "saved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved At"
+          }
+        },
+        "required": [
+          "connected",
+          "realtime_model"
+        ],
+        "title": "OpenAIOAuthStatusResponse",
+        "type": "object"
+      },
       "OpportunityActivityResponse": {
         "description": "Opportunity activity response schema.",
         "properties": {
@@ -22703,6 +22817,62 @@
         "summary": "Get Billing Status",
         "tags": [
           "Billing"
+        ]
+      }
+    },
+    "/api/v1/integrations/openai/oauth/callback": {
+      "get": {
+        "description": "Hosted OAuth callback for custom OpenAI OAuth clients/redirect URIs.",
+        "operationId": "complete_openai_subscription_login_api_v1_integrations_openai_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Complete Openai Subscription Login Api V1 Integrations Openai Oauth Callback Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Openai Subscription Login",
+        "tags": [
+          "Integrations"
         ]
       }
     },
@@ -33638,6 +33808,153 @@
           }
         ],
         "summary": "Create Integration",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth": {
+      "delete": {
+        "description": "Disconnect ChatGPT subscription credentials for the workspace.",
+        "operationId": "disconnect_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIOAuthStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Disconnect Openai Subscription Login",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth/start": {
+      "post": {
+        "description": "Create a Codex OAuth URL for connecting ChatGPT subscription auth.",
+        "operationId": "start_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIOAuthStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Start Openai Subscription Login",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth/status": {
+      "get": {
+        "description": "Return the workspace's ChatGPT subscription sign-in status.",
+        "operationId": "get_openai_subscription_status_api_v1_workspaces__workspace_id__integrations_openai_oauth_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAIOAuthStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Openai Subscription Status",
         "tags": [
           "Integrations"
         ]

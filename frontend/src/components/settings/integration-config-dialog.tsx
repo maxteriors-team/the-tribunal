@@ -98,28 +98,28 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
     ],
   },
   openai: {
-    name: "OpenAI",
-    description: "Connect OpenAI for AI-powered agents and conversations",
+    name: "OpenAI API key",
+    description: "Optional fallback API-key connection for OpenAI. Use the ChatGPT subscription card for Codex OAuth sign-in.",
     fields: [
       {
         key: "api_key",
         label: "API Key",
         placeholder: "sk-...",
-        description: "Find this at platform.openai.com/api-keys, or use OAuth fields below",
+        description: "Find this at platform.openai.com/api-keys. For subscription billing, use the ChatGPT subscription card instead.",
         type: "password",
       },
       {
         key: "access_token",
         label: "OAuth Access Token",
         placeholder: "eyJ...",
-        description: "Paste the OpenAI OAuth accessToken from your working auth.json",
+        description: "Advanced fallback only. Prefer the ChatGPT subscription card so tokens refresh automatically.",
         type: "password",
       },
       {
         key: "refresh_token",
         label: "OAuth Refresh Token",
         placeholder: "rt_...",
-        description: "Stored for future refresh support; not used until refresh is implemented",
+        description: "Advanced fallback only. Stored encrypted and refreshed automatically when possible.",
         type: "password",
       },
       {

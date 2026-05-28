@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     openai_oauth_expires_at: int | None = None
     openai_oauth_account_id: str = ""
     openai_oauth_client_id: str = ""
+    openai_oauth_redirect_uri: str = ""
     openai_oauth_token_url: str = "https://auth.openai.com/oauth/token"
     openai_realtime_model: str = "gpt-realtime-2"
     openai_realtime_client_secret_ttl_seconds: int = 600

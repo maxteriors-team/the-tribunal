@@ -4,6 +4,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import uuid
 from typing import Any
 
 try:
@@ -22,7 +23,7 @@ from app.models.user import User
 from app.models.workspace import WorkspaceMembership
 from app.services.ai.elevenlabs_voice_agent import ElevenLabsVoiceAgentSession
 from app.services.ai.grok import GrokVoiceAgentSession
-from app.services.ai.openai_credentials import get_openai_bearer_token, is_openai_configured
+from app.services.ai.openai_credentials import OpenAICredentialError, resolve_openai_credentials
 from app.services.ai.voice_agent import VoiceAgentSession
 from app.websockets.connection_limits import (
     HeartbeatMonitor,
@@ -143,9 +144,10 @@ async def _get_agent_by_id(agent_id: str, workspace_id: str, log: Any) -> Any:
         return agent
 
 
-def _create_voice_session_for_test(  # noqa: PLR0911
+async def _create_voice_session_for_test(  # noqa: PLR0911
     voice_provider: str,
     agent: Any,
+    workspace_id: str,
 ) -> tuple[VoiceSessionType | None, str | None]:
     """Create appropriate voice session based on provider.
 
@@ -174,9 +176,20 @@ def _create_voice_session_for_test(  # noqa: PLR0911
         return GrokVoiceAgentSession(settings.xai_api_key, agent), None
 
     # Default to OpenAI
-    if not is_openai_configured():
-        return None, "OpenAI credential not configured"
-    return VoiceAgentSession(get_openai_bearer_token(), agent), None
+    async with AsyncSessionLocal() as db:
+        try:
+            credential_context = await resolve_openai_credentials(db, uuid.UUID(workspace_id))
+        except OpenAICredentialError:
+            return None, "OpenAI credential not configured"
+    return VoiceAgentSession(
+        credential_context.bearer_token,
+        agent,
+        additional_headers={
+            key: value
+            for key, value in credential_context.openai_headers().items()
+            if key != "Authorization"
+        },
+    ), None
 
 
 async def _handle_start_message(
@@ -407,7 +420,11 @@ async def voice_test_endpoint(
             log.info("using_voice_provider", provider=voice_provider)
 
             # Create voice session
-            voice_session, error = _create_voice_session_for_test(voice_provider, agent)
+            voice_session, error = await _create_voice_session_for_test(
+                voice_provider,
+                agent,
+                workspace_id,
+            )
             if voice_session is None:
                 log.error("api_key_not_configured", provider=voice_provider)
                 await websocket.send_json({"type": "error", "message": error})

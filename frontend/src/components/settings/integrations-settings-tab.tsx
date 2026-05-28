@@ -5,6 +5,7 @@ import { Phone, Mail, Calendar, Webhook, Key, Loader2, Send as SendIcon } from "
 import { useState } from "react";
 
 import { IntegrationConfigDialog } from "@/components/settings/integration-config-dialog";
+import { OpenAIChatGPTCard } from "@/components/settings/openai-chatgpt-card";
 import { PhoneNumbersTable } from "@/components/settings/phone-numbers-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,8 @@ export function IntegrationsSettingsTab() {
     <div className="space-y-6">
       {/* Phone Numbers Section */}
       <PhoneNumbersTable variant="section" />
+
+      <OpenAIChatGPTCard />
 
       <div className="grid gap-4 md:grid-cols-2">
         {integrationsLoading ? (

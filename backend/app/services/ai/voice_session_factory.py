@@ -13,15 +13,22 @@ Usage:
     )
 """
 
+import uuid
 from typing import Any
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.models.agent import Agent
 from app.services.ai.elevenlabs_voice_agent import ElevenLabsVoiceAgentSession
 from app.services.ai.grok import GrokVoiceAgentSession
-from app.services.ai.openai_credentials import get_openai_bearer_token, is_openai_configured
+from app.services.ai.openai_credentials import (
+    OpenAICredentialError,
+    get_openai_bearer_token,
+    is_openai_configured,
+    resolve_openai_credentials,
+)
 from app.services.ai.protocols import VoiceAgentProtocol
 from app.services.ai.voice_agent import VoiceAgentSession
 
@@ -79,6 +86,33 @@ class VoiceSessionFactory:
 
         # Default to OpenAI
         return self._create_openai_session(agent)
+
+    async def create_session_for_workspace(
+        self,
+        db: AsyncSession,
+        workspace_id: uuid.UUID,
+        provider: str,
+        agent: Agent | None = None,
+        timezone: str = "America/New_York",
+    ) -> tuple[VoiceSessionType | None, str | None]:
+        """Create a voice session using workspace-aware credentials when possible."""
+        provider_lower = provider.lower()
+        if provider_lower != "openai":
+            return self.create_session(provider, agent, timezone)
+
+        try:
+            credential_context = await resolve_openai_credentials(db, workspace_id)
+        except OpenAICredentialError:
+            return None, "OpenAI credential not configured"
+        return VoiceAgentSession(
+            credential_context.bearer_token,
+            agent,
+            additional_headers={
+                key: value
+                for key, value in credential_context.openai_headers().items()
+                if key != "Authorization"
+            },
+        ), None
 
     def _create_openai_session(
         self,
@@ -264,6 +298,26 @@ def create_voice_session(
 
     factory = VoiceSessionFactory(settings)
     return factory.create_session(voice_provider, agent, timezone)
+
+
+async def create_workspace_voice_session(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    voice_provider: str,
+    agent: Any,
+    timezone: str = "America/New_York",
+) -> tuple[VoiceSessionType | None, str | None]:
+    """Create a voice session with workspace-scoped OpenAI credentials."""
+    from app.core.config import settings
+
+    factory = VoiceSessionFactory(settings)
+    return await factory.create_session_for_workspace(
+        db,
+        workspace_id,
+        voice_provider,
+        agent,
+        timezone,
+    )
 
 
 async def setup_voice_session(

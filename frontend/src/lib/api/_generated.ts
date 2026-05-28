@@ -220,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/openai/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete Openai Subscription Login
+         * @description Hosted OAuth callback for custom OpenAI OAuth clients/redirect URIs.
+         */
+        get: operations["complete_openai_subscription_login_api_v1_integrations_openai_oauth_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations/{token}": {
         parameters: {
             query?: never;
@@ -3159,6 +3179,66 @@ export interface paths {
          * @description Create a new integration for the workspace.
          */
         post: operations["create_integration_api_v1_workspaces__workspace_id__integrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect Openai Subscription Login
+         * @description Disconnect ChatGPT subscription credentials for the workspace.
+         */
+        delete: operations["disconnect_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Openai Subscription Login
+         * @description Create a Codex OAuth URL for connecting ChatGPT subscription auth.
+         */
+        post: operations["start_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/openai/oauth/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Openai Subscription Status
+         * @description Return the workspace's ChatGPT subscription sign-in status.
+         */
+        get: operations["get_openai_subscription_status_api_v1_workspaces__workspace_id__integrations_openai_oauth_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -11027,6 +11107,45 @@ export interface components {
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
         };
         /**
+         * OpenAIOAuthStartResponse
+         * @description Browser sign-in URL for OpenAI Codex OAuth.
+         */
+        OpenAIOAuthStartResponse: {
+            /** Authorization Url */
+            authorization_url: string;
+            /** Expires At */
+            expires_at: number;
+            /** Redirect Uri */
+            redirect_uri: string;
+        };
+        /**
+         * OpenAIOAuthStatusResponse
+         * @description Safe OpenAI subscription login status.
+         */
+        OpenAIOAuthStatusResponse: {
+            /** Account Id */
+            account_id?: string | null;
+            /**
+             * Api Key Configured
+             * @default false
+             */
+            api_key_configured: boolean;
+            /** Auth Method */
+            auth_method?: string | null;
+            /** Connected */
+            connected: boolean;
+            /** Email */
+            email?: string | null;
+            /** Expires At */
+            expires_at?: number | null;
+            /** Plan Type */
+            plan_type?: string | null;
+            /** Realtime Model */
+            realtime_model: string;
+            /** Saved At */
+            saved_at?: string | null;
+        };
+        /**
          * OpportunityActivityResponse
          * @description Opportunity activity response schema.
          */
@@ -14357,6 +14476,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingStatus"];
+                };
+            };
+        };
+    };
+    complete_openai_subscription_login_api_v1_integrations_openai_oauth_callback_get: {
+        parameters: {
+            query: {
+                code: string;
+                state: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -20157,6 +20310,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationWithMaskedCredentials"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAIOAuthStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_openai_subscription_login_api_v1_workspaces__workspace_id__integrations_openai_oauth_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAIOAuthStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_openai_subscription_status_api_v1_workspaces__workspace_id__integrations_openai_oauth_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenAIOAuthStatusResponse"];
                 };
             };
             /** @description Validation Error */

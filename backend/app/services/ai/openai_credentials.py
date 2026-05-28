@@ -27,6 +27,7 @@ logger = structlog.get_logger()
 
 _OPENAI_INTEGRATION_TYPE = "openai"
 _OPENAI_JWT_AUTH_CLAIM = "https://api.openai.com/auth"
+_DEFAULT_OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 _OAUTH_REFRESH_WINDOW_MS = 5 * 60 * 1000
 
 
@@ -56,6 +57,9 @@ class OpenAICredentialContext:
         headers = {"Authorization": f"Bearer {self.bearer_token}"}
         if self.organization_id:
             headers["OpenAI-Organization"] = self.organization_id
+        if self.is_oauth and self.account_id:
+            headers["chatgpt-account-id"] = self.account_id
+            headers["originator"] = "the-tribunal"
         return headers
 
 
@@ -80,6 +84,14 @@ def is_openai_configured() -> bool:
 def create_openai_client() -> AsyncOpenAI:
     """Create an OpenAI SDK client with the configured global bearer token."""
     return AsyncOpenAI(api_key=get_openai_bearer_token())
+
+
+async def get_workspace_openai_bearer_token(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+) -> str:
+    """Return the best OpenAI bearer token for a workspace-aware voice session."""
+    return (await resolve_openai_credentials(db, workspace_id)).bearer_token
 
 
 async def resolve_openai_credentials(
@@ -125,9 +137,8 @@ async def resolve_openai_credentials(
 
 
 async def refresh_openai_oauth_token(refresh_token: str) -> OpenAICredentialContext:
-    """Refresh an OpenAI OAuth access token using configured OAuth client ID."""
-    if not settings.openai_oauth_client_id:
-        raise OpenAICredentialError("OpenAI OAuth refresh is not configured")
+    """Refresh an OpenAI OAuth access token using the Codex OAuth client."""
+    client_id = settings.openai_oauth_client_id or _DEFAULT_OPENAI_OAUTH_CLIENT_ID
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -137,7 +148,7 @@ async def refresh_openai_oauth_token(refresh_token: str) -> OpenAICredentialCont
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token,
-                    "client_id": settings.openai_oauth_client_id,
+                    "client_id": client_id,
                 },
             )
     except httpx.RequestError as exc:
@@ -215,7 +226,9 @@ async def _resolve_credentials_dict(
     access_token = _string_value(credentials.get("access_token"))
     refresh_token = _string_value(credentials.get("refresh_token"))
     api_key = _string_value(credentials.get("api_key"))
-    account_id = _string_value(credentials.get("account_id"))
+    account_id = _string_value(credentials.get("account_id")) or _string_value(
+        credentials.get("chatgpt_account_id")
+    )
     organization_id = _string_value(credentials.get("organization_id"))
     expires_at = _coerce_expires_at(credentials.get("expires_at"))
 
@@ -232,11 +245,7 @@ async def _resolve_credentials_dict(
             )
         )
 
-    if (
-        refresh_token is not None
-        and (access_token is not None or not api_key)
-        and settings.openai_oauth_client_id
-    ):
+    if refresh_token is not None and (access_token is not None or not api_key):
         refreshed = await refresh_openai_oauth_token(refresh_token)
         context = replace(
             refreshed,

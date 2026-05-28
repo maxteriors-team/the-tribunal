@@ -141,7 +141,7 @@ async def test_missing_credentials_raise_generic_error() -> None:
         await resolve_openai_credentials()
 
 
-async def test_expired_oauth_without_refresh_client_id_does_not_fall_back_to_env() -> None:
+async def test_expired_oauth_refresh_failure_does_not_fall_back_to_env() -> None:
     settings.openai_api_key = "sk-env"
     integration = _workspace_integration(
         {
@@ -152,5 +152,5 @@ async def test_expired_oauth_without_refresh_client_id_does_not_fall_back_to_env
     )
     db = _AsyncDB(integration)
 
-    with pytest.raises(OpenAICredentialError, match="expired"):
+    with pytest.raises(OpenAICredentialError, match="refreshed"):
         await resolve_openai_credentials(db, integration.workspace_id)
