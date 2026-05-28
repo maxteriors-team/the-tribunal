@@ -52,6 +52,8 @@ def _reset_openai_oauth_settings() -> None:
     settings.openai_oauth_client_id = ""
     settings.openai_oauth_redirect_uri = ""
     settings.openai_api_key = ""
+    settings.api_base_url = ""
+    settings.public_base_url = "http://localhost:8000"
 
 
 async def test_build_openai_oauth_start_uses_codex_client_and_encrypted_state(
@@ -83,6 +85,28 @@ async def test_build_openai_oauth_start_uses_codex_client_and_encrypted_state(
     assert decoded_state.client_id == DEFAULT_OPENAI_OAUTH_CLIENT_ID
     assert decoded_state.redirect_uri == "http://localhost:1455/auth/callback"
     assert decoded_state.code_verifier
+
+
+async def test_build_openai_oauth_start_uses_hosted_callback_when_api_base_url_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = uuid.uuid4()
+    user_id = 123
+    settings.api_base_url = "https://api.thetribunal.ai/"
+    monkeypatch.setattr(
+        openai_oauth,
+        "ensure_local_openai_oauth_callback_server",
+        lambda: pytest.fail("localhost callback should not be started for hosted URL"),
+    )
+
+    start = build_openai_oauth_start(workspace_id, user_id)
+
+    parsed = urlparse(start.authorization_url)
+    params = parse_qs(parsed.query)
+    callback_url = "https://api.thetribunal.ai/api/v1/integrations/openai/oauth/callback"
+    assert params["redirect_uri"] == [callback_url]
+    decoded_state = openai_oauth._decode_state(params["state"][0])  # noqa: SLF001
+    assert decoded_state.redirect_uri == callback_url
 
 
 async def test_get_openai_oauth_status_reports_safe_snapshot() -> None:

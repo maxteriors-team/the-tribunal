@@ -1,10 +1,9 @@
 """OpenAI Codex OAuth helpers for ChatGPT subscription sign-in.
 
 This module mirrors the Codex CLI browser login flow so a workspace can store a
-ChatGPT-backed OpenAI OAuth session instead of a Platform API key. The default
-client ID and localhost callback ports match OpenAI's published Codex CLI auth
-flow; a custom client/redirect URI can be supplied through settings for hosted
-or first-party deployments.
+ChatGPT-backed OpenAI OAuth session instead of a Platform API key. Production
+uses the backend's hosted callback endpoint; localhost callback ports remain
+available only for local development.
 """
 
 from __future__ import annotations
@@ -237,6 +236,13 @@ def _configured_redirect_uri() -> str | None:
     return redirect_uri or None
 
 
+def _hosted_redirect_uri() -> str | None:
+    for base_url in (settings.api_base_url.strip(), settings.public_base_url.strip()):
+        if base_url and "localhost" not in base_url and "127.0.0.1" not in base_url:
+            return f"{base_url.rstrip('/')}/api/v1/integrations/openai/oauth/callback"
+    return None
+
+
 def _local_redirect_uri(port: int) -> str:
     return f"http://localhost:{port}{LOCAL_CALLBACK_PATH}"
 
@@ -381,7 +387,11 @@ def ensure_local_openai_oauth_callback_server() -> str:
 
 def build_openai_oauth_start(workspace_id: uuid.UUID, user_id: int) -> OpenAIOAuthStart:
     """Build a Codex OAuth authorize URL for a workspace admin."""
-    redirect_uri = _configured_redirect_uri() or ensure_local_openai_oauth_callback_server()
+    redirect_uri = (
+        _configured_redirect_uri()
+        or _hosted_redirect_uri()
+        or ensure_local_openai_oauth_callback_server()
+    )
     code_verifier, code_challenge = _generate_pkce_pair()
     client_id = get_openai_oauth_client_id()
     state, expires_at = _encode_state(
