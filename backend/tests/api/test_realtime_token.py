@@ -75,7 +75,7 @@ async def test_realtime_token_posts_ga_client_secret_body(client: AsyncClient) -
 
     fake_openai_response = MagicMock()
     fake_openai_response.status_code = 200
-    fake_openai_response.json.return_value = {"client_secret": {"value": "secret-value"}}
+    fake_openai_response.json.return_value = {"value": "secret-value"}
 
     fake_http_client = AsyncMock()
     fake_http_client.post = AsyncMock(return_value=fake_openai_response)

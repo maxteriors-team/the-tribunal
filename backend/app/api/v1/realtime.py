@@ -18,6 +18,7 @@ from app.services.ai.openai_credentials import OpenAICredentialError, resolve_op
 from app.services.ai.openai_realtime_config import (
     build_client_secret_request,
     build_realtime_session_config,
+    extract_realtime_client_secret_value,
 )
 from app.services.ai.voice_tools import get_tools_from_agent_config
 
@@ -120,7 +121,7 @@ async def create_realtime_token(
         ) from None
 
     return RealtimeTokenResponse(
-        client_secret={"value": session_data.get("client_secret", {}).get("value", "")},
+        client_secret={"value": extract_realtime_client_secret_value(session_data) or ""},
         model=session_config["model"],
         agent={
             "id": str(agent.id),

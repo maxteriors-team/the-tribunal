@@ -189,6 +189,8 @@ async def _create_voice_session_for_test(  # noqa: PLR0911
             for key, value in credential_context.openai_headers().items()
             if key != "Authorization"
         },
+        use_client_secret=credential_context.is_oauth,
+        credential_source=credential_context.source,
     ), None
 
 

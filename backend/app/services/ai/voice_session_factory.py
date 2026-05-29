@@ -112,6 +112,8 @@ class VoiceSessionFactory:
                 for key, value in credential_context.openai_headers().items()
                 if key != "Authorization"
             },
+            use_client_secret=credential_context.is_oauth,
+            credential_source=credential_context.source,
         ), None
 
     def _create_openai_session(
@@ -129,7 +131,14 @@ class VoiceSessionFactory:
         if not is_openai_configured():
             return None, "OpenAI credential not configured"
 
-        return VoiceAgentSession(get_openai_bearer_token(), agent), None
+        return VoiceAgentSession(
+            get_openai_bearer_token(),
+            agent,
+            use_client_secret=bool(self.settings.openai_oauth_access_token),
+            credential_source="env_oauth"
+            if self.settings.openai_oauth_access_token
+            else "env_api_key",
+        ), None
 
     def _create_grok_session(
         self,

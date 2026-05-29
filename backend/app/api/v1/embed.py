@@ -26,6 +26,7 @@ from app.services.ai.openai_credentials import OpenAICredentialError, resolve_op
 from app.services.ai.openai_realtime_config import (
     build_client_secret_request,
     build_realtime_session_config,
+    extract_realtime_client_secret_value,
 )
 from app.services.rate_limiting.embed_limiter import (
     enforce_chat_rate_limits,
@@ -339,7 +340,7 @@ async def get_ephemeral_token(
     )
 
     return TokenResponse(
-        client_secret={"value": session_data.get("client_secret", {}).get("value", "")},
+        client_secret={"value": extract_realtime_client_secret_value(session_data) or ""},
         agent={
             "name": agent.name,
             "voice": agent.voice_id,

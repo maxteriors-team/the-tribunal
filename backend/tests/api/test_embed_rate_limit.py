@@ -74,9 +74,7 @@ def patched_agent() -> AsyncIterator[MagicMock]:
 
 @pytest.fixture
 def allow_origin() -> AsyncIterator[MagicMock]:
-    with patch(
-        "app.api.v1.embed.validate_origin", return_value=True
-    ) as patched:
+    with patch("app.api.v1.embed.validate_origin", return_value=True) as patched:
         yield patched
 
 
@@ -105,9 +103,7 @@ class TestTokenEndpointRateLimit:
         # Stub OpenAI HTTP call so the endpoint succeeds when not limited.
         fake_openai_response = MagicMock()
         fake_openai_response.status_code = 200
-        fake_openai_response.json.return_value = {
-            "client_secret": {"value": "ephemeral-secret"}
-        }
+        fake_openai_response.json.return_value = {"value": "ephemeral-secret"}
 
         fake_http_client = AsyncMock()
         fake_http_client.post = AsyncMock(return_value=fake_openai_response)
@@ -182,9 +178,7 @@ class TestChatEndpointRateLimit:
 
         fake_openai_response = MagicMock()
         fake_openai_response.status_code = 200
-        fake_openai_response.json.return_value = {
-            "choices": [{"message": {"content": "hello"}}]
-        }
+        fake_openai_response.json.return_value = {"choices": [{"message": {"content": "hello"}}]}
         fake_http_client = AsyncMock()
         fake_http_client.post = AsyncMock(return_value=fake_openai_response)
         fake_http_client.__aenter__.return_value = fake_http_client

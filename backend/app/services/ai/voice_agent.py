@@ -8,6 +8,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
+import httpx
 import structlog
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
@@ -16,9 +17,12 @@ from app.core.config import settings
 from app.core.metrics import openai_realtime_latency_ms
 from app.models.agent import Agent
 from app.services.ai.openai_realtime_config import (
+    RealtimeSessionConfig,
+    build_client_secret_request,
     build_realtime_session_config,
     build_response_create_event,
     build_session_update_event,
+    extract_realtime_client_secret_value,
 )
 from app.services.ai.voice_agent_base import VoiceAgentBase
 from app.services.ai.voice_tools import get_tools_from_agent_config
@@ -26,6 +30,7 @@ from app.services.ai.voice_tools import get_tools_from_agent_config
 logger = structlog.get_logger()
 
 TOOL_TIMEOUT_SECONDS = 30.0
+OPENAI_REALTIME_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 
 
 class VoiceAgentSession(VoiceAgentBase):
@@ -53,17 +58,25 @@ class VoiceAgentSession(VoiceAgentBase):
         *,
         model: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        use_client_secret: bool = False,
+        credential_source: str | None = None,
     ) -> None:
         """Initialize voice agent session.
 
         Args:
-            api_key: OpenAI API key
-            agent: Optional Agent model for configuration
+            api_key: OpenAI API key, OAuth access token, or another bearer token.
+            agent: Optional Agent model for configuration.
+            use_client_secret: Mint an ephemeral Realtime client secret before
+                connecting. ChatGPT OAuth tokens require this path; direct
+                WebSocket auth only accepts Platform API keys.
+            credential_source: Safe credential source label for diagnostics.
         """
         super().__init__(agent)
         self.api_key = api_key
         self.model = model or settings.openai_realtime_model
         self.additional_headers = additional_headers or {}
+        self.use_client_secret = use_client_secret
+        self.credential_source = credential_source or "unknown"
         self._connection_task: asyncio.Task[None] | None = None
         self._tool_callback: Callable[[str, str, dict[str, Any]], Any] | None = None
         self._tool_tasks: set[asyncio.Task[None]] = set()
@@ -79,19 +92,30 @@ class VoiceAgentSession(VoiceAgentBase):
             True if successful, False otherwise
         """
         url = f"{self.BASE_URL}?model={self.model}"
+        session_config = self._build_initial_session_config()
+        bearer_token = self.api_key
+        connect_headers = dict(self.additional_headers)
         self.logger.info(
             "========== CONNECTING TO OPENAI REALTIME API ==========",
             url=url,
             model=self.model,
             credential_configured=bool(self.api_key),
+            credential_source=self.credential_source,
+            use_client_secret=self.use_client_secret,
         )
 
         try:
+            if self.use_client_secret:
+                bearer_token = await self._mint_realtime_client_secret(session_config)
+                # The OAuth/account headers were needed to mint the ephemeral key.
+                # The WebSocket should authenticate with the short-lived key only.
+                connect_headers = {}
+
             self.ws = await connect(
                 url,
                 additional_headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    **self.additional_headers,
+                    "Authorization": f"Bearer {bearer_token}",
+                    **connect_headers,
                 },
             )
 
@@ -102,7 +126,7 @@ class VoiceAgentSession(VoiceAgentBase):
 
             # Send session configuration
             self.logger.info("configuring_openai_session")
-            await self._configure_session()
+            await self._configure_session(session_config)
             self.logger.info("openai_session_configured")
 
             return True
@@ -111,7 +135,9 @@ class VoiceAgentSession(VoiceAgentBase):
                 "openai_connection_rejected",
                 status_code=e.response.status_code if hasattr(e, "response") else "unknown",
                 error=str(e),
-                hint="Check if API key is valid",
+                credential_source=self.credential_source,
+                use_client_secret=self.use_client_secret,
+                hint="Check if OpenAI credentials are valid",
             )
             return False
         except Exception as e:
@@ -152,6 +178,55 @@ class VoiceAgentSession(VoiceAgentBase):
         await self._send_event(event)
         self.logger.info("openai_tool_result_submitted", call_id=call_id)
         await self._send_event(build_response_create_event())
+
+    async def _mint_realtime_client_secret(self, session_config: RealtimeSessionConfig) -> str:
+        """Mint an ephemeral Realtime client secret for OAuth-backed sessions."""
+        request_body = build_client_secret_request(session=session_config)
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    OPENAI_REALTIME_CLIENT_SECRETS_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        **self.additional_headers,
+                        "Content-Type": "application/json",
+                    },
+                    json=request_body,
+                )
+        except httpx.RequestError as exc:
+            self.logger.warning(
+                "openai_realtime_client_secret_request_failed",
+                error_type=type(exc).__name__,
+                credential_source=self.credential_source,
+            )
+            raise RuntimeError("OpenAI Realtime client secret could not be created") from exc
+
+        elapsed_ms = round((time.monotonic() - start) * 1000, 2)
+        if response.status_code != httpx.codes.OK:
+            self.logger.error(
+                "openai_realtime_client_secret_rejected",
+                status_code=response.status_code,
+                elapsed_ms=elapsed_ms,
+                credential_source=self.credential_source,
+            )
+            raise RuntimeError("OpenAI Realtime client secret was rejected")
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise RuntimeError("OpenAI Realtime client secret returned invalid JSON") from exc
+
+        client_secret = extract_realtime_client_secret_value(payload)
+        if client_secret is None:
+            raise RuntimeError("OpenAI Realtime client secret response was incomplete")
+
+        self.logger.info(
+            "openai_realtime_client_secret_created",
+            elapsed_ms=elapsed_ms,
+            credential_source=self.credential_source,
+        )
+        return client_secret
 
     async def _cancel_tool_tasks(self) -> None:
         """Cancel pending OpenAI tool tasks on disconnect."""
@@ -254,12 +329,8 @@ class VoiceAgentSession(VoiceAgentBase):
             output_audio_format=audio_output.get("format") or session.get("output_audio_format"),
         )
 
-    async def _configure_session(self) -> None:
-        """Configure the Realtime session with agent settings.
-
-        Uses g711_ulaw at 8kHz - this matches Telnyx's format directly,
-        eliminating the need for audio conversion (lower latency, no quality loss).
-        """
+    def _build_initial_session_config(self) -> RealtimeSessionConfig:
+        """Build the initial Realtime session config for connection startup."""
         instructions = self._prompt_builder.build_full_prompt(
             include_realism=False,
             include_booking=False,
@@ -269,7 +340,7 @@ class VoiceAgentSession(VoiceAgentBase):
             enable_booking=bool(self.agent and self.agent.calcom_event_type_id),
             timezone=self._timezone,
         )
-        session_config = build_realtime_session_config(
+        return build_realtime_session_config(
             model=self.model,
             instructions=instructions,
             voice=self.agent.voice_id if self.agent else None,
@@ -281,7 +352,14 @@ class VoiceAgentSession(VoiceAgentBase):
             tools=tools,
         )
 
-        await self._send_event(build_session_update_event(session_config))
+    async def _configure_session(self, session_config: RealtimeSessionConfig | None = None) -> None:
+        """Configure the Realtime session with agent settings.
+
+        Uses g711_ulaw at 8kHz - this matches Telnyx's format directly,
+        eliminating the need for audio conversion (lower latency, no quality loss).
+        """
+        config = session_config or self._build_initial_session_config()
+        await self._send_event(build_session_update_event(config))
         self.logger.info("session_configured", audio_format="audio/pcmu", model=self.model)
 
     async def configure_session(

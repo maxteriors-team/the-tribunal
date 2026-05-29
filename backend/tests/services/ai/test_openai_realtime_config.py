@@ -2,6 +2,7 @@
 
 from app.services.ai.openai_realtime_config import (
     build_realtime_audio_config,
+    extract_realtime_client_secret_value,
     normalize_transcription_language,
 )
 
@@ -34,3 +35,18 @@ def test_build_realtime_audio_config_omits_unsupported_transcription_language() 
     audio_config = build_realtime_audio_config(language="x-klingon")
 
     assert audio_config["input"]["transcription"] == {"model": "gpt-4o-mini-transcribe"}
+
+
+def test_extract_realtime_client_secret_value_accepts_current_response_shape() -> None:
+    assert extract_realtime_client_secret_value({"value": " ek-test "}) == "ek-test"
+
+
+def test_extract_realtime_client_secret_value_accepts_legacy_nested_shape() -> None:
+    assert (
+        extract_realtime_client_secret_value({"client_secret": {"value": "ek-nested"}})
+        == "ek-nested"
+    )
+
+
+def test_extract_realtime_client_secret_value_rejects_incomplete_payload() -> None:
+    assert extract_realtime_client_secret_value({"client_secret": {}}) is None

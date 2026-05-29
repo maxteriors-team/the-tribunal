@@ -129,6 +129,24 @@ REASONING_REALTIME_MODELS = frozenset(
 )
 
 
+def extract_realtime_client_secret_value(payload: object) -> str | None:
+    """Return a Realtime client secret value from current or legacy response shapes."""
+    if not isinstance(payload, dict):
+        return None
+
+    value = payload.get("value")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+
+    nested = payload.get("client_secret")
+    if isinstance(nested, dict):
+        nested_value = nested.get("value")
+        if isinstance(nested_value, str) and nested_value.strip():
+            return nested_value.strip()
+
+    return None
+
+
 class AudioFormatConfig(TypedDict, total=False):
     """GA Realtime audio format object."""
 
