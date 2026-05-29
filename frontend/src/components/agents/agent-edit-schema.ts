@@ -1,5 +1,10 @@
 import * as z from "zod";
 
+import {
+  TEXT_RESPONSE_MAX_DELAY_MS,
+  TEXT_RESPONSE_MIN_DELAY_MS,
+} from "@/lib/text-response-timing";
+
 export const editAgentFormSchema = z.object({
   name: z.string().min(2, { error: "Name must be at least 2 characters" }),
   description: z.string().optional(),
@@ -9,7 +14,10 @@ export const editAgentFormSchema = z.object({
   voiceId: z.string(),
   systemPrompt: z.string().min(10, { error: "System prompt is required" }),
   temperature: z.number().min(0).max(2),
-  textResponseDelayMs: z.number().min(0).max(5000),
+  textResponseDelayMs: z
+    .number()
+    .min(TEXT_RESPONSE_MIN_DELAY_MS)
+    .max(TEXT_RESPONSE_MAX_DELAY_MS),
   textMaxContextMessages: z.number().min(1).max(50),
   calcomEventTypeId: z.number().optional().nullable(),
   isActive: z.boolean(),

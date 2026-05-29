@@ -6078,7 +6078,7 @@ export interface components {
             text_max_context_messages: number;
             /**
              * Text Response Delay Ms
-             * @default 2000
+             * @default 30000
              */
             text_response_delay_ms: number;
             /**

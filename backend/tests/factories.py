@@ -261,7 +261,7 @@ class AgentFactory(BaseFactory):
     max_tokens = 2000
 
     initial_greeting = "Hello, how can I help you today?"
-    text_response_delay_ms = 2000
+    text_response_delay_ms = 30_000
     text_max_context_messages = 20
 
     enabled_tools = factory.LazyFunction(list)

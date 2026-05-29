@@ -62,6 +62,10 @@ import { getLanguagesForTier } from "@/lib/languages";
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import {
+  TEXT_RESPONSE_DEFAULT_DELAY_MS,
+  clampTextResponseDelayMs,
+} from "@/lib/text-response-timing";
+import {
   REALTIME_VOICES,
   HUME_VOICES,
   GROK_VOICES,
@@ -112,7 +116,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       voiceId: "marin",
       systemPrompt: "",
       temperature: 0.7,
-      textResponseDelayMs: 0,
+      textResponseDelayMs: TEXT_RESPONSE_DEFAULT_DELAY_MS,
       textMaxContextMessages: 10,
       calcomEventTypeId: null,
       isActive: true,
@@ -161,7 +165,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
         voiceId: agent.voice_id ?? "marin",
         systemPrompt: agent.system_prompt,
         temperature: agent.temperature ?? 0.7,
-        textResponseDelayMs: agent.text_response_delay_ms ?? 0,
+        textResponseDelayMs: clampTextResponseDelayMs(agent.text_response_delay_ms),
         textMaxContextMessages: agent.text_max_context_messages ?? 10,
         calcomEventTypeId: agent.calcom_event_type_id,
         isActive: agent.is_active,
@@ -269,7 +273,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       voice_id: data.voiceId,
       system_prompt: data.systemPrompt,
       temperature: data.temperature,
-      text_response_delay_ms: data.textResponseDelayMs,
+      text_response_delay_ms: clampTextResponseDelayMs(data.textResponseDelayMs),
       text_max_context_messages: data.textMaxContextMessages,
       calcom_event_type_id: data.calcomEventTypeId ?? undefined,
       is_active: data.isActive,

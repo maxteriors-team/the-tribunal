@@ -707,7 +707,7 @@ async def upsert_agent(db: AsyncSession, workspace_id: uuid.UUID, spec: AgentSpe
         "temperature": template.temperature if template else 0.7,
         "max_tokens": template.max_tokens if template else 2000,
         "initial_greeting": spec.initial_greeting,
-        "text_response_delay_ms": template.text_response_delay_ms if template else 2500,
+        "text_response_delay_ms": template.text_response_delay_ms if template else 30_000,
         "text_max_context_messages": template.text_max_context_messages if template else 24,
         "calcom_event_type_id": _resolve_calcom_event_type_id(template, spec),
         "enabled_tools": _resolve_enabled_tools(template, spec),

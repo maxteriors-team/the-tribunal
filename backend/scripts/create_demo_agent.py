@@ -217,7 +217,7 @@ async def create_or_update_demo_agent(session: AsyncSession) -> Agent:
             temperature=0.7,
             max_tokens=2000,
             initial_greeting=ALYX_INITIAL_GREETING,
-            text_response_delay_ms=2000,
+            text_response_delay_ms=30_000,
             text_max_context_messages=20,
             enabled_tools=["web_search", "x_search", "book_appointment"],
             calcom_event_type_id=4453549,

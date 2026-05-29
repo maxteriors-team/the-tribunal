@@ -4,7 +4,30 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing_extensions import TypeIs
+
+from app.constants.text_response_timing import (
+    TEXT_RESPONSE_DEFAULT_DELAY_MS,
+    TEXT_RESPONSE_MAX_DELAY_MS,
+    TEXT_RESPONSE_MIN_DELAY_MS,
+)
+from app.services.ai.text_response_timing import clamp_text_response_delay_ms
+
+
+def _is_int_convertible(value: object) -> TypeIs[str | bytes | bytearray | int | float]:
+    """Return whether ``value`` can reasonably be coerced with ``int``."""
+    return isinstance(value, str | bytes | bytearray | int | float)
+
+
+def _clamp_text_response_delay_value(value: object) -> object:
+    """Clamp legacy text response delay values while preserving invalid inputs."""
+    if value is None or not _is_int_convertible(value):
+        return value
+    try:
+        return clamp_text_response_delay_ms(int(value))
+    except ValueError:
+        return value
 
 
 class AgentCreate(BaseModel):
@@ -18,7 +41,11 @@ class AgentCreate(BaseModel):
     language: str = "en-US"
     system_prompt: str
     temperature: float = 0.7
-    text_response_delay_ms: int = 2000
+    text_response_delay_ms: int = Field(
+        default=TEXT_RESPONSE_DEFAULT_DELAY_MS,
+        ge=TEXT_RESPONSE_MIN_DELAY_MS,
+        le=TEXT_RESPONSE_MAX_DELAY_MS,
+    )
     text_max_context_messages: int = 20
     calcom_event_type_id: int | None = None
     enabled_tools: list[str] = []
@@ -61,6 +88,12 @@ class AgentCreate(BaseModel):
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
 
+    @field_validator("text_response_delay_ms", mode="before")
+    @classmethod
+    def clamp_text_response_delay(cls, value: object) -> object:
+        """Accept legacy fast delays and clamp them to the supported range."""
+        return _clamp_text_response_delay_value(value)
+
 
 class AgentUpdate(BaseModel):
     """Schema for updating an agent."""
@@ -73,7 +106,11 @@ class AgentUpdate(BaseModel):
     language: str | None = None
     system_prompt: str | None = None
     temperature: float | None = None
-    text_response_delay_ms: int | None = None
+    text_response_delay_ms: int | None = Field(
+        default=None,
+        ge=TEXT_RESPONSE_MIN_DELAY_MS,
+        le=TEXT_RESPONSE_MAX_DELAY_MS,
+    )
     text_max_context_messages: int | None = None
     calcom_event_type_id: int | None = None
     is_active: bool | None = None
@@ -116,6 +153,12 @@ class AgentUpdate(BaseModel):
     noshow_reengagement_enabled: bool | None = None
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
+
+    @field_validator("text_response_delay_ms", mode="before")
+    @classmethod
+    def clamp_text_response_delay(cls, value: object) -> object:
+        """Accept legacy fast delays and clamp them to the supported range."""
+        return _clamp_text_response_delay_value(value)
 
 
 class AgentResponse(BaseModel):
@@ -176,6 +219,12 @@ class AgentResponse(BaseModel):
     noshow_day7_template: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("text_response_delay_ms", mode="before")
+    @classmethod
+    def clamp_text_response_delay(cls, value: object) -> object:
+        """Return legacy fast delays as the effective supported minimum."""
+        return _clamp_text_response_delay_value(value)
 
     model_config = ConfigDict(from_attributes=True)
 

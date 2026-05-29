@@ -569,7 +569,9 @@
             "type": "integer"
           },
           "text_response_delay_ms": {
-            "default": 2000,
+            "default": 30000,
+            "maximum": 180000.0,
+            "minimum": 22000.0,
             "title": "Text Response Delay Ms",
             "type": "integer"
           },
@@ -1348,6 +1350,8 @@
           "text_response_delay_ms": {
             "anyOf": [
               {
+                "maximum": 180000.0,
+                "minimum": 22000.0,
                 "type": "integer"
               },
               {

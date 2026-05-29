@@ -70,6 +70,7 @@ import { agentsApi } from "@/lib/api/agents";
 import { callsApi } from "@/lib/api/calls";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
 import { queryKeys } from "@/lib/query-keys";
+import { clampTextResponseDelayMs } from "@/lib/text-response-timing";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Agent } from "@/types";
 
@@ -145,7 +146,7 @@ export function AgentsList() {
         language: agent.language,
         system_prompt: agent.system_prompt,
         temperature: agent.temperature,
-        text_response_delay_ms: agent.text_response_delay_ms,
+        text_response_delay_ms: clampTextResponseDelayMs(agent.text_response_delay_ms),
         text_max_context_messages: agent.text_max_context_messages,
         calcom_event_type_id: agent.calcom_event_type_id ?? undefined,
         enabled_tools: agent.enabled_tools,

@@ -63,7 +63,7 @@ def get_realtor_agent_config() -> dict[str, Any]:
         "language": "en-US",
         "temperature": 0.6,
         "max_tokens": 500,
-        "text_response_delay_ms": 3000,
+        "text_response_delay_ms": 30_000,
         "text_max_context_messages": 20,
         "enabled_tools": ["book_appointment"],
         "reminder_enabled": True,

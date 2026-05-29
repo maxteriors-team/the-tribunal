@@ -1,0 +1,5 @@
+"""Shared constants for human-like AI text response timing."""
+
+TEXT_RESPONSE_MIN_DELAY_MS = 22_000
+TEXT_RESPONSE_DEFAULT_DELAY_MS = 30_000
+TEXT_RESPONSE_MAX_DELAY_MS = 180_000

@@ -99,7 +99,7 @@ def build_prestyj_cold_lead_responder_template() -> AgentCreate:
         language="en-US",
         system_prompt=PRESTYJ_COLD_LEAD_RESPONDER_PROMPT,
         temperature=0.45,
-        text_response_delay_ms=2500,
+        text_response_delay_ms=30_000,
         text_max_context_messages=24,
         initial_greeting=None,
         enabled_tools=[

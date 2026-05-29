@@ -10,6 +10,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.constants.text_response_timing import TEXT_RESPONSE_DEFAULT_DELAY_MS
 from app.db.base import Base
 
 
@@ -77,7 +78,9 @@ class Agent(Base):
     initial_greeting: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Text agent settings
-    text_response_delay_ms: Mapped[int] = mapped_column(Integer, default=2000, nullable=False)
+    text_response_delay_ms: Mapped[int] = mapped_column(
+        Integer, default=TEXT_RESPONSE_DEFAULT_DELAY_MS, nullable=False
+    )
     text_max_context_messages: Mapped[int] = mapped_column(Integer, default=20, nullable=False)
 
     # Cal.com integration

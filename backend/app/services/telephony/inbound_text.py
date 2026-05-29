@@ -469,16 +469,10 @@ async def _schedule_ai_if_enabled(
     if not conversation.ai_enabled or conversation.ai_paused:
         return
 
+    # Keep this delay short: it is only the debounce window for batching rapid
+    # inbound texts. Agent-level human-like timing is applied after the AI has
+    # generated the exact reply, so reply length can influence the final wait.
     delay_ms = settings.ai_response_delay_ms
-    if conversation.assigned_agent_id:
-        from app.models.agent import Agent
-
-        agent_result = await db.execute(
-            select(Agent).where(Agent.id == conversation.assigned_agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
-        if agent:
-            delay_ms = agent.text_response_delay_ms
 
     await schedule_ai_response_fn(
         conversation_id=message.conversation_id,

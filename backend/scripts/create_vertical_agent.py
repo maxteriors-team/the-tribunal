@@ -8,7 +8,9 @@ Usage:
     cd backend && uv run python scripts/create_vertical_agent.py /path/to/registry/painters.json
 
 For production (via Railway):
-    cd /home/groot/aicrm && railway run -- bash -c "cd backend && python scripts/create_vertical_agent.py /path/to/config.json"
+    cd /home/groot/aicrm
+    railway run -- bash -c \
+      "cd backend && python scripts/create_vertical_agent.py /path/to/config.json"
 """
 
 import asyncio
@@ -125,9 +127,7 @@ def build_initial_greeting(config: dict) -> str:
     )
 
 
-async def create_or_update_vertical_agent(
-    session: AsyncSession, config: dict
-) -> Agent:
+async def create_or_update_vertical_agent(session: AsyncSession, config: dict) -> Agent:
     """Create or update the vertical agent."""
     if not DEMO_WORKSPACE_ID:
         print("ERROR: DEMO_WORKSPACE_ID not set in environment", file=sys.stderr)
@@ -202,7 +202,7 @@ async def create_or_update_vertical_agent(
             temperature=0.7,
             max_tokens=2000,
             initial_greeting=initial_greeting,
-            text_response_delay_ms=2000,
+            text_response_delay_ms=30_000,
             text_max_context_messages=20,
             enabled_tools=["book_appointment"],
             is_active=True,

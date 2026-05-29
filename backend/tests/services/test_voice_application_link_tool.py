@@ -54,7 +54,7 @@ def _make_agent(**overrides: Any) -> Agent:
         "language": "en-US",
         "system_prompt": "Be concise.",
         "temperature": 0.7,
-        "text_response_delay_ms": 2000,
+        "text_response_delay_ms": 30_000,
         "text_max_context_messages": 20,
         "calcom_event_type_id": None,
         "enabled_tools": ["twilio-sms"],

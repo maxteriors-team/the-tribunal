@@ -17,7 +17,7 @@ def test_prestyj_template_builds_agent_create_payload() -> None:
     assert template.name == "Prestyj Cold-Lead Responder"
     assert template.channel_mode == "text"
     assert template.temperature == 0.45
-    assert template.text_response_delay_ms == 2500
+    assert template.text_response_delay_ms == 30_000
     assert template.text_max_context_messages == 24
 
 

@@ -27,6 +27,7 @@ import { agentsApi, type CreateAgentRequest } from "@/lib/api/agents";
 import { getLanguagesForTier, getFallbackLanguage } from "@/lib/languages";
 import { PRICING_TIERS } from "@/lib/pricing-tiers";
 import { queryKeys } from "@/lib/query-keys";
+import { TEXT_RESPONSE_DEFAULT_DELAY_MS } from "@/lib/text-response-timing";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import {
@@ -259,6 +260,7 @@ export function CreateAgentForm() {
       language: data.language,
       system_prompt: data.systemPrompt,
       temperature: data.temperature,
+      text_response_delay_ms: TEXT_RESPONSE_DEFAULT_DELAY_MS,
       enabled_tools: data.enabledTools,
       tool_settings: data.enabledToolIds,
       // Include IVR settings for Grok agents

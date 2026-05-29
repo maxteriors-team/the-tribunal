@@ -11,6 +11,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Slider } from "@/components/ui/slider";
+import {
+  TEXT_RESPONSE_DELAY_STEP_MS,
+  TEXT_RESPONSE_DEFAULT_DELAY_MS,
+  TEXT_RESPONSE_MAX_DELAY_MS,
+  TEXT_RESPONSE_MIN_DELAY_MS,
+  clampTextResponseDelayMs,
+  formatTextResponseDelay,
+} from "@/lib/text-response-timing";
 
 interface TextSettingsSectionProps {
   control: Control<EditAgentFormValues>;
@@ -29,21 +37,30 @@ export function TextSettingsSection({ control }: TextSettingsSectionProps) {
           render={({ field }) => (
             <FormItem>
               <div className="flex items-center justify-between">
-                <FormLabel>Response Delay</FormLabel>
-                <span className="text-sm font-medium">{field.value}ms</span>
+                <FormLabel>Minimum Response Delay</FormLabel>
+                <span className="text-sm font-medium">
+                  {formatTextResponseDelay(clampTextResponseDelayMs(field.value))}
+                </span>
               </div>
               <FormControl>
-                <Slider
-                  min={0}
-                  max={5000}
-                  step={100}
-                  value={[field.value]}
-                  onValueChange={(value) => field.onChange(value[0])}
-                  className="w-full"
-                />
+                <div className="space-y-2">
+                  <Slider
+                    min={TEXT_RESPONSE_MIN_DELAY_MS}
+                    max={TEXT_RESPONSE_MAX_DELAY_MS}
+                    step={TEXT_RESPONSE_DELAY_STEP_MS}
+                    value={[clampTextResponseDelayMs(field.value)]}
+                    onValueChange={(value) => field.onChange(value[0])}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{formatTextResponseDelay(TEXT_RESPONSE_MIN_DELAY_MS)}</span>
+                    <span>{formatTextResponseDelay(TEXT_RESPONSE_DEFAULT_DELAY_MS)}</span>
+                    <span>{formatTextResponseDelay(TEXT_RESPONSE_MAX_DELAY_MS)}</span>
+                  </div>
+                </div>
               </FormControl>
               <FormDescription>
-                Delay before sending text responses (makes it feel more natural)
+                The fastest an AI text will send. Longer replies automatically wait longer, up to 3 minutes.
               </FormDescription>
               <FormMessage />
             </FormItem>

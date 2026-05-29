@@ -12,7 +12,9 @@ This module delegates to focused submodules:
 """
 
 import asyncio
+import time
 import uuid
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -27,6 +29,7 @@ from app.services.ai.opt_out_detector import (
     has_potential_opt_out_keywords,
 )
 from app.services.ai.text_response_generator import generate_text_response
+from app.services.ai.text_response_timing import calculate_text_response_delay_ms
 
 logger = structlog.get_logger()
 
@@ -38,6 +41,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     conversation_id: uuid.UUID,
     workspace_id: uuid.UUID,
     db: AsyncSession,
+    response_started_at: float | None = None,
 ) -> None:
     """Process inbound message and generate AI response.
 
@@ -49,10 +53,11 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         conversation_id: The conversation ID
         workspace_id: Workspace ID
         db: Database session
+        response_started_at: Monotonic timestamp for when the latest inbound text arrived.
     """
-    from app.services.telephony.text_provider import get_text_message_provider
-
     log = logger.bind(conversation_id=str(conversation_id))
+    if response_started_at is None:
+        response_started_at = time.monotonic()
     log.info("processing_inbound_with_ai")
 
     # Get conversation with agent
@@ -139,19 +144,78 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         log.warning("no_response_generated")
         return
 
-    sms_service = get_text_message_provider(_preferred_provider_for_conversation(conversation))
+    response_delay_ms = calculate_text_response_delay_ms(
+        response_text=response_text,
+        minimum_delay_ms=agent.text_response_delay_ms,
+    )
+    elapsed_ms = round((time.monotonic() - response_started_at) * 1000)
+    send_wait_ms = max(0, response_delay_ms - elapsed_ms)
+    agent_id = agent.id
+
+    await _send_ai_text_response_after_delay(
+        db=db,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        response_text=response_text,
+        target_delay_ms=response_delay_ms,
+        elapsed_ms=elapsed_ms,
+        wait_ms=send_wait_ms,
+        log=log,
+    )
+
+
+async def _send_ai_text_response_after_delay(
+    *,
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    response_text: str,
+    target_delay_ms: int,
+    elapsed_ms: int,
+    wait_ms: int,
+    log: Any,
+) -> None:
+    """Wait the remaining human-like delay, re-check state, then send."""
+    from app.services.telephony.text_provider import get_text_message_provider
+
+    if wait_ms > 0:
+        log.info(
+            "ai_response_waiting_to_send",
+            response_length=len(response_text),
+            target_delay_ms=target_delay_ms,
+            elapsed_ms=elapsed_ms,
+            wait_ms=wait_ms,
+        )
+        await db.rollback()
+        await asyncio.sleep(wait_ms / 1000.0)
+
+    current_conversation = await _load_sendable_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        agent_id=agent_id,
+        log=log,
+    )
+    if current_conversation is None:
+        return
+
+    provider_name = _preferred_provider_for_conversation(current_conversation)
+    sms_service = get_text_message_provider(provider_name)
     try:
         await sms_service.send_message(
-            to_number=conversation.contact_phone,
-            from_number=conversation.workspace_phone,
+            to_number=current_conversation.contact_phone,
+            from_number=current_conversation.workspace_phone,
             body=response_text,
             db=db,
             workspace_id=workspace_id,
-            agent_id=agent.id,
+            agent_id=agent_id,
         )
         log.info(
             "ai_response_sent",
             response_length=len(response_text),
+            target_delay_ms=target_delay_ms,
+            wait_ms=wait_ms,
         )
     except Exception as e:
         log.error(
@@ -161,6 +225,31 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         )
     finally:
         await sms_service.close()
+
+
+async def _load_sendable_conversation(
+    *,
+    db: AsyncSession,
+    conversation_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    log: Any,
+) -> Conversation | None:
+    """Return the conversation if it should still receive the delayed AI reply."""
+    current_result = await db.execute(
+        select(Conversation).where(Conversation.id == conversation_id)
+    )
+    current_conversation = current_result.scalar_one_or_none()
+    if not current_conversation:
+        log.info("conversation_removed_before_ai_response_send")
+        return None
+    if (
+        not current_conversation.ai_enabled
+        or current_conversation.ai_paused
+        or current_conversation.assigned_agent_id != agent_id
+    ):
+        log.info("ai_response_skipped_after_delay")
+        return None
+    return current_conversation
 
 
 def _preferred_provider_for_conversation(conversation: Conversation) -> str | None:
@@ -195,6 +284,8 @@ async def schedule_ai_response(
         _pending_responses[key].cancel()
         log.debug("cancelled_pending_response")
 
+    scheduled_at = time.monotonic()
+
     async def delayed_response() -> None:
         """Execute response after delay."""
         log.info("delayed_response_started")
@@ -203,7 +294,12 @@ async def schedule_ai_response(
 
             # Process in new database session
             async with AsyncSessionLocal() as db:
-                await process_inbound_with_ai(conversation_id, workspace_id, db)
+                await process_inbound_with_ai(
+                    conversation_id,
+                    workspace_id,
+                    db,
+                    response_started_at=scheduled_at,
+                )
 
         except asyncio.CancelledError:
             log.info("response_cancelled")
