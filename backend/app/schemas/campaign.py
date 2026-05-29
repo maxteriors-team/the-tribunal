@@ -36,6 +36,7 @@ class CampaignUpdate(BaseModel):
     name: str | None = None
     agent_id: uuid.UUID | None = None
     offer_id: uuid.UUID | None = None
+    from_phone_number: str | None = None
     initial_message: str | None = None
     ai_enabled: bool | None = None
     qualification_criteria: str | None = None

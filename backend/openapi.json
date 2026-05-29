@@ -5290,6 +5290,17 @@
             ],
             "title": "Follow Up Message"
           },
+          "from_phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Phone Number"
+          },
           "guarantee_target": {
             "anyOf": [
               {
@@ -17344,9 +17355,28 @@
             "title": "Id",
             "type": "string"
           },
+          "imessage_enabled": {
+            "title": "Imessage Enabled",
+            "type": "boolean"
+          },
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "mac_relay_sender_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mac Relay Sender Id"
+          },
+          "mac_relay_service": {
+            "title": "Mac Relay Service",
+            "type": "string"
           },
           "mms_enabled": {
             "title": "Mms Enabled",
@@ -17354,6 +17384,10 @@
           },
           "phone_number": {
             "title": "Phone Number",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
             "type": "string"
           },
           "sms_enabled": {
@@ -17375,9 +17409,13 @@
           "workspace_id",
           "phone_number",
           "friendly_name",
+          "provider",
           "sms_enabled",
           "voice_enabled",
           "mms_enabled",
+          "imessage_enabled",
+          "mac_relay_sender_id",
+          "mac_relay_service",
           "assigned_agent_id",
           "is_active"
         ],

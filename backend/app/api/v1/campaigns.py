@@ -7,13 +7,16 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
 from app.api.deps import DB, CurrentUser, get_workspace
+from app.core.config import settings
 from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
+from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
 from app.schemas.campaign import (
     CampaignAnalytics,
@@ -42,6 +45,40 @@ from app.services.campaigns.guarantee_tracker import check_guarantee_expiry
 from app.utils.datetime import parse_time_string
 
 router = APIRouter()
+
+
+async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str) -> None:
+    """Ensure a campaign sender has a usable text channel."""
+    sender_result = await db.execute(
+        select(PhoneNumber).where(
+            PhoneNumber.phone_number == from_phone_number,
+            PhoneNumber.is_active.is_(True),
+        )
+    )
+    sender = sender_result.scalar_one_or_none()
+    if sender is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Campaign sender phone number is not active",
+        )
+
+    if not sender.sms_enabled and not sender.imessage_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Campaign sender must have SMS or iMessage enabled",
+        )
+
+    if sender.imessage_enabled and not (settings.mac_relay_base_url and settings.mac_relay_token):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="iMessage relay is not configured for campaign sending",
+        )
+
+    if sender.sms_enabled and not sender.imessage_enabled and not settings.telnyx_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Telnyx SMS is not configured for campaign sending",
+        )
 
 
 @router.get("", response_model=PaginatedCampaigns)
@@ -88,6 +125,8 @@ async def create_campaign(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Agent not found",
             )
+
+    await _validate_campaign_sender(db, campaign_in.from_phone_number)
 
     # Convert time strings to datetime.time objects
     campaign_data = campaign_in.model_dump()
@@ -142,6 +181,8 @@ async def update_campaign(
 
     # Update fields
     update_data = campaign_in.model_dump(exclude_unset=True)
+    if "from_phone_number" in update_data and update_data["from_phone_number"] is not None:
+        await _validate_campaign_sender(db, update_data["from_phone_number"])
 
     # Convert time strings to datetime.time objects
     if "sending_hours_start" in update_data:
@@ -170,6 +211,7 @@ async def start_campaign(
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
     try:
+        await _validate_campaign_sender(db, campaign.from_phone_number)
         lifecycle_result = await start_campaign_lifecycle(db, campaign)
     except CampaignLifecycleError as exc:
         raise HTTPException(

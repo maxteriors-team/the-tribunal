@@ -7916,6 +7916,8 @@ export interface components {
             follow_up_enabled?: boolean | null;
             /** Follow Up Message */
             follow_up_message?: string | null;
+            /** From Phone Number */
+            from_phone_number?: string | null;
             /** Guarantee Target */
             guarantee_target?: number | null;
             /** Guarantee Window Days */
@@ -12238,12 +12240,20 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Imessage Enabled */
+            imessage_enabled: boolean;
             /** Is Active */
             is_active: boolean;
+            /** Mac Relay Sender Id */
+            mac_relay_sender_id: string | null;
+            /** Mac Relay Service */
+            mac_relay_service: string;
             /** Mms Enabled */
             mms_enabled: boolean;
             /** Phone Number */
             phone_number: string;
+            /** Provider */
+            provider: string;
             /** Sms Enabled */
             sms_enabled: boolean;
             /** Voice Enabled */

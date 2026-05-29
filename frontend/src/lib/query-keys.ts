@@ -253,6 +253,8 @@ export const queryKeys = {
       ["phone-numbers", workspaceId, params] as const,
     smsEnabled: (workspaceId: string) =>
       ["phone-numbers", workspaceId, { sms_enabled: true }] as const,
+    activeTextCapable: (workspaceId: string) =>
+      ["phone-numbers", workspaceId, { active_only: true, text_capable: true }] as const,
     activeOnlyFalse: (workspaceId: string) =>
       ["phone-numbers", workspaceId, { active_only: false }] as const,
     detail: (workspaceId: string, phoneNumberId: string) =>

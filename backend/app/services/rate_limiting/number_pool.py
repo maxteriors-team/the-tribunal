@@ -64,7 +64,7 @@ class NumberPoolManager:
             )
             phone = result.scalar_one_or_none()
 
-            if phone and await self._phone_has_capacity(phone):
+            if phone and self._phone_can_send_text(phone) and await self._phone_has_capacity(phone):
                 if consume_rate_limit and not await self.reserve_number_for_send(phone, db):
                     log.debug("single_number_rate_limited", phone=campaign.from_phone_number)
                     return None
@@ -98,8 +98,8 @@ class NumberPoolManager:
         for pool_entry in pool_entries:
             phone = pool_entry.phone_number
 
-            # Skip inactive or non-SMS numbers
-            if not phone or not phone.is_active or not phone.sms_enabled:
+            # Skip inactive or non-text numbers.
+            if not phone or not self._phone_can_send_text(phone):
                 continue
 
             # Skip quarantined or cooldown numbers
@@ -170,6 +170,9 @@ class NumberPoolManager:
             pool_entry.messages_sent += 1
         await db.flush()
         return True
+
+    def _phone_can_send_text(self, phone: PhoneNumber) -> bool:
+        return phone.is_active and (phone.sms_enabled or phone.imessage_enabled)
 
     async def _phone_has_capacity(self, phone: PhoneNumber) -> bool:
         counts = await self.rate_limiter.get_current_counts(phone.id)
@@ -439,7 +442,7 @@ class NumberPoolManager:
         )
         phone = result.scalar_one_or_none()
 
-        if phone and await self._check_all_rate_limits(phone):
+        if phone and self._phone_can_send_text(phone) and await self._check_all_rate_limits(phone):
             return phone
 
         log.debug("test_number_rate_limited", phone=test.from_phone_number)

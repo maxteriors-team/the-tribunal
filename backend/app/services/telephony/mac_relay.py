@@ -122,10 +122,11 @@ def _coerce_mac_relay_service(service: str) -> MacRelayServiceName:
     return "imessage"
 
 
-def build_configured_mac_relay_service() -> MacRelayMessageService:
+def build_configured_mac_relay_service(service: str | None = None) -> MacRelayMessageService:
     """Build a relay service from application settings."""
+    configured_service = service or settings.mac_relay_default_service
     return MacRelayMessageService(
         base_url=settings.mac_relay_base_url,
         token=settings.mac_relay_token,
-        service=_coerce_mac_relay_service(settings.mac_relay_default_service),
+        service=_coerce_mac_relay_service(configured_service),
     )

@@ -14,9 +14,13 @@ class PhoneNumberResponse(BaseModel):
     workspace_id: uuid.UUID
     phone_number: str
     friendly_name: str | None
+    provider: str
     sms_enabled: bool
     voice_enabled: bool
     mms_enabled: bool
+    imessage_enabled: bool
+    mac_relay_sender_id: str | None
+    mac_relay_service: str
     assigned_agent_id: uuid.UUID | None
     is_active: bool
 

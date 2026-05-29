@@ -29,6 +29,7 @@ from app.models.campaign import (
 )
 from app.models.contact import Contact
 from app.models.offer import Offer
+from app.models.phone_number import PhoneNumber
 from app.services.compliance.outbound_compliance import (
     OutboundComplianceRequest,
     OutboundComplianceResult,
@@ -48,6 +49,28 @@ logger = structlog.get_logger()
 
 # Worker configuration
 MAX_MESSAGES_PER_TICK = 20
+TextProviderCache = dict[tuple[str | None, str | None], TextMessageProvider]
+
+
+def _preferred_provider_for_phone(phone_number: PhoneNumber) -> str | None:
+    """Keep campaign sends on the selected sender identity's transport."""
+    if phone_number.imessage_enabled:
+        return "mac_relay"
+    return None
+
+
+def _sender_address_for_phone(phone_number: PhoneNumber) -> str:
+    """Return the provider-facing sender identity for a campaign sender row."""
+    if phone_number.imessage_enabled and phone_number.mac_relay_sender_id:
+        return phone_number.mac_relay_sender_id
+    return phone_number.phone_number
+
+
+def _campaign_channel_for_phone(phone_number: PhoneNumber) -> str:
+    """Return the campaign compliance/logging channel for the selected sender."""
+    if phone_number.imessage_enabled:
+        return "imessage"
+    return "sms"
 
 
 class CampaignWorker(BaseCampaignWorker):
@@ -61,6 +84,7 @@ class CampaignWorker(BaseCampaignWorker):
     MAX_CONCURRENCY = 10
     max_retries = 3
     backoff_base_seconds = 2.0
+    requires_telnyx_api_key = False
 
     def __init__(self) -> None:
         super().__init__()
@@ -98,24 +122,45 @@ class CampaignWorker(BaseCampaignWorker):
         db: AsyncSession,
         log: Any,
     ) -> None:
-        """Process SMS campaign contacts: send initial messages and follow-ups."""
-        sms_service = get_text_message_provider()
+        """Process SMS/iMessage campaign contacts: send initial messages and follow-ups."""
+        text_providers: TextProviderCache = {}
         try:
-            await self._process_initial_messages(campaign, sms_service, db, log)
+            await self._process_initial_messages(campaign, text_providers, db, log)
 
             if campaign.follow_up_enabled:
-                await self._process_follow_ups(campaign, sms_service, db, log)
+                await self._process_follow_ups(campaign, text_providers, db, log)
 
             await self._check_completion(campaign, db, log)
 
             await db.commit()
         finally:
-            await sms_service.close()
+            for provider in text_providers.values():
+                await provider.close()
+
+    def _get_text_provider(
+        self,
+        phone_number: PhoneNumber,
+        text_providers: TextProviderCache,
+    ) -> TextMessageProvider:
+        """Return a cached provider for the selected sender identity."""
+        preferred_provider = _preferred_provider_for_phone(phone_number)
+        mac_relay_service = None
+        if phone_number.imessage_enabled:
+            mac_relay_service = phone_number.mac_relay_service
+        cache_key = (preferred_provider, mac_relay_service)
+        provider = text_providers.get(cache_key)
+        if provider is None:
+            provider = get_text_message_provider(
+                preferred_provider,
+                mac_relay_service=mac_relay_service,
+            )
+            text_providers[cache_key] = provider
+        return provider
 
     async def _process_initial_messages(  # noqa: PLR0912, PLR0915
         self,
         campaign: Campaign,
-        sms_service: TextMessageProvider,
+        text_providers: TextProviderCache,
         db: AsyncSession,
         log: Any,
     ) -> None:
@@ -171,14 +216,21 @@ class CampaignWorker(BaseCampaignWorker):
                 campaign_contact.last_error = "missing_phone_number"
                 continue
 
+            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
+            if not from_phone:
+                log.warning("No available numbers in pool, pausing sending")
+                break
+
+            channel = _campaign_channel_for_phone(from_phone)
+            action_type = f"campaign_initial_{channel}"
             compliance_result = await self.compliance_service.evaluate(
                 OutboundComplianceRequest(
                     workspace_id=campaign.workspace_id,
                     campaign=campaign,
                     campaign_contact=campaign_contact,
                     contact=contact,
-                    channel="sms",
-                    action_type="campaign_initial_sms",
+                    channel=channel,
+                    action_type=action_type,
                     now=datetime.now(UTC),
                 ),
                 db,
@@ -195,7 +247,8 @@ class CampaignWorker(BaseCampaignWorker):
                     campaign_contact_id=str(campaign_contact.id),
                     contact_id=contact.id,
                     reason=compliance_result.reason,
-                    action_type="campaign_initial_sms",
+                    action_type=action_type,
+                    channel=channel,
                 )
                 continue
 
@@ -222,14 +275,10 @@ class CampaignWorker(BaseCampaignWorker):
                         campaign_contact_id=str(campaign_contact.id),
                         contact_id=contact.id,
                         reason=cap_result.reason,
-                        action_type="campaign_initial_sms",
+                        action_type=action_type,
+                        channel=channel,
                     )
                     continue
-
-            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
-            if not from_phone:
-                log.warning("No available numbers in pool, pausing sending")
-                break
 
             if not await self.number_pool.reserve_number_for_send(from_phone, db):
                 log.warning("Selected number became rate limited, retrying next tick")
@@ -255,10 +304,12 @@ class CampaignWorker(BaseCampaignWorker):
                 # the campaign_contact id alone is unique.
                 initial_key = derive_idempotency_key("campaign_sms_initial", campaign_contact.id)
 
-                # Send SMS with phone number tracking
-                message = await sms_service.send_message(
+                text_service = self._get_text_provider(from_phone, text_providers)
+
+                # Send via the selected sender's text transport.
+                message = await text_service.send_message(
                     to_number=contact.phone_number,
-                    from_number=from_phone.phone_number,
+                    from_number=_sender_address_for_phone(from_phone),
                     body=message_text,
                     db=db,
                     workspace_id=campaign.workspace_id,
@@ -300,6 +351,7 @@ class CampaignWorker(BaseCampaignWorker):
                     contact_id=contact.id,
                     phone=contact.phone_number,
                     from_phone=from_phone.phone_number,
+                    channel=channel,
                     message_id=str(message.id),
                     offer_id=str(campaign.offer_id) if campaign.offer_id else None,
                     has_offer=bool(campaign.offer_id),
@@ -345,7 +397,7 @@ class CampaignWorker(BaseCampaignWorker):
     async def _process_follow_ups(  # noqa: PLR0912, PLR0915
         self,
         campaign: Campaign,
-        sms_service: TextMessageProvider,
+        text_providers: TextProviderCache,
         db: AsyncSession,
         log: Any,
     ) -> None:
@@ -405,14 +457,22 @@ class CampaignWorker(BaseCampaignWorker):
             if not contact or not contact.phone_number:
                 continue
 
+            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
+
+            if not from_phone:
+                log.warning("No available numbers for follow-ups")
+                break
+
+            channel = _campaign_channel_for_phone(from_phone)
+            action_type = f"campaign_follow_up_{channel}"
             compliance_result = await self.compliance_service.evaluate(
                 OutboundComplianceRequest(
                     workspace_id=campaign.workspace_id,
                     campaign=campaign,
                     campaign_contact=campaign_contact,
                     contact=contact,
-                    channel="sms",
-                    action_type="campaign_follow_up_sms",
+                    channel=channel,
+                    action_type=action_type,
                     now=datetime.now(UTC),
                 ),
                 db,
@@ -429,7 +489,8 @@ class CampaignWorker(BaseCampaignWorker):
                     campaign_contact_id=str(campaign_contact.id),
                     contact_id=contact.id,
                     reason=compliance_result.reason,
-                    action_type="campaign_follow_up_sms",
+                    action_type=action_type,
+                    channel=channel,
                 )
                 continue
 
@@ -456,15 +517,10 @@ class CampaignWorker(BaseCampaignWorker):
                         campaign_contact_id=str(campaign_contact.id),
                         contact_id=contact.id,
                         reason=cap_result.reason,
-                        action_type="campaign_follow_up_sms",
+                        action_type=action_type,
+                        channel=channel,
                     )
                     continue
-
-            from_phone = await self.number_pool.peek_next_available_number(campaign, db)
-
-            if not from_phone:
-                log.warning("No available numbers for follow-ups")
-                break
 
             if not await self.number_pool.reserve_number_for_send(from_phone, db):
                 log.warning("Selected follow-up number became rate limited")
@@ -486,9 +542,11 @@ class CampaignWorker(BaseCampaignWorker):
                     campaign_contact.follow_ups_sent,
                 )
 
-                message = await sms_service.send_message(
+                text_service = self._get_text_provider(from_phone, text_providers)
+
+                message = await text_service.send_message(
                     to_number=contact.phone_number,
-                    from_number=from_phone.phone_number,
+                    from_number=_sender_address_for_phone(from_phone),
                     body=message_text,
                     db=db,
                     workspace_id=campaign.workspace_id,
@@ -523,6 +581,7 @@ class CampaignWorker(BaseCampaignWorker):
                     contact_id=contact.id,
                     phone=contact.phone_number,
                     from_phone=from_phone.phone_number,
+                    channel=channel,
                     follow_up_number=campaign_contact.follow_ups_sent,
                     message_id=str(message.id),
                     offer_id=str(campaign.offer_id) if campaign.offer_id else None,

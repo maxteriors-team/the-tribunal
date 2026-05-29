@@ -40,6 +40,7 @@ class BaseCampaignWorker(RetryableWorker, BaseWorker):
 
     max_retries = 3
     backoff_base_seconds = 2.0
+    requires_telnyx_api_key = True
 
     @property
     @abstractmethod
@@ -115,7 +116,7 @@ class BaseCampaignWorker(RetryableWorker, BaseWorker):
             await db.commit()
             return
 
-        if not settings.telnyx_api_key:
+        if self.requires_telnyx_api_key and not settings.telnyx_api_key:
             log.warning("No Telnyx API key configured")
             return
 

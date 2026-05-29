@@ -219,9 +219,7 @@ export function makeReviewStep<
           <ReviewSummaryCard
             name={formData.name}
             description={formData.description || undefined}
-            fromPhoneDisplay={
-              selectedPhone?.friendly_name || formData.from_phone_number
-            }
+            fromPhoneDisplay={getSenderDisplayName(selectedPhone, formData.from_phone_number)}
           />
 
           <Card>
@@ -258,4 +256,15 @@ export function makeReviewStep<
       );
     },
   };
+}
+
+function getSenderDisplayName(
+  phoneNumber: PhoneNumber | undefined,
+  fallbackPhoneNumber: string,
+): string {
+  if (!phoneNumber) return fallbackPhoneNumber;
+
+  const senderAddress = phoneNumber.mac_relay_sender_id || phoneNumber.phone_number;
+  const label = phoneNumber.friendly_name || senderAddress;
+  return phoneNumber.imessage_enabled ? `${label} · iMessage` : label;
 }

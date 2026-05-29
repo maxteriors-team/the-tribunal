@@ -37,11 +37,15 @@ class TextMessageProvider(Protocol):
         ...
 
 
-def get_text_message_provider(preferred_provider: str | None = None) -> TextMessageProvider:
+def get_text_message_provider(
+    preferred_provider: str | None = None,
+    *,
+    mac_relay_service: str | None = None,
+) -> TextMessageProvider:
     """Return the configured text provider, defaulting safely to Telnyx."""
     provider = (preferred_provider or settings.text_message_provider).strip().lower()
     if provider in {"mac_relay", "mac-relay", "imessage"} and _mac_relay_configured():
-        return build_configured_mac_relay_service()
+        return build_configured_mac_relay_service(mac_relay_service)
     return TelnyxSMSService(settings.telnyx_api_key)
 
 

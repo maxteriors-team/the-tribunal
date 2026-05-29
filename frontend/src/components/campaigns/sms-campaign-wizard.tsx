@@ -105,7 +105,7 @@ export function SMSCampaignWizard({
         id: "basics",
         phoneNumbers,
         namePlaceholder: "e.g., Summer Sale Outreach",
-        emptyPhoneLabel: "No SMS-enabled phone numbers available",
+        emptyPhoneLabel: "No SMS or iMessage sender identities available",
       }),
       makeContactsStep<StepId, SMSFormData>({
         id: "contacts",

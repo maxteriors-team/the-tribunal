@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone } from "lucide-react";
+import { MessageCircle, Phone } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,19 +75,27 @@ export function BasicsStep({
             <SelectValue placeholder="Select a phone number" />
           </SelectTrigger>
           <SelectContent>
-            {phoneNumbers.map((phone) => (
-              <SelectItem key={phone.id} value={phone.phone_number}>
-                <div className="flex items-center gap-2">
-                  <Phone className="size-4" />
-                  <span>{phone.phone_number}</span>
-                  {phone.friendly_name && (
-                    <span className="text-muted-foreground">
-                      ({phone.friendly_name})
-                    </span>
-                  )}
-                </div>
-              </SelectItem>
-            ))}
+            {phoneNumbers.map((phone) => {
+              const isImessage = Boolean(phone.imessage_enabled);
+              const displayAddress = phone.mac_relay_sender_id || phone.phone_number;
+              const Icon = isImessage ? MessageCircle : Phone;
+              return (
+                <SelectItem key={phone.id} value={phone.phone_number}>
+                  <div className="flex items-center gap-2">
+                    <Icon className="size-4" />
+                    <span>{displayAddress}</span>
+                    {phone.friendly_name && (
+                      <span className="text-muted-foreground">
+                        ({phone.friendly_name})
+                      </span>
+                    )}
+                    {isImessage && (
+                      <span className="text-muted-foreground">iMessage</span>
+                    )}
+                  </div>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
         {errors.from_phone_number && (

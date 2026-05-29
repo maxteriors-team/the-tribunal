@@ -42,13 +42,14 @@ export default function NewSMSCampaignPage() {
     enabled: !!workspaceId,
   });
 
-  // Fetch phone numbers from API - filter to SMS-enabled only
+  // Fetch active text-capable sender identities. The backend includes both
+  // Telnyx SMS numbers and Mac relay/iMessage senders in the active list.
   const { data: phoneNumbersData, isPending: phoneNumbersLoading } = useQuery({
-    queryKey: queryKeys.phoneNumbers.smsEnabled(workspaceId ?? ""),
+    queryKey: queryKeys.phoneNumbers.activeTextCapable(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
-      const response = await phoneNumbersApi.list(workspaceId, { sms_enabled: true });
-      return response.items;
+      const response = await phoneNumbersApi.list(workspaceId, { active_only: true });
+      return response.items.filter((phone) => phone.sms_enabled || phone.imessage_enabled);
     },
     enabled: !!workspaceId,
   });
@@ -157,7 +158,7 @@ export default function NewSMSCampaignPage() {
           <div>
             <h1 className="text-xl font-semibold">Create SMS Campaign</h1>
             <p className="text-sm text-muted-foreground">
-              Set up a new SMS campaign to reach your contacts
+              Set up a new SMS or iMessage campaign to reach your contacts
             </p>
           </div>
         </div>
