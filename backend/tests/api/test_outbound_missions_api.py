@@ -360,50 +360,36 @@ def _rows_result(rows: list[tuple[Any, ...]]) -> MagicMock:
 class TestMissionAuth:
     """Every mission route requires authentication."""
 
-    async def test_list_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
-        response = await noauth_client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions"
-        )
+    async def test_list_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
+        response = await noauth_client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions")
         assert response.status_code == 401
 
-    async def test_create_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_create_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/outbound-missions",
             json={"name": "x"},
         )
         assert response.status_code == 401
 
-    async def test_get_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_get_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         response = await noauth_client.get(
             f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}"
         )
         assert response.status_code == 401
 
-    async def test_delete_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_delete_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         response = await noauth_client.delete(
             f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}"
         )
         assert response.status_code == 401
 
-    async def test_start_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_start_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/start"
         )
         assert response.status_code == 401
 
-    async def test_stats_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_stats_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         response = await noauth_client.get(
             f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/stats"
         )
@@ -467,17 +453,11 @@ class TestMissionValidation:
         assert response.status_code == 422
 
     async def test_list_page_zero_returns_422(self, client: AsyncClient) -> None:
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions?page=0"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions?page=0")
         assert response.status_code == 422
 
-    async def test_list_page_size_too_high_returns_422(
-        self, client: AsyncClient
-    ) -> None:
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions?page_size=101"
-        )
+    async def test_list_page_size_too_high_returns_422(self, client: AsyncClient) -> None:
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions?page_size=101")
         assert response.status_code == 422
 
     async def test_list_invalid_status_returns_422(self, client: AsyncClient) -> None:
@@ -486,29 +466,20 @@ class TestMissionValidation:
         )
         assert response.status_code == 422
 
-    async def test_get_invalid_mission_uuid_returns_422(
-        self, client: AsyncClient
-    ) -> None:
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/not-a-uuid"
-        )
+    async def test_get_invalid_mission_uuid_returns_422(self, client: AsyncClient) -> None:
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions/not-a-uuid")
         assert response.status_code == 422
 
     async def test_get_nonexistent_mission_returns_404(
         self, client: AsyncClient, mock_db: AsyncMock
     ) -> None:
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(None))
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{uuid.uuid4()}"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions/{uuid.uuid4()}")
         assert response.status_code == 404
 
-    async def test_list_prospects_invalid_score_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_prospects_invalid_score_returns_422(self, client: AsyncClient) -> None:
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/prospects"
-            "?min_score=-1"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/prospects?min_score=-1"
         )
         assert response.status_code == 422
 
@@ -578,19 +549,15 @@ class TestCreateMission:
 
 
 class TestListMissions:
-    async def test_list_returns_pagination(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_returns_pagination(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         with patch(
-            "app.api.v1.outbound_missions.paginate", new_callable=AsyncMock
+            "app.services.outbound.mission_service.paginate", new_callable=AsyncMock
         ) as mock_paginate:
             mock_paginate.return_value = PaginationResult(
                 items=[mission], total=1, page=1, page_size=50, pages=1
             )
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/outbound-missions"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions")
 
         assert response.status_code == 200
         body = response.json()
@@ -602,15 +569,11 @@ class TestListMissions:
 
 
 class TestGetMission:
-    async def test_get_returns_mission(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_get_returns_mission(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
 
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}")
         assert response.status_code == 200
         assert response.json()["id"] == str(MISSION_ID)
 
@@ -643,9 +606,7 @@ class TestMissionLifecycle:
         )
         assert response.status_code == 400
 
-    async def test_pause_from_active(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_pause_from_active(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.ACTIVE)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         response = await client.post(
@@ -655,9 +616,7 @@ class TestMissionLifecycle:
         assert mission.status == MissionStatus.PAUSED
         assert mission.paused_at is not None
 
-    async def test_resume_from_paused(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_resume_from_paused(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.PAUSED)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         response = await client.post(
@@ -666,9 +625,7 @@ class TestMissionLifecycle:
         assert response.status_code == 200
         assert mission.status == MissionStatus.ACTIVE
 
-    async def test_complete_from_active(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_complete_from_active(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.ACTIVE)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         response = await client.post(
@@ -678,9 +635,7 @@ class TestMissionLifecycle:
         assert mission.status == MissionStatus.COMPLETED
         assert mission.completed_at is not None
 
-    async def test_archive_from_draft(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_archive_from_draft(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.DRAFT)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         response = await client.post(
@@ -702,32 +657,22 @@ class TestMissionLifecycle:
 
 
 class TestDeleteMission:
-    async def test_delete_draft_returns_204(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_delete_draft_returns_204(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.DRAFT)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
-        response = await client.delete(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}"
-        )
+        response = await client.delete(f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}")
         assert response.status_code == 204
         mock_db.delete.assert_awaited_with(mission)
 
-    async def test_delete_active_returns_400(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_delete_active_returns_400(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.ACTIVE)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
-        response = await client.delete(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}"
-        )
+        response = await client.delete(f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}")
         assert response.status_code == 400
 
 
 class TestUpdateMission:
-    async def test_update_draft_succeeds(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_update_draft_succeeds(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.DRAFT)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
 
@@ -739,9 +684,7 @@ class TestUpdateMission:
         assert mission.name == "Renamed"
         assert mission.daily_outreach_cap == 25
 
-    async def test_update_active_returns_400(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_update_active_returns_400(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission(mission_status=MissionStatus.ACTIVE)
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         response = await client.put(
@@ -757,9 +700,7 @@ class TestUpdateMission:
 
 
 class TestMissionStats:
-    async def test_stats_computes_rates(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_stats_computes_rates(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         # contacted=20, replied=5, qualified=2, booked=1
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
@@ -801,15 +742,13 @@ class TestMissionStats:
 
 
 class TestProspects:
-    async def test_list_prospects_paginated(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_prospects_paginated(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         prospect = _make_mock_prospect()
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
 
         with patch(
-            "app.api.v1.outbound_missions.paginate", new_callable=AsyncMock
+            "app.services.outbound.mission_service.paginate", new_callable=AsyncMock
         ) as mock_paginate:
             mock_paginate.return_value = PaginationResult(
                 items=[prospect], total=1, page=1, page_size=50, pages=1
@@ -823,9 +762,7 @@ class TestProspects:
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["company_name"] == "Acme"
-        assert body["items"][0]["evidence"] == [
-            {"snippet": "Plumbing services since 1999"}
-        ]
+        assert body["items"][0]["evidence"] == [{"snippet": "Plumbing services since 1999"}]
         assert body["items"][0]["provenance"] == {"origin": "google_places"}
 
     async def test_get_prospect_belongs_to_mission(
@@ -840,8 +777,7 @@ class TestProspects:
             ]
         )
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/prospects/{PROSPECT_ID}"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/prospects/{PROSPECT_ID}"
         )
         assert response.status_code == 200
         assert response.json()["id"] == str(PROSPECT_ID)
@@ -858,8 +794,7 @@ class TestProspects:
             ]
         )
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/prospects/{PROSPECT_ID}"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/prospects/{PROSPECT_ID}"
         )
         assert response.status_code == 404
 
@@ -954,22 +889,19 @@ class TestProspects:
 
 
 class TestDiscoveryJobs:
-    async def test_list_jobs_paginated(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_jobs_paginated(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         job = _make_mock_discovery_job()
         mock_db.execute = AsyncMock(return_value=_scalar_one_result(mission))
 
         with patch(
-            "app.api.v1.outbound_missions.paginate", new_callable=AsyncMock
+            "app.services.outbound.mission_service.paginate", new_callable=AsyncMock
         ) as mock_paginate:
             mock_paginate.return_value = PaginationResult(
                 items=[job], total=1, page=1, page_size=50, pages=1
             )
             response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-                f"{MISSION_ID}/discovery-jobs"
+                f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/discovery-jobs"
             )
 
         assert response.status_code == 200
@@ -989,8 +921,7 @@ class TestDiscoveryJobs:
             ]
         )
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/discovery-jobs/{JOB_ID}"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/discovery-jobs/{JOB_ID}"
         )
         assert response.status_code == 200
         assert response.json()["id"] == str(JOB_ID)
@@ -1007,8 +938,7 @@ class TestDiscoveryJobs:
             ]
         )
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/discovery-jobs/{JOB_ID}"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/discovery-jobs/{JOB_ID}"
         )
         assert response.status_code == 404
 
@@ -1040,8 +970,7 @@ class TestEnrichmentStatus:
         )
 
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/enrichment-status"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/enrichment-status"
         )
         assert response.status_code == 200
         body = response.json()
@@ -1115,9 +1044,7 @@ class TestSequenceOverview:
         assert body["total_enrollments"] == 0
         assert body["enrollment_counts"] == {}
 
-    async def test_list_enrollments(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_enrollments(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         mission = _make_mock_mission()
         enrollment = MagicMock()
         enrollment.id = uuid.uuid4()
@@ -1149,8 +1076,7 @@ class TestSequenceOverview:
         )
 
         response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/outbound-missions/"
-            f"{MISSION_ID}/enrollments"
+            f"/api/v1/workspaces/{WS_ID}/outbound-missions/{MISSION_ID}/enrollments"
         )
         assert response.status_code == 200
         body = response.json()
