@@ -23,6 +23,16 @@ uv run uvicorn app.main:app --reload --port 8000
 
 The API will be available at <http://localhost:8000> and the OpenAPI docs at <http://localhost:8000/docs>.
 
+### Migration safety
+
+Before opening a PR that adds or edits Alembic migrations, run the root target that mirrors CI against your local backend database:
+
+```bash
+make migrate.check
+```
+
+It runs `alembic upgrade head`, `alembic check`, `alembic downgrade -1`, and `alembic upgrade head` from `backend/`. Use `make migrate.heads` to confirm the migration graph has a single head, and `make migrate.history` when you need to inspect the full revision chain.
+
 ### Frontend (`frontend/`)
 
 ```bash

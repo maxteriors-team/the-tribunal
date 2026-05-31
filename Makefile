@@ -64,6 +64,30 @@ db.reset: ## Stop services, drop volumes, restart, re-run migrations. Destructiv
 migrate: ## Apply pending Alembic migrations.
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
+.PHONY: migrate.heads
+migrate.heads: ## Verify the Alembic graph has exactly one head.
+	@cd $(BACKEND_DIR) && \
+		heads_output=$$(mktemp); \
+		trap 'rm -f "$$heads_output"' EXIT; \
+		uv run alembic heads --resolve-dependencies >"$$heads_output"; \
+		cat "$$heads_output"; \
+		count=$$(sed '/^[[:space:]]*$$/d' "$$heads_output" | wc -l | tr -d ' '); \
+		if [ "$$count" -ne 1 ]; then \
+			echo "✗ expected exactly 1 Alembic head, found $$count"; \
+			exit 1; \
+		fi
+
+.PHONY: migrate.history
+migrate.history: ## Show Alembic migration history.
+	cd $(BACKEND_DIR) && uv run alembic history --verbose
+
+.PHONY: migrate.check
+migrate.check: ## Run CI-shaped migration safety check against local backend DB.
+	cd $(BACKEND_DIR) && uv run alembic upgrade head
+	cd $(BACKEND_DIR) && uv run alembic check
+	cd $(BACKEND_DIR) && uv run alembic downgrade -1
+	cd $(BACKEND_DIR) && uv run alembic upgrade head
+
 .PHONY: migrate.new
 migrate.new: ## Autogenerate a new migration: make migrate.new m="add foo column".
 	@if [ -z "$(m)" ]; then echo "✗ missing message — usage: make migrate.new m=\"...\""; exit 1; fi

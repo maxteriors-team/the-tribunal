@@ -50,6 +50,9 @@ Run `make help` for the full list. Cheat sheet:
 | `make db.down` | Stop docker compose services (keeps volumes). |
 | `make db.reset` | **Destructive.** Drop volumes, restart, re-migrate. |
 | `make migrate` | `alembic upgrade head`. |
+| `make migrate.check` | CI-shaped local migration safety check: upgrade head, check, downgrade -1, upgrade head. |
+| `make migrate.heads` | Verify the Alembic graph has exactly one head. |
+| `make migrate.history` | Show verbose Alembic migration history. |
 | `make migrate.new m="..."` | Autogenerate a new Alembic revision. |
 | `make test` / `test.backend` / `test.frontend` | Run tests. |
 | `make lint` | Ruff + ESLint. |
