@@ -11,10 +11,11 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-# Keep test security/CORS expectations deterministic even when a developer's
-# local backend/.env disables webhook verification or Vercel preview CORS.
+# Keep test security/CORS/worker expectations deterministic even when a
+# developer's local backend/.env flips deployment-mode flags.
 os.environ.setdefault("SKIP_WEBHOOK_VERIFICATION", "false")
 os.environ.setdefault("CORS_ALLOW_VERCEL_PREVIEWS", "true")
+os.environ.setdefault("RUN_BACKGROUND_WORKERS", "true")
 
 import pytest
 

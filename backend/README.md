@@ -66,13 +66,31 @@ Rules for this directory:
 
 ## Workers
 
-All background workers run **inside the single `backend-api` FastAPI process**.
-There is no separate Railway service for workers, no Celery beat, and no
-separate worker container. On startup, `app/main.py`'s lifespan handler calls
-`start_all_workers()` (defined in `app/workers/__init__.py`), which iterates
-`ALL_REGISTRIES` and starts each worker as an `asyncio.Task` on the same event
-loop that serves HTTP/WebSocket traffic. Shutdown calls `stop_all_workers()`
-to drain in-flight work in reverse order.
+By default, background workers still run **inside the single `backend-api`
+FastAPI process** for local/dev parity. On startup, `app/main.py`'s lifespan
+handler checks `settings.run_background_workers` (`RUN_BACKGROUND_WORKERS` in
+the environment). When it is `true`, the API process calls `start_all_workers()`
+(defined in `app/workers/__init__.py`), which iterates `ALL_REGISTRIES` and
+starts each worker as an `asyncio.Task` on the same event loop that serves
+HTTP/WebSocket traffic. Shutdown calls `stop_all_workers()` to drain in-flight
+work in reverse order.
+
+Set `RUN_BACKGROUND_WORKERS=false` for **API-only mode**. In that mode the
+FastAPI app still validates startup configuration, serves HTTP/WebSocket routes,
+and marks `/readyz` healthy after Postgres/Redis checks, but it logs
+`background_workers_disabled` and does not start or stop polling loops in the
+lifespan. If workers are disabled on the API service, run exactly one separate
+worker process with:
+
+```bash
+cd backend
+uv run backend-workers
+# equivalent: uv run python -m app.workers.runner
+```
+
+The standalone runner validates the same startup config, starts every registry,
+waits for SIGINT/SIGTERM, then stops workers, closes Redis, and disposes the SQL
+Alchemy engine.
 
 Each worker subclasses `BaseWorker` (`app/workers/base.py`) and exposes a
 `POLL_INTERVAL_SECONDS` class variable plus a `_process_items()` coroutine.
@@ -108,51 +126,78 @@ Startup order matches `ALL_REGISTRIES` in `app/workers/__init__.py`.
 
 ### Operational implications
 
-Because every worker loop lives in the API process, the deployment topology is
+Because worker loops can run in the API process, the deployment topology is
 constrained in ways that aren't obvious from the file layout:
 
-1. **Run with exactly one process per replica.** Launching uvicorn/gunicorn
-   with `--workers > 1` forks the lifespan handler in every worker process, so
-   every poll loop runs `N` times in parallel against the same database. That
-   means duplicate SMS sends, duplicate calls, duplicate appointment
-   reminders, and racing approval execution. Keep `--workers 1` (or omit the
-   flag) and scale CPU by giving the container more cores; the loops are I/O-
-   bound so a single event loop saturates well past one core. Multiple
-   *replicas* (separate containers) have the same problem — see point 2.
+1. **Run with exactly one process per worker-enabled replica.** Launching
+   uvicorn/gunicorn with `--workers > 1` while `RUN_BACKGROUND_WORKERS=true`
+   forks the lifespan handler in every worker process, so every poll loop runs
+   `N` times in parallel against the same database. That means duplicate SMS
+   sends, duplicate calls, duplicate appointment reminders, and racing approval
+   execution. Keep `--workers 1` (or omit the flag) on worker-enabled services
+   and scale CPU by giving the container more cores; the loops are I/O-bound so
+   a single event loop saturates well past one core.
 
-2. **Horizontal scaling requires extracting workers or adding leader-election.**
-   Running >1 `backend-api` replica today will multiply every poll loop by the
-   replica count for the same reason as point 1. Two safe paths forward when
-   that's needed:
-   - **Extract**: move `start_all_workers()` into a dedicated entrypoint
-     (e.g. `python -m app.workers.runner`) and deploy it as a separate
-     `backend-workers` Railway service with replica count fixed at 1.
-     Keep `backend-api` worker-free.
-   - **Coordinate**: gate each worker's `_process_items()` behind a Redis
-     lease (`SET worker:<name>:leader <pod-id> NX EX <interval*2>`) so only
-     the lease-holder does work. Cheaper than a full extraction but every
-     worker becomes responsible for its own leader contract.
+2. **Use API-only mode before horizontally scaling the API.** Multiple
+   `backend-api` replicas with `RUN_BACKGROUND_WORKERS=true` multiply every poll
+   loop by the replica count. To scale HTTP/WebSocket capacity safely, set
+   `RUN_BACKGROUND_WORKERS=false` on the API service and deploy a single
+   `backend-workers` Railway service running `uv run backend-workers` (or
+   `python -m app.workers.runner`). Keep the worker service replica count fixed
+   at 1 until leader election or external queueing exists.
 
-3. **Cross-replica coordination state already lives in shared stores.** If
-   leader-election is added, the inputs are mostly already in Postgres or
-   Redis — workers do not rely on in-process memory for scheduling:
-   - Per-item idempotency is in the DB: `AutomationExecution` rows,
-     `appointment.reminders_sent` arrays, `CampaignContactStatus`,
-     `automation.last_evaluated_at`, the `noshow-day*-sent` /
-     `never-booked-reengaged` tags. A second replica picking up the same
-     item will short-circuit on these.
-   - Per-worker liveness is in Redis: `worker:<component_name>:heartbeat`
-     keys with a `3 × poll_interval` TTL (see `app/workers/base.py`,
-     `heartbeat_key()`). `/readyz` reads these to fail health checks when a
-     loop wedges.
-   - Per-job retry/failure state is in the DB: `failed_jobs` rows written by
-     `RetryableWorker._dead_letter` (see `backend/scripts/inspect_dlq.py`).
+3. **A separate worker service is not leader election.** API-only mode prevents
+   HTTP replicas from starting duplicate loops, but starting more than one
+   `backend-workers` replica is still unsafe. Gate each worker's
+   `_process_items()` behind a Redis lease (`SET worker:<name>:leader <pod-id>
+   NX EX <interval*2>`) or move scheduling into a queue before increasing worker
+   replicas.
 
-   The remaining gap is a *scheduler-level* `next_run` lease — workers
-   currently rely on every replica polling on the same wall-clock cadence,
-   which is fine when there is exactly one replica and unsafe otherwise.
-   Add a `worker_schedule(component_name, next_run_at)` table or Redis lease
-   before turning the replica count up.
+### Railway deployment modes
+
+The committed `backend/railway.toml` keeps the existing single-service default:
+
+```toml
+[deploy]
+startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'"
+```
+
+For one API service that also runs workers, leave `RUN_BACKGROUND_WORKERS=true`
+(or unset) and keep the service replica count at 1. For API-only horizontal
+scaling, set the `backend-api` Railway variable `RUN_BACKGROUND_WORKERS=false`,
+then create a separate `backend-workers` service from the same repo/backend
+root with the same pre-deploy migration command disabled or omitted and this
+start command:
+
+```bash
+uv run backend-workers
+```
+
+Do not attach `/readyz` as an HTTP healthcheck to the worker-only service unless
+it also runs an HTTP server; use Railway's process restart policy/logs for that
+service.
+
+### Cross-replica coordination state
+
+If leader-election is added, the inputs are mostly already in Postgres or Redis
+— workers do not rely on in-process memory for scheduling:
+
+- Per-item idempotency is in the DB: `AutomationExecution` rows,
+  `appointment.reminders_sent` arrays, `CampaignContactStatus`,
+  `automation.last_evaluated_at`, the `noshow-day*-sent` /
+  `never-booked-reengaged` tags. A second replica picking up the same item will
+  short-circuit on these.
+- Per-worker liveness is in Redis: `worker:<component_name>:heartbeat` keys with
+  a `3 × poll_interval` TTL (see `app/workers/base.py`, `heartbeat_key()`).
+  `/readyz` reads these to fail health checks when a loop wedges.
+- Per-job retry/failure state is in the DB: `failed_jobs` rows written by
+  `RetryableWorker._dead_letter` (see `backend/scripts/inspect_dlq.py`).
+
+The remaining gap is a *scheduler-level* `next_run` lease — workers currently
+rely on every replica polling on the same wall-clock cadence, which is fine when
+there is exactly one replica and unsafe otherwise. Add a
+`worker_schedule(component_name, next_run_at)` table or Redis lease before
+turning the replica count up.
 
 ## Observability — OpenTelemetry tracing
 

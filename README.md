@@ -71,6 +71,8 @@ docker compose up -d
 cp .env.example .env   # configure your secrets
 uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
+# Optional split mode: RUN_BACKGROUND_WORKERS=false uv run uvicorn ...
+# then run workers separately with: uv run backend-workers
 ```
 
 ### Manual: frontend only

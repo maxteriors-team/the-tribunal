@@ -332,12 +332,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler.
 
     Sets ``app.state.ready`` to ``True`` only after configuration validation
-    and worker startup both succeed. ``/readyz`` reads this flag and returns
-    503 while it is ``False`` so orchestrators (Railway, Kubernetes) hold
-    traffic on the previous container until this one finishes booting.
+    and the configured runtime mode finish booting. ``/readyz`` reads this flag
+    and returns 503 while it is ``False`` so orchestrators (Railway,
+    Kubernetes) hold traffic on the previous container until this one finishes
+    booting.
     """
     log = logger.bind(context="app_lifespan")
-    log.info("Starting AI CRM backend...")
+    run_background_workers = settings.run_background_workers
+    runtime_mode = "api_with_workers" if run_background_workers else "api_only"
+    log.info(
+        "backend_starting",
+        runtime_mode=runtime_mode,
+        run_background_workers=run_background_workers,
+    )
 
     # Default to not-ready so any in-flight readiness probe between process
     # start and lifespan completion returns 503. We never serve traffic with
@@ -347,21 +354,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Validate configuration at startup
     _validate_startup_config()
 
-    # Start all background workers
-    await start_all_workers()
+    if run_background_workers:
+        log.info("background_workers_starting", runtime_mode=runtime_mode)
+        await start_all_workers()
+        log.info("background_workers_started", runtime_mode=runtime_mode)
+    else:
+        log.info(
+            "background_workers_disabled",
+            runtime_mode=runtime_mode,
+            reason="RUN_BACKGROUND_WORKERS=false",
+        )
 
-    # Only mark ready after both validation and worker startup succeed. If
-    # either raises, ``ready`` stays ``False`` and the process exits before
+    # Only mark ready after validation and the configured runtime mode succeed.
+    # If either raises, ``ready`` stays ``False`` and the process exits before
     # serving traffic.
     app.state.ready = True
-    log.info("startup_complete", ready=True)
+    log.info(
+        "startup_complete",
+        ready=True,
+        runtime_mode=runtime_mode,
+        run_background_workers=run_background_workers,
+    )
 
     yield
 
-    log.info("Shutting down AI CRM backend...")
+    log.info("backend_shutting_down", runtime_mode=runtime_mode)
     # Flip ready off immediately so /readyz reports 503 during drain.
     app.state.ready = False
-    await stop_all_workers()
+    if run_background_workers:
+        await stop_all_workers()
+    else:
+        log.info("background_workers_stop_skipped", runtime_mode=runtime_mode)
     await close_redis()
     # Dispose the SQLAlchemy engine so all pooled asyncpg connections are
     # closed cleanly. Without this, shutdown can leave half-open sockets that

@@ -21,7 +21,7 @@ uv run alembic upgrade head       # Apply database migrations
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-The API will be available at <http://localhost:8000> and the OpenAPI docs at <http://localhost:8000/docs>.
+The API will be available at <http://localhost:8000> and the OpenAPI docs at <http://localhost:8000/docs>. By default this process also starts polling workers; set `RUN_BACKGROUND_WORKERS=false` for API-only mode and run `uv run backend-workers` in a separate shell when you need split API/worker parity.
 
 ### Migration safety
 

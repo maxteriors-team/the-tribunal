@@ -398,7 +398,7 @@ class TestProductionCorsWiring:
 
 
 class TestLifespan:
-    """``lifespan(app)`` runs validate → start_workers → yield → stop → close.
+    """``lifespan(app)`` runs validate → optional workers → stop → close.
 
     We patch every external side effect (worker pool, Redis, SQLAlchemy engine)
     so the context manager can complete entirely in-process and we can assert
@@ -423,7 +423,10 @@ class TestLifespan:
         def _validate() -> None:
             calls.append("validate")
 
+        cfg = MagicMock(run_background_workers=True)
+
         with (
+            patch.object(main_module, "settings", cfg),
             patch.object(main_module, "start_all_workers", _start_workers),
             patch.object(main_module, "stop_all_workers", _stop_workers),
             patch.object(main_module, "close_redis", _close_redis),
@@ -452,7 +455,9 @@ class TestLifespan:
         """
         fake_engine = MagicMock()
         fake_engine.dispose = AsyncMock()
+        cfg = MagicMock(run_background_workers=True)
         with (
+            patch.object(main_module, "settings", cfg),
             patch.object(main_module, "start_all_workers", AsyncMock()),
             patch.object(main_module, "stop_all_workers", AsyncMock()),
             patch.object(main_module, "close_redis", AsyncMock()),
@@ -461,6 +466,30 @@ class TestLifespan:
         ):
             async with lifespan(production_app):
                 pass
+        fake_engine.dispose.assert_awaited_once()
+
+    async def test_api_only_mode_does_not_start_or_stop_workers(self) -> None:
+        """``RUN_BACKGROUND_WORKERS=false`` leaves the API lifespan worker-free."""
+        fake_engine = MagicMock()
+        fake_engine.dispose = AsyncMock()
+        cfg = MagicMock(run_background_workers=False)
+        start_workers = AsyncMock()
+        stop_workers = AsyncMock()
+
+        with (
+            patch.object(main_module, "settings", cfg),
+            patch.object(main_module, "start_all_workers", start_workers),
+            patch.object(main_module, "stop_all_workers", stop_workers),
+            patch.object(main_module, "close_redis", AsyncMock()),
+            patch.object(main_module, "_validate_startup_config", MagicMock()),
+            patch.object(main_module, "engine", fake_engine),
+        ):
+            target_app = FastAPI()
+            async with lifespan(target_app):
+                assert target_app.state.ready is True
+
+        start_workers.assert_not_awaited()
+        stop_workers.assert_not_awaited()
         fake_engine.dispose.assert_awaited_once()
 
 
@@ -492,7 +521,10 @@ class TestStartupReadinessFlag:
         # production_app between tests.
         target_app = FastAPI()
 
+        cfg = MagicMock(run_background_workers=True)
+
         with (
+            patch.object(main_module, "settings", cfg),
             patch.object(main_module, "start_all_workers", AsyncMock()),
             patch.object(main_module, "stop_all_workers", AsyncMock()),
             patch.object(main_module, "close_redis", AsyncMock()),
@@ -514,7 +546,10 @@ class TestStartupReadinessFlag:
         def _boom() -> None:
             raise RuntimeError("bad config")
 
+        cfg = MagicMock(run_background_workers=True)
+
         with (
+            patch.object(main_module, "settings", cfg),
             patch.object(main_module, "start_all_workers", AsyncMock()),
             patch.object(main_module, "stop_all_workers", AsyncMock()),
             patch.object(main_module, "close_redis", AsyncMock()),
@@ -533,7 +568,10 @@ class TestStartupReadinessFlag:
         target_app = FastAPI()
         failing_workers = AsyncMock(side_effect=RuntimeError("worker boom"))
 
+        cfg = MagicMock(run_background_workers=True)
+
         with (
+            patch.object(main_module, "settings", cfg),
             patch.object(main_module, "start_all_workers", failing_workers),
             patch.object(main_module, "stop_all_workers", AsyncMock()),
             patch.object(main_module, "close_redis", AsyncMock()),

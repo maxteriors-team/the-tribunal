@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"  # Public base URL for short link redirects
 
     # Workers
+    # Keep ``True`` for the legacy single-process API+workers topology. Set
+    # ``RUN_BACKGROUND_WORKERS=false`` on API-only deployments that should serve
+    # HTTP/WebSocket traffic without starting polling loops in-process.
+    run_background_workers: bool = True
     campaign_poll_interval: int = 5
     ai_response_delay_ms: int = 2000
 

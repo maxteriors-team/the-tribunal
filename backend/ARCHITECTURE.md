@@ -51,10 +51,13 @@ this doc disagree, the code wins — please update the doc.
                                         └─────────────────┘
 ```
 
-The HTTP app, workers, and the voice WebSocket all run in the **same
-process** — workers are started/stopped by `lifespan` in `app/main.py` via
-`app/workers/__init__.py::start_all_workers()`. There is no separate worker
-deployment today.
+The HTTP app, workers, and the voice WebSocket can run in the **same process**
+for the default local/single-replica topology — workers are started/stopped by
+`lifespan` in `app/main.py` via
+`app/workers/__init__.py::start_all_workers()` when `RUN_BACKGROUND_WORKERS` is
+`true`. Set `RUN_BACKGROUND_WORKERS=false` for API-only mode and run
+`uv run backend-workers` from `backend/` as a separate single-replica worker
+process.
 
 ---
 

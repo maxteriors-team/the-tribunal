@@ -3,6 +3,9 @@ builder = "nixpacks"
 
 [deploy]
 preDeployCommand = ["alembic upgrade head"]
+# Default service topology is API + in-process workers. To scale API replicas,
+# set RUN_BACKGROUND_WORKERS=false on this service and run a separate
+# backend-workers service with startCommand = "uv run backend-workers".
 startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'"
 healthcheckPath = "/readyz"
 healthcheckTimeout = 60

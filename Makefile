@@ -37,6 +37,10 @@ dev: dev.db ## Run db + backend + frontend together (Ctrl-C stops all).
 dev.backend: ## Run FastAPI with --reload on :8000.
 	cd $(BACKEND_DIR) && uv run uvicorn app.main:app --reload --port 8000
 
+.PHONY: dev.workers
+dev.workers: ## Run backend background workers without the API server.
+	cd $(BACKEND_DIR) && RUN_BACKGROUND_WORKERS=true uv run backend-workers
+
 .PHONY: dev.frontend
 dev.frontend: ## Run Next.js dev server on :3000.
 	cd $(FRONTEND_DIR) && npm run dev
