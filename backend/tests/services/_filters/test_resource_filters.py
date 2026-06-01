@@ -19,10 +19,19 @@ from sqlalchemy.dialects import postgresql
 
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceType, LeadDiscoveryJob
+from app.models.lead_prospect import LeadProspect, ProspectIdentityKind, ProspectStatus
 from app.models.opportunity import Opportunity
+from app.models.outbound_mission import MissionStatus, OutboundMission
+from app.services._filters import apply_filter_specs
 from app.services.campaigns.campaign_filters import apply_campaign_filters
-from app.services.contacts.contact_filters import apply_contact_filters
+from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
+from app.services.outbound.mission_service import (
+    _DISCOVERY_JOB_FILTER_SPECS,
+    _MISSION_FILTER_SPECS,
+    _PROSPECT_FILTER_SPECS,
+)
 
 _WORKSPACE_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -42,6 +51,18 @@ def _sql(stmt: Any) -> str:
 
 
 class TestContactFiltersBehaviorPreserved:
+    def test_base_list_filters_are_shared(self) -> None:
+        stmt = apply_contact_list_filters(
+            select(Contact),
+            status_filter="new",
+            search="alice",
+        )
+        sql = _sql(stmt)
+        assert "contacts.status = 'new'" in sql
+        assert "%alice%" in sql
+        assert "contacts.first_name ILIKE" in sql
+        assert "contacts.company_name ILIKE" in sql
+
     def test_simple_kwargs_still_work(self) -> None:
         stmt = apply_contact_filters(
             select(Contact),
@@ -262,3 +283,63 @@ class TestOpportunityFiltersBehaviorPreserved:
             filter_logic="or",
         )
         assert " OR " in _sql(stmt).upper()
+
+
+# ---------------------------------------------------------------------------
+# Outbound mission resources
+# ---------------------------------------------------------------------------
+
+
+class TestOutboundResourceFilterSpecs:
+    def test_mission_specs_match_previous_list_filters(self) -> None:
+        stmt = apply_filter_specs(
+            select(OutboundMission),
+            _MISSION_FILTER_SPECS,
+            {
+                "status_filter": MissionStatus.DRAFT,
+                "objective": "book_call",
+                "search": "roofing",
+            },
+        )
+        sql = _sql(stmt)
+        assert "outbound_missions.status = 'draft'" in sql
+        assert "outbound_missions.objective = 'book_call'" in sql
+        assert "%roofing%" in sql
+
+    def test_prospect_specs_match_previous_list_filters(self) -> None:
+        stmt = apply_filter_specs(
+            select(LeadProspect),
+            _PROSPECT_FILTER_SPECS,
+            {
+                "status_filter": ProspectStatus.ENRICHED,
+                "identity_kind": ProspectIdentityKind.EMAIL,
+                "source_type": "google_places",
+                "min_score": 25,
+                "max_score": 80,
+                "has_email": True,
+                "has_phone": False,
+                "search": "acme",
+            },
+        )
+        sql = _sql(stmt)
+        assert "lead_prospects.status = 'enriched'" in sql
+        assert "lead_prospects.identity_kind = 'email'" in sql
+        assert "lead_prospects.source_type = 'google_places'" in sql
+        assert "lead_prospects.lead_score >= 25" in sql
+        assert "lead_prospects.lead_score <= 80" in sql
+        assert "lead_prospects.email_hash IS NOT NULL" in sql
+        assert "lead_prospects.phone_hash IS NULL" in sql
+        assert "%acme%" in sql
+
+    def test_discovery_job_specs_match_previous_list_filters(self) -> None:
+        stmt = apply_filter_specs(
+            select(LeadDiscoveryJob),
+            _DISCOVERY_JOB_FILTER_SPECS,
+            {
+                "status_filter": DiscoveryJobStatus.SUCCEEDED,
+                "source_type": DiscoverySourceType.GOOGLE_PLACES,
+            },
+        )
+        sql = _sql(stmt)
+        assert "lead_discovery_jobs.status = 'succeeded'" in sql
+        assert "lead_discovery_jobs.source_type = 'google_places'" in sql

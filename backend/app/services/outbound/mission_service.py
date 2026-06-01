@@ -54,6 +54,7 @@ from app.schemas.outbound_sequence import (
     OutboundSequenceEnrollmentResponse,
     OutboundSequenceResponse,
 )
+from app.services._filters import FilterSpec, apply_filter_specs, presence_filter, search_filter
 
 logger = structlog.get_logger()
 
@@ -67,6 +68,32 @@ _STARTABLE_STATUSES: frozenset[MissionStatus] = frozenset(
 )
 _DELETABLE_STATUSES: frozenset[MissionStatus] = frozenset(
     {MissionStatus.DRAFT, MissionStatus.ARCHIVED}
+)
+_MISSION_FILTER_SPECS: tuple[FilterSpec, ...] = (
+    FilterSpec("status_filter", OutboundMission.status),
+    FilterSpec("objective", OutboundMission.objective),
+    FilterSpec("search", condition=search_filter(OutboundMission.name)),
+)
+_PROSPECT_FILTER_SPECS: tuple[FilterSpec, ...] = (
+    FilterSpec("status_filter", LeadProspect.status),
+    FilterSpec("identity_kind", LeadProspect.identity_kind),
+    FilterSpec("source_type", LeadProspect.source_type),
+    FilterSpec("min_score", LeadProspect.lead_score, "gte"),
+    FilterSpec("max_score", LeadProspect.lead_score, "lte"),
+    FilterSpec("has_email", condition=presence_filter(LeadProspect.email_hash)),
+    FilterSpec("has_phone", condition=presence_filter(LeadProspect.phone_hash)),
+    FilterSpec(
+        "search",
+        condition=search_filter(
+            LeadProspect.full_name,
+            LeadProspect.company_name,
+            LeadProspect.website_host,
+        ),
+    ),
+)
+_DISCOVERY_JOB_FILTER_SPECS: tuple[FilterSpec, ...] = (
+    FilterSpec("status_filter", LeadDiscoveryJob.status),
+    FilterSpec("source_type", LeadDiscoveryJob.source_type),
 )
 
 
@@ -209,17 +236,22 @@ class OutboundMissionService:
     ) -> PaginatedOutboundMissions:
         """List outbound missions in a workspace with optional filters."""
         query = apply_workspace_scope(select(OutboundMission), OutboundMission, workspace_id)
-
-        if status_filter is not None:
-            query = query.where(OutboundMission.status == status_filter)
-        if objective is not None:
-            query = query.where(OutboundMission.objective == objective)
-        if search:
-            query = query.where(OutboundMission.name.ilike(f"%{search}%"))
+        query = apply_filter_specs(
+            query,
+            _MISSION_FILTER_SPECS,
+            {
+                "status_filter": status_filter,
+                "objective": objective,
+                "search": search,
+            },
+        )
 
         query = query.order_by(OutboundMission.updated_at.desc())
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        return PaginatedOutboundMissions(**result.to_response(OutboundMissionResponse))
+        return result.build_response(
+            item_model=OutboundMissionResponse,
+            response_builder=PaginatedOutboundMissions,
+        )
 
     async def update_mission(
         self,
@@ -454,35 +486,27 @@ class OutboundMissionService:
             LeadProspect.mission_id == mission_id,
         )
 
-        if status_filter is not None:
-            query = query.where(LeadProspect.status == status_filter)
-        if identity_kind is not None:
-            query = query.where(LeadProspect.identity_kind == identity_kind)
-        if source_type is not None:
-            query = query.where(LeadProspect.source_type == source_type)
-        if min_score is not None:
-            query = query.where(LeadProspect.lead_score >= min_score)
-        if max_score is not None:
-            query = query.where(LeadProspect.lead_score <= max_score)
-        if has_email is True:
-            query = query.where(LeadProspect.email_hash.is_not(None))
-        elif has_email is False:
-            query = query.where(LeadProspect.email_hash.is_(None))
-        if has_phone is True:
-            query = query.where(LeadProspect.phone_hash.is_not(None))
-        elif has_phone is False:
-            query = query.where(LeadProspect.phone_hash.is_(None))
-        if search:
-            like = f"%{search}%"
-            query = query.where(
-                (LeadProspect.full_name.ilike(like))
-                | (LeadProspect.company_name.ilike(like))
-                | (LeadProspect.website_host.ilike(like))
-            )
+        query = apply_filter_specs(
+            query,
+            _PROSPECT_FILTER_SPECS,
+            {
+                "status_filter": status_filter,
+                "identity_kind": identity_kind,
+                "source_type": source_type,
+                "min_score": min_score,
+                "max_score": max_score,
+                "has_email": has_email,
+                "has_phone": has_phone,
+                "search": search,
+            },
+        )
 
         query = query.order_by(LeadProspect.lead_score.desc(), LeadProspect.discovered_at.desc())
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        return PaginatedLeadProspects(**result.to_response(LeadProspectResponse))
+        return result.build_response(
+            item_model=LeadProspectResponse,
+            response_builder=PaginatedLeadProspects,
+        )
 
     async def select_mission_prospect(
         self,
@@ -568,14 +592,21 @@ class OutboundMissionService:
             workspace_id,
         ).where(LeadDiscoveryJob.mission_id == mission_id)
 
-        if status_filter is not None:
-            query = query.where(LeadDiscoveryJob.status == status_filter)
-        if source_type is not None:
-            query = query.where(LeadDiscoveryJob.source_type == source_type)
+        query = apply_filter_specs(
+            query,
+            _DISCOVERY_JOB_FILTER_SPECS,
+            {
+                "status_filter": status_filter,
+                "source_type": source_type,
+            },
+        )
 
         query = query.order_by(LeadDiscoveryJob.created_at.desc())
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        return PaginatedLeadDiscoveryJobs(**result.to_response(LeadDiscoveryJobResponse))
+        return result.build_response(
+            item_model=LeadDiscoveryJobResponse,
+            response_builder=PaginatedLeadDiscoveryJobs,
+        )
 
     async def get_mission_discovery_job(
         self,

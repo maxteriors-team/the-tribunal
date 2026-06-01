@@ -233,7 +233,10 @@ class OpportunityService:
         ).order_by(Opportunity.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        return PaginatedOpportunities(**result.to_response(OpportunityResponse))
+        return result.build_response(
+            item_model=OpportunityResponse,
+            response_builder=PaginatedOpportunities,
+        )
 
     async def create_opportunity(
         self,

@@ -7,8 +7,9 @@ from typing import Any
 
 from sqlalchemy import Select
 
+from app.db.scope import apply_workspace_scope
 from app.models.opportunity import Opportunity
-from app.services._filters import apply_filter_rules
+from app.services._filters import FilterSpec, apply_resource_filters, contains_filter
 
 # Column map for the JSON-rule engine. Mirrors the simple kwargs below
 # plus a few additional fields useful for rule-based filtering.
@@ -27,6 +28,22 @@ _COLUMN_MAP: dict[str, Any] = {
     "closed_date": Opportunity.closed_date,
     "created_at": Opportunity.created_at,
 }
+
+_SIMPLE_FILTER_SPECS: tuple[FilterSpec, ...] = (
+    FilterSpec("pipeline_id", Opportunity.pipeline_id),
+    FilterSpec("stage_id", Opportunity.stage_id),
+    FilterSpec("owner_id", Opportunity.assigned_user_id),
+    FilterSpec("status", Opportunity.status),
+    FilterSpec("is_active", Opportunity.is_active),
+    FilterSpec("source", Opportunity.source),
+    FilterSpec("search", condition=contains_filter(Opportunity.name)),
+    FilterSpec("value_min", Opportunity.amount, "gte"),
+    FilterSpec("value_max", Opportunity.amount, "lte"),
+    FilterSpec("probability_min", Opportunity.probability, "gte"),
+    FilterSpec("probability_max", Opportunity.probability, "lte"),
+    FilterSpec("created_after", Opportunity.created_at, "gte"),
+    FilterSpec("created_before", Opportunity.created_at, "lte"),
+)
 
 
 def apply_opportunity_filters(  # noqa: PLR0912
@@ -57,39 +74,26 @@ def apply_opportunity_filters(  # noqa: PLR0912
     additionally pass a ``filter_rules`` / ``filter_logic`` pair for
     rule-based filtering (matching the shape used by contact filters).
     """
-    query = query.where(Opportunity.workspace_id == workspace_id)
-
-    if pipeline_id is not None:
-        query = query.where(Opportunity.pipeline_id == pipeline_id)
-    if stage_id is not None:
-        query = query.where(Opportunity.stage_id == stage_id)
-    if owner_id is not None:
-        query = query.where(Opportunity.assigned_user_id == owner_id)
-    if status is not None:
-        query = query.where(Opportunity.status == status)
-    if is_active is not None:
-        query = query.where(Opportunity.is_active == is_active)
-    if source is not None:
-        query = query.where(Opportunity.source == source)
-    if search:
-        query = query.where(Opportunity.name.ilike(f"%{search}%"))
-
-    if value_min is not None:
-        query = query.where(Opportunity.amount >= value_min)
-    if value_max is not None:
-        query = query.where(Opportunity.amount <= value_max)
-
-    if probability_min is not None:
-        query = query.where(Opportunity.probability >= probability_min)
-    if probability_max is not None:
-        query = query.where(Opportunity.probability <= probability_max)
-
-    if created_after is not None:
-        query = query.where(Opportunity.created_at >= created_after)
-    if created_before is not None:
-        query = query.where(Opportunity.created_at <= created_before)
-
-    if filter_rules:
-        query = apply_filter_rules(query, filter_rules, filter_logic, _COLUMN_MAP)
-
-    return query
+    query = apply_workspace_scope(query, Opportunity, workspace_id)
+    return apply_resource_filters(
+        query,
+        simple_specs=_SIMPLE_FILTER_SPECS,
+        values={
+            "pipeline_id": pipeline_id,
+            "stage_id": stage_id,
+            "owner_id": owner_id,
+            "status": status,
+            "is_active": is_active,
+            "source": source,
+            "search": search,
+            "value_min": value_min,
+            "value_max": value_max,
+            "probability_min": probability_min,
+            "probability_max": probability_max,
+            "created_after": created_after,
+            "created_before": created_before,
+        },
+        filter_rules=filter_rules,
+        filter_logic=filter_logic,
+        column_map=_COLUMN_MAP,
+    )

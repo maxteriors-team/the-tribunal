@@ -18,6 +18,8 @@ The split mirrors what was previously inlined inside
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from sqlalchemy import Select, and_, or_
@@ -32,6 +34,130 @@ class ExtraResolver(Protocol):
     """
 
     def __call__(self, field: str, operator: str, value: Any) -> ColumnElement[bool] | None: ...
+
+
+class ConditionBuilder(Protocol):
+    """Callable that turns a supplied value into a SQLAlchemy expression."""
+
+    def __call__(self, value: Any) -> ColumnElement[bool] | None: ...
+
+
+@dataclass(slots=True, frozen=True)
+class FilterSpec:
+    """Declarative simple-filter rule for resource list query parameters.
+
+    ``field`` is the key in the normalized values mapping. Either provide a
+    SQLAlchemy ``column`` plus an ``operator`` supported by
+    :func:`build_condition`, or provide a custom ``condition`` callback for
+    resource-specific expressions such as multi-column search or tag
+    membership.
+    """
+
+    field: str
+    column: Any | None = None
+    operator: str = "equals"
+    condition: ConditionBuilder | None = None
+    skip_empty_string: bool = True
+
+    def build(self, value: Any) -> ColumnElement[bool] | None:
+        """Build a condition for ``value`` or return ``None`` when absent."""
+        if value is None:
+            return None
+        if self.skip_empty_string and value == "":
+            return None
+        if self.condition is not None:
+            return self.condition(value)
+        if self.column is None:
+            return None
+        return build_condition(self.operator, self.column, value)
+
+
+FilterValues = Mapping[str, Any]
+
+
+def apply_filter_specs(
+    query: Select[Any],
+    specs: Sequence[FilterSpec],
+    values: FilterValues,
+) -> Select[Any]:
+    """Apply declarative simple-filter specs to ``query`` in order."""
+    for spec in specs:
+        condition = spec.build(values.get(spec.field))
+        if condition is not None:
+            query = query.where(condition)
+    return query
+
+
+def contains_filter(column: Any) -> ConditionBuilder:
+    """Build a case-insensitive ``%value%`` condition for text query params."""
+
+    def _condition(value: Any) -> ColumnElement[bool] | None:
+        return cast("ColumnElement[bool]", column.ilike(f"%{value}%"))
+
+    return _condition
+
+
+def range_filter_specs(
+    field_prefix: str,
+    column: Any,
+    *,
+    min_field: str = "min",
+    max_field: str = "max",
+) -> tuple[FilterSpec, FilterSpec]:
+    """Return paired ``gte`` / ``lte`` specs for min/max query params."""
+    return (
+        FilterSpec(f"{field_prefix}_{min_field}", column, "gte"),
+        FilterSpec(f"{field_prefix}_{max_field}", column, "lte"),
+    )
+
+
+def search_filter(*columns: Any) -> ConditionBuilder:
+    """Build an ORed ILIKE search condition across multiple columns."""
+
+    def _condition(value: Any) -> ColumnElement[bool] | None:
+        like = f"%{value}%"
+        return or_(*(column.ilike(like) for column in columns))
+
+    return _condition
+
+
+def presence_filter(column: Any) -> ConditionBuilder:
+    """Build boolean presence/absence checks for nullable columns."""
+
+    def _condition(value: Any) -> ColumnElement[bool] | None:
+        if value is True:
+            return cast("ColumnElement[bool]", column.is_not(None))
+        if value is False:
+            return cast("ColumnElement[bool]", column.is_(None))
+        return None
+
+    return _condition
+
+
+def apply_resource_filters(
+    query: Select[Any],
+    *,
+    simple_specs: Sequence[FilterSpec] = (),
+    values: FilterValues | None = None,
+    filter_rules: list[dict[str, Any]] | None = None,
+    filter_logic: str = "and",
+    column_map: Mapping[str, Any] | None = None,
+    extra_resolver: ExtraResolver | None = None,
+) -> Select[Any]:
+    """Apply simple filter specs followed by optional JSON filter rules."""
+    if values is not None and simple_specs:
+        query = apply_filter_specs(query, simple_specs, values)
+
+    if filter_rules:
+        query = apply_filter_rules(
+            query,
+            filter_rules,
+            filter_logic,
+            column_map or {},
+            extra_resolver=extra_resolver,
+        )
+
+    return query
 
 
 def build_condition(
@@ -50,7 +176,7 @@ def build_condition(
     if operator == "not_in" and isinstance(value, list):
         return cast("ColumnElement[bool]", column.notin_(value))
 
-    comparison_ops: dict[str, Any] = {
+    comparison_ops: dict[str, Callable[[Any, Any], Any]] = {
         "equals": lambda c, v: c == v,
         "not_equals": lambda c, v: c != v,
         "contains": lambda c, v: c.ilike(f"%{v}%"),
@@ -78,7 +204,7 @@ def apply_filter_rules(
     query: Select[Any],
     rules: list[dict[str, Any]],
     logic: str,
-    column_map: dict[str, Any],
+    column_map: Mapping[str, Any],
     extra_resolver: ExtraResolver | None = None,
 ) -> Select[Any]:
     """Apply a list of ``{field, operator, value}`` rules to ``query``.

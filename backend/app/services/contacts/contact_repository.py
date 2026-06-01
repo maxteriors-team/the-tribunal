@@ -9,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.encryption import hash_phone, hash_value
+from app.db.pagination import paginate_rows
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.tag import ContactTag
-from app.services.contacts.contact_filters import apply_contact_filters
+from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
 from app.utils.phone import normalize_phone_safe
 
 logger = structlog.get_logger()
@@ -84,19 +85,11 @@ async def list_contacts_paginated(
         .options(selectinload(Contact.contact_tags).selectinload(ContactTag.tag))
     )
 
-    # Apply filters
-    if status_filter:
-        query = query.where(Contact.status == status_filter)
-
-    if search:
-        search_term = f"%{search}%"
-        query = query.where(
-            (Contact.first_name.ilike(search_term))
-            | (Contact.last_name.ilike(search_term))
-            | (Contact.email.ilike(search_term))
-            | (Contact.phone_number.ilike(search_term))
-            | (Contact.company_name.ilike(search_term))
-        )
+    query = apply_contact_list_filters(
+        query,
+        status_filter=status_filter,
+        search=search,
+    )
 
     # Apply advanced filters
     query = apply_contact_filters(
@@ -116,11 +109,6 @@ async def list_contacts_paginated(
         filter_logic=filter_logic,
     )
 
-    # Get total count by wrapping the filtered query in a subquery
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-
     # Apply sorting (always include Contact.id as final sort key for stable pagination)
     if sort_by == "unread_first":
         # Unread contacts first (by unread count desc), then by last message time
@@ -138,16 +126,12 @@ async def list_contacts_paginated(
     else:
         query = query.order_by(Contact.created_at.desc(), Contact.id.desc())
 
-    # Apply pagination
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    paginated = await paginate_rows(db, query, page=page, page_size=page_size)
+    rows = paginated.items
 
-    # Execute query
-    result = await db.execute(query)
-    rows = result.all()
+    log.info("contacts_listed", total=paginated.total, returned=len(rows))
 
-    log.info("contacts_listed", total=total, returned=len(rows))
-
-    return rows, total
+    return rows, paginated.total
 
 
 async def get_contact_by_id(
@@ -502,18 +486,11 @@ async def list_contact_ids(
     """Get all contact IDs matching filters (for Select All functionality)."""
     query = select(Contact.id).where(Contact.workspace_id == workspace_id)
 
-    if status_filter:
-        query = query.where(Contact.status == status_filter)
-
-    if search:
-        search_term = f"%{search}%"
-        query = query.where(
-            (Contact.first_name.ilike(search_term))
-            | (Contact.last_name.ilike(search_term))
-            | (Contact.email.ilike(search_term))
-            | (Contact.phone_number.ilike(search_term))
-            | (Contact.company_name.ilike(search_term))
-        )
+    query = apply_contact_list_filters(
+        query,
+        status_filter=status_filter,
+        search=search,
+    )
 
     # Apply advanced filters
     query = apply_contact_filters(

@@ -9,8 +9,26 @@ the rule-evaluation work to :func:`apply_filter_rules`.
 
 from app.services._filters.base import (
     ExtraResolver,
+    FilterSpec,
     apply_filter_rules,
+    apply_filter_specs,
+    apply_resource_filters,
     build_condition,
+    contains_filter,
+    presence_filter,
+    range_filter_specs,
+    search_filter,
 )
 
-__all__ = ["ExtraResolver", "apply_filter_rules", "build_condition"]
+__all__ = [
+    "ExtraResolver",
+    "FilterSpec",
+    "apply_filter_rules",
+    "apply_filter_specs",
+    "apply_resource_filters",
+    "build_condition",
+    "contains_filter",
+    "presence_filter",
+    "range_filter_specs",
+    "search_filter",
+]

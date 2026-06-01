@@ -4,12 +4,12 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from math import ceil
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.pagination import PaginationResult
 from app.schemas.contact import ContactWithConversationResponse
 from app.schemas.tag import TagResponse
 from app.services.contacts.contact_repository import (
@@ -176,13 +176,13 @@ class ContactQueryService:
                 ]
             items.append(contact_data)
 
-        return {
-            "items": items,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "pages": ceil(total / page_size) if total > 0 else 1,
-        }
+        return PaginationResult(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=(total + page_size - 1) // page_size if total > 0 else 1,
+        ).to_dict()
 
     async def list_contact_ids(
         self,

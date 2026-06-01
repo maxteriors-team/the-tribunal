@@ -8,6 +8,7 @@ import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.pagination import list_response
 from app.schemas.segment import SegmentResponse
 from app.services.segments.segment_repository import (
     create_segment,
@@ -35,10 +36,7 @@ class SegmentService:
         """List all segments for a workspace."""
         segments = await list_segments(workspace_id, self.db)
         items = [SegmentResponse.model_validate(s) for s in segments]
-        return {
-            "items": items,
-            "total": len(items),
-        }
+        return list_response(items)
 
     async def get_segment(
         self,

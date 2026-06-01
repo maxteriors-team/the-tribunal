@@ -17,8 +17,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.services._filters import (
+    FilterSpec,
     apply_filter_rules,
+    apply_filter_specs,
+    apply_resource_filters,
     build_condition,
+    presence_filter,
+    range_filter_specs,
+    search_filter,
 )
 
 
@@ -211,3 +217,55 @@ class TestApplyFilterRules:
         base = select(_Thing)
         out = apply_filter_rules(base, [{}], "and", _COLUMN_MAP)
         assert _compile(out) == _compile(base)
+
+
+class TestFilterSpecs:
+    """Declarative simple-filter specs used by resource list endpoints."""
+
+    def test_apply_filter_specs_skips_none_and_empty_strings(self) -> None:
+        stmt = apply_filter_specs(
+            select(_Thing),
+            (
+                FilterSpec("score", _Thing.score, "gte"),
+                FilterSpec("name", _Thing.name, "contains"),
+            ),
+            {"score": None, "name": ""},
+        )
+        assert _compile(stmt) == _compile(select(_Thing))
+
+    def test_range_search_and_presence_helpers(self) -> None:
+        min_spec, max_spec = range_filter_specs("score", _Thing.score)
+        stmt = apply_filter_specs(
+            select(_Thing),
+            (
+                min_spec,
+                max_spec,
+                FilterSpec("search", condition=search_filter(_Thing.name, _Thing.bucket)),
+                FilterSpec("has_bucket", condition=presence_filter(_Thing.bucket)),
+            ),
+            {
+                "score_min": 10,
+                "score_max": 20,
+                "search": "vip",
+                "has_bucket": True,
+            },
+        )
+        sql = _compile(stmt)
+        assert "things.score >= 10" in sql
+        assert "things.score <= 20" in sql
+        assert "things.name ILIKE" in sql
+        assert "things.bucket ILIKE" in sql
+        assert "things.bucket IS NOT NULL" in sql
+
+    def test_apply_resource_filters_combines_specs_and_rule_engine(self) -> None:
+        stmt = apply_resource_filters(
+            select(_Thing),
+            simple_specs=(FilterSpec("bucket", _Thing.bucket),),
+            values={"bucket": "vip"},
+            filter_rules=[{"field": "score", "operator": "gte", "value": 50}],
+            filter_logic="and",
+            column_map=_COLUMN_MAP,
+        )
+        sql = _compile(stmt)
+        assert "things.bucket = 'vip'" in sql
+        assert "things.score >= 50" in sql
