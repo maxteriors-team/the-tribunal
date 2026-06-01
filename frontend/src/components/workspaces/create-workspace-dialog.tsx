@@ -1,24 +1,10 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Form,
   FormControl,
   FormField,
   FormItem,
@@ -26,9 +12,11 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { workspacesApi, type CreateWorkspaceRequest } from "@/lib/api/workspaces";
+import { useFormDialog } from "@/lib/forms/use-form-dialog";
 import { queryKeys } from "@/lib/query-keys";
 
 const workspaceFormSchema = z.object({
@@ -42,6 +30,12 @@ const workspaceFormSchema = z.object({
 });
 
 type WorkspaceFormValues = z.infer<typeof workspaceFormSchema>;
+
+const defaultValues: WorkspaceFormValues = {
+  name: "",
+  slug: "",
+  description: "",
+};
 
 function generateSlug(name: string): string {
   return name
@@ -59,142 +53,110 @@ interface CreateWorkspaceDialogProps {
 
 export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDialogProps) {
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const form = useForm<WorkspaceFormValues>({
-    resolver: zodResolver(workspaceFormSchema),
-    defaultValues: {
-      name: "",
-      slug: "",
-      description: "",
-    },
-  });
 
   const createWorkspaceMutation = useMutation({
     mutationFn: (data: CreateWorkspaceRequest) => workspacesApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       toast.success("Workspace created successfully!");
-      form.reset();
-      onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      if (error.message.includes("slug already exists")) {
-        form.setError("slug", { message: "This slug is already taken" });
-      } else {
-        toast.error("Failed to create workspace. Please try again.");
-      }
-    },
-    onSettled: () => {
-      setIsSubmitting(false);
     },
   });
 
-  const handleSubmit = (data: WorkspaceFormValues) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  const dialog = useFormDialog<WorkspaceFormValues>({
+    open,
+    onOpenChange,
+    schema: workspaceFormSchema,
+    defaultValues,
+    errorFallback: "Failed to create workspace. Please try again.",
+    // Map a known slug collision to a field error; anything else is a toast.
+    onTopLevelError: (message) => {
+      if (message.includes("slug already exists")) {
+        dialog.form.setError("slug", { message: "This slug is already taken" });
+        return;
+      }
+      toast.error("Failed to create workspace. Please try again.");
+    },
+    onSubmit: async (data) => {
+      await createWorkspaceMutation.mutateAsync({
+        name: data.name,
+        slug: data.slug,
+        description: data.description || undefined,
+      });
+      onOpenChange(false);
+    },
+  });
 
-    const request: CreateWorkspaceRequest = {
-      name: data.name,
-      slug: data.slug,
-      description: data.description || undefined,
-    };
-
-    createWorkspaceMutation.mutate(request);
-  };
+  const { form } = dialog;
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
-    form.setValue("name", name);
-    // Auto-generate slug from name if slug is empty or was auto-generated
+    // Auto-generate slug from name if slug is empty or was auto-generated.
     const currentSlug = form.getValues("slug");
     const previousName = form.getValues("name");
+    form.setValue("name", name);
     if (!currentSlug || currentSlug === generateSlug(previousName)) {
       form.setValue("slug", generateSlug(name));
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px]">
-        <DialogHeader>
-          <DialogTitle>Create Workspace</DialogTitle>
-          <DialogDescription>
-            Create a new workspace to organize your contacts, campaigns, and team.
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      dialog={dialog}
+      open={open}
+      title="Create Workspace"
+      description="Create a new workspace to organize your contacts, campaigns, and team."
+      submitLabel="Create Workspace"
+      submitBusyLabel="Creating..."
+      className="sm:max-w-[450px]"
+    >
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Name *</FormLabel>
+            <FormControl>
+              <Input placeholder="My Company" {...field} onChange={handleNameChange} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="My Company"
-                      {...field}
-                      onChange={handleNameChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+      <FormField
+        control={form.control}
+        name="slug"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Slug *</FormLabel>
+            <FormControl>
+              <Input placeholder="my-company" {...field} />
+            </FormControl>
+            <FormDescription>
+              URL-friendly identifier (lowercase, numbers, hyphens only)
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
 
-            <FormField
-              control={form.control}
-              name="slug"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Slug *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="my-company" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    URL-friendly identifier (lowercase, numbers, hyphens only)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="A brief description of this workspace..."
-                      className="min-h-[80px]"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "Creating..." : "Create Workspace"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+      <FormField
+        control={form.control}
+        name="description"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="A brief description of this workspace..."
+                className="min-h-[80px]"
+                {...field}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </FormDialog>
   );
 }
