@@ -18,24 +18,26 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect, Fragment } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import * as z from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import {
+  CREATE_AGENT_FORM_DEFAULTS,
+  buildCreateAgentRequest,
+  createAgentFormSchema,
+  type CreateAgentFormValues,
+} from "@/lib/agents/agent-form";
+import {
+  getVoiceProviderForTier,
+  resolveVoiceForProvider,
+} from "@/lib/agents/agent-voice";
 import { agentsApi, type CreateAgentRequest } from "@/lib/api/agents";
 import { getLanguagesForTier, getFallbackLanguage } from "@/lib/languages";
 import { PRICING_TIERS } from "@/lib/pricing-tiers";
 import { queryKeys } from "@/lib/query-keys";
-import { TEXT_RESPONSE_DEFAULT_DELAY_MS } from "@/lib/text-response-timing";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import {
-  REALTIME_VOICES,
-  HUME_VOICES,
-  GROK_VOICES,
-  ELEVENLABS_VOICES,
-} from "@/lib/voice-constants";
 
 import { BasicInfoStep } from "./basic-info-step";
 import { PricingTierStep } from "./pricing-tier-step";
@@ -51,36 +53,7 @@ const WIZARD_STEPS = [
   { id: 5, label: "Settings", icon: Settings },
 ] as const;
 
-const agentFormSchema = z.object({
-  pricingTier: z.enum(["budget", "balanced", "premium-mini", "premium", "hume-evi", "openai-hume", "grok", "elevenlabs"]),
-  name: z.string().min(2, { error: "Name must be at least 2 characters" }),
-  description: z.string().optional(),
-  language: z.string(),
-  voice: z.string(),
-  channelMode: z.enum(["voice", "text", "both"]),
-  systemPrompt: z.string().min(10, { error: "System prompt is required" }),
-  initialGreeting: z.string().optional(),
-  temperature: z.number().min(0).max(2),
-  maxTokens: z.number().min(100).max(16000),
-  enabledTools: z.array(z.string()),
-  enabledToolIds: z.record(z.string(), z.array(z.string())),
-  enableRecording: z.boolean(),
-  enableTranscript: z.boolean(),
-  // IVR navigation settings (Grok only)
-  enableIvrNavigation: z.boolean(),
-  ivrNavigationGoal: z.string().optional(),
-  ivrLoopThreshold: z.number().min(1).max(10),
-  ivrSilenceDurationMs: z.number().min(1000).max(10000),
-  ivrPostDtmfCooldownMs: z.number().min(0).max(10000),
-  ivrMenuBufferSilenceMs: z.number().min(0).max(10000),
-  // Appointment reminder settings
-  reminderEnabled: z.boolean(),
-  reminderMinutesBefore: z.number().min(5).max(1440),
-  // Experiment auto-evaluation
-  autoEvaluate: z.boolean(),
-});
-
-export type AgentFormValues = z.infer<typeof agentFormSchema>;
+export type AgentFormValues = CreateAgentFormValues;
 
 export function CreateAgentForm() {
   const router = useRouter();
@@ -108,35 +81,8 @@ export function CreateAgentForm() {
   });
 
   const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      systemPrompt: "",
-      initialGreeting: "",
-      pricingTier: "premium",
-      language: "en-US",
-      voice: "marin",
-      channelMode: "both",
-      temperature: 0.7,
-      maxTokens: 2000,
-      enabledTools: [],
-      enabledToolIds: {},
-      enableRecording: true,
-      enableTranscript: true,
-      // IVR navigation defaults
-      enableIvrNavigation: false,
-      ivrNavigationGoal: "",
-      ivrLoopThreshold: 2,
-      ivrSilenceDurationMs: 3000,
-      ivrPostDtmfCooldownMs: 3000,
-      ivrMenuBufferSilenceMs: 2000,
-      // Appointment reminder defaults
-      reminderEnabled: true,
-      reminderMinutesBefore: 30,
-      // Experiment auto-evaluation
-      autoEvaluate: false,
-    },
+    resolver: zodResolver(createAgentFormSchema),
+    defaultValues: CREATE_AGENT_FORM_DEFAULTS,
   });
 
   const pricingTier = useWatch({ control: form.control, name: "pricingTier" });
@@ -166,34 +112,11 @@ export function CreateAgentForm() {
 
   // Set default voice when pricing tier changes
   useEffect(() => {
+    const provider = getVoiceProviderForTier(pricingTier);
     const currentVoice = form.getValues("voice");
-    let defaultVoice = "marin"; // OpenAI default
-
-    if (pricingTier === "grok") {
-      defaultVoice = "ara";
-      // Only reset if current voice isn't a valid Grok voice
-      const grokVoiceIds = GROK_VOICES.map((v) => v.id);
-      if (!grokVoiceIds.includes(currentVoice as typeof grokVoiceIds[number])) {
-        form.setValue("voice", defaultVoice);
-      }
-    } else if (pricingTier === "openai-hume") {
-      defaultVoice = "kora";
-      const humeVoiceIds = HUME_VOICES.map((v) => v.id);
-      if (!humeVoiceIds.includes(currentVoice as typeof humeVoiceIds[number])) {
-        form.setValue("voice", defaultVoice);
-      }
-    } else if (pricingTier === "elevenlabs") {
-      defaultVoice = "ava";
-      const elevenlabsVoiceIds = ELEVENLABS_VOICES.map((v) => v.id);
-      if (!elevenlabsVoiceIds.includes(currentVoice as typeof elevenlabsVoiceIds[number])) {
-        form.setValue("voice", defaultVoice);
-      }
-    } else {
-      // OpenAI Realtime
-      const realtimeVoiceIds = REALTIME_VOICES.map((v) => v.id);
-      if (!realtimeVoiceIds.includes(currentVoice as typeof realtimeVoiceIds[number])) {
-        form.setValue("voice", defaultVoice);
-      }
+    const resolved = resolveVoiceForProvider(provider, currentVoice);
+    if (resolved !== currentVoice) {
+      form.setValue("voice", resolved);
     }
   }, [pricingTier, form]);
 
@@ -236,46 +159,7 @@ export function CreateAgentForm() {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    // Determine voice provider based on pricing tier
-    const getVoiceProvider = (tier: string): string => {
-      switch (tier) {
-        case "grok":
-          return "grok";
-        case "openai-hume":
-          return "hume";
-        case "elevenlabs":
-          return "elevenlabs";
-        default:
-          return "openai";
-      }
-    };
-
-    // Map form data to API request format
-    const apiRequest: CreateAgentRequest = {
-      name: data.name,
-      description: data.description || undefined,
-      channel_mode: data.channelMode,
-      voice_provider: getVoiceProvider(data.pricingTier),
-      voice_id: data.voice,
-      language: data.language,
-      system_prompt: data.systemPrompt,
-      temperature: data.temperature,
-      text_response_delay_ms: TEXT_RESPONSE_DEFAULT_DELAY_MS,
-      enabled_tools: data.enabledTools,
-      tool_settings: data.enabledToolIds,
-      // Include IVR settings for Grok agents
-      enable_ivr_navigation: data.enableIvrNavigation,
-      ivr_navigation_goal: data.ivrNavigationGoal || undefined,
-      ivr_loop_threshold: data.ivrLoopThreshold,
-      ivr_silence_duration_ms: data.ivrSilenceDurationMs,
-      ivr_post_dtmf_cooldown_ms: data.ivrPostDtmfCooldownMs,
-      ivr_menu_buffer_silence_ms: data.ivrMenuBufferSilenceMs,
-      enable_recording: data.enableRecording,
-      reminder_enabled: data.reminderEnabled,
-      reminder_minutes_before: data.reminderMinutesBefore,
-      auto_evaluate: data.autoEvaluate,
-    };
-
+    const apiRequest: CreateAgentRequest = buildCreateAgentRequest(data);
     createAgentMutation.mutate(apiRequest);
   };
 

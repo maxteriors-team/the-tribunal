@@ -17,10 +17,6 @@ import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { ABTestDashboard } from "@/components/agents/ab-test-dashboard";
-import {
-  editAgentFormSchema,
-  type EditAgentFormValues,
-} from "@/components/agents/agent-edit-schema";
 import { EmbedAgentDialog } from "@/components/agents/embed-agent-dialog";
 import { PromptImprovementDialog } from "@/components/agents/prompt-improvement-dialog";
 import { PromptPerformanceChart } from "@/components/agents/prompt-performance-chart";
@@ -57,20 +53,18 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgent } from "@/hooks/useAgents";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import {
+  EDIT_AGENT_FORM_DEFAULTS,
+  agentToEditFormValues,
+  buildUpdateAgentRequest,
+  editAgentFormSchema,
+  type EditAgentFormValues,
+} from "@/lib/agents/agent-form";
+import { getVoicesForProvider, resolveVoiceForProvider } from "@/lib/agents/agent-voice";
 import { agentsApi, type UpdateAgentRequest } from "@/lib/api/agents";
 import { getLanguagesForTier } from "@/lib/languages";
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
-import {
-  TEXT_RESPONSE_DEFAULT_DELAY_MS,
-  clampTextResponseDelayMs,
-} from "@/lib/text-response-timing";
-import {
-  REALTIME_VOICES,
-  HUME_VOICES,
-  GROK_VOICES,
-  ELEVENLABS_VOICES,
-} from "@/lib/voice-constants";
 
 interface EditAgentPageProps {
   params: Promise<{ id: string }>;
@@ -107,46 +101,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
 
   const form = useForm<EditAgentFormValues>({
     resolver: zodResolver(editAgentFormSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      language: "en-US",
-      channelMode: "voice",
-      voiceProvider: "openai",
-      voiceId: "marin",
-      systemPrompt: "",
-      temperature: 0.7,
-      textResponseDelayMs: TEXT_RESPONSE_DEFAULT_DELAY_MS,
-      textMaxContextMessages: 10,
-      calcomEventTypeId: null,
-      isActive: true,
-      enabledTools: [],
-      enabledToolIds: {},
-      enableIvrNavigation: false,
-      ivrNavigationGoal: "",
-      ivrLoopThreshold: 2,
-      ivrSilenceDurationMs: 3000,
-      ivrPostDtmfCooldownMs: 3000,
-      ivrMenuBufferSilenceMs: 2000,
-      reminderEnabled: true,
-      reminderMinutesBefore: 30,
-      reminderOffsets: [1440, 120, 30],
-      reminderTemplate: null,
-      noshowSmsEnabled: false,
-      noshowReengagementEnabled: true,
-      noshowDay3Template: null,
-      noshowDay7Template: null,
-      neverBookedReengagementEnabled: false,
-      neverBookedDelayDays: 7,
-      neverBookedMaxAttempts: 2,
-      neverBookedTemplate: null,
-      valueReinforcementEnabled: false,
-      valueReinforcementOffsetMinutes: 120,
-      valueReinforcementTemplate: null,
-      postMeetingSmsEnabled: false,
-      postMeetingTemplate: null,
-      autoEvaluate: false,
-    },
+    defaultValues: EDIT_AGENT_FORM_DEFAULTS,
   });
 
   // Track if form has been initialized with agent data
@@ -156,46 +111,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
   useEffect(() => {
     if (agent && !formInitialized.current) {
       formInitialized.current = true;
-      form.reset({
-        name: agent.name,
-        description: agent.description ?? "",
-        language: agent.language,
-        channelMode: (agent.channel_mode as "voice" | "text" | "both") ?? "voice",
-        voiceProvider: agent.voice_provider ?? "openai",
-        voiceId: agent.voice_id ?? "marin",
-        systemPrompt: agent.system_prompt,
-        temperature: agent.temperature ?? 0.7,
-        textResponseDelayMs: clampTextResponseDelayMs(agent.text_response_delay_ms),
-        textMaxContextMessages: agent.text_max_context_messages ?? 10,
-        calcomEventTypeId: agent.calcom_event_type_id,
-        isActive: agent.is_active,
-        enabledTools: agent.enabled_tools ?? [],
-        enabledToolIds: agent.tool_settings ?? {},
-        enableIvrNavigation: agent.enable_ivr_navigation ?? false,
-        ivrNavigationGoal: agent.ivr_navigation_goal ?? "",
-        ivrLoopThreshold: agent.ivr_loop_threshold ?? 2,
-        ivrSilenceDurationMs: agent.ivr_silence_duration_ms ?? 3000,
-        ivrPostDtmfCooldownMs: agent.ivr_post_dtmf_cooldown_ms ?? 3000,
-        ivrMenuBufferSilenceMs: agent.ivr_menu_buffer_silence_ms ?? 2000,
-        reminderEnabled: agent.reminder_enabled ?? true,
-        reminderMinutesBefore: agent.reminder_minutes_before ?? 30,
-        reminderOffsets: agent.reminder_offsets ?? [1440, 120, 30],
-        reminderTemplate: agent.reminder_template ?? null,
-        noshowSmsEnabled: agent.noshow_sms_enabled ?? false,
-        noshowReengagementEnabled: agent.noshow_reengagement_enabled ?? true,
-        noshowDay3Template: agent.noshow_day3_template ?? null,
-        noshowDay7Template: agent.noshow_day7_template ?? null,
-        neverBookedReengagementEnabled: agent.never_booked_reengagement_enabled ?? false,
-        neverBookedDelayDays: agent.never_booked_delay_days ?? 7,
-        neverBookedMaxAttempts: agent.never_booked_max_attempts ?? 2,
-        neverBookedTemplate: agent.never_booked_template ?? null,
-        valueReinforcementEnabled: agent.value_reinforcement_enabled ?? false,
-        valueReinforcementOffsetMinutes: agent.value_reinforcement_offset_minutes ?? 120,
-        valueReinforcementTemplate: agent.value_reinforcement_template ?? null,
-        postMeetingSmsEnabled: agent.post_meeting_sms_enabled ?? false,
-        postMeetingTemplate: agent.post_meeting_template ?? null,
-        autoEvaluate: agent.auto_evaluate ?? false,
-      });
+      form.reset(agentToEditFormValues(agent));
     }
   }, [agent, form]);
 
@@ -206,31 +122,16 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
 
   // Watch voice provider to show appropriate voices
   const voiceProvider = useWatch({ control: form.control, name: "voiceProvider" });
-  const voices =
-    voiceProvider === "grok"
-      ? GROK_VOICES
-      : voiceProvider === "hume"
-        ? HUME_VOICES
-        : voiceProvider === "elevenlabs"
-          ? ELEVENLABS_VOICES
-          : REALTIME_VOICES;
+  const voices = getVoicesForProvider(voiceProvider);
 
   // Reset voice when provider changes if current voice isn't valid
   useEffect(() => {
     const currentVoice = form.getValues("voiceId");
-    const validVoiceIds = voices.map((v) => v.id);
-    if (!validVoiceIds.includes(currentVoice)) {
-      const defaultVoice =
-        voiceProvider === "grok"
-          ? "ara"
-          : voiceProvider === "hume"
-            ? "kora"
-            : voiceProvider === "elevenlabs"
-              ? "ava"
-              : "marin";
-      form.setValue("voiceId", defaultVoice);
+    const resolved = resolveVoiceForProvider(voiceProvider, currentVoice);
+    if (resolved !== currentVoice) {
+      form.setValue("voiceId", resolved);
     }
-  }, [voiceProvider, voices, form]);
+  }, [voiceProvider, form]);
 
   // Watch tools for UI updates
   const enabledToolIds = useWatch({ control: form.control, name: "enabledToolIds" });
@@ -264,46 +165,7 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
       return;
     }
 
-    const request: UpdateAgentRequest = {
-      name: data.name,
-      description: data.description || undefined,
-      language: data.language,
-      channel_mode: data.channelMode,
-      voice_provider: data.voiceProvider,
-      voice_id: data.voiceId,
-      system_prompt: data.systemPrompt,
-      temperature: data.temperature,
-      text_response_delay_ms: clampTextResponseDelayMs(data.textResponseDelayMs),
-      text_max_context_messages: data.textMaxContextMessages,
-      calcom_event_type_id: data.calcomEventTypeId ?? undefined,
-      is_active: data.isActive,
-      enabled_tools: data.enabledTools,
-      tool_settings: data.enabledToolIds,
-      enable_ivr_navigation: data.enableIvrNavigation,
-      ivr_navigation_goal: data.ivrNavigationGoal || undefined,
-      ivr_loop_threshold: data.ivrLoopThreshold,
-      ivr_silence_duration_ms: data.ivrSilenceDurationMs,
-      ivr_post_dtmf_cooldown_ms: data.ivrPostDtmfCooldownMs,
-      ivr_menu_buffer_silence_ms: data.ivrMenuBufferSilenceMs,
-      reminder_enabled: data.reminderEnabled,
-      reminder_minutes_before: data.reminderMinutesBefore,
-      reminder_offsets: data.reminderOffsets,
-      reminder_template: data.reminderTemplate ?? null,
-      noshow_sms_enabled: data.noshowSmsEnabled,
-      noshow_reengagement_enabled: data.noshowReengagementEnabled,
-      noshow_day3_template: data.noshowDay3Template ?? null,
-      noshow_day7_template: data.noshowDay7Template ?? null,
-      never_booked_reengagement_enabled: data.neverBookedReengagementEnabled,
-      never_booked_delay_days: data.neverBookedDelayDays,
-      never_booked_max_attempts: data.neverBookedMaxAttempts,
-      never_booked_template: data.neverBookedTemplate ?? null,
-      value_reinforcement_enabled: data.valueReinforcementEnabled,
-      value_reinforcement_offset_minutes: data.valueReinforcementOffsetMinutes,
-      value_reinforcement_template: data.valueReinforcementTemplate ?? null,
-      post_meeting_sms_enabled: data.postMeetingSmsEnabled,
-      post_meeting_template: data.postMeetingTemplate ?? null,
-      auto_evaluate: data.autoEvaluate,
-    };
+    const request: UpdateAgentRequest = buildUpdateAgentRequest(data);
 
     setIsSaving(true);
     try {
