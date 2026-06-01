@@ -4,11 +4,17 @@ on:
   push:
     paths:
       - "backend/**"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "frontend/src/lib/api/_generated.ts"
       - "Makefile"
       - ".github/workflows/backend-ci.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "frontend/src/lib/api/_generated.ts"
       - "Makefile"
       - ".github/workflows/backend-ci.yml"
 
@@ -48,7 +54,7 @@ jobs:
         # Policy: see CONTRIBUTING.md § Coverage Ratchet. Current floor: 48%.
         run: make ci.backend
 
-      - name: OpenAPI schema freshness
+      - name: OpenAPI codegen freshness
         # Regenerate committed API artifacts from the live FastAPI app and fail
         # if they drift, so contract changes are reviewable in the PR diff.
-        run: make ci.codegen
+        run: make codegen/check

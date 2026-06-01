@@ -58,7 +58,9 @@ Run `make help` for the full list. Cheat sheet:
 | `make ci.env` | Verify env templates match backend config and frontend env usage. |
 | `make ci.backend` | Backend CI parity: env drift, lint, format, type-check, and coverage. |
 | `make ci.frontend` | Frontend CI parity: env drift, dependency lock, lint, type-check, tests, and build. |
-| `make ci.codegen` | Regenerate OpenAPI/client artifacts and fail on drift. |
+| `make codegen` | Regenerate `backend/openapi.json` and `frontend/src/lib/api/_generated.ts`. |
+| `make codegen/check` | Regenerate OpenAPI/client artifacts and fail on drift. |
+| `make ci.codegen` | Alias for `make codegen/check`. |
 | `make ci.migrations` | Migration CI parity: upgrade head, check, downgrade -1, upgrade head. |
 | `make ci.all` | Run all canonical CI parity targets. |
 | `make test` / `test.backend` / `test.frontend` | Run tests. |

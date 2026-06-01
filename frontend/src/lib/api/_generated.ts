@@ -4362,22 +4362,12 @@ export interface paths {
         /**
          * Update Mission
          * @description Partially update an outbound mission.
-         *
-         *     Field updates are only allowed when the mission is in DRAFT, PAUSED, or
-         *     ARCHIVED status. The ``status`` field is intentionally read-only here —
-         *     callers must use the dedicated lifecycle endpoints (start/pause/resume/
-         *     complete/archive).
          */
         put: operations["update_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__put"];
         post?: never;
         /**
          * Delete Mission
-         * @description Delete a mission.
-         *
-         *     Only DRAFT or ARCHIVED missions can be deleted outright. Active or paused
-         *     missions must be archived first (via ``POST /{id}/archive``) — this
-         *     preserves the audit trail of any prospects/sequence enrollments that
-         *     referenced the mission.
+         * @description Delete a draft or archived mission.
          */
         delete: operations["delete_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__delete"];
         options?: never;
@@ -4385,11 +4375,6 @@ export interface paths {
         /**
          * Update Mission
          * @description Partially update an outbound mission.
-         *
-         *     Field updates are only allowed when the mission is in DRAFT, PAUSED, or
-         *     ARCHIVED status. The ``status`` field is intentionally read-only here —
-         *     callers must use the dedicated lifecycle endpoints (start/pause/resume/
-         *     complete/archive).
          */
         patch: operations["update_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__patch"];
         trace?: never;
@@ -4405,7 +4390,7 @@ export interface paths {
         put?: never;
         /**
          * Archive Mission
-         * @description Archive a mission (any state except already-archived).
+         * @description Archive a mission in any non-archived state.
          */
         post: operations["archive_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__archive_post"];
         delete?: never;
@@ -4484,10 +4469,6 @@ export interface paths {
         /**
          * Get Mission Enrichment Status
          * @description Aggregate enrichment status for a mission.
-         *
-         *     Returns counts grouped by ``(provider, status)`` plus totals for the
-         *     prospect-level enrichment counters. Useful to drive a Lead Miner status
-         *     panel without paginating the raw audit table.
          */
         get: operations["get_mission_enrichment_status_api_v1_workspaces__workspace_id__outbound_missions__mission_id__enrichment_status_get"];
         put?: never;
@@ -4587,7 +4568,7 @@ export interface paths {
         };
         /**
          * List Prospect Enrichment Results
-         * @description List enrichment audit rows for a single prospect (newest first).
+         * @description List enrichment audit rows for a single prospect, newest first.
          */
         get: operations["list_prospect_enrichment_results_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__enrichment_get"];
         put?: never;
@@ -4609,7 +4590,7 @@ export interface paths {
         put?: never;
         /**
          * Select Mission Prospect
-         * @description Select a prospect for outreach — moves status to QUEUED.
+         * @description Select a prospect for outreach by moving it to QUEUED.
          */
         post: operations["select_mission_prospect_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__select_post"];
         delete?: never;
@@ -4629,7 +4610,7 @@ export interface paths {
         put?: never;
         /**
          * Suppress Mission Prospect
-         * @description Suppress a prospect (do-not-contact).
+         * @description Suppress a prospect as do-not-contact.
          */
         post: operations["suppress_mission_prospect_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__suppress_post"];
         delete?: never;
@@ -4667,16 +4648,7 @@ export interface paths {
         };
         /**
          * Get Mission Sequence Overview
-         * @description Return the mission's default sequence + enrollment counters.
-         *
-         *     Response shape::
-         *
-         *         {
-         *           "mission_id": "<uuid>",
-         *           "default_sequence": OutboundSequenceResponse | null,
-         *           "enrollment_counts": {"active": 3, "completed": 12, ...},
-         *           "total_enrollments": 27
-         *         }
+         * @description Return the mission's default sequence and enrollment counters.
          */
         get: operations["get_mission_sequence_overview_api_v1_workspaces__workspace_id__outbound_missions__mission_id__sequence_get"];
         put?: never;
@@ -4698,7 +4670,7 @@ export interface paths {
         put?: never;
         /**
          * Start Mission
-         * @description Start (or resume) a mission — moves DRAFT/PAUSED → ACTIVE.
+         * @description Start (or resume) a mission by moving DRAFT/PAUSED to ACTIVE.
          */
         post: operations["start_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__start_post"];
         delete?: never;

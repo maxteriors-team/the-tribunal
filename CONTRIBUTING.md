@@ -140,7 +140,8 @@ Run the relevant checks **before pushing**. CI delegates to these same root targ
 | `make ci.env` | Backend/frontend env templates match backend Settings and frontend `process.env` usage. |
 | `make ci.backend` | Env drift check, backend dependency lock, Ruff lint/format, mypy, and pytest coverage gate. |
 | `make ci.frontend` | Env drift check, frontend dependency lock, ESLint, TypeScript, unit tests, and production build. |
-| `make ci.codegen` | OpenAPI schema and generated TypeScript client freshness. |
+| `make codegen/check` | OpenAPI schema and generated TypeScript client freshness. |
+| `make ci.codegen` | Compatibility alias for `make codegen/check`. |
 | `make ci.migrations` | Alembic upgrade/check/downgrade/upgrade round-trip against the configured database. |
 | `make ci.all` | All canonical CI parity targets. |
 

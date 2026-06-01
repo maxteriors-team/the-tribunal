@@ -11,12 +11,13 @@ SHELL        := /usr/bin/env bash
 .SHELLFLAGS  := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-BACKEND_DIR  := backend
-FRONTEND_DIR := frontend
-BACKUP_DIR   := backend/backups
-DB_USER      := aicrm
-DB_NAME      := aicrm
-DB_CONTAINER := aicrm-postgres
+BACKEND_DIR       := backend
+FRONTEND_DIR      := frontend
+OPENAPI_ARTIFACTS := $(BACKEND_DIR)/openapi.json $(FRONTEND_DIR)/src/lib/api/_generated.ts
+BACKUP_DIR        := backend/backups
+DB_USER           := aicrm
+DB_NAME           := aicrm
+DB_CONTAINER      := aicrm-postgres
 
 CI_BACKEND_COVERAGE_FLOOR ?= 48
 CI_OPENAPI_SECRET_KEY     ?= ci-openapi-export-secret-key-not-used-for-signing-0123
@@ -30,7 +31,7 @@ CI_PYTEST_OPENAI_API_KEY  ?= sk-ci-pytest-placeholder-not-a-real-key
 .PHONY: help
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage: make \033[36m<target>\033[0m\n\nTargets:\n"} \
-		/^[a-zA-Z_.-]+:.*##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+		/^[a-zA-Z0-9_.\/-]+:.*##/ { printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # ─── Dev loop ──────────────────────────────────────────────────────────────────
 
@@ -144,17 +145,22 @@ ci.frontend: ci.frontend.deps ci.env ## Run frontend CI parity: env drift, lint,
 	cd $(FRONTEND_DIR) && npm test -- --run
 	cd $(FRONTEND_DIR) && npm run build
 
-.PHONY: ci.codegen
-ci.codegen: ci.backend.deps ci.frontend.deps ## Regenerate OpenAPI/client artifacts and fail on drift.
-	cd $(BACKEND_DIR) && \
-		SECRET_KEY="$(CI_OPENAPI_SECRET_KEY)" \
-		ENCRYPTION_KEY="$(CI_OPENAPI_ENCRYPTION_KEY)" \
-		uv run export-openapi
+.PHONY: codegen
+codegen: ci.backend.deps ci.frontend.deps ## Regenerate OpenAPI schema and frontend API client.
+	SECRET_KEY="$(CI_OPENAPI_SECRET_KEY)" \
+	ENCRYPTION_KEY="$(CI_OPENAPI_ENCRYPTION_KEY)" \
+	uv run --project $(BACKEND_DIR) export-openapi
 	cd $(FRONTEND_DIR) && npm run codegen
-	@if ! git diff --exit-code -- $(BACKEND_DIR)/openapi.json $(FRONTEND_DIR)/src/lib/api/_generated.ts; then \
-		echo "✗ Generated API artifacts are out of date. Commit the changes produced by 'make ci.codegen'."; \
+
+.PHONY: codegen/check
+codegen/check: codegen ## Regenerate OpenAPI/client artifacts and fail on drift.
+	@if ! git diff --exit-code -- $(OPENAPI_ARTIFACTS); then \
+		echo "✗ Generated API artifacts are out of date. Run 'make codegen' and commit $(OPENAPI_ARTIFACTS)."; \
 		exit 1; \
 	fi
+
+.PHONY: ci.codegen
+ci.codegen: codegen/check ## Alias for codegen/check.
 
 .PHONY: ci.migrations
 ci.migrations: ci.backend.deps ## Run migration CI parity against the configured backend database.
@@ -164,7 +170,7 @@ ci.migrations: ci.backend.deps ## Run migration CI parity against the configured
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
 .PHONY: ci.all
-ci.all: ci.codegen ci.backend ci.frontend ci.migrations ## Run all CI parity targets.
+ci.all: codegen/check ci.backend ci.frontend ci.migrations ## Run all CI parity targets.
 
 # ─── Tests ─────────────────────────────────────────────────────────────────────
 

@@ -33,17 +33,17 @@ The dev server runs on http://localhost:3000.
 
 ## Available Scripts
 
-| Script | What it does |
-| --- | --- |
-| `npm run dev` | Start the Next.js dev server on :3000 |
-| `npm run build` | Production build |
-| `npm run start` | Serve the production build |
-| `npm run lint` | Run ESLint (`eslint-config-next`) |
-| `npm run test` | Run the Vitest suite once |
-| `npm run test:watch` | Vitest in watch mode |
-| `npm run test:coverage` | Vitest with coverage report |
-| `npm run codegen` | Regenerate `src/lib/api/_generated.ts` from `backend/openapi.json` |
-| `npx tsc --noEmit` | Type-check without emitting (no dedicated script) |
+| Script                  | What it does                                                       |
+| ----------------------- | ------------------------------------------------------------------ |
+| `npm run dev`           | Start the Next.js dev server on :3000                              |
+| `npm run build`         | Production build                                                   |
+| `npm run start`         | Serve the production build                                         |
+| `npm run lint`          | Run ESLint (`eslint-config-next`)                                  |
+| `npm run test`          | Run the Vitest suite once                                          |
+| `npm run test:watch`    | Vitest in watch mode                                               |
+| `npm run test:coverage` | Vitest with coverage report                                        |
+| `npm run codegen`       | Regenerate `src/lib/api/_generated.ts` from `backend/openapi.json` |
+| `npx tsc --noEmit`      | Type-check without emitting (no dedicated script)                  |
 
 > Type checking and formatting are not separate scripts today — `npm run build` enforces types, and ESLint covers stylistic rules.
 
@@ -53,7 +53,7 @@ The frontend talks to the backend through a thin axios wrapper that derives requ
 
 ### Files
 
-- **`backend/openapi.json`** — source of truth. Exported by `cd backend && uv run python scripts/export_openapi.py`. CI fails if it drifts from the live FastAPI routers.
+- **`backend/openapi.json`** — source of truth. Exported by `make codegen`. CI runs `make codegen/check` and fails if it drifts from the live FastAPI routers.
 - **`src/lib/api/_generated.ts`** — generated TypeScript types (`paths`, `components`, `operations`). Produced by `openapi-typescript`. **Do not edit by hand.** It's git-tracked so reviewers see API surface changes in the diff, and ESLint ignores it.
 - **`src/lib/api/_client.ts`** — the typed axios wrapper. Re-exports `Paths`, `Components`, `Schemas`, and helper types (`ResponseOf`, `PathParamsOf`, `QueryParamsOf`, `RequestBodyOf`). Exposes `apiClient.get/post/put/patch/del` whose URL argument is constrained to spec paths that actually expose that verb.
 - **`src/lib/api/contacts.ts`** — proof-of-concept resource client using `apiClient`. Other resource modules under `src/lib/api/` will migrate incrementally.
@@ -61,9 +61,9 @@ The frontend talks to the backend through a thin axios wrapper that derives requ
 ### Regenerating types after a backend change
 
 ```bash
-cd backend && uv run python scripts/export_openapi.py   # refresh openapi.json
-cd ../frontend && npm run codegen                       # regenerate _generated.ts
-npx tsc --noEmit                                        # catch any consumer breakage
+make codegen          # refresh openapi.json and regenerate _generated.ts
+make codegen/check    # rerun generation and fail if committed artifacts drift
+cd frontend && npm run typecheck  # catch any consumer breakage
 ```
 
 Commit both `backend/openapi.json` and `frontend/src/lib/api/_generated.ts` together with the backend change.
@@ -98,10 +98,10 @@ apiClient.post("/api/v1/workspaces/{workspace_id}/contacts/import", {
 
 Create `frontend/.env.local`. Only `NEXT_PUBLIC_*` vars are exposed to the browser.
 
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `NEXT_PUBLIC_API_URL` | yes (prod) | `http://localhost:8000` | Base URL for the FastAPI backend; also used to derive the websocket host |
-| `NEXT_PUBLIC_PLAN_PRICE` | no | `$297/month` | Plan price shown on billing/onboarding surfaces |
+| Variable                 | Required   | Default                 | Purpose                                                                  |
+| ------------------------ | ---------- | ----------------------- | ------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`    | yes (prod) | `http://localhost:8000` | Base URL for the FastAPI backend; also used to derive the websocket host |
+| `NEXT_PUBLIC_PLAN_PRICE` | no         | `$297/month`            | Plan price shown on billing/onboarding surfaces                          |
 
 Example `.env.local`:
 

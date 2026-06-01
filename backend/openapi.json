@@ -39433,7 +39433,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}": {
       "delete": {
-        "description": "Delete a mission.\n\nOnly DRAFT or ARCHIVED missions can be deleted outright. Active or paused\nmissions must be archived first (via ``POST /{id}/archive``) — this\npreserves the audit trail of any prospects/sequence enrollments that\nreferenced the mission.",
+        "description": "Delete a draft or archived mission.",
         "operationId": "delete_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__delete",
         "parameters": [
           {
@@ -39540,7 +39540,7 @@
         ]
       },
       "patch": {
-        "description": "Partially update an outbound mission.\n\nField updates are only allowed when the mission is in DRAFT, PAUSED, or\nARCHIVED status. The ``status`` field is intentionally read-only here —\ncallers must use the dedicated lifecycle endpoints (start/pause/resume/\ncomplete/archive).",
+        "description": "Partially update an outbound mission.",
         "operationId": "update_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__patch",
         "parameters": [
           {
@@ -39607,7 +39607,7 @@
         ]
       },
       "put": {
-        "description": "Partially update an outbound mission.\n\nField updates are only allowed when the mission is in DRAFT, PAUSED, or\nARCHIVED status. The ``status`` field is intentionally read-only here —\ncallers must use the dedicated lifecycle endpoints (start/pause/resume/\ncomplete/archive).",
+        "description": "Partially update an outbound mission.",
         "operationId": "update_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__put",
         "parameters": [
           {
@@ -39676,7 +39676,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/archive": {
       "post": {
-        "description": "Archive a mission (any state except already-archived).",
+        "description": "Archive a mission in any non-archived state.",
         "operationId": "archive_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__archive_post",
         "parameters": [
           {
@@ -39977,7 +39977,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/enrichment-status": {
       "get": {
-        "description": "Aggregate enrichment status for a mission.\n\nReturns counts grouped by ``(provider, status)`` plus totals for the\nprospect-level enrichment counters. Useful to drive a Lead Miner status\npanel without paginating the raw audit table.",
+        "description": "Aggregate enrichment status for a mission.",
         "operationId": "get_mission_enrichment_status_api_v1_workspaces__workspace_id__outbound_missions__mission_id__enrichment_status_get",
         "parameters": [
           {
@@ -40471,7 +40471,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/prospects/{prospect_id}/enrichment": {
       "get": {
-        "description": "List enrichment audit rows for a single prospect (newest first).",
+        "description": "List enrichment audit rows for a single prospect, newest first.",
         "operationId": "list_prospect_enrichment_results_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__enrichment_get",
         "parameters": [
           {
@@ -40556,7 +40556,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/prospects/{prospect_id}/select": {
       "post": {
-        "description": "Select a prospect for outreach — moves status to QUEUED.",
+        "description": "Select a prospect for outreach by moving it to QUEUED.",
         "operationId": "select_mission_prospect_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__select_post",
         "parameters": [
           {
@@ -40625,7 +40625,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/prospects/{prospect_id}/suppress": {
       "post": {
-        "description": "Suppress a prospect (do-not-contact).",
+        "description": "Suppress a prospect as do-not-contact.",
         "operationId": "suppress_mission_prospect_api_v1_workspaces__workspace_id__outbound_missions__mission_id__prospects__prospect_id__suppress_post",
         "parameters": [
           {
@@ -40770,7 +40770,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/sequence": {
       "get": {
-        "description": "Return the mission's default sequence + enrollment counters.\n\nResponse shape::\n\n    {\n      \"mission_id\": \"<uuid>\",\n      \"default_sequence\": OutboundSequenceResponse | null,\n      \"enrollment_counts\": {\"active\": 3, \"completed\": 12, ...},\n      \"total_enrollments\": 27\n    }",
+        "description": "Return the mission's default sequence and enrollment counters.",
         "operationId": "get_mission_sequence_overview_api_v1_workspaces__workspace_id__outbound_missions__mission_id__sequence_get",
         "parameters": [
           {
@@ -40831,7 +40831,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/outbound-missions/{mission_id}/start": {
       "post": {
-        "description": "Start (or resume) a mission — moves DRAFT/PAUSED → ACTIVE.",
+        "description": "Start (or resume) a mission by moving DRAFT/PAUSED to ACTIVE.",
         "operationId": "start_mission_api_v1_workspaces__workspace_id__outbound_missions__mission_id__start_post",
         "parameters": [
           {
