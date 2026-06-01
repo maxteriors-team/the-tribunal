@@ -7,14 +7,23 @@ Handles:
 - Error handling and retry logic with exponential backoff
 """
 
-import asyncio
-import random
-from datetime import UTC, datetime, timedelta
-from email.utils import parsedate_to_datetime
-from typing import Any
+from datetime import datetime, timedelta
+from typing import Any, cast
 
 import httpx
 import structlog
+
+from app.services.providers.http import (
+    AsyncProviderHTTPClient,
+    HTTPMethod,
+    ProviderAuthError,
+    ProviderHTTPError,
+    ProviderNotFoundError,
+    ProviderRateLimitError,
+    ProviderRetryPolicy,
+    ProviderTransportError,
+    parse_retry_after,
+)
 
 logger = structlog.get_logger()
 
@@ -22,43 +31,12 @@ logger = structlog.get_logger()
 MAX_RETRIES = 3
 INITIAL_BACKOFF_SECONDS = 1
 MAX_BACKOFF_SECONDS = 30
+_ALLOWED_METHODS = frozenset({"DELETE", "GET", "PATCH", "POST", "PUT"})
 
 
 def _parse_retry_after(value: str | None, fallback: float) -> float:
-    """Parse a Retry-After header value.
-
-    Supports both delta-seconds (integer) and HTTP-date (RFC 7231) formats.
-    Returns ``fallback`` when the header is missing or unparseable.
-
-    Args:
-        value: Raw Retry-After header value.
-        fallback: Seconds to use when parsing fails.
-
-    Returns:
-        Non-negative number of seconds to wait before retrying.
-    """
-    if value is None:
-        return fallback
-
-    stripped = value.strip()
-    if not stripped:
-        return fallback
-
-    # delta-seconds form
-    if stripped.isascii() and stripped.isdigit():
-        return float(stripped)
-
-    # HTTP-date form (RFC 7231)
-    try:
-        parsed_date = parsedate_to_datetime(stripped)
-    except (TypeError, ValueError, IndexError):
-        return fallback
-
-    if parsed_date.tzinfo is None:
-        parsed_date = parsed_date.replace(tzinfo=UTC)
-
-    diff = (parsed_date - datetime.now(UTC)).total_seconds()
-    return max(0.0, diff)
+    """Backward-compatible wrapper around the shared Retry-After parser."""
+    return parse_retry_after(value, fallback=fallback)
 
 
 class CalComError(Exception):
@@ -97,19 +75,33 @@ class CalComService:
         self.api_key = api_key
         self.base_url = "https://api.cal.com/v2"
         self.logger = logger.bind(component="calcom_service")
-        self._client: httpx.AsyncClient | None = None
+        self._client: AsyncProviderHTTPClient | None = None
 
-    async def get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
+    def _build_client(
+        self,
+        raw_client: httpx.AsyncClient | None = None,
+    ) -> AsyncProviderHTTPClient:
+        """Build the shared provider HTTP client for Cal.com."""
+        return AsyncProviderHTTPClient(
+            provider="calcom",
+            base_url=self.base_url,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "cal-api-version": "2024-08-13",
+            },
+            retry_policy=ProviderRetryPolicy(
+                max_attempts=MAX_RETRIES,
+                initial_backoff_seconds=float(INITIAL_BACKOFF_SECONDS),
+                max_backoff_seconds=float(MAX_BACKOFF_SECONDS),
+            ),
+            logger=self.logger,
+            client=raw_client,
+        )
+
+    async def get_client(self) -> AsyncProviderHTTPClient:
+        """Get or create the shared provider HTTP client."""
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "cal-api-version": "2024-08-13",
-                },
-                timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
-                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-            )
+            self._client = self._build_client()
         return self._client
 
     async def close(self) -> None:
@@ -146,8 +138,6 @@ class CalComService:
         )
 
         try:
-            client = await self.get_client()
-
             # Cal.com API v2 /slots/available expects YYYY-MM-DD for startTime/endTime
             # IMPORTANT: endTime must be > startTime (at least next day) or API returns empty
             start_str = start_date.strftime("%Y-%m-%d")
@@ -173,9 +163,8 @@ class CalComService:
 
             response = await self._request_with_retry(
                 "GET",
-                f"{self.base_url}/slots/available",
+                "/slots/available",
                 params=params,
-                client=client,
             )
 
             # Cal.com v2 response structure:
@@ -261,8 +250,6 @@ class CalComService:
         )
 
         try:
-            client = await self.get_client()
-
             # Build attendee object with required fields
             attendee: dict[str, Any] = {
                 "name": contact_name,
@@ -292,9 +279,8 @@ class CalComService:
 
             response = await self._request_with_retry(
                 "POST",
-                f"{self.base_url}/bookings",
+                "/bookings",
                 json=payload,
-                client=client,
             )
 
             log.info(
@@ -327,12 +313,9 @@ class CalComService:
         log = self.logger.bind(operation="get_booking", booking_uid=booking_uid)
 
         try:
-            client = await self.get_client()
-
             response = await self._request_with_retry(
                 "GET",
-                f"{self.base_url}/bookings/{booking_uid}",
-                client=client,
+                f"/bookings/{booking_uid}",
             )
 
             log.info("booking_fetched", booking_id=response.get("id"))
@@ -361,15 +344,12 @@ class CalComService:
         log = self.logger.bind(operation="cancel_booking", booking_uid=booking_uid)
 
         try:
-            client = await self.get_client()
-
             payload = {"reason": reason}
 
             await self._request_with_retry(
                 "DELETE",
-                f"{self.base_url}/bookings/{booking_uid}",
+                f"/bookings/{booking_uid}",
                 json=payload,
-                client=client,
             )
 
             log.info("booking_cancelled")
@@ -434,109 +414,48 @@ class CalComService:
         self,
         method: str,
         url: str,
-        client: httpx.AsyncClient,
+        client: AsyncProviderHTTPClient | httpx.AsyncClient | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Make HTTP request with exponential backoff retry logic.
+        """Make a Cal.com HTTP request through the shared provider client.
 
-        Args:
-            method: HTTP method (GET, POST, DELETE, etc.)
-            url: API endpoint URL
-            client: HTTP client to use
-            **kwargs: Additional arguments to pass to client request
-
-        Returns:
-            JSON response from API
-
-        Raises:
-            CalComError: If all retries fail
+        ``client`` remains optional for older tests that pre-wire a mock
+        ``httpx.AsyncClient``; service methods use the lazily-created shared
+        client directly.
         """
-        backoff_seconds: float = float(INITIAL_BACKOFF_SECONDS)
+        provider_client = await self._coerce_provider_client(client)
+        http_method = self._coerce_method(method)
+        try:
+            return await provider_client.request_json(http_method, url, **kwargs)
+        except ProviderAuthError as exc:
+            raise CalComAuthError("Invalid API key or authentication failed") from exc
+        except ProviderNotFoundError as exc:
+            raise CalComNotFoundError("Resource not found on Cal.com") from exc
+        except ProviderRateLimitError as exc:
+            raise CalComRateLimitError("Rate limit exceeded, max retries reached") from exc
+        except ProviderTransportError as exc:
+            if exc.code == "timeout":
+                raise CalComError(f"Request timeout after {MAX_RETRIES} attempts") from exc
+            raise CalComError(f"Network error after {MAX_RETRIES} attempts") from exc
+        except ProviderHTTPError as exc:
+            raise CalComError(f"API error: {exc.message}") from exc
 
-        def _next_backoff(current: float) -> float:
-            """Apply randomized jitter and exponential growth, capped at max."""
-            jittered = current + random.uniform(0, current)
-            return min(jittered, float(MAX_BACKOFF_SECONDS))
+    async def _coerce_provider_client(
+        self,
+        client: AsyncProviderHTTPClient | httpx.AsyncClient | None,
+    ) -> AsyncProviderHTTPClient:
+        """Return a provider client, wrapping raw httpx clients for tests."""
+        if client is None:
+            return await self.get_client()
+        if isinstance(client, AsyncProviderHTTPClient):
+            return client
+        return self._build_client(raw_client=client)
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = await client.request(method, url, **kwargs)
-
-                # Handle rate limiting
-                if response.status_code == 429:
-                    retry_after = _parse_retry_after(
-                        response.headers.get("retry-after"),
-                        fallback=backoff_seconds,
-                    )
-                    self.logger.warning(
-                        "rate_limit_hit",
-                        attempt=attempt + 1,
-                        retry_after=retry_after,
-                    )
-
-                    if attempt < MAX_RETRIES - 1:
-                        await asyncio.sleep(retry_after)
-                        backoff_seconds = _next_backoff(backoff_seconds)
-                        continue
-
-                    raise CalComRateLimitError("Rate limit exceeded, max retries reached")
-
-                # Handle authentication errors
-                if response.status_code == 401:
-                    raise CalComAuthError("Invalid API key or authentication failed")
-
-                # Handle not found
-                if response.status_code == 404:
-                    raise CalComNotFoundError("Resource not found on Cal.com")
-
-                # Handle other HTTP errors
-                if response.status_code >= 400:
-                    error_msg = response.text or f"HTTP {response.status_code}"
-                    self.logger.warning(
-                        "http_error",
-                        status_code=response.status_code,
-                        error=error_msg,
-                        attempt=attempt + 1,
-                    )
-
-                    # Retry only on 5xx; 4xx are terminal (client errors).
-                    if attempt < MAX_RETRIES - 1 and response.status_code >= 500:
-                        await asyncio.sleep(backoff_seconds)
-                        backoff_seconds = _next_backoff(backoff_seconds)
-                        continue
-
-                    raise CalComError(f"API error: {error_msg}")
-
-                # Success
-                return response.json()  # type: ignore[no-any-return]
-
-            except httpx.TimeoutException as e:
-                self.logger.warning(
-                    "request_timeout",
-                    attempt=attempt + 1,
-                    error=str(e),
-                )
-
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(backoff_seconds)
-                    backoff_seconds = _next_backoff(backoff_seconds)
-                    continue
-
-                raise CalComError(f"Request timeout after {MAX_RETRIES} attempts") from e
-
-            except httpx.NetworkError as e:
-                # NetworkError covers ConnectError, ReadError, WriteError, etc.
-                self.logger.warning(
-                    "network_error",
-                    attempt=attempt + 1,
-                    error=str(e),
-                )
-
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(backoff_seconds)
-                    backoff_seconds = _next_backoff(backoff_seconds)
-                    continue
-
-                raise CalComError(f"Network error after {MAX_RETRIES} attempts") from e
-
-        raise CalComError("Max retries exceeded")
+    @staticmethod
+    def _coerce_method(method: str) -> HTTPMethod:
+        """Validate and narrow an HTTP method string for the provider client."""
+        normalized = method.upper()
+        if normalized not in _ALLOWED_METHODS:
+            msg = f"Unsupported Cal.com HTTP method: {method}"
+            raise CalComError(msg)
+        return cast(HTTPMethod, normalized)

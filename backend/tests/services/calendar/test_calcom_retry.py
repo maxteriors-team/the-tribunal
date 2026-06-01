@@ -1,4 +1,4 @@
-"""Tests for `CalComService._request_with_retry`.
+"""Tests for Cal.com requests through the shared provider HTTP client.
 
 Covers the narrowed retry policy:
 - 4xx responses are terminal (no retry).
@@ -9,10 +9,10 @@ Covers the narrowed retry policy:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -25,52 +25,51 @@ from app.services.calendar.calcom import (
     _parse_retry_after,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_response(
-    status_code: int,
-    *,
-    json_body: dict[str, Any] | None = None,
-    text: str = "",
-    headers: dict[str, str] | None = None,
-) -> MagicMock:
-    """Build a MagicMock that quacks like httpx.Response for our code path."""
-    resp = MagicMock(spec=httpx.Response)
-    resp.status_code = status_code
-    resp.text = text
-    resp.headers = headers or {}
-    resp.json = MagicMock(return_value=json_body or {})
-    return resp
-
 
 @pytest.fixture
 def service() -> CalComService:
     return CalComService(api_key="test-key")
 
 
-@pytest.fixture
-def mock_client() -> AsyncMock:
-    client = AsyncMock(spec=httpx.AsyncClient)
-    return client
-
-
 @pytest.fixture(autouse=True)
-def _no_sleep() -> Any:
-    """Make asyncio.sleep instant so retry loops run quickly."""
+def _no_sleep() -> Iterator[AsyncMock]:
+    """Make provider retry sleeps instant so retry loops run quickly."""
     with patch(
-        "app.services.calendar.calcom.asyncio.sleep", new=AsyncMock(return_value=None)
+        "app.services.providers.http.asyncio.sleep", new=AsyncMock(return_value=None)
     ) as mock_sleep:
         yield mock_sleep
 
 
 @pytest.fixture(autouse=True)
-def _deterministic_jitter() -> Any:
-    """Pin random.uniform so jitter is deterministic in assertions."""
-    with patch("app.services.calendar.calcom.random.uniform", return_value=0.0) as mock_uniform:
+def _deterministic_jitter() -> Iterator[object]:
+    """Pin shared provider jitter so retry assertions are deterministic."""
+    with patch("app.services.providers.http.random.uniform", return_value=0.0) as mock_uniform:
         yield mock_uniform
+
+
+def _client_from_responses(
+    responses: list[httpx.Response | httpx.TransportError],
+) -> tuple[httpx.AsyncClient, list[httpx.Request]]:
+    """Return a raw client backed by MockTransport and capture requests."""
+    requests: list[httpx.Request] = []
+    queue = list(responses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        item = queue.pop(0)
+        if isinstance(item, httpx.TransportError):
+            raise item
+        return item
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.cal.com/v2",
+        headers={
+            "Authorization": "Bearer test-key",
+            "cal-api-version": "2024-08-13",
+        },
+    )
+    return client, requests
 
 
 # ---------------------------------------------------------------------------
@@ -80,28 +79,30 @@ def _deterministic_jitter() -> Any:
 
 @pytest.mark.asyncio
 async def test_4xx_client_error_is_not_retried(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
-    mock_client.request.return_value = _make_response(400, text="bad request")
-
-    with pytest.raises(CalComError) as excinfo:
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    client, requests = _client_from_responses([httpx.Response(400, text="bad request")])
+    try:
+        with pytest.raises(CalComError) as excinfo:
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     assert "bad request" in str(excinfo.value)
-    assert mock_client.request.await_count == 1
+    assert len(requests) == 1
     assert _no_sleep.await_count == 0
 
 
 @pytest.mark.asyncio
-async def test_404_raises_not_found_without_retry(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
-    mock_client.request.return_value = _make_response(404)
+async def test_404_raises_not_found_without_retry(service: CalComService) -> None:
+    client, requests = _client_from_responses([httpx.Response(404)])
+    try:
+        with pytest.raises(CalComNotFoundError):
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
-    with pytest.raises(CalComNotFoundError):
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
-
-    assert mock_client.request.await_count == 1
+    assert len(requests) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -111,32 +112,41 @@ async def test_404_raises_not_found_without_retry(
 
 @pytest.mark.asyncio
 async def test_5xx_retries_then_succeeds(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
-    mock_client.request.side_effect = [
-        _make_response(500, text="boom"),
-        _make_response(502, text="bad gateway"),
-        _make_response(200, json_body={"ok": True}),
-    ]
-
-    result = await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    client, requests = _client_from_responses(
+        [
+            httpx.Response(500, text="boom"),
+            httpx.Response(502, text="bad gateway"),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    try:
+        result = await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     assert result == {"ok": True}
-    assert mock_client.request.await_count == 3
-    # Two sleeps between the three attempts.
+    assert len(requests) == 3
     assert _no_sleep.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_5xx_exhausts_retries_and_raises(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
-    mock_client.request.return_value = _make_response(503, text="unavailable")
+async def test_5xx_exhausts_retries_and_raises(service: CalComService) -> None:
+    client, requests = _client_from_responses(
+        [
+            httpx.Response(503, text="unavailable"),
+            httpx.Response(503, text="unavailable"),
+            httpx.Response(503, text="unavailable"),
+        ]
+    )
+    try:
+        with pytest.raises(CalComError):
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
-    with pytest.raises(CalComError):
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
-
-    assert mock_client.request.await_count == 3
+    assert len(requests) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -145,43 +155,60 @@ async def test_5xx_exhausts_retries_and_raises(
 
 
 @pytest.mark.asyncio
-async def test_network_error_retries_then_succeeds(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
-    mock_client.request.side_effect = [
-        httpx.ConnectError("connection refused"),
-        _make_response(200, json_body={"ok": True}),
-    ]
-
-    result = await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+async def test_network_error_retries_then_succeeds(service: CalComService) -> None:
+    client, requests = _client_from_responses(
+        [
+            httpx.ConnectError("connection refused"),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    try:
+        result = await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     assert result == {"ok": True}
-    assert mock_client.request.await_count == 2
+    assert len(requests) == 2
 
 
 @pytest.mark.asyncio
-async def test_timeout_retries_then_exhausts(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
-    mock_client.request.side_effect = httpx.ReadTimeout("timed out")
+async def test_timeout_retries_then_exhausts(service: CalComService) -> None:
+    client, requests = _client_from_responses(
+        [
+            httpx.ReadTimeout("timed out"),
+            httpx.ReadTimeout("timed out"),
+            httpx.ReadTimeout("timed out"),
+        ]
+    )
+    try:
+        with pytest.raises(CalComError, match="timeout"):
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
-    with pytest.raises(CalComError, match="timeout"):
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
-
-    assert mock_client.request.await_count == 3
+    assert len(requests) == 3
 
 
 @pytest.mark.asyncio
-async def test_unrelated_exception_is_not_retried(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
+async def test_unrelated_exception_is_not_retried(service: CalComService) -> None:
     """RuntimeError (or any non-httpx exception) must bubble immediately."""
-    mock_client.request.side_effect = RuntimeError("unexpected")
+    requests: list[httpx.Request] = []
 
-    with pytest.raises(RuntimeError, match="unexpected"):
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        raise RuntimeError("unexpected")
 
-    assert mock_client.request.await_count == 1
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.cal.com/v2",
+    )
+    try:
+        with pytest.raises(RuntimeError, match="unexpected"):
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
+
+    assert len(requests) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -191,69 +218,85 @@ async def test_unrelated_exception_is_not_retried(
 
 @pytest.mark.asyncio
 async def test_retry_after_integer_seconds_is_honored(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
-    mock_client.request.side_effect = [
-        _make_response(429, headers={"retry-after": "7"}),
-        _make_response(200, json_body={"ok": True}),
-    ]
-
-    result = await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    client, _requests = _client_from_responses(
+        [
+            httpx.Response(429, headers={"retry-after": "7"}),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    try:
+        result = await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     assert result == {"ok": True}
-    # First (and only) sleep should be the parsed retry-after.
     _no_sleep.assert_awaited_once_with(7.0)
 
 
 @pytest.mark.asyncio
 async def test_retry_after_http_date_is_honored(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
     future = datetime.now(UTC) + timedelta(seconds=12)
     http_date = format_datetime(future, usegmt=True)
 
-    mock_client.request.side_effect = [
-        _make_response(429, headers={"retry-after": http_date}),
-        _make_response(200, json_body={"ok": True}),
-    ]
-
-    result = await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    client, _requests = _client_from_responses(
+        [
+            httpx.Response(429, headers={"retry-after": http_date}),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    try:
+        result = await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     assert result == {"ok": True}
     _no_sleep.assert_awaited_once()
     assert _no_sleep.await_args is not None
     slept_for = _no_sleep.await_args.args[0]
-    # Allow a generous window for clock drift between header generation and parsing.
     assert 0 <= slept_for <= 13
 
 
 @pytest.mark.asyncio
 async def test_retry_after_past_http_date_clamps_to_zero(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
     past = datetime.now(UTC) - timedelta(seconds=30)
     http_date = format_datetime(past, usegmt=True)
 
-    mock_client.request.side_effect = [
-        _make_response(429, headers={"retry-after": http_date}),
-        _make_response(200, json_body={"ok": True}),
-    ]
-
-    await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
+    client, _requests = _client_from_responses(
+        [
+            httpx.Response(429, headers={"retry-after": http_date}),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    try:
+        await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
     _no_sleep.assert_awaited_once_with(0.0)
 
 
 @pytest.mark.asyncio
-async def test_429_exhausts_retries_raises_rate_limit_error(
-    service: CalComService, mock_client: AsyncMock
-) -> None:
-    mock_client.request.return_value = _make_response(429, headers={"retry-after": "1"})
+async def test_429_exhausts_retries_raises_rate_limit_error(service: CalComService) -> None:
+    client, requests = _client_from_responses(
+        [
+            httpx.Response(429, headers={"retry-after": "1"}),
+            httpx.Response(429, headers={"retry-after": "1"}),
+            httpx.Response(429, headers={"retry-after": "1"}),
+        ]
+    )
+    try:
+        with pytest.raises(CalComRateLimitError):
+            await service._request_with_retry("GET", "/x", client)
+    finally:
+        await client.aclose()
 
-    with pytest.raises(CalComRateLimitError):
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
-
-    assert mock_client.request.await_count == 3
+    assert len(requests) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -263,22 +306,24 @@ async def test_429_exhausts_retries_raises_rate_limit_error(
 
 @pytest.mark.asyncio
 async def test_backoff_includes_random_jitter(
-    service: CalComService, mock_client: AsyncMock, _no_sleep: AsyncMock
+    service: CalComService, _no_sleep: AsyncMock
 ) -> None:
     """random.uniform(0, backoff_seconds) is added to the current backoff each retry."""
-    with patch("app.services.calendar.calcom.random.uniform", return_value=0.5) as mock_uniform:
-        mock_client.request.side_effect = [
-            _make_response(500),
-            _make_response(500),
-            _make_response(200, json_body={"ok": True}),
-        ]
+    with patch("app.services.providers.http.random.uniform", return_value=0.5) as mock_uniform:
+        client, _requests = _client_from_responses(
+            [
+                httpx.Response(500),
+                httpx.Response(500),
+                httpx.Response(200, json={"ok": True}),
+            ]
+        )
+        try:
+            await service._request_with_retry("GET", "/x", client)
+        finally:
+            await client.aclose()
 
-        await service._request_with_retry("GET", "https://api.cal.com/v2/x", mock_client)
-
-    # First retry sleeps at the initial backoff (1.0), second at jittered next.
     sleeps = [call.args[0] for call in _no_sleep.await_args_list]
     assert sleeps == [1.0, 1.5]
-    # Called once per successful retry transition (2 transitions here).
     assert mock_uniform.call_count == 2
 
 

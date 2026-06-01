@@ -1,12 +1,12 @@
 """Chaos tests for the Telnyx SMS client.
 
 These tests inject faults at the HTTP transport layer and assert that the
-production retry policy (``app.services.telephony.telnyx._telnyx_retry``)
-absorbs them per its contract:
+shared provider retry policy used by ``TelnyxSMSService`` absorbs them per
+its contract:
 
-- 5xx → retried up to 3 times total, surfaces on exhaustion.
+- 5xx → retried up to 3 times total, surfaces as ProviderHTTPError.
 - 4xx → terminal, raised immediately, never retried.
-- Transport errors / timeouts → retried, surfaces on exhaustion.
+- Transport errors / timeouts → retried, surfaces as ProviderTransportError.
 
 We bypass ``send_message`` (which writes to the DB) and call
 ``_post_message`` directly, since the goal is to characterise the HTTP
@@ -18,6 +18,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from app.services.providers.http import ProviderHTTPError, ProviderTransportError
 from app.services.telephony.telnyx import TelnyxSMSService
 from tests.chaos.conftest import FaultStats, make_fault_transport
 
@@ -70,10 +71,10 @@ async def test_random_500s_are_retried_then_recovered(fault_stats: FaultStats) -
     )
     svc = _build_service_with_transport(transport)
     try:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(ProviderHTTPError) as exc_info:
             await svc._post_message(PAYLOAD)
 
-        assert exc_info.value.response.status_code == 500
+        assert exc_info.value.status_code == 500
         # 1 initial + 2 retries = 3.
         assert stats.total == 3
         assert stats.injected_500 == 3
@@ -116,7 +117,7 @@ async def test_timeouts_are_retried(fault_stats: FaultStats) -> None:
     )
     svc = _build_service_with_transport(transport)
     try:
-        with pytest.raises(httpx.ReadTimeout):
+        with pytest.raises(ProviderTransportError):
             await svc._post_message(PAYLOAD)
         assert stats.total == 3
         assert stats.injected_timeout == 3
@@ -166,9 +167,9 @@ async def test_4xx_is_terminal_not_retried(fault_stats: FaultStats) -> None:
     )
     svc = _build_service_with_transport(transport)
     try:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(ProviderHTTPError) as exc_info:
             await svc._post_message(PAYLOAD)
-        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.status_code == 400
         assert stats.total == 1
     finally:
         await svc.close()
@@ -197,7 +198,7 @@ async def test_mixed_chaos_500_and_timeout(fault_stats: FaultStats) -> None:
                 result = await svc._post_message(PAYLOAD)
                 assert result["data"]["id"] == "msg_ok"
                 outcomes.append("ok")
-            except (httpx.HTTPStatusError, httpx.ReadTimeout):
+            except ProviderHTTPError:
                 outcomes.append("failed")
 
         # Both outcomes must be observed — if every call passes or every

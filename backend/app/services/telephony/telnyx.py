@@ -10,12 +10,6 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from tenacity import (
-    retry,
-    retry_if_exception,
-    stop_after_attempt,
-    wait_exponential_jitter,
-)
 
 from app.core.config import settings
 from app.core.encryption import hash_phone
@@ -27,38 +21,21 @@ from app.core.metrics import (
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageChannel, MessageStatus
 from app.services.messaging.link_shortener import shorten_urls_in_text
+from app.services.providers.http import (
+    AsyncProviderHTTPClient,
+    ProviderHTTPError,
+    ProviderRetryPolicy,
+)
 from app.utils.phone import normalize_phone_e164, phone_lookup_variants
 from app.utils.pii import mask_phone
 
 logger = structlog.get_logger()
 
 
-def _is_retryable_telnyx_error(exc: BaseException) -> bool:
-    """Return True if the exception is a transient Telnyx/network failure.
-
-    Retries on:
-    - ``httpx.TransportError`` (connect/read/write timeouts, network errors)
-    - ``httpx.HTTPStatusError`` with a 5xx response
-
-    Never retries on 4xx responses — those are client errors (bad request,
-    auth, invalid number, etc.) and re-issuing the request will not help.
-    """
-    if isinstance(exc, httpx.TransportError):
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    return False
-
-
-# Shared retry decorator for outbound Telnyx HTTP calls.
-# - 3 attempts total (1 initial + 2 retries)
-# - Exponential backoff with jitter starting at 1s, capped at 10s
-# - Only retries on 5xx and network errors; 4xx client errors propagate immediately
-_telnyx_retry = retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential_jitter(initial=1, max=10),
-    retry=retry_if_exception(_is_retryable_telnyx_error),
-    reraise=True,
+TELNYX_RETRY_POLICY = ProviderRetryPolicy(
+    max_attempts=3,
+    initial_backoff_seconds=1.0,
+    max_backoff_seconds=10.0,
 )
 
 
@@ -107,28 +84,59 @@ class TelnyxSMSService:
         self.conversation_channel = conversation_channel
         self.provider_payload_type = provider_payload_type
         self._client: httpx.AsyncClient | None = None
+        self._provider_client: AsyncProviderHTTPClient | None = None
         self.logger = logger.bind(service=service_name)
+
+    def _build_provider_client(
+        self,
+        raw_client: httpx.AsyncClient | None = None,
+    ) -> AsyncProviderHTTPClient:
+        """Build the shared provider HTTP client for Telnyx."""
+        return AsyncProviderHTTPClient(
+            provider="telnyx",
+            base_url=self.BASE_URL,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            retry_policy=TELNYX_RETRY_POLICY,
+            logger=self.logger,
+            client=raw_client,
+        )
 
     @property
     def client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
+        """Get or create the raw HTTP client.
+
+        Kept for subclasses and tests that still interact with httpx directly;
+        migrated Telnyx methods use :attr:`provider_client` instead.
+        """
         if self._client is None:
-            self._client = httpx.AsyncClient(
-                base_url=self.BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
-                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-            )
+            self._provider_client = self._build_provider_client()
+            self._client = self._provider_client.raw_client
         return self._client
+
+    @property
+    def provider_client(self) -> AsyncProviderHTTPClient:
+        """Get or create the shared provider HTTP client."""
+        if self._provider_client is None:
+            self._provider_client = self._build_provider_client(raw_client=self._client)
+            self._client = self._provider_client.raw_client
+        return self._provider_client
 
     async def close(self) -> None:
         """Close HTTP client."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
+        provider_client = self._provider_client
+        raw_client = self._client
+        self._provider_client = None
+        self._client = None
+        if provider_client is not None:
+            await provider_client.aclose()
+            if not provider_client.owns_client and raw_client is not None:
+                await raw_client.aclose()
+            return
+        if raw_client is not None:
+            await raw_client.aclose()
 
     async def _find_message_by_idempotency_key(
         self,
@@ -262,20 +270,15 @@ class TelnyxSMSService:
             message.sent_at = datetime.now(UTC)
             observe_sms_sent(workspace_id, direction="outbound")
             log.info("text_message_sent", message_id=message.provider_message_id)
-        except httpx.HTTPStatusError as e:
-            try:
-                err_data = e.response.json()
-            except (ValueError, TypeError):
-                err_data = {}
-            errors = err_data.get("errors", []) if isinstance(err_data, dict) else []
-            first_error = errors[0] if errors else {}
-            error_msg = first_error.get("detail") if first_error else e.response.text
+        except ProviderHTTPError as e:
             message.status = MessageStatus.FAILED
-            message.error_message = error_msg
+            message.error_message = e.message
             log.error(
                 "text_send_failed",
-                status_code=e.response.status_code,
-                error=error_msg,
+                status_code=e.status_code,
+                error=e.message,
+                error_code=e.code,
+                retryable=e.retryable,
             )
         except Exception as e:
             message.status = MessageStatus.FAILED
@@ -655,75 +658,52 @@ class TelnyxSMSService:
             "type": self.provider_payload_type,
         }
 
-    @_telnyx_retry
     async def _post_message(
         self,
         payload: dict[str, str],
         idempotency_key: uuid.UUID | None = None,
     ) -> dict[str, Any]:
-        """POST to /messages with retry on 5xx/network errors.
+        """POST to /messages with shared retry/error handling.
 
         If ``idempotency_key`` is provided, it is sent as the
         ``X-Idempotency-Key`` HTTP header. Telnyx echoes this header back on
         retry-safe deduplication so the provider also rejects duplicates if
-        our retry decorator re-issues the request after a transient failure.
+        the provider client re-issues the request after a transient failure.
 
-        Raises ``httpx.HTTPStatusError`` on 4xx (immediately) or 5xx (after
-        retries are exhausted) and ``httpx.TransportError`` on persistent
-        network failures. The caller maps these to a failed Message row.
+        Raises a typed ``ProviderHTTPError`` subclass on 4xx, exhausted 5xx,
+        invalid JSON, or persistent network failures. The caller maps these
+        to a failed Message row.
         """
         headers: dict[str, str] | None = None
         if idempotency_key is not None:
             headers = {"X-Idempotency-Key": str(idempotency_key)}
         with latency_ms_timer(telnyx_api_latency_ms):
-            response = await self.client.post("/messages", json=payload, headers=headers)
-        self.logger.info("telnyx_response", status_code=response.status_code)
-        response.raise_for_status()
-        try:
-            data: dict[str, Any] = response.json()
-            return data
-        except (ValueError, TypeError):
-            self.logger.error("telnyx_invalid_json", status_code=response.status_code)
-            return {"errors": [{"detail": "Invalid JSON response"}]}
-
-    @_telnyx_retry
-    async def _get_phone_numbers(self) -> dict[str, Any]:
-        response = await self.client.get("/phone_numbers")
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
+            data = await self.provider_client.post_json("/messages", json=payload, headers=headers)
+        self.logger.info("telnyx_response", status_code=200)
         return data
 
-    @_telnyx_retry
+    async def _get_phone_numbers(self) -> dict[str, Any]:
+        return await self.provider_client.get_json("/phone_numbers")
+
     async def _get_available_phone_numbers(
         self, params: dict[str, str | int | bool]
     ) -> dict[str, Any]:
-        response = await self.client.get("/available_phone_numbers", params=params)
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        return data
+        return await self.provider_client.get_json("/available_phone_numbers", params=params)
 
-    @_telnyx_retry
     async def _post_number_order(self, phone_number: str) -> dict[str, Any]:
-        response = await self.client.post(
+        return await self.provider_client.post_json(
             "/number_orders",
             json={"phone_numbers": [{"phone_number": phone_number}]},
         )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        return data
 
-    @_telnyx_retry
     async def _delete_phone_number(self, phone_number_id: str) -> None:
-        response = await self.client.delete(f"/phone_numbers/{phone_number_id}")
-        response.raise_for_status()
+        await self.provider_client.delete(f"/phone_numbers/{phone_number_id}")
 
-    @_telnyx_retry
     async def _patch_phone_number(self, phone_number_id: str, payload: dict[str, str]) -> None:
-        response = await self.client.patch(
+        await self.provider_client.patch(
             f"/phone_numbers/{phone_number_id}",
             json=payload,
         )
-        response.raise_for_status()
 
     async def list_phone_numbers(self) -> list[PhoneNumberInfo]:
         """List all Telnyx phone numbers."""

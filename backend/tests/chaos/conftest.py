@@ -113,7 +113,7 @@ def _reset_circuit_breakers() -> Iterator[None]:
 def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make retry backoff sleep instantly.
 
-    Both ``CalComService._request_with_retry`` and tenacity-decorated Telnyx
+    The shared provider HTTP client and any legacy tenacity-decorated
     methods sleep with real time. Real sleeps make the suite slow and time-
     dependent. We patch the specific call sites so latency *we* inject in
     the mock transport still applies — only the retry backoff is short-
@@ -122,11 +122,11 @@ def _no_real_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     from unittest.mock import AsyncMock
 
     monkeypatch.setattr(
-        "app.services.calendar.calcom.asyncio.sleep",
+        "app.services.providers.http.asyncio.sleep",
         AsyncMock(return_value=None),
     )
-    # Tenacity uses its own asyncio.sleep call site for the @_telnyx_retry
-    # decorator. Pin that too so retry backoff doesn't add 1-10s per test.
+    # Tenacity uses its own asyncio.sleep call site. Pin that too so any
+    # remaining tenacity retry backoff doesn't add 1-10s per test.
     try:
         import tenacity.nap
 

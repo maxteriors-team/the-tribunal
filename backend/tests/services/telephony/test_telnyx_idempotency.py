@@ -25,6 +25,7 @@ import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.models.conversation import MessageStatus
@@ -43,37 +44,49 @@ class TestPostMessageHeader:
         svc = TelnyxSMSService(api_key="k")
         key = uuid.uuid4()
 
-        fake_client = MagicMock()
-        response = MagicMock(status_code=200)
-        response.raise_for_status = MagicMock()
-        response.json = MagicMock(return_value={"data": {"id": "m1"}})
-        fake_client.post = AsyncMock(return_value=response)
-        svc._client = fake_client
+        seen_requests: list[httpx.Request] = []
 
-        await svc._post_message(
-            {"to": "+1", "from": "+2", "text": "hi", "type": "SMS"},
-            idempotency_key=key,
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_requests.append(request)
+            return httpx.Response(200, json={"data": {"id": "m1"}})
+
+        svc._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url=svc.BASE_URL,
         )
 
-        post_kwargs = fake_client.post.call_args.kwargs
-        assert post_kwargs["headers"] == {"X-Idempotency-Key": str(key)}
+        try:
+            await svc._post_message(
+                {"to": "+1", "from": "+2", "text": "hi", "type": "SMS"},
+                idempotency_key=key,
+            )
+        finally:
+            await svc.close()
+
+        assert seen_requests[0].headers["X-Idempotency-Key"] == str(key)
 
     async def test_header_omitted_when_no_key(self) -> None:
         svc = TelnyxSMSService(api_key="k")
 
-        fake_client = MagicMock()
-        response = MagicMock(status_code=200)
-        response.raise_for_status = MagicMock()
-        response.json = MagicMock(return_value={"data": {"id": "m1"}})
-        fake_client.post = AsyncMock(return_value=response)
-        svc._client = fake_client
+        seen_requests: list[httpx.Request] = []
 
-        await svc._post_message(
-            {"to": "+1", "from": "+2", "text": "hi", "type": "SMS"},
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_requests.append(request)
+            return httpx.Response(200, json={"data": {"id": "m1"}})
+
+        svc._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url=svc.BASE_URL,
         )
 
-        post_kwargs = fake_client.post.call_args.kwargs
-        assert post_kwargs["headers"] is None
+        try:
+            await svc._post_message(
+                {"to": "+1", "from": "+2", "text": "hi", "type": "SMS"},
+            )
+        finally:
+            await svc.close()
+
+        assert "X-Idempotency-Key" not in seen_requests[0].headers
 
 
 # ---------------------------------------------------------------------------
