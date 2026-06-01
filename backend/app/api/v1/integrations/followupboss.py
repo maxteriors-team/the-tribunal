@@ -14,7 +14,6 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DB, CurrentUser
-from app.core.encryption import encrypt_json
 from app.models.contact import Contact
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.followupboss import (
@@ -24,6 +23,7 @@ from app.schemas.followupboss import (
     FUBVerifyResponse,
 )
 from app.services.followupboss import FollowUpBossClient
+from app.services.onboarding.credentials import store_followupboss_credentials
 from app.services.reactivation.drip_bootstrap import auto_create_drip_for_imports
 
 router = APIRouter()
@@ -36,25 +36,7 @@ async def upsert_fub_integration(
     api_key: str,
 ) -> None:
     """Create or update a Follow Up Boss WorkspaceIntegration row."""
-    result = await db.execute(
-        select(WorkspaceIntegration).where(
-            WorkspaceIntegration.workspace_id == workspace_id,
-            WorkspaceIntegration.integration_type == "followupboss",
-        )
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing is not None:
-        existing.encrypted_credentials = encrypt_json({"api_key": api_key})
-        existing.is_active = True
-    else:
-        integration = WorkspaceIntegration(
-            workspace_id=workspace_id,
-            integration_type="followupboss",
-            encrypted_credentials=encrypt_json({"api_key": api_key}),
-            is_active=True,
-        )
-        db.add(integration)
+    await store_followupboss_credentials(db, workspace_id, api_key)
 
 
 async def _get_fub_integration(
