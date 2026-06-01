@@ -44,6 +44,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
 from app.services.approval.approval_gate_service import approval_gate_service
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -88,7 +89,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     self._evaluate_automation,
                     automation,
                     db,
-                    item_key=f"automation:{automation.id}",
+                    item_key=derive_worker_retry_key("automation", automation.id),
                 )
 
             await db.commit()
@@ -121,7 +122,9 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 automation,
                 contact,
                 db,
-                item_key=f"automation:{automation.id}:contact:{contact.id}",
+                item_key=derive_worker_retry_key(
+                    "automation", automation.id, "contact", contact.id
+                ),
             )
 
         automation.last_evaluated_at = datetime.now(UTC)
@@ -416,12 +419,14 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         sms_service = get_text_message_provider()
         try:
+            idempotency_key = derive_outbound_key("automation_sms", automation.id, contact.id)
             await sms_service.send_message(
                 to_number=contact.phone_number,
                 from_number=from_number,
                 body=message_body,
                 db=db,
                 workspace_id=automation.workspace_id,
+                idempotency_key=idempotency_key,
             )
             self.logger.info(
                 "Automation SMS sent",

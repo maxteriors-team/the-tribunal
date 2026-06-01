@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
+from app.services.idempotency import derive_outbound_key
 from app.services.telephony.telnyx import TelnyxSMSService
 
 logger = structlog.get_logger()
@@ -95,6 +96,11 @@ async def send_sms_fallback(
     # Send SMS
     sms_service = TelnyxSMSService(telnyx_api_key)
     try:
+        idempotency_key = derive_outbound_key(
+            "voice_campaign_sms_fallback",
+            campaign_contact.id,
+            call_outcome,
+        )
         message = await sms_service.send_message(
             to_number=contact.phone_number,
             from_number=campaign.from_phone_number,
@@ -102,6 +108,7 @@ async def send_sms_fallback(
             db=db,
             workspace_id=campaign.workspace_id,
             agent_id=campaign.sms_fallback_agent_id or campaign.agent_id,
+            idempotency_key=idempotency_key,
         )
 
         # Update campaign contact

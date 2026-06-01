@@ -28,8 +28,8 @@ from app.models.drip_campaign import (
     DripEnrollment,
     DripEnrollmentStatus,
 )
+from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
-from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.telnyx import TelnyxSMSService
 
 logger = structlog.get_logger()
@@ -174,7 +174,7 @@ async def _process_enrollment(
     # Stable per-(enrollment, step) key so a worker crash between the
     # Message row insert and the Telnyx POST is recoverable on the next
     # poll cycle without re-sending the same drip step.
-    idempotency_key = derive_idempotency_key("drip_step", enrollment.id, enrollment.current_step)
+    idempotency_key = derive_outbound_key("drip_step", enrollment.id, enrollment.current_step)
 
     # Send SMS
     message = await sms_service.send_message(

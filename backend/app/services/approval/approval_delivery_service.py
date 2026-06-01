@@ -8,16 +8,16 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models.agent import Agent
 from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
+from app.services.idempotency import derive_outbound_key
 from app.services.push_notifications import push_notification_service
 from app.services.telephony.phone_number_resolver import get_workspace_sms_number
+from app.services.telephony.text_provider import get_text_message_provider
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ class ApprovalDeliveryService:
                 workspace_id=action.workspace_id,
                 to_number=profile.phone_number,
                 agent_name=agent_name,
+                action_id=action.id,
                 description=action.description,
             )
             if sms_ok:
@@ -97,45 +98,39 @@ class ApprovalDeliveryService:
         *,
         workspace_id: uuid.UUID,
         to_number: str,
+        action_id: uuid.UUID,
         agent_name: str,
         description: str,
     ) -> bool:
-        """Send an approval request SMS via Telnyx."""
+        """Send an approval request through the configured text provider."""
         phone = await get_workspace_sms_number(db, workspace_id)
-        if phone is None or not settings.telnyx_api_key:
-            logger.debug(
-                "No from_number or Telnyx API key for workspace %s",
-                workspace_id,
-            )
+        if phone is None:
+            logger.debug("No from_number for workspace %s", workspace_id)
             return False
-        from_number = phone.phone_number
 
         message = f"[{agent_name}] wants to: {description}. Reply Y to approve, N to reject."
-
+        idempotency_key = derive_outbound_key("approval_notification_sms", action_id)
+        sms_service = get_text_message_provider()
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    "https://api.telnyx.com/v2/messages",
-                    headers={
-                        "Authorization": f"Bearer {settings.telnyx_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "from": from_number,
-                        "to": to_number,
-                        "text": message,
-                        "type": "SMS",
-                    },
-                )
-                resp.raise_for_status()
+            await sms_service.send_message(
+                to_number=to_number,
+                from_number=phone.phone_number,
+                body=message,
+                db=db,
+                workspace_id=workspace_id,
+                phone_number_id=phone.id,
+                idempotency_key=idempotency_key,
+            )
             return True
         except Exception:
             logger.exception(
-                "Failed to send approval SMS to %s for workspace %s",
+                "Failed to send approval text to %s for workspace %s",
                 to_number,
                 workspace_id,
             )
             return False
+        finally:
+            await sms_service.close()
 
     async def _send_push(
         self,

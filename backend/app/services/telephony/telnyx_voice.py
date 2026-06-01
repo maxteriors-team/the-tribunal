@@ -1,6 +1,5 @@
 """Telnyx voice service for making and receiving calls."""
 
-import base64
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,6 +17,11 @@ from app.core.metrics import (
     telnyx_api_latency_ms,
 )
 from app.models.conversation import Conversation, Message, MessageStatus
+from app.services.idempotency import (
+    encode_client_state,
+    idempotency_headers,
+    resolve_message_idempotency,
+)
 
 logger = structlog.get_logger()
 
@@ -229,19 +233,16 @@ class TelnyxVoiceService:
         # DB commit. Return it unchanged unless the prior attempt rolled
         # back to QUEUED (DB row written but Telnyx call never made), in
         # which case we resume the dial with the same id + client_state.
-        if idempotency_key is not None:
-            existing_result = await db.execute(
-                select(Message).where(Message.idempotency_key == idempotency_key)
+        idempotency_state = await resolve_message_idempotency(db, idempotency_key)
+        if idempotency_state.should_skip and idempotency_state.existing_message is not None:
+            existing = idempotency_state.existing_message
+            log.info(
+                "call_initiate_idempotent_skip",
+                idempotency_key=str(idempotency_key),
+                message_id=str(existing.id),
+                status=existing.status,
             )
-            existing = existing_result.scalar_one_or_none()
-            if existing is not None and existing.status != MessageStatus.QUEUED:
-                log.info(
-                    "call_initiate_idempotent_skip",
-                    idempotency_key=str(idempotency_key),
-                    message_id=str(existing.id),
-                    status=existing.status,
-                )
-                return existing
+            return existing
 
         log.info(
             "initiating_call",
@@ -264,14 +265,9 @@ class TelnyxVoiceService:
         # Resume or create the Message row. ``effective_key`` is what we
         # send to Telnyx so the provider also rejects duplicates if the
         # local row was rolled back after the API call.
-        effective_key = idempotency_key or uuid.uuid4()
+        effective_key = idempotency_state.effective_key
 
-        message: Message | None = None
-        if idempotency_key is not None:
-            existing_result = await db.execute(
-                select(Message).where(Message.idempotency_key == idempotency_key)
-            )
-            message = existing_result.scalar_one_or_none()
+        message = idempotency_state.existing_message
 
         if message is None:
             message = Message(
@@ -294,7 +290,7 @@ class TelnyxVoiceService:
             # this call, so the receiver side can also key on the same UUID
             # if it needs to dedupe inbound events. Telnyx requires it as a
             # base64 string.
-            client_state_b64 = base64.b64encode(str(effective_key).encode("ascii")).decode("ascii")
+            client_state_b64 = encode_client_state(effective_key)
             payload: dict[str, Any] = {
                 "to": to_number,
                 "from": from_number,
@@ -318,7 +314,7 @@ class TelnyxVoiceService:
                 response = await self.client.post(
                     "/calls",
                     json=payload,
-                    headers={"X-Idempotency-Key": str(effective_key)},
+                    headers=idempotency_headers(effective_key),
                 )
             response_data = response.json()
 

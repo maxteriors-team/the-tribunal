@@ -26,6 +26,7 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -74,7 +75,7 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
                     self._process_agent,
                     agent,
                     db,
-                    item_key=f"agent:{agent.id}",
+                    item_key=derive_worker_retry_key("agent", agent.id),
                 )
 
     async def _process_agent(self, agent: Agent, db: AsyncSession) -> None:
@@ -204,6 +205,12 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
 
         sms_service = TelnyxSMSService(telnyx_key)
         try:
+            idempotency_key = derive_outbound_key(
+                "noshow_reengagement",
+                agent.id,
+                contact.id,
+                sent_tag,
+            )
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,
@@ -211,6 +218,7 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
                 db=db,
                 workspace_id=contact.workspace_id,
                 agent_id=agent.id,
+                idempotency_key=idempotency_key,
             )
             log.info("Noshow re-engagement SMS sent", message_id=str(message.id))
             await self._tag_contact(contact, sent_tag, db)

@@ -23,6 +23,7 @@ from app.models.demo_request import DemoRequest
 from app.models.lead_source import LeadSource
 from app.models.workspace import WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
+from app.services.idempotency import derive_outbound_key
 from app.services.push_notifications import push_notification_service
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
@@ -82,6 +83,7 @@ async def _action_auto_text(lead_source: LeadSource, contact: Contact, db: DB) -
     agent_id_str = config.get("agent_id")
     agent_id = uuid.UUID(agent_id_str) if agent_id_str else None
     try:
+        idempotency_key = derive_outbound_key("lead_form_auto_text", lead_source.id, contact.id)
         await sms_service.send_message(
             to_number=contact.phone_number,
             from_number=from_number,
@@ -89,6 +91,7 @@ async def _action_auto_text(lead_source: LeadSource, contact: Contact, db: DB) -
             db=db,
             workspace_id=lead_source.workspace_id,
             agent_id=agent_id,
+            idempotency_key=idempotency_key,
         )
         # Assign agent to the conversation so replies get AI responses
         if agent_id:
@@ -127,6 +130,7 @@ async def _action_auto_call(lead_source: LeadSource, contact: Contact, db: DB) -
     try:
         api_base = settings.api_base_url or "https://example.com"
         agent_id_str = config.get("agent_id")
+        idempotency_key = derive_outbound_key("lead_form_auto_call", lead_source.id, contact.id)
         await voice_service.initiate_call(
             to_number=contact.phone_number,
             from_number=from_number,
@@ -136,6 +140,7 @@ async def _action_auto_call(lead_source: LeadSource, contact: Contact, db: DB) -
             workspace_id=lead_source.workspace_id,
             contact_phone=contact.phone_number,
             agent_id=uuid.UUID(agent_id_str) if agent_id_str else None,
+            idempotency_key=idempotency_key,
         )
     except Exception:
         logger.exception("auto_call_failed", contact_id=contact.id)

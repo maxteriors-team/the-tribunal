@@ -24,6 +24,7 @@ from app.schemas.embed import (
 )
 from app.services.embed.access import EmbedAccessService
 from app.services.embed.openai import EmbedOpenAIService
+from app.services.idempotency import derive_outbound_key
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
@@ -184,6 +185,7 @@ class PublicEmbedService:
             api_base = settings.api_base_url or "https://example.com"
             webhook_url = f"{api_base}/webhooks/telnyx/voice"
             connection_id = settings.telnyx_connection_id if settings.telnyx_connection_id else None
+            idempotency_key = derive_outbound_key("embed_call", demo_record.id)
             await voice_service.initiate_call(
                 to_number=body.phone_number,
                 from_number=settings.demo_from_phone_number,
@@ -193,6 +195,7 @@ class PublicEmbedService:
                 workspace_id=agent.workspace_id,
                 contact_phone=body.phone_number,
                 agent_id=agent.id,
+                idempotency_key=idempotency_key,
             )
 
             demo_record.status = "initiated"
@@ -241,6 +244,7 @@ class PublicEmbedService:
         greeting = agent.initial_greeting or default_greeting
         sms_service = TelnyxSMSService(settings.telnyx_api_key)
         try:
+            idempotency_key = derive_outbound_key("embed_text", demo_record.id)
             await sms_service.send_message(
                 to_number=body.phone_number,
                 from_number=settings.demo_from_phone_number,
@@ -248,6 +252,7 @@ class PublicEmbedService:
                 db=self.db,
                 workspace_id=agent.workspace_id,
                 agent_id=agent.id,
+                idempotency_key=idempotency_key,
             )
 
             demo_record.status = "initiated"

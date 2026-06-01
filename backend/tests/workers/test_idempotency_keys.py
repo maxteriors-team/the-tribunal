@@ -363,3 +363,148 @@ class TestApprovalWorkerKey:
             sms_instance.send_message.assert_awaited_once()
             call_kwargs = sms_instance.send_message.call_args.kwargs
             assert call_kwargs["idempotency_key"] == derive("approval_send_sms", action_id)
+
+    async def test_notify_pending_action_forwards_notification_key(self) -> None:
+        from app.services.approval.approval_delivery_service import ApprovalDeliveryService
+
+        service = ApprovalDeliveryService()
+        action_id = uuid4()
+        workspace_id = uuid4()
+        action = SimpleNamespace(
+            id=action_id,
+            workspace_id=workspace_id,
+            agent_id=uuid4(),
+            description="send a message",
+            notification_sent=False,
+            notification_sent_at=None,
+        )
+        profile = SimpleNamespace(phone_number="+12025551234")
+        agent = SimpleNamespace(name="Agent Smith")
+        phone = SimpleNamespace(id=uuid4(), phone_number="+12025556789")
+
+        db = MagicMock()
+        db.execute = AsyncMock(
+            side_effect=[
+                MagicMock(scalar_one_or_none=MagicMock(return_value=profile)),
+                MagicMock(scalar_one_or_none=MagicMock(return_value=agent)),
+            ]
+        )
+        db.commit = AsyncMock()
+
+        with (
+            patch(
+                "app.services.approval.approval_delivery_service.get_workspace_sms_number",
+                AsyncMock(return_value=phone),
+            ),
+            patch(
+                "app.services.approval.approval_delivery_service.get_text_message_provider"
+            ) as provider_factory,
+            patch(
+                "app.services.approval.approval_delivery_service.push_notification_service"
+            ) as push_service,
+        ):
+            sms_instance = provider_factory.return_value
+            sms_instance.send_message = AsyncMock(return_value=SimpleNamespace(id=uuid4()))
+            sms_instance.close = AsyncMock()
+            push_service.send_to_workspace_members = AsyncMock(return_value=None)
+
+            ok = await service.notify_pending_action(db, action)  # type: ignore[arg-type]
+
+        assert ok is True
+        call_kwargs = sms_instance.send_message.call_args.kwargs
+        assert call_kwargs["idempotency_key"] == derive("approval_notification_sms", action_id)
+
+
+# ---------------------------------------------------------------------------
+# Additional retry-prone send paths
+# ---------------------------------------------------------------------------
+
+
+class TestAdditionalRetrySendKeys:
+    async def test_automation_send_sms_forwards_key(self) -> None:
+        from app.workers.automation_worker import AutomationWorker
+
+        worker = AutomationWorker()
+        automation_id = uuid4()
+        contact_id = 123
+        automation = SimpleNamespace(id=automation_id, workspace_id=uuid4())
+        contact = SimpleNamespace(id=contact_id, phone_number="+12025551234", first_name="A")
+        db = MagicMock()
+
+        with (
+            patch.object(worker, "_resolve_from_number", AsyncMock(return_value="+12025556789")),
+            patch.object(worker, "_render_template", return_value="hi"),
+            patch("app.workers.automation_worker.get_text_message_provider") as provider_factory,
+        ):
+            sms_instance = provider_factory.return_value
+            sms_instance.send_message = AsyncMock(return_value=SimpleNamespace(id=uuid4()))
+            sms_instance.close = AsyncMock()
+
+            await worker._action_send_sms(  # type: ignore[arg-type]
+                automation,
+                contact,
+                {"message": "hi"},
+                db,
+            )
+
+        call_kwargs = sms_instance.send_message.call_args.kwargs
+        assert call_kwargs["idempotency_key"] == derive("automation_sms", automation_id, contact_id)
+
+    async def test_sms_fallback_forwards_campaign_contact_key(self) -> None:
+        from app.services.campaigns.sms_fallback import send_sms_fallback
+
+        campaign_contact_id = uuid4()
+        campaign = SimpleNamespace(
+            id=uuid4(),
+            workspace_id=uuid4(),
+            from_phone_number="+12025556789",
+            sms_fallback_enabled=True,
+            sms_fallback_use_ai=False,
+            sms_fallback_agent_id=None,
+            sms_fallback_template="Hi {first_name}",
+            sms_fallbacks_sent=0,
+            messages_sent=0,
+            agent_id=uuid4(),
+        )
+        campaign_contact = SimpleNamespace(
+            id=campaign_contact_id,
+            sms_fallback_sent=False,
+            sms_fallback_sent_at=None,
+            sms_fallback_message_id=None,
+            status=None,
+            conversation_id=None,
+            messages_sent=0,
+            last_error=None,
+        )
+        contact = SimpleNamespace(
+            id=1,
+            phone_number="+12025551234",
+            first_name="A",
+            last_name=None,
+            company_name=None,
+            email=None,
+        )
+        db = MagicMock()
+        db.commit = AsyncMock()
+
+        with patch("app.services.campaigns.sms_fallback.TelnyxSMSService") as sms_cls:
+            sms_instance = sms_cls.return_value
+            sms_instance.send_message = AsyncMock(
+                return_value=SimpleNamespace(id=uuid4(), conversation_id=uuid4())
+            )
+            sms_instance.close = AsyncMock()
+
+            ok = await send_sms_fallback(
+                db,
+                campaign,  # type: ignore[arg-type]
+                campaign_contact,  # type: ignore[arg-type]
+                contact,  # type: ignore[arg-type]
+                "no_answer",
+                "key",
+            )
+
+        assert ok is True
+        call_kwargs = sms_instance.send_message.call_args.kwargs
+        assert call_kwargs["idempotency_key"] == derive(
+            "voice_campaign_sms_fallback", campaign_contact_id, "no_answer"
+        )

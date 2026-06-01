@@ -309,7 +309,7 @@ class VoiceToolExecutor(BaseToolExecutor):
 
         from app.db.session import AsyncSessionLocal
         from app.models.conversation import Message as MessageModel
-        from app.services.telephony.idempotency import derive as derive_idempotency_key
+        from app.services.idempotency import derive_outbound_key
         from app.services.telephony.text_provider import get_text_message_provider
 
         if not self.call_control_id:
@@ -330,7 +330,7 @@ class VoiceToolExecutor(BaseToolExecutor):
 
             conversation = call_message.conversation
             workspace_id = self.workspace_id or conversation.workspace_id
-            idempotency_key = derive_idempotency_key(
+            idempotency_key = derive_outbound_key(
                 "voice_application_link_sms",
                 call_message.id,
                 PRESTYJ_APPLICATION_URL,

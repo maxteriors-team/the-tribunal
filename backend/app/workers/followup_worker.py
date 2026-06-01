@@ -16,6 +16,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.conversation import Conversation
 from app.services.ai.openai_credentials import get_openai_bearer_token
 from app.services.ai.text_response_generator import generate_followup_message
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -68,7 +69,7 @@ class FollowupWorker(RetryableWorker, BaseWorker):
                     self._process_conversation_followup,
                     conversation,
                     db,
-                    item_key=f"conversation:{conversation.id}",
+                    item_key=derive_worker_retry_key("conversation", conversation.id),
                 )
                 if ok:
                     self.record_items_processed()
@@ -113,12 +114,18 @@ class FollowupWorker(RetryableWorker, BaseWorker):
         # Send the follow-up via SMS
         sms_service = get_text_message_provider()
         try:
+            idempotency_key = derive_outbound_key(
+                "conversation_followup",
+                conversation.id,
+                conversation.followup_count_sent,
+            )
             message = await sms_service.send_message(
                 to_number=conversation.contact_phone,
                 from_number=conversation.workspace_phone,
                 body=message_body,
                 db=db,
                 workspace_id=conversation.workspace_id,
+                idempotency_key=idempotency_key,
             )
 
             log.info(

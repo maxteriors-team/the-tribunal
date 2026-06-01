@@ -4,7 +4,6 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,8 +12,10 @@ from app.core.config import settings
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.idempotency import derive_outbound_key
 from app.services.push_notifications import push_notification_service
 from app.services.telephony.phone_number_resolver import get_workspace_sms_number
+from app.services.telephony.text_provider import get_text_message_provider
 
 logger = logging.getLogger(__name__)
 
@@ -123,27 +124,27 @@ class NudgeDeliveryService:
         from_number = phone.phone_number
 
         sms_sent = False
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        sms_service = get_text_message_provider()
+        try:
             for user in users:
                 if not user.notification_sms or not user.phone_number:
                     continue
                 try:
-                    await client.post(
-                        "https://api.telnyx.com/v2/messages",
-                        headers={
-                            "Authorization": f"Bearer {settings.telnyx_api_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "from": from_number,
-                            "to": user.phone_number,
-                            "text": nudge.message,
-                            "type": "SMS",
-                        },
+                    idempotency_key = derive_outbound_key("nudge_sms", nudge.id, user.id)
+                    await sms_service.send_message(
+                        to_number=user.phone_number,
+                        from_number=from_number,
+                        body=nudge.message,
+                        db=db,
+                        workspace_id=nudge.workspace_id,
+                        phone_number_id=phone.id,
+                        idempotency_key=idempotency_key,
                     )
                     sms_sent = True
                 except Exception:
                     logger.exception("Failed to send nudge SMS to user %s", user.id)
+        finally:
+            await sms_service.close()
         return sms_sent
 
     async def _resolve_target_users(self, db: AsyncSession, nudge: HumanNudge) -> list[User]:
@@ -161,31 +162,6 @@ class NudgeDeliveryService:
         )
         memberships: list[WorkspaceMembership] = list(membership_result.scalars().all())
         return [m.user for m in memberships if m.user and m.user.is_active]
-
-    async def _send_sms_to_user(self, user: User, nudge: HumanNudge, from_number: str) -> bool:
-        """Send SMS nudge to a single user."""
-        if not user.notification_sms or not user.phone_number:
-            return False
-
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                await client.post(
-                    "https://api.telnyx.com/v2/messages",
-                    headers={
-                        "Authorization": f"Bearer {settings.telnyx_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "from": from_number,
-                        "to": user.phone_number,
-                        "text": nudge.message,
-                        "type": "SMS",
-                    },
-                )
-            return True
-        except Exception:
-            logger.exception("Failed to send nudge SMS to user %s", user.id)
-            return False
 
     def _is_quiet_hours(self, workspace: Workspace) -> bool:
         """Check if current time is within quiet hours."""

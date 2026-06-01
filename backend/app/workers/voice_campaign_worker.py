@@ -21,7 +21,7 @@ from app.models.campaign import (
     CampaignContactStatus,
     CampaignType,
 )
-from app.services.telephony.idempotency import derive as derive_idempotency_key
+from app.services.idempotency import derive_outbound_key
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
@@ -147,7 +147,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                 # between the Message row insert and Telnyx /calls POST
                 # doesn't double-dial. ``call_attempts`` here is the
                 # 0-indexed next attempt (it's incremented after success).
-                idempotency_key = derive_idempotency_key(
+                idempotency_key = derive_outbound_key(
                     "voice_campaign_call",
                     campaign_contact.id,
                     campaign_contact.call_attempts,

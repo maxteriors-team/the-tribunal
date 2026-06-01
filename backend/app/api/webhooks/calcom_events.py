@@ -30,6 +30,7 @@ from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 
@@ -284,6 +285,8 @@ async def send_lifecycle_sms(
     contact: Contact,
     agent: Agent | None,
     body_text: str,
+    idempotency_scope: str | None = None,
+    idempotency_parts: tuple[object, ...] = (),
 ) -> None:
     """Send a lifecycle SMS (confirmation, cancellation, etc.) to a contact.
 
@@ -301,6 +304,8 @@ async def send_lifecycle_sms(
         contact: Contact ORM object (needs ``.phone_number``, ``.id``).
         agent: Optional Agent ORM object (used for from-number resolution).
         body_text: Pre-rendered SMS body text.
+        idempotency_scope: Optional outbound key scope for webhook retries.
+        idempotency_parts: Stable domain identifiers for the outbound key.
     """
     try:
         telnyx_key = settings.telnyx_api_key
@@ -335,6 +340,10 @@ async def send_lifecycle_sms(
             )
             return
 
+        idempotency_key = None
+        if idempotency_scope is not None:
+            idempotency_key = derive_outbound_key(idempotency_scope, *idempotency_parts)
+
         sms_service = TelnyxSMSService(telnyx_key)
         try:
             message = await sms_service.send_message(
@@ -344,6 +353,7 @@ async def send_lifecycle_sms(
                 db=db,
                 workspace_id=workspace_id,
                 agent_id=agent_id,
+                idempotency_key=idempotency_key,
             )
             logger.info(
                 "lifecycle_sms_sent",

@@ -20,6 +20,11 @@ from app.core.metrics import (
 )
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageChannel, MessageStatus
+from app.services.idempotency import (
+    find_message_by_idempotency_key,
+    idempotency_headers,
+    resolve_message_idempotency,
+)
 from app.services.messaging.link_shortener import shorten_urls_in_text
 from app.services.providers.http import (
     AsyncProviderHTTPClient,
@@ -144,10 +149,7 @@ class TelnyxSMSService:
         idempotency_key: uuid.UUID | None,
     ) -> Message | None:
         """Return an existing outbound message for an idempotency key."""
-        if idempotency_key is None:
-            return None
-        result = await db.execute(select(Message).where(Message.idempotency_key == idempotency_key))
-        return result.scalar_one_or_none()
+        return await find_message_by_idempotency_key(db, idempotency_key)
 
     async def send_message(
         self,
@@ -196,8 +198,9 @@ class TelnyxSMSService:
         # immediately — the SMS was already sent. If the row exists but the
         # send never happened (still QUEUED), we resume the send rather than
         # inserting a duplicate row, reusing the existing message id.
-        existing = await self._find_message_by_idempotency_key(db, idempotency_key)
-        if existing is not None and existing.status != MessageStatus.QUEUED:
+        idempotency_state = await resolve_message_idempotency(db, idempotency_key)
+        if idempotency_state.should_skip and idempotency_state.existing_message is not None:
+            existing = idempotency_state.existing_message
             log.info(
                 "text_send_idempotent_skip",
                 idempotency_key=str(idempotency_key),
@@ -223,9 +226,9 @@ class TelnyxSMSService:
         # Either resume the half-finished QUEUED row from a prior attempt or
         # create a fresh one. Either way ``effective_key`` is the value we
         # send to Telnyx, ensuring the provider also rejects duplicates.
-        effective_key = idempotency_key or uuid.uuid4()
+        effective_key = idempotency_state.effective_key
 
-        message = await self._find_message_by_idempotency_key(db, idempotency_key)
+        message = idempotency_state.existing_message
 
         if message is None:
             message = Message(
@@ -674,9 +677,7 @@ class TelnyxSMSService:
         invalid JSON, or persistent network failures. The caller maps these
         to a failed Message row.
         """
-        headers: dict[str, str] | None = None
-        if idempotency_key is not None:
-            headers = {"X-Idempotency-Key": str(idempotency_key)}
+        headers = idempotency_headers(idempotency_key) or None
         with latency_ms_timer(telnyx_api_latency_ms):
             data = await self.provider_client.post_json("/messages", json=payload, headers=headers)
         self.logger.info("telnyx_response", status_code=200)

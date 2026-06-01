@@ -189,6 +189,8 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 contact=contact,
                 agent=agent,
                 body_text=confirmation_body,
+                idempotency_scope="calcom_booking_confirmation_sms",
+                idempotency_parts=(appointment.id,),
             )
 
         # Email notification to realtor for new bookings
@@ -398,6 +400,8 @@ async def handle_booking_rescheduled(data: dict[str, Any], log: Any) -> None:  #
                     contact=contact,
                     agent=rescheduled_agent,
                     body_text=rescheduled_body,
+                    idempotency_scope="calcom_booking_rescheduled_sms",
+                    idempotency_parts=(appointment.id, appointment.scheduled_at),
                 )
         except Exception as e:
             log.warning("rescheduled_sms_setup_failed", error=str(e))
@@ -575,6 +579,8 @@ async def handle_booking_cancelled(data: dict[str, Any], log: Any) -> None:  # n
                         contact=cancelled_contact,
                         agent=cancelled_agent,
                         body_text=cancellation_body,
+                        idempotency_scope="calcom_booking_cancelled_sms",
+                        idempotency_parts=(appointment.id,),
                     )
             except Exception as e:
                 log.warning("cancellation_sms_setup_failed", error=str(e))
@@ -781,6 +787,8 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
                             contact=noshow_contact,
                             agent=noshow_agent,
                             body_text=noshow_body,
+                            idempotency_scope="calcom_meeting_noshow_sms",
+                            idempotency_parts=(appointment.id,),
                         )
             except Exception as e:
                 log.warning("noshow_sms_setup_failed", error=str(e))
@@ -824,6 +832,8 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
                             contact=completed_contact,
                             agent=completed_agent,
                             body_text=post_meeting_body,
+                            idempotency_scope="calcom_post_meeting_sms",
+                            idempotency_parts=(appointment.id,),
                         )
             except Exception as e:
                 log.warning("post_meeting_sms_setup_failed", error=str(e))

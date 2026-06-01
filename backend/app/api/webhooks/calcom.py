@@ -24,6 +24,12 @@ from app.core.metrics import (
 )
 from app.core.webhook_security import verify_calcom_webhook
 from app.db.redis import get_redis
+from app.services.idempotency import (
+    DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS,
+    claim_redis_idempotency_key,
+    derive_webhook_delivery_key,
+    webhook_key_prefix,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -32,8 +38,8 @@ logger = structlog.get_logger()
 # effects in handlers (confirmation SMS, realtor email) are not safe to
 # replay. 7 days covers any plausible retry horizon while keeping the
 # Redis footprint bounded.
-_IDEMPOTENCY_TTL_SECONDS = 7 * 24 * 60 * 60  # 604800
-_IDEMPOTENCY_KEY_PREFIX = "calcom:webhook:"
+_IDEMPOTENCY_TTL_SECONDS = DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS
+_IDEMPOTENCY_KEY_PREFIX = webhook_key_prefix("calcom")
 
 
 def _build_idempotency_key(payload: dict[str, Any]) -> str | None:
@@ -53,7 +59,7 @@ def _build_idempotency_key(payload: dict[str, Any]) -> str | None:
     """
     delivery_id = payload.get("id")
     if delivery_id:
-        return f"{_IDEMPOTENCY_KEY_PREFIX}{delivery_id}"
+        return derive_webhook_delivery_key("calcom", delivery_id)
 
     trigger = payload.get("trigger") or payload.get("triggerEvent") or ""
     data = payload.get("data") or payload.get("payload") or {}
@@ -66,7 +72,9 @@ def _build_idempotency_key(payload: dict[str, Any]) -> str | None:
 
     if not (trigger and uid):
         return None
-    return f"{_IDEMPOTENCY_KEY_PREFIX}{trigger}:{uid}:{created_at}"
+    if created_at:
+        return derive_webhook_delivery_key("calcom", trigger, uid, created_at)
+    return derive_webhook_delivery_key("calcom", trigger, uid)
 
 
 async def _claim_webhook_delivery(key: str, log: Any) -> bool:
@@ -81,19 +89,14 @@ async def _claim_webhook_delivery(key: str, log: Any) -> bool:
     check is an explicit safety net layered on top. A Redis outage
     must not silently drop legitimate webhooks.
     """
-    try:
-        client = await get_redis()
-        # ``redis-py`` returns ``True`` when the key was set, ``None`` when
-        # NX prevented the write because the key already existed.
-        was_set = await client.set(key, "1", nx=True, ex=_IDEMPOTENCY_TTL_SECONDS)
-        return bool(was_set)
-    except Exception as exc:
-        log.warning(
-            "calcom_idempotency_redis_unavailable",
-            key=key,
-            error=str(exc),
-        )
-        return True
+    claim = await claim_redis_idempotency_key(
+        key,
+        ttl_seconds=_IDEMPOTENCY_TTL_SECONDS,
+        log=log,
+        redis_getter=get_redis,
+        failure_event="calcom_idempotency_redis_unavailable",
+    )
+    return claim.claimed
 
 
 # Dispatch table keyed by Cal.com ``trigger`` field.

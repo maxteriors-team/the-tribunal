@@ -35,12 +35,12 @@ from app.services.compliance.outbound_compliance import (
     OutboundComplianceResult,
     OutboundComplianceService,
 )
+from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.rate_limiting.rate_limiter import RateLimiter
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.rate_limiting.warming_scheduler import WarmingScheduler
-from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.text_provider import TextMessageProvider, get_text_message_provider
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
@@ -302,7 +302,7 @@ class CampaignWorker(BaseCampaignWorker):
                 # Stable per-campaign-contact key for the initial send. A
                 # campaign contact only ever sends one initial message, so
                 # the campaign_contact id alone is unique.
-                initial_key = derive_idempotency_key("campaign_sms_initial", campaign_contact.id)
+                initial_key = derive_outbound_key("campaign_sms_initial", campaign_contact.id)
 
                 text_service = self._get_text_provider(from_phone, text_providers)
 
@@ -536,7 +536,7 @@ class CampaignWorker(BaseCampaignWorker):
                 # Stable per-(campaign_contact, follow_up_index) key. The
                 # current ``follow_ups_sent`` is the next follow-up's index
                 # because it's incremented only after a successful send.
-                followup_key = derive_idempotency_key(
+                followup_key = derive_outbound_key(
                     "campaign_sms_followup",
                     campaign_contact.id,
                     campaign_contact.follow_ups_sent,

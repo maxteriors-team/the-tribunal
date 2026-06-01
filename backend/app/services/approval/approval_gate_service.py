@@ -358,7 +358,7 @@ class ApprovalGateService:
     ) -> dict[str, Any]:
         """Execute a send_sms action via TelnyxSMSService."""
         from app.core.config import settings
-        from app.services.telephony.idempotency import derive as derive_idempotency_key
+        from app.services.idempotency import derive_outbound_key
         from app.services.telephony.telnyx import TelnyxSMSService
 
         payload = action.action_payload
@@ -367,7 +367,7 @@ class ApprovalGateService:
         # most once on success; the approval_worker retries this method on
         # transient failure, and the key ensures the SMS isn't sent twice
         # if the prior attempt reached Telnyx but failed to commit.
-        idempotency_key = derive_idempotency_key("approval_send_sms", action.id)
+        idempotency_key = derive_outbound_key("approval_send_sms", action.id)
         try:
             await sms_service.send_message(
                 to_number=payload["to_number"],

@@ -22,6 +22,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
+from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 
@@ -257,6 +258,7 @@ async def send_appointment_reminder(
 
     sms_service = TelnyxSMSService(telnyx_key)
     try:
+        idempotency_key = derive_outbound_key("manual_appointment_reminder", appointment.id)
         message = await sms_service.send_message(
             to_number=contact_phone,
             from_number=from_number,
@@ -264,6 +266,7 @@ async def send_appointment_reminder(
             db=db,
             workspace_id=workspace.id,
             agent_id=agent_id,
+            idempotency_key=idempotency_key,
         )
         log.info("manual_reminder_sent", message_id=str(message.id))
 

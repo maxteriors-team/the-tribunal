@@ -32,8 +32,8 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.workspace import Workspace
 from app.services.calendar.reminder_service import resolve_from_number
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
-from app.services.telephony.idempotency import derive as derive_idempotency_key
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -132,7 +132,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                         appt,
                         offset,
                         db,
-                        item_key=f"reminder:{appt.id}:offset:{offset}",
+                        item_key=derive_worker_retry_key("reminder", appt.id, "offset", offset),
                     )
 
             # Value-reinforcement pre-appointment messages
@@ -211,7 +211,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             # Stable per-(appointment, offset) key so a worker crash between
             # the Message insert and the Telnyx POST is recoverable on the
             # next tick without sending the reminder twice.
-            idempotency_key = derive_idempotency_key("reminder", appt.id, offset_minutes)
+            idempotency_key = derive_outbound_key("reminder", appt.id, offset_minutes)
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,
@@ -286,7 +286,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 self._send_value_reinforcement,
                 appt,
                 db,
-                item_key=f"vr:{appt.id}",
+                item_key=derive_worker_retry_key("value_reinforcement", appt.id),
             )
 
     async def _send_value_reinforcement(
@@ -354,7 +354,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         sms_service = TelnyxSMSService(telnyx_key)
         try:
             # Stable per-appointment key (VR is single-shot per appointment).
-            idempotency_key = derive_idempotency_key("value_reinforcement", appt.id)
+            idempotency_key = derive_outbound_key("value_reinforcement", appt.id)
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,

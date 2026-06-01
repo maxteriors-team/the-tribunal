@@ -26,6 +26,7 @@ from app.models.message_test import (
     TestContact,
     TestContactStatus,
 )
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.rate_limiting.rate_limiter import RateLimiter
@@ -79,7 +80,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
                     self._process_test,
                     test,
                     db,
-                    item_key=f"message_test:{test.id}",
+                    item_key=derive_worker_retry_key("message_test", test.id),
                 )
 
     async def _process_test(self, test: MessageTest, db: AsyncSession) -> None:
@@ -132,6 +133,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
         contact = test_contact.contact
         message_text = self._render_template(variant.message_template, contact)
 
+        idempotency_key = derive_outbound_key("message_test", test.id, test_contact.id)
         message = await sms_service.send_message(
             to_number=contact.phone_number,
             from_number=from_phone.phone_number,
@@ -140,6 +142,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
             workspace_id=test.workspace_id,
             agent_id=test.agent_id,
             phone_number_id=from_phone.id,
+            idempotency_key=idempotency_key,
         )
 
         from_phone.last_sent_at = datetime.now(UTC)

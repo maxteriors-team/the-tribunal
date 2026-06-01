@@ -29,6 +29,7 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
+from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -72,7 +73,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
                     self._process_agent,
                     agent,
                     db,
-                    item_key=f"agent:{agent.id}",
+                    item_key=derive_worker_retry_key("agent", agent.id),
                 )
 
     async def _process_agent(self, agent: Agent, db: AsyncSession) -> None:
@@ -137,7 +138,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
                 contact,
                 agent,
                 db,
-                item_key=f"never_booked:{agent.id}:contact:{contact.id}",
+                item_key=derive_worker_retry_key("never_booked", agent.id, "contact", contact.id),
             )
 
     async def _send_reengagement(
@@ -177,6 +178,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
 
         sms_service = get_text_message_provider()
         try:
+            idempotency_key = derive_outbound_key("never_booked_reengagement", agent.id, contact.id)
             message = await sms_service.send_message(
                 to_number=contact_phone,
                 from_number=from_number,
@@ -184,6 +186,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
                 db=db,
                 workspace_id=contact.workspace_id,
                 agent_id=agent.id,
+                idempotency_key=idempotency_key,
             )
             log.info("Never-booked re-engagement SMS sent", message_id=str(message.id))
             await self._tag_contact(contact, "never-booked-reengaged", db)

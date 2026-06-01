@@ -16,6 +16,7 @@ from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
 from app.services.approval.approval_delivery_service import ApprovalDeliveryService
 from app.services.approval.approval_gate_service import ApprovalGateService
+from app.services.idempotency import derive_worker_retry_key
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -62,7 +63,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                 self._notify_pending_action,
                 db,
                 action,
-                item_key=f"notify:{action.id}",
+                item_key=derive_worker_retry_key("notify", action.id),
             )
 
     async def _notify_pending_action(self, db: AsyncSession, action: PendingAction) -> None:
@@ -85,7 +86,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                 self._execute_single_action,
                 db,
                 action,
-                item_key=f"execute:{action.id}",
+                item_key=derive_worker_retry_key("execute", action.id),
             )
 
     async def _execute_single_action(self, db: AsyncSession, action: PendingAction) -> None:
