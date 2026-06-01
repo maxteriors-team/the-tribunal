@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { resolveThemeOption } from "@/lib/embed/theme";
+
 import type { AgentConfig, ResolvedTheme, ThemeOption } from "./_types";
 
 /**
@@ -13,13 +15,13 @@ export function useResolvedTheme(theme: ThemeOption): ResolvedTheme {
   useEffect(() => {
     if (theme === "auto") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      setResolved(mediaQuery.matches ? "dark" : "light");
+      setResolved(resolveThemeOption(theme, mediaQuery.matches));
       const handler = (e: MediaQueryListEvent) =>
-        setResolved(e.matches ? "dark" : "light");
+        setResolved(resolveThemeOption(theme, e.matches));
       mediaQuery.addEventListener("change", handler);
       return () => mediaQuery.removeEventListener("change", handler);
     }
-    setResolved(theme);
+    setResolved(resolveThemeOption(theme, false));
     return undefined;
   }, [theme]);
   /* eslint-enable react-hooks/set-state-in-effect */

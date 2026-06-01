@@ -4,6 +4,11 @@ import { X, Mic, MicOff, MessageSquare, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, use, Suspense } from "react";
 
+import {
+  postToParent,
+  subscribeToEmbedMessages,
+} from "@/lib/embed/messaging";
+
 import { ChatInput, MessageList, type ChatMessage } from "../_chat-ui";
 import {
   DEFAULT_PRIMARY_COLOR,
@@ -115,24 +120,19 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
 
   // Notify parent of state
   useEffect(() => {
-    if (window.parent !== window) {
-      const state =
-        voiceStatus === "connected"
-          ? agentState
-          : isChatLoading
-            ? "thinking"
-            : "idle";
-      window.parent.postMessage({ type: "ai-agent:state", state }, "*");
-    }
+    const state =
+      voiceStatus === "connected"
+        ? agentState
+        : isChatLoading
+          ? "thinking"
+          : "idle";
+    postToParent({ type: "ai-agent:state", state });
   }, [agentState, isChatLoading, voiceStatus]);
 
   // Notify parent of audio level
   useEffect(() => {
-    if (window.parent !== window && smoothedLevel > 0.05) {
-      window.parent.postMessage(
-        { type: "ai-agent:audio-level", level: smoothedLevel },
-        "*"
-      );
+    if (smoothedLevel > 0.05) {
+      postToParent({ type: "ai-agent:audio-level", level: smoothedLevel });
     }
   }, [smoothedLevel]);
 
@@ -156,13 +156,11 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
 
   // Listen for start message from parent
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "ai-agent:start" && config && voiceStatus === "idle") {
+    return subscribeToEmbedMessages((message) => {
+      if (message.type === "ai-agent:start" && config && voiceStatus === "idle") {
         void startVoice();
       }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    });
   }, [voiceStatus, config, startVoice]);
 
   const sendMessage = useCallback(async () => {
@@ -225,9 +223,7 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
 
   const closeChat = () => {
     endVoice();
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: "ai-agent:close" }, "*");
-    }
+    postToParent({ type: "ai-agent:close" });
   };
 
   const toggleVoice = () => {

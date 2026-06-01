@@ -4,6 +4,12 @@ import { Send, X, MessageSquare, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
 
+import {
+  postToParent,
+  subscribeToEmbedMessages,
+} from "@/lib/embed/messaging";
+import { parseThemeOption, resolveThemeOption } from "@/lib/embed/theme";
+
 interface AgentConfig {
   public_id: string;
   name: string;
@@ -30,8 +36,7 @@ interface ChatEmbedPageProps {
 function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   const { publicId } = use(params);
   const searchParams = useSearchParams();
-  const themeParam = searchParams.get("theme");
-  const theme = themeParam === "light" || themeParam === "dark" ? themeParam : "auto";
+  const theme = parseThemeOption(searchParams.get("theme"));
   const position = searchParams.get("position") ?? "bottom-right";
   const autostart = searchParams.get("autostart") === "true";
 
@@ -64,12 +69,10 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
 
   // Notify parent window of state
   useEffect(() => {
-    if (window.parent !== window) {
-      window.parent.postMessage(
-        { type: "ai-agent:state", state: isLoading ? "thinking" : "idle" },
-        "*"
-      );
-    }
+    postToParent({
+      type: "ai-agent:state",
+      state: isLoading ? "thinking" : "idle",
+    });
   }, [isLoading]);
 
   // Fetch agent config
@@ -120,13 +123,11 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
 
   // Listen for start message from widget
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "ai-agent:start" && !isOpen && config) {
+    return subscribeToEmbedMessages((message) => {
+      if (message.type === "ai-agent:start" && !isOpen && config) {
         setIsOpen(true);
       }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    });
   }, [isOpen, config]);
 
   const sendMessage = useCallback(async () => {
@@ -192,9 +193,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
 
   const closeChat = () => {
     setIsOpen(false);
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: "ai-agent:close" }, "*");
-    }
+    postToParent({ type: "ai-agent:close" });
   };
 
   const positionClasses: Record<string, string> = {
@@ -204,7 +203,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     "top-left": "top-5 left-5",
   };
 
-  const isDark = (theme === "auto" ? systemTheme : theme) === "dark";
+  const isDark = resolveThemeOption(theme, systemTheme === "dark") === "dark";
   const primaryColor = config?.primary_color ?? "#6366f1";
 
   if (error && !config) {

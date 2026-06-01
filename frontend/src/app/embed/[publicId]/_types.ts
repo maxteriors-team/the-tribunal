@@ -31,28 +31,20 @@ export interface TokenResponse {
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "error";
 export type AgentState = "idle" | "listening" | "thinking" | "speaking";
 
-export type WebRTCResources = {
-  peerConnection: RTCPeerConnection | null;
-  dataChannel: RTCDataChannel | null;
-  audioStream: MediaStream | null;
-  audioElement: HTMLAudioElement | null;
-};
-
-export type AudioResources = {
-  audioContext: AudioContext | null;
-  analyser: AnalyserNode | null;
-  dataArray: Uint8Array<ArrayBuffer> | null;
-  animationFrame: number | null;
-};
+// WebRTC/audio resource shapes and their cleanup helpers live in the shared
+// embed browser layer so they can be unit-tested in isolation.
+export type {
+  WebRTCResources,
+  AudioAnalysisResources as AudioResources,
+} from "@/lib/embed/session";
 
 export type TranscriptEntry = {
   role: "user" | "assistant";
   content: string;
 };
 
-export type ThemeOption = "light" | "dark" | "auto";
-
-export type ResolvedTheme = "light" | "dark";
+// Theme option/resolution helpers live in `@/lib/embed/theme`.
+export type { ThemeOption, ResolvedTheme } from "@/lib/embed/theme";
 
 export const POSITION_CLASSES: Record<string, string> = {
   "bottom-right": "bottom-5 right-5",

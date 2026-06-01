@@ -5,6 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, use, Suspense } from "react";
 
 import {
+  postToParent,
+  subscribeToEmbedMessages,
+} from "@/lib/embed/messaging";
+
+import {
   DEFAULT_PRIMARY_COLOR,
   getAgentStateInfo,
   getEmbedTheme,
@@ -35,9 +40,7 @@ function EmbedPageContent({ params }: EmbedPageProps) {
 
   const handleClose = useCallback(() => {
     setIsExpanded(false);
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: "ai-agent:close" }, "*");
-    }
+    postToParent({ type: "ai-agent:close" });
   }, []);
 
   const {
@@ -63,18 +66,13 @@ function EmbedPageContent({ params }: EmbedPageProps) {
 
   // Notify parent of agent state
   useEffect(() => {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: "ai-agent:state", state: agentState }, "*");
-    }
+    postToParent({ type: "ai-agent:state", state: agentState });
   }, [agentState]);
 
   // Notify parent of audio level
   useEffect(() => {
-    if (window.parent !== window && smoothedLevel > 0.05) {
-      window.parent.postMessage(
-        { type: "ai-agent:audio-level", level: smoothedLevel },
-        "*"
-      );
+    if (smoothedLevel > 0.05) {
+      postToParent({ type: "ai-agent:audio-level", level: smoothedLevel });
     }
   }, [smoothedLevel]);
 
@@ -100,13 +98,11 @@ function EmbedPageContent({ params }: EmbedPageProps) {
 
   // Listen for start message from widget
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "ai-agent:start" && status === "idle" && config) {
+    return subscribeToEmbedMessages((message) => {
+      if (message.type === "ai-agent:start" && status === "idle" && config) {
         void handleStart();
       }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    });
   }, [status, config, handleStart]);
 
   const theme = getEmbedTheme(resolvedTheme === "dark");

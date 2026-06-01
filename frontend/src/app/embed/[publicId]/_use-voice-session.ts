@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  closeAudioAnalysis,
+  closeWebRTCResources,
+  emptyAudioAnalysisResources,
+  emptyWebRTCResources,
+  setAudioTracksEnabled,
+  stopMediaStream,
+  type AudioAnalysisResources,
+  type WebRTCResources,
+} from "@/lib/embed/session";
+import {
   isRealtimeAudioDeltaEvent,
   isRealtimeAudioDoneEvent,
   isRealtimeAudioTranscriptDeltaEvent,
@@ -10,11 +20,9 @@ import {
 import type {
   AgentConfig,
   AgentState,
-  AudioResources,
   ConnectionStatus,
   TokenResponse,
   TranscriptEntry,
-  WebRTCResources,
 } from "./_types";
 
 export type AudioAnalysisMode = "none" | "level" | "level+bars";
@@ -78,19 +86,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   );
   const [smoothedLevel, setSmoothedLevel] = useState(0);
 
-  const webrtcRef = useRef<WebRTCResources>({
-    peerConnection: null,
-    dataChannel: null,
-    audioStream: null,
-    audioElement: null,
-  });
+  const webrtcRef = useRef<WebRTCResources>(emptyWebRTCResources());
 
-  const audioRef = useRef<AudioResources>({
-    audioContext: null,
-    analyser: null,
-    dataArray: null,
-    animationFrame: null,
-  });
+  const audioRef = useRef<AudioAnalysisResources>(
+    emptyAudioAnalysisResources()
+  );
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
@@ -184,70 +184,17 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
   );
 
   const cleanupAudioAnalysis = useCallback(() => {
-    if (audioRef.current.animationFrame) {
-      cancelAnimationFrame(audioRef.current.animationFrame);
-    }
-    if (audioRef.current.audioContext) {
-      try {
-        void audioRef.current.audioContext.close();
-      } catch {
-        // ignore
-      }
-    }
-    audioRef.current = {
-      audioContext: null,
-      analyser: null,
-      dataArray: null,
-      animationFrame: null,
-    };
+    closeAudioAnalysis(audioRef.current);
+    audioRef.current = emptyAudioAnalysisResources();
     setFrequencies(new Array(barCount).fill(0));
     setSmoothedLevel(0);
   }, [barCount]);
 
   // ───── Cleanup ─────
   const cleanup = useCallback(() => {
-    const { peerConnection, dataChannel, audioStream, audioElement } =
-      webrtcRef.current;
-
     cleanupAudioAnalysis();
-
-    if (dataChannel) {
-      try {
-        dataChannel.close();
-      } catch {
-        // ignore
-      }
-    }
-    if (peerConnection) {
-      try {
-        peerConnection.close();
-      } catch {
-        // ignore
-      }
-    }
-    if (audioStream) {
-      try {
-        audioStream.getTracks().forEach((track) => track.stop());
-      } catch {
-        // ignore
-      }
-    }
-    if (audioElement) {
-      try {
-        audioElement.srcObject = null;
-        audioElement.remove();
-      } catch {
-        // ignore
-      }
-    }
-
-    webrtcRef.current = {
-      peerConnection: null,
-      dataChannel: null,
-      audioStream: null,
-      audioElement: null,
-    };
-
+    closeWebRTCResources(webrtcRef.current);
+    webrtcRef.current = emptyWebRTCResources();
     setAgentState("idle");
   }, [cleanupAudioAnalysis]);
 
@@ -375,7 +322,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       };
 
       if (abortController.signal.aborted) {
-        micStream.getTracks().forEach((track) => track.stop());
+        stopMediaStream(micStream);
         pc.close();
         return;
       }
@@ -384,7 +331,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       await pc.setLocalDescription(offer);
 
       if (abortController.signal.aborted) {
-        micStream.getTracks().forEach((track) => track.stop());
+        stopMediaStream(micStream);
         pc.close();
         return;
       }
@@ -400,7 +347,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       });
 
       if (abortController.signal.aborted) {
-        micStream.getTracks().forEach((track) => track.stop());
+        stopMediaStream(micStream);
         pc.close();
         return;
       }
@@ -412,7 +359,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
 
       const answerSdp = await response.text();
       if (abortController.signal.aborted) {
-        micStream.getTracks().forEach((track) => track.stop());
+        stopMediaStream(micStream);
         pc.close();
         return;
       }
@@ -631,9 +578,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     if (audioStream) {
       setIsMuted((prev) => {
         const next = !prev;
-        audioStream.getAudioTracks().forEach((track) => {
-          track.enabled = !next;
-        });
+        setAudioTracksEnabled(audioStream, !next);
         return next;
       });
     }
