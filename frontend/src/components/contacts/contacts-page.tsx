@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBulkDeleteContacts, useBulkUpdateStatus, useContactIds, useContactsPaginated } from "@/hooks/useContacts";
+import { useRowSelection } from "@/hooks/useRowSelection";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import type { ContactIdsParams, ContactsListParams } from "@/lib/api/contacts";
 import { useContactStore } from "@/lib/contact-store";
@@ -59,11 +60,9 @@ export function ContactsPage() {
   }, [importRequested, searchParams, router]);
 
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectAllMatchingIds, setSelectAllMatchingIds] = useState<Set<number> | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkTagDialogOpen, setIsBulkTagDialogOpen] = useState(false);
-  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
 
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -106,6 +105,11 @@ export function ContactsPage() {
   const contactsTotal = contactsData?.total ?? 0;
   const contactsTotalPages = contactsData?.pages ?? 1;
 
+  // Standardized base row selection (single toggle, shift-range, clear).
+  // `selectAllMatchingIds` overlays this as a server-side "all matching" set.
+  const rowIds = useMemo(() => contacts.map((c: Contact) => c.id), [contacts]);
+  const selection = useRowSelection<number>({ rowIds });
+
   // Debounce search: update store query 400ms after user stops typing
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -124,7 +128,7 @@ export function ContactsPage() {
   }, [searchQuery, statusFilter, filters]);
 
   // Effective selected IDs: either the explicit set or the "select all matching" set
-  const effectiveSelectedIds = selectAllMatchingIds ?? selectedIds;
+  const effectiveSelectedIds: ReadonlySet<number> = selectAllMatchingIds ?? selection.selectedIds;
   const selectedCount = effectiveSelectedIds.size;
   const selectedArray = useMemo(() => Array.from(effectiveSelectedIds), [effectiveSelectedIds]);
 
@@ -146,67 +150,25 @@ export function ContactsPage() {
 
   const handleToggleSelectionMode = () => {
     if (isSelectionMode) {
-      setSelectedIds(new Set());
+      selection.clear();
       setSelectAllMatchingIds(null);
-      setLastClickedIndex(null);
     }
     setIsSelectionMode(!isSelectionMode);
   };
 
-  const handleSelectContact = (contactId: number, checked: boolean, shiftKey: boolean) => {
+  const handleSelectContact = (contactId: number, _checked: boolean, shiftKey: boolean) => {
+    // Breaking out of "select all matching": materialize the overlay into the
+    // base selection, then toggle the clicked row on top of it.
     if (selectAllMatchingIds) {
       setSelectAllMatchingIds(null);
-      const next = new Set(selectAllMatchingIds);
-      if (checked) next.add(contactId);
-      else next.delete(contactId);
-      setSelectedIds(next);
-
-      const idx = contacts.findIndex((c: Contact) => c.id === contactId);
-      if (idx !== -1) setLastClickedIndex(idx);
-      return;
+      selection.selectIds(selectAllMatchingIds);
     }
-
-    // Shift+click range selection
-    if (shiftKey && lastClickedIndex !== null) {
-      const currentIndex = contacts.findIndex((c: Contact) => c.id === contactId);
-      if (currentIndex !== -1) {
-        const start = Math.min(lastClickedIndex, currentIndex);
-        const end = Math.max(lastClickedIndex, currentIndex);
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          for (let i = start; i <= end; i++) {
-            next.add(contacts[i].id);
-          }
-          return next;
-        });
-        setLastClickedIndex(currentIndex);
-        return;
-      }
-    }
-
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(contactId);
-      else next.delete(contactId);
-      return next;
-    });
-
-    const idx = contacts.findIndex((c: Contact) => c.id === contactId);
-    if (idx !== -1) setLastClickedIndex(idx);
+    selection.toggle(contactId, shiftKey);
   };
 
   const handleSelectAllVisible = () => {
     setSelectAllMatchingIds(null);
-    const allVisibleIds = new Set(contacts.map((c: Contact) => c.id));
-    if (contacts.every((c: Contact) => selectedIds.has(c.id))) {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        allVisibleIds.forEach((id) => next.delete(id));
-        return next;
-      });
-    } else {
-      setSelectedIds((prev) => new Set([...prev, ...allVisibleIds]));
-    }
+    selection.toggleAllVisible();
   };
 
   const [fetchAllIds, setFetchAllIds] = useState(false);
@@ -216,7 +178,7 @@ export function ContactsPage() {
     fetchAllIds,
     (data) => {
       setSelectAllMatchingIds(new Set(data.ids));
-      setSelectedIds(new Set());
+      selection.clear();
       setFetchAllIds(false);
     }
   );
@@ -224,7 +186,7 @@ export function ContactsPage() {
   const handleSelectAllMatching = () => {
     if (allIdsData) {
       setSelectAllMatchingIds(new Set(allIdsData.ids));
-      setSelectedIds(new Set());
+      selection.clear();
       setFetchAllIds(false);
     } else {
       setFetchAllIds(true);
@@ -232,9 +194,8 @@ export function ContactsPage() {
   };
 
   const handleClearSelection = () => {
-    setSelectedIds(new Set());
+    selection.clear();
     setSelectAllMatchingIds(null);
-    setLastClickedIndex(null);
   };
 
   const handleBulkDelete = async () => {

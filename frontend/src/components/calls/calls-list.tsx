@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 
 import { TranscriptViewer } from "@/components/calls/transcript-viewer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,6 +55,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { useFilterState } from "@/hooks/useFilterState";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { callsApi } from "@/lib/api/calls";
 import { queryKeys } from "@/lib/query-keys";
@@ -79,22 +81,17 @@ function formatDuration(seconds: number): string {
 }
 
 export function CallsList() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [directionFilter, setDirectionFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const search = useDebouncedSearch({ delay: 300 });
+  const debouncedSearch = search.debouncedValue;
+  const { filters, setFilter } = useFilterState({
+    initialFilters: { direction: "all", status: "all" },
+  });
+  const directionFilter = filters.direction;
+  const statusFilter = filters.status;
   const pageSize = 50;
 
   const workspaceId = useWorkspaceId();
   const sentinelRef = useRef<HTMLDivElement>(null);
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   const { data, isPending, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: queryKeys.calls.listFiltered(workspaceId ?? "", directionFilter, statusFilter, debouncedSearch),
@@ -207,13 +204,13 @@ export function CallsList() {
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by contact name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={search.value}
+                onChange={(e) => search.setValue(e.target.value)}
                 className="pl-10"
               />
             </div>
             <div className="flex gap-2">
-              <Select value={directionFilter} onValueChange={setDirectionFilter}>
+              <Select value={directionFilter} onValueChange={(value) => setFilter("direction", value)}>
                 <SelectTrigger className="w-full sm:w-[140px]">
                   <SelectValue placeholder="Direction" />
                 </SelectTrigger>
@@ -223,7 +220,7 @@ export function CallsList() {
                   <SelectItem value="outbound">Outbound</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(value) => setFilter("status", value)}>
                 <SelectTrigger className="w-full sm:w-[140px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>

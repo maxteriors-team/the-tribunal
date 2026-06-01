@@ -9,10 +9,11 @@ import {
   FlaskConical,
   Trophy,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
 
 import {
@@ -23,10 +24,12 @@ import {
   ResourceListError,
   ResourceListPagination,
   ResourceListLayout,
+  ResourceListBulkBar,
 } from "@/components/resource-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +54,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { useFilterState } from "@/hooks/useFilterState";
+import { useRowSelection } from "@/hooks/useRowSelection";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { messageTestsApi } from "@/lib/api/message-tests";
 import { queryKeys } from "@/lib/query-keys";
@@ -60,8 +66,9 @@ import { formatNumber } from "@/lib/utils/number";
 import type { MessageTest } from "@/types";
 
 export function ExperimentsList() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const search = useDebouncedSearch({ delay: 300 });
+  const { filters, setFilter } = useFilterState({ initialFilters: { status: "all" } });
+  const statusFilter = filters.status;
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
@@ -74,7 +81,7 @@ export function ExperimentsList() {
     enabled: !!workspaceId,
   });
 
-  const tests = testsData?.items ?? [];
+  const tests = useMemo(() => testsData?.items ?? [], [testsData?.items]);
 
   const pauseMutation = useMutation({
     mutationFn: (id: string) => {
@@ -124,11 +131,33 @@ export function ExperimentsList() {
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete test")),
   });
 
-  const filteredTests = tests.filter((test) => {
-    const matchesSearch = test.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || test.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!workspaceId) throw new Error("Workspace not loaded");
+      await Promise.all(ids.map((id) => messageTestsApi.delete(workspaceId, id)));
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
+      selection.clear();
+      toast.success(`Deleted ${count} experiment${count !== 1 ? "s" : ""}`);
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete experiments")),
   });
+
+  const searchQuery = search.debouncedValue;
+  const filteredTests = useMemo(
+    () =>
+      tests.filter((test) => {
+        const matchesSearch = test.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === "all" || test.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [tests, searchQuery, statusFilter],
+  );
+
+  const rowIds = useMemo(() => filteredTests.map((test) => test.id), [filteredTests]);
+  const selection = useRowSelection({ rowIds });
 
   const getResponseRate = (test: MessageTest) => {
     if (test.messages_sent === 0) return 0;
@@ -179,11 +208,11 @@ export function ExperimentsList() {
       }
       filterBar={
         <ResourceListSearch
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          searchQuery={search.value}
+          onSearchChange={search.setValue}
           placeholder="Search experiments..."
           filters={
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(value) => setFilter("status", value)}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -221,11 +250,50 @@ export function ExperimentsList() {
         ) : undefined
       }
     >
+      {selection.selectedCount > 0 && (
+        <ResourceListBulkBar
+          className="mb-4"
+          selectedCount={selection.selectedCount}
+          resourceName="experiment"
+          allVisibleSelected={selection.allVisibleSelected}
+          someVisibleSelected={selection.someVisibleSelected}
+          onToggleAllVisible={selection.toggleAllVisible}
+          onClearSelection={selection.clear}
+        >
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-2"
+            disabled={bulkDeleteMutation.isPending}
+            onClick={() => bulkDeleteMutation.mutate(selection.selectedArray)}
+          >
+            {bulkDeleteMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            Delete
+          </Button>
+        </ResourceListBulkBar>
+      )}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]">
+                  <Checkbox
+                    checked={
+                      selection.allVisibleSelected
+                        ? true
+                        : selection.someVisibleSelected
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={selection.toggleAllVisible}
+                    aria-label="Select all experiments"
+                  />
+                </TableHead>
                 <TableHead>Experiment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Variants</TableHead>
@@ -250,8 +318,16 @@ export function ExperimentsList() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
+                      data-state={selection.isSelected(test.id) ? "selected" : undefined}
                       className="group cursor-pointer hover:bg-muted/50"
                     >
+                      <TableCell>
+                        <Checkbox
+                          checked={selection.isSelected(test.id)}
+                          onCheckedChange={() => selection.toggle(test.id)}
+                          aria-label={`Select ${test.name}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Link href={`/experiments/${test.id}`} className="block">
                           <div className="font-medium">{test.name}</div>

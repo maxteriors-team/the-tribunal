@@ -1,12 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { Search } from "lucide-react";
 
+import { ResourceListPagination } from "@/components/resource-list";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { PageEmptyState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
+import { usePagination } from "@/hooks/usePagination";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { opportunityStatusColors } from "@/lib/status-colors";
@@ -34,19 +38,27 @@ function getStageColor(probability: number): string {
 
 
 export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
-  const [page] = useState(1);
-  const [search] = useState("");
+  const pageSize = 50;
+  const pagination = usePagination({ initialPageSize: pageSize });
+  const search = useDebouncedSearch({ delay: 300, onDebouncedChange: () => pagination.reset() });
 
   const { data, isPending } = useQuery({
-    queryKey: queryKeys.opportunities.list(workspaceId ?? "", page, search),
+    queryKey: queryKeys.opportunities.list(
+      workspaceId ?? "",
+      pagination.page,
+      search.debouncedValue,
+    ),
     queryFn: () =>
       opportunitiesApi.list(workspaceId, {
-        page,
-        page_size: 50,
-        search: search || undefined,
+        page: pagination.page,
+        page_size: pageSize,
+        search: search.debouncedValue || undefined,
       }),
     enabled: !!workspaceId,
+    placeholderData: keepPreviousData,
   });
+
+  const totalPages = data?.pages ?? 1;
 
   if (isPending) {
     return (
@@ -84,55 +96,90 @@ export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
   }
 
   return (
-    <div className="w-full h-full overflow-auto">
-      <Table>
-        <TableHeader className="sticky top-0 bg-background">
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Probability</TableHead>
-            <TableHead>Expected Close</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Created</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data?.items && data.items.length > 0 ? (
-            data.items.map((opportunity) => (
-              <TableRow key={opportunity.id} className="hover:bg-muted/50">
-                <TableCell className="font-medium">{opportunity.name}</TableCell>
-                <TableCell>
-                  <Badge className={opportunityStatusColors[opportunity.status as OpportunityStatus] ?? "bg-info/10 text-info border-info/20"}>
-                    {opportunity.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{formatCurrency(opportunity.amount, opportunity.currency)}</TableCell>
-                <TableCell>
-                  <Badge className={getStageColor(opportunity.probability)}>
-                    {opportunity.probability}%
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {opportunity.expected_close_date
-                    ? formatDate(opportunity.expected_close_date)
-                    : "—"}
-                </TableCell>
-                <TableCell>{opportunity.source || "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {formatDate(opportunity.created_at)}
+    <div className="flex h-full w-full flex-col">
+      <div className="border-b p-4">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search opportunities..."
+            value={search.value}
+            onChange={(e) => search.setValue(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      <div className="w-full flex-1 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 bg-background">
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Probability</TableHead>
+              <TableHead>Expected Close</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data?.items && data.items.length > 0 ? (
+              data.items.map((opportunity) => (
+                <TableRow key={opportunity.id} className="hover:bg-muted/50">
+                  <TableCell className="font-medium">{opportunity.name}</TableCell>
+                  <TableCell>
+                    <Badge className={opportunityStatusColors[opportunity.status as OpportunityStatus] ?? "bg-info/10 text-info border-info/20"}>
+                      {opportunity.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{formatCurrency(opportunity.amount, opportunity.currency)}</TableCell>
+                  <TableCell>
+                    <Badge className={getStageColor(opportunity.probability)}>
+                      {opportunity.probability}%
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {opportunity.expected_close_date
+                      ? formatDate(opportunity.expected_close_date)
+                      : "—"}
+                  </TableCell>
+                  <TableCell>{opportunity.source || "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatDate(opportunity.created_at)}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="py-0">
+                  <PageEmptyState
+                    className="min-h-0 py-8"
+                    title="No opportunities found"
+                    description={
+                      search.debouncedValue
+                        ? "Try a different search term."
+                        : undefined
+                    }
+                  />
                 </TableCell>
               </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={7} className="py-0">
-                <PageEmptyState className="min-h-0 py-8" title="No opportunities found" />
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {data && data.total > 0 && (
+        <div className="border-t p-4">
+          <ResourceListPagination
+            filteredCount={data.items.length}
+            totalCount={data.total}
+            resourceName="opportunities"
+            page={pagination.page}
+            totalPages={totalPages}
+            onPageChange={pagination.setPage}
+          />
+        </div>
+      )}
     </div>
   );
 }
