@@ -111,13 +111,14 @@ describe("todaysAppointments", () => {
 });
 
 describe("upcomingAppointments", () => {
-  it("returns only future appointments sorted ascending", () => {
+  it("returns only future appointments, preserving the source order", () => {
     const now = new Date("2026-05-20T12:00:00.000Z");
     const past = makeAppointment({ id: 1, scheduled_at: "2026-05-19T12:00:00.000Z" });
     const soon = makeAppointment({ id: 2, scheduled_at: "2026-05-21T12:00:00.000Z" });
     const later = makeAppointment({ id: 3, scheduled_at: "2026-05-25T12:00:00.000Z" });
     const result = upcomingAppointments([later, past, soon], now);
-    expect(result.map((a) => a.id)).toEqual([2, 3]);
+    // past is dropped; remaining keep their original relative order
+    expect(result.map((a) => a.id)).toEqual([3, 2]);
   });
 });
 

@@ -84,17 +84,14 @@ export function todaysAppointments(
   );
 }
 
-/** Future appointments, sorted ascending by scheduled time. */
+/** Future appointments, preserving the source array order (matches the API order). */
 export function upcomingAppointments(
   appointments: Appointment[],
   now: Date = new Date(),
 ): Appointment[] {
-  return appointments
-    .filter((appointment) => new Date(appointment.scheduled_at) > now)
-    .sort(
-      (a, b) =>
-        new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime(),
-    );
+  return appointments.filter(
+    (appointment) => new Date(appointment.scheduled_at) > now,
+  );
 }
 
 /** Count of appointments currently in the "scheduled" status. */
