@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -52,7 +53,8 @@ async def test_send_uses_resend_async_client(fake_resend: _FakeResend) -> None:
             "to": ["lead@example.com"],
             "subject": "Hello",
             "html": "<p>Hello</p>",
-        }
+        },
+        None,
     )
     fake_resend.Emails.send.assert_not_called()
 
@@ -69,7 +71,7 @@ async def test_send_returns_none_when_resend_async_client_fails(
     result = await email._send({"to": ["lead@example.com"]})
 
     assert result is None
-    fake_resend.Emails.send_async.assert_awaited_once_with({"to": ["lead@example.com"]})
+    fake_resend.Emails.send_async.assert_awaited_once_with({"to": ["lead@example.com"]}, None)
     logger.error.assert_called_once()
 
 
@@ -93,3 +95,21 @@ async def test_invitation_email_uses_async_resend_path(fake_resend: _FakeResend)
     assert params["subject"] == "You've been invited to join Acme Realty"
     assert "https://app.example/invitations/abc" in params["html"]
     fake_resend.Emails.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_invitation_email_passes_resend_idempotency_key(fake_resend: _FakeResend) -> None:
+    key = uuid.uuid4()
+
+    sent = await email.send_invitation_email(
+        to_email="agent@example.com",
+        workspace_name="Acme Realty",
+        inviter_name="Nolan",
+        invitation_url="https://app.example/invitations/abc",
+        role="admin",
+        idempotency_key=key,
+    )
+
+    assert sent is True
+    fake_resend.Emails.send_async.assert_awaited_once()
+    assert fake_resend.Emails.send_async.await_args.args[1] == {"idempotency_key": str(key)}

@@ -37,26 +37,27 @@ class PushNotificationService:
         data: dict[str, Any] | None = None,
         notification_type: str | None = None,
         channel_id: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Send a push notification to all devices of a user.
 
         Checks the user's master push toggle and per-type preference before sending.
+        Returns True when at least one notification was accepted by Expo.
         """
         # Fetch user to check preferences
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if user is None:
-            return
+            return False
 
         # Check master push toggle
         if not user.notification_push:
-            return
+            return False
 
         # Check per-type preference
         if notification_type and notification_type in NOTIFICATION_TYPE_PREFS:
             pref_attr = NOTIFICATION_TYPE_PREFS[notification_type]
             if not getattr(user, pref_attr, True):
-                return
+                return False
 
         # Fetch device tokens
         tokens_result = await db.execute(
@@ -65,9 +66,9 @@ class PushNotificationService:
         tokens = [row[0] for row in tokens_result.all()]
 
         if not tokens:
-            return
+            return False
 
-        await self._send_notifications(tokens, title, body, data, channel_id)
+        return await self._send_notifications(tokens, title, body, data, channel_id)
 
     async def send_to_workspace_members(
         self,
@@ -78,7 +79,7 @@ class PushNotificationService:
         data: dict[str, Any] | None = None,
         notification_type: str | None = None,
         channel_id: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Send a push notification to all members of a workspace."""
         # Get all workspace member user IDs
         result = await db.execute(
@@ -88,13 +89,16 @@ class PushNotificationService:
         )
         user_ids = [row[0] for row in result.all()]
 
+        any_sent = False
         for user_id in user_ids:
             try:
-                await self.send_to_user(
+                sent = await self.send_to_user(
                     db, user_id, title, body, data, notification_type, channel_id
                 )
+                any_sent = any_sent or sent
             except Exception:
                 logger.exception("Failed to send push to user %s", user_id)
+        return any_sent
 
     async def _send_notifications(
         self,
@@ -103,7 +107,7 @@ class PushNotificationService:
         body: str,
         data: dict[str, Any] | None = None,
         channel_id: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Send push notifications to a list of Expo push tokens."""
         messages = []
         for token in tokens:
@@ -132,8 +136,10 @@ class PushNotificationService:
                 response.raise_for_status()
 
                 result = response.json()
+                accepted = True
                 # Log errors for individual tokens (e.g., DeviceNotRegistered)
                 if "data" in result:
+                    accepted = False
                     for i, item in enumerate(result["data"]):
                         if item.get("status") == "error":
                             logger.warning(
@@ -142,8 +148,12 @@ class PushNotificationService:
                                 item.get("details", {}).get("error", "unknown"),
                                 item.get("message", ""),
                             )
+                        else:
+                            accepted = True
+                return accepted
         except httpx.HTTPError:
             logger.exception("Failed to send push notifications via Expo")
+            return False
 
 
 push_notification_service = PushNotificationService()

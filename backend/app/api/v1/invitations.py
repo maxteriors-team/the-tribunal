@@ -22,6 +22,7 @@ from app.schemas.invitation import (
     InvitationResponse,
 )
 from app.services.email import send_invitation_email
+from app.services.idempotency import derive_outbound_key
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -165,6 +166,7 @@ async def create_invitation(
             invitation_url=invitation_url,
             role=invitation_data.role,
             message=invitation_data.message,
+            idempotency_key=derive_outbound_key("workspace_invitation_email", invitation.id),
         )
     except Exception as e:
         logger.error(

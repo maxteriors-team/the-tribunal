@@ -12,10 +12,12 @@ from app.core.config import settings
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
-from app.services.idempotency import derive_outbound_key
-from app.services.push_notifications import push_notification_service
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryRequest,
+    outbound_delivery_service,
+)
 from app.services.telephony.phone_number_resolver import get_workspace_sms_number
-from app.services.telephony.text_provider import get_text_message_provider
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +52,22 @@ class NudgeDeliveryService:
         # Push notifications
         if "push" in delivery_channels:
             try:
-                if nudge.assigned_to_user_id is not None:
-                    await push_notification_service.send_to_user(
-                        db,
+                push_result = await outbound_delivery_service.deliver(
+                    db,
+                    OutboundDeliveryRequest(
+                        workspace_id=nudge.workspace_id,
+                        channel=OutboundDeliveryChannel.PUSH,
+                        title=nudge.title,
+                        body=nudge.message,
+                        data={"type": "nudge", "nudge_id": str(nudge.id)},
                         user_id=nudge.assigned_to_user_id,
-                        title=nudge.title,
-                        body=nudge.message,
-                        data={"type": "nudge", "nudge_id": str(nudge.id)},
-                    )
-                else:
-                    await push_notification_service.send_to_workspace_members(
-                        db,
-                        workspace_id=str(nudge.workspace_id),
-                        title=nudge.title,
-                        body=nudge.message,
-                        data={"type": "nudge", "nudge_id": str(nudge.id)},
-                    )
-                delivered_via.append("push")
+                        idempotency_scope="nudge_push",
+                        idempotency_parts=(nudge.id, nudge.assigned_to_user_id or "workspace"),
+                        action_type="nudge_push",
+                    ),
+                )
+                if push_result.delivered:
+                    delivered_via.append("push")
             except Exception:
                 logger.exception("Failed to send push for nudge %s", nudge.id)
 
@@ -124,27 +125,28 @@ class NudgeDeliveryService:
         from_number = phone.phone_number
 
         sms_sent = False
-        sms_service = get_text_message_provider()
-        try:
-            for user in users:
-                if not user.notification_sms or not user.phone_number:
-                    continue
-                try:
-                    idempotency_key = derive_outbound_key("nudge_sms", nudge.id, user.id)
-                    await sms_service.send_message(
-                        to_number=user.phone_number,
-                        from_number=from_number,
-                        body=nudge.message,
-                        db=db,
+        for user in users:
+            if not user.phone_number:
+                continue
+            try:
+                result = await outbound_delivery_service.deliver(
+                    db,
+                    OutboundDeliveryRequest(
                         workspace_id=nudge.workspace_id,
+                        channel=OutboundDeliveryChannel.SMS,
+                        to=user.phone_number,
+                        from_=from_number,
+                        body=nudge.message,
+                        user=user,
                         phone_number_id=phone.id,
-                        idempotency_key=idempotency_key,
-                    )
-                    sms_sent = True
-                except Exception:
-                    logger.exception("Failed to send nudge SMS to user %s", user.id)
-        finally:
-            await sms_service.close()
+                        idempotency_scope="nudge_sms",
+                        idempotency_parts=(nudge.id, user.id),
+                        action_type="nudge_sms",
+                    ),
+                )
+                sms_sent = sms_sent or result.delivered
+            except Exception:
+                logger.exception("Failed to send nudge SMS to user %s", user.id)
         return sms_sent
 
     async def _resolve_target_users(self, db: AsyncSession, nudge: HumanNudge) -> list[User]:

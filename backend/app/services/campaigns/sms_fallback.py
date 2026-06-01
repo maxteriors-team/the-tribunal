@@ -16,8 +16,13 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
-from app.services.idempotency import derive_outbound_key
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryRequest,
+    OutboundDeliveryResult,
+    OutboundDeliveryStatus,
+    outbound_delivery_service,
+)
 
 logger = structlog.get_logger()
 
@@ -93,23 +98,35 @@ async def send_sms_fallback(
         log.warning("no_fallback_message_configured")
         return False
 
-    # Send SMS
-    sms_service = TelnyxSMSService(telnyx_api_key)
     try:
-        idempotency_key = derive_outbound_key(
-            "voice_campaign_sms_fallback",
-            campaign_contact.id,
-            call_outcome,
+        result = await outbound_delivery_service.deliver(
+            db,
+            OutboundDeliveryRequest(
+                workspace_id=campaign.workspace_id,
+                channel=OutboundDeliveryChannel.SMS,
+                to=contact.phone_number,
+                from_=campaign.from_phone_number,
+                body=message_text,
+                contact=contact,
+                campaign=campaign,
+                campaign_contact=campaign_contact,
+                agent_id=campaign.sms_fallback_agent_id or campaign.agent_id,
+                idempotency_scope="voice_campaign_sms_fallback",
+                idempotency_parts=(campaign_contact.id, call_outcome),
+                action_type="voice_campaign_sms_fallback",
+                require_sms_consent=True,
+                metadata={"telnyx_api_key_configured": bool(telnyx_api_key)},
+            ),
         )
-        message = await sms_service.send_message(
-            to_number=contact.phone_number,
-            from_number=campaign.from_phone_number,
-            body=message_text,
-            db=db,
-            workspace_id=campaign.workspace_id,
-            agent_id=campaign.sms_fallback_agent_id or campaign.agent_id,
-            idempotency_key=idempotency_key,
-        )
+
+        failed_reason = _sms_fallback_failure_reason(result)
+        if failed_reason is not None:
+            campaign_contact.last_error = failed_reason
+            await db.commit()
+            return False
+
+        message = result.message
+        assert message is not None
 
         # Update campaign contact
         campaign_contact.sms_fallback_sent = True
@@ -133,8 +150,14 @@ async def send_sms_fallback(
         campaign_contact.last_error = f"SMS fallback failed: {e}"
         await db.commit()
         return False
-    finally:
-        await sms_service.close()
+
+
+def _sms_fallback_failure_reason(result: OutboundDeliveryResult) -> str | None:
+    if result.status is OutboundDeliveryStatus.BLOCKED:
+        return f"SMS fallback blocked: {result.reason}"
+    if not result.delivered or result.message is None:
+        return f"SMS fallback failed: {result.reason or 'provider_failed'}"
+    return None
 
 
 def render_fallback_template(

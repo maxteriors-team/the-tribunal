@@ -19,10 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import Agent
 from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
-from app.services.idempotency import derive_outbound_key
-from app.services.push_notifications import push_notification_service
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryRequest,
+    outbound_delivery_service,
+)
 from app.services.telephony.phone_number_resolver import get_workspace_sms_number
-from app.services.telephony.text_provider import get_text_message_provider
 
 logger = logging.getLogger(__name__)
 
@@ -102,19 +104,22 @@ class SmsApprovalDeliveryHandler:
             return False
 
         message = f"[{agent_name}] wants to: {description}. Reply Y to approve, N to reject."
-        idempotency_key = derive_outbound_key("approval_notification_sms", action_id)
-        sms_service = get_text_message_provider()
         try:
-            await sms_service.send_message(
-                to_number=to_number,
-                from_number=phone.phone_number,
-                body=message,
-                db=db,
-                workspace_id=workspace_id,
-                phone_number_id=phone.id,
-                idempotency_key=idempotency_key,
+            result = await outbound_delivery_service.deliver(
+                db,
+                OutboundDeliveryRequest(
+                    workspace_id=workspace_id,
+                    channel=OutboundDeliveryChannel.SMS,
+                    to=to_number,
+                    from_=phone.phone_number,
+                    body=message,
+                    phone_number_id=phone.id,
+                    idempotency_scope="approval_notification_sms",
+                    idempotency_parts=(action_id,),
+                    action_type="approval_notification_sms",
+                ),
             )
-            return True
+            return result.delivered
         except Exception:
             logger.exception(
                 "Failed to send approval text to %s for workspace %s",
@@ -122,8 +127,6 @@ class SmsApprovalDeliveryHandler:
                 workspace_id,
             )
             return False
-        finally:
-            await sms_service.close()
 
 
 @dataclass(slots=True, frozen=True)
@@ -155,14 +158,20 @@ class PushApprovalDeliveryHandler:
     ) -> bool:
         """Send push notification to workspace members about a pending action."""
         try:
-            await push_notification_service.send_to_workspace_members(
+            result = await outbound_delivery_service.deliver(
                 db,
-                workspace_id=str(workspace_id),
-                title=f"Approval needed from {agent_name}",
-                body=action.description,
-                data={"type": "approval", "action_id": str(action.id)},
+                OutboundDeliveryRequest(
+                    workspace_id=workspace_id,
+                    channel=OutboundDeliveryChannel.PUSH,
+                    title=f"Approval needed from {agent_name}",
+                    body=action.description,
+                    data={"type": "approval", "action_id": str(action.id)},
+                    idempotency_scope="approval_notification_push",
+                    idempotency_parts=(action.id,),
+                    action_type="approval_notification_push",
+                ),
             )
-            return True
+            return result.delivered
         except Exception:
             logger.exception("Failed to send approval push for action %s", action.id)
             return False

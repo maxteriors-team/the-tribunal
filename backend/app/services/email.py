@@ -1,5 +1,6 @@
 """Email service for sending transactional emails via Resend."""
 
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -20,7 +21,11 @@ logger = structlog.get_logger()
 
 
 class _ResendEmails(Protocol):
-    async def send_async(self, params: dict[str, Any]) -> dict[str, Any]:
+    async def send_async(
+        self,
+        params: dict[str, Any],
+        options: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Send one email with Resend's async HTTP client."""
 
 
@@ -35,7 +40,11 @@ def _from_address() -> str:
     return f"{name} <{email}>"
 
 
-async def _send(params: dict[str, Any]) -> dict[str, Any] | None:
+async def _send(
+    params: dict[str, Any],
+    *,
+    idempotency_key: uuid.UUID | None = None,
+) -> dict[str, Any] | None:
     """Send an email via Resend, returning the response dict or None on failure."""
     if not RESEND_AVAILABLE:
         logger.warning("resend_not_installed", hint="Install with: uv add resend")
@@ -47,8 +56,9 @@ async def _send(params: dict[str, Any]) -> dict[str, Any] | None:
 
     resend_module = cast(_ResendModule, resend)
     resend_module.api_key = settings.resend_api_key
+    options = {"idempotency_key": str(idempotency_key)} if idempotency_key else None
     try:
-        response = await resend_module.Emails.send_async(params)
+        response = await resend_module.Emails.send_async(params, options)
     except Exception as exc:
         logger.error("resend_send_failed", error=str(exc), to=params.get("to"))
         return None
@@ -62,6 +72,7 @@ async def send_invitation_email(
     invitation_url: str,
     role: str,
     message: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
 ) -> bool:
     """Send a workspace invitation email."""
     subject = f"You've been invited to join {workspace_name}"
@@ -124,7 +135,7 @@ async def send_invitation_email(
         "html": html_content,
     }
 
-    response = await _send(params)
+    response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
         return False
 
@@ -144,6 +155,7 @@ async def send_appointment_booked_notification(
     contact_phone: str,
     appointment_time: datetime,
     calcom_booking_url: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
 ) -> bool:
     """Send an email notification to the realtor when an appointment is booked."""
     subject = f"New Appointment Booked — {contact_name}"
@@ -207,7 +219,7 @@ async def send_appointment_booked_notification(
         "html": html_content,
     }
 
-    response = await _send(params)
+    response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
         return False
 
