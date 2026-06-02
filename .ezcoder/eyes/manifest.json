@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "probes": [
+    {
+      "name": "http",
+      "capability": "http",
+      "impl": "curl",
+      "script": ".ezcoder/eyes/http.sh",
+      "status": "verified"
+    },
+    {
+      "name": "logs",
+      "capability": "runtime_logs",
+      "impl": "tail",
+      "script": ".ezcoder/eyes/logs.sh",
+      "status": "verified"
+    },
+    {
+      "name": "mail",
+      "capability": "capture_email",
+      "impl": "mailpit",
+      "script": ".ezcoder/eyes/mail.sh",
+      "status": "verified"
+    }
+  ]
+}

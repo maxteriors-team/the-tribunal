@@ -114,24 +114,22 @@ card-*.html
 navigation-*.html
 generic-component-*.html
 
-# Agent perception probes — runtime artifacts only.
-# Probe scripts live under .gg/eyes/ (canonical); .ezcoder/eyes/ holds the
-# manifest + journal that point at them. Both contain transient state
-# (screenshots, captured mail, mailpit binary) so the whole tree is ignored.
-.ezcoder/eyes/
-.gg/eyes/
+# Agent perception probes (.ezcoder/eyes): the authored probe scripts
+# (http.sh, logs.sh, mail.sh) and manifest.json are canonical tracked assets.
+# Ignore only runtime-copied helpers, downloaded binaries, and captured state.
+.ezcoder/eyes/out/
+.ezcoder/eyes/state/
+.ezcoder/eyes/bin/
+.ezcoder/eyes/recordings/
+.ezcoder/eyes/auth/
+.ezcoder/eyes/remote.json
+.ezcoder/eyes/_lib.sh
+.ezcoder/eyes/_redact.sh
 
 # Legacy agent toolchains — consolidated into .ezcoder/ (see CLAUDE.md).
-# Keep these ignored so stray IDE configs don't re-introduce duplicates.
-.claude/commands/
-.gg/commands/
-.gg/plans/
-
-# Worktrees / agent scratch
-.claude/worktrees/
-
-# Python caches outside backend
-scripts/__pycache__/
+# Ignore the whole legacy trees so stray IDE/agent configs don't reintroduce them.
+.claude/
+.gg/
 
 # Deploy / build tool caches
 .railway
