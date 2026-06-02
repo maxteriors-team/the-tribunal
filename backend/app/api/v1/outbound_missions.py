@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.service_errors import ServiceErrorRoute
 from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceType
 from app.models.lead_prospect import ProspectIdentityKind, ProspectStatus
 from app.models.outbound_mission import MissionStatus, OutboundMission
@@ -34,7 +35,7 @@ from app.schemas.outbound_mission import (
 from app.schemas.outbound_sequence import OutboundSequenceEnrollmentResponse
 from app.services.outbound.mission_service import OutboundMissionService
 
-router = APIRouter()
+router = APIRouter(route_class=ServiceErrorRoute)
 
 
 @router.post(

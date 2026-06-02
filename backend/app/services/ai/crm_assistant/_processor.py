@@ -29,7 +29,6 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
 from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
@@ -695,15 +694,10 @@ async def _send_sms_response(
     workspace_id: uuid.UUID,
     log: Any,
 ) -> None:
-    """Send the assistant's final reply as an SMS to the operator."""
-    from app.services.telephony.telnyx import TelnyxSMSService
+    """Send the assistant's final reply through the configured text provider."""
+    from app.services.telephony.text_provider import get_text_message_provider
 
-    telnyx_key = settings.telnyx_api_key
-    if not telnyx_key:
-        log.warning("no_telnyx_key_for_sms_response")
-        return
-
-    sms_service = TelnyxSMSService(telnyx_key)
+    sms_service = get_text_message_provider()
     try:
         await sms_service.send_message(
             to_number=to_number,

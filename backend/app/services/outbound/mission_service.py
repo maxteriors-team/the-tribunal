@@ -8,13 +8,12 @@ from enum import Enum
 from typing import Any
 
 import structlog
-from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
 from app.db.pagination import paginate
-from app.db.scope import apply_workspace_scope
+from app.db.scope import apply_workspace_scope, assert_workspace_owned
 from app.models.agent import Agent
 from app.models.lead_discovery_job import (
     DiscoveryJobStatus,
@@ -55,6 +54,7 @@ from app.schemas.outbound_sequence import (
     OutboundSequenceResponse,
 )
 from app.services._filters import FilterSpec, apply_filter_specs, presence_filter, search_filter
+from app.services.exceptions import NotFoundError, ValidationError
 
 logger = structlog.get_logger()
 
@@ -125,18 +125,13 @@ class OutboundMissionService:
         """Validate that ``fk_id`` (if set) refers to a row owned by ``workspace_id``."""
         if fk_id is None:
             return
-        result = await self.db.execute(
-            apply_workspace_scope(
-                select(model.id).where(model.id == fk_id),
-                model,
-                workspace_id,
-            )
+        await assert_workspace_owned(
+            self.db,
+            model,
+            fk_id,
+            workspace_id,
+            detail=f"{label} not found",
         )
-        if result.scalar_one_or_none() is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"{label} not found",
-            )
 
     async def validate_mission_fks(
         self,
@@ -184,10 +179,7 @@ class OutboundMissionService:
             detail="Lead prospect not found",
         )
         if prospect.mission_id != mission_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lead prospect not found",
-            )
+            raise NotFoundError("Lead prospect not found")
         return prospect
 
     # ------------------------------------------------------------------
@@ -263,9 +255,8 @@ class OutboundMissionService:
         mission = await self.get_mission_or_404(mission_id, workspace_id)
 
         if mission.status not in _MUTABLE_STATUSES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=("Cannot edit an active or completed mission; pause or archive it first."),
+            raise ValidationError(
+                "Cannot edit an active or completed mission; pause or archive it first."
             )
 
         update_data = mission_in.model_dump(exclude_unset=True)
@@ -291,10 +282,7 @@ class OutboundMissionService:
         mission = await self.get_mission_or_404(mission_id, workspace_id)
 
         if mission.status not in _DELETABLE_STATUSES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only draft or archived missions can be deleted; archive first.",
-            )
+            raise ValidationError("Only draft or archived missions can be deleted; archive first.")
 
         await self.db.delete(mission)
         await self.db.commit()
@@ -404,10 +392,7 @@ class OutboundMissionService:
     ) -> None:
         """Mutate a mission status transition after validating the current state."""
         if mission.status not in allowed_from:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot {action} mission in status '{mission.status.value}'",
-            )
+            raise ValidationError(f"Cannot {action} mission in status '{mission.status.value}'")
 
         now = datetime.now(UTC)
         mission.status = target
@@ -518,10 +503,7 @@ class OutboundMissionService:
         prospect = await self.get_mission_prospect_or_404(mission_id, prospect_id, workspace_id)
 
         if prospect.status in (ProspectStatus.SUPPRESSED, ProspectStatus.ARCHIVED):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot select prospect in status '{prospect.status.value}'",
-            )
+            raise ValidationError(f"Cannot select prospect in status '{prospect.status.value}'")
 
         prospect.status = ProspectStatus.QUEUED
         await self.db.commit()
@@ -624,10 +606,7 @@ class OutboundMissionService:
             detail="Lead discovery job not found",
         )
         if job.mission_id != mission_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lead discovery job not found",
-            )
+            raise NotFoundError("Lead discovery job not found")
         return job
 
     # ------------------------------------------------------------------
