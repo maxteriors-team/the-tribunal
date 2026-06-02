@@ -8,6 +8,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
 from app.models.contact import Contact
@@ -72,7 +73,7 @@ class OutboundGrowthWorkflowService:
 
         offer = await self._resolve_offer(offer_id)
         segment = await self._resolve_segment(segment_id)
-        selected_phone = from_phone_number or await self._get_default_phone_number()
+        selected_phone = await self._resolve_phone_number(from_phone_number)
 
         missing_inputs = await self._collect_missing_inputs(offer, segment, selected_phone)
         if missing_inputs:
@@ -158,13 +159,9 @@ class OutboundGrowthWorkflowService:
 
     async def _resolve_offer(self, offer_id: uuid.UUID | None) -> Offer | None:
         if offer_id is not None:
-            result = await self.db.execute(
-                select(Offer).where(Offer.id == offer_id, Offer.workspace_id == self.workspace_id)
-            )
-            return result.scalar_one_or_none()
+            return await get_workspace_owned(self.db, Offer, offer_id, self.workspace_id)
         result = await self.db.execute(
-            select(Offer)
-            .where(Offer.workspace_id == self.workspace_id)
+            select_workspace_owned(Offer, self.workspace_id)
             .order_by(Offer.is_active.desc(), Offer.updated_at.desc())
             .limit(1)
         )
@@ -172,34 +169,26 @@ class OutboundGrowthWorkflowService:
 
     async def _resolve_segment(self, segment_id: uuid.UUID | None) -> Segment | None:
         if segment_id is not None:
-            result = await self.db.execute(
-                select(Segment).where(
-                    Segment.id == segment_id,
-                    Segment.workspace_id == self.workspace_id,
-                )
-            )
-            return result.scalar_one_or_none()
+            return await get_workspace_owned(self.db, Segment, segment_id, self.workspace_id)
         result = await self.db.execute(
-            select(Segment)
-            .where(Segment.workspace_id == self.workspace_id)
+            select_workspace_owned(Segment, self.workspace_id)
             .order_by(Segment.contact_count.desc(), Segment.updated_at.desc())
             .limit(1)
         )
         return result.scalar_one_or_none()
 
-    async def _get_default_phone_number(self) -> str | None:
-        result = await self.db.execute(
-            select(PhoneNumber.phone_number)
-            .where(
-                PhoneNumber.workspace_id == self.workspace_id,
-                PhoneNumber.is_active.is_(True),
-                PhoneNumber.sms_enabled.is_(True),
-            )
-            .order_by(PhoneNumber.created_at.desc())
-            .limit(1)
+    async def _resolve_phone_number(self, requested_number: str | None) -> str | None:
+        query = select_workspace_owned(
+            PhoneNumber,
+            self.workspace_id,
+            PhoneNumber.is_active.is_(True),
+            PhoneNumber.sms_enabled.is_(True),
         )
-        value = result.scalar_one_or_none()
-        return str(value) if value else None
+        if requested_number is not None:
+            query = query.where(PhoneNumber.phone_number == requested_number)
+        result = await self.db.execute(query.order_by(PhoneNumber.created_at.desc()).limit(1))
+        phone = result.scalar_one_or_none()
+        return phone.phone_number if phone is not None else None
 
     async def _collect_missing_inputs(
         self,
@@ -236,8 +225,7 @@ class OutboundGrowthWorkflowService:
 
     async def _offer_options(self) -> list[dict[str, Any]]:
         result = await self.db.execute(
-            select(Offer)
-            .where(Offer.workspace_id == self.workspace_id)
+            select_workspace_owned(Offer, self.workspace_id)
             .order_by(Offer.is_active.desc(), Offer.updated_at.desc())
             .limit(5)
         )
@@ -245,8 +233,7 @@ class OutboundGrowthWorkflowService:
 
     async def _segment_options(self) -> list[dict[str, Any]]:
         result = await self.db.execute(
-            select(Segment)
-            .where(Segment.workspace_id == self.workspace_id)
+            select_workspace_owned(Segment, self.workspace_id)
             .order_by(Segment.contact_count.desc(), Segment.updated_at.desc())
             .limit(5)
         )
@@ -254,9 +241,9 @@ class OutboundGrowthWorkflowService:
 
     async def _phone_options(self) -> list[dict[str, Any]]:
         result = await self.db.execute(
-            select(PhoneNumber)
-            .where(
-                PhoneNumber.workspace_id == self.workspace_id,
+            select_workspace_owned(
+                PhoneNumber,
+                self.workspace_id,
                 PhoneNumber.is_active.is_(True),
                 PhoneNumber.sms_enabled.is_(True),
             )
@@ -354,9 +341,9 @@ class OutboundGrowthWorkflowService:
 
     async def _find_existing_responder_agent(self) -> Agent | None:
         result = await self.db.execute(
-            select(Agent)
-            .where(
-                Agent.workspace_id == self.workspace_id,
+            select_workspace_owned(
+                Agent,
+                self.workspace_id,
                 Agent.is_active.is_(True),
                 Agent.channel_mode.in_(["text", "both"]),
             )

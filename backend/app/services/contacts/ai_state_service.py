@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -71,14 +72,14 @@ class ContactAIStateService:
         conversation = await self.get_or_create_contact_conversation(contact_id, workspace_id)
 
         if agent_id is not None:
-            agent_result = await self.db.execute(
-                select(Agent).where(
-                    Agent.id == agent_id,
-                    Agent.workspace_id == workspace_id,
-                    Agent.is_active.is_(True),
-                )
+            agent = await get_workspace_owned(
+                self.db,
+                Agent,
+                agent_id,
+                workspace_id,
+                Agent.is_active.is_(True),
             )
-            if agent_result.scalar_one_or_none() is None:
+            if agent is None:
                 raise ContactValidationError("Agent not found or inactive")
 
         conversation.assigned_agent_id = agent_id
@@ -136,8 +137,9 @@ class ContactAIStateService:
         """Get a workspace phone number for text sending or conversation creation."""
         if from_number:
             phone_result = await self.db.execute(
-                select(PhoneNumber).where(
-                    PhoneNumber.workspace_id == workspace_id,
+                select_workspace_owned(
+                    PhoneNumber,
+                    workspace_id,
                     PhoneNumber.phone_number == from_number,
                     PhoneNumber.sms_enabled.is_(True),
                     PhoneNumber.is_active.is_(True),
@@ -149,9 +151,9 @@ class ContactAIStateService:
             return workspace_phone
 
         phone_result = await self.db.execute(
-            select(PhoneNumber)
-            .where(
-                PhoneNumber.workspace_id == workspace_id,
+            select_workspace_owned(
+                PhoneNumber,
+                workspace_id,
                 PhoneNumber.sms_enabled.is_(True),
                 PhoneNumber.is_active.is_(True),
             )

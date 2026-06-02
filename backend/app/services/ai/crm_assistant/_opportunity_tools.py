@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
-
+from app.db.scope import select_workspace_owned
 from app.models.opportunity import Opportunity
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 
@@ -20,8 +19,7 @@ class OpportunityAssistantTools:
     async def list_opportunities(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Opportunity)
-            .where(Opportunity.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Opportunity, self.context.workspace_id)
             .order_by(Opportunity.created_at.desc())
             .limit(limit)
         )

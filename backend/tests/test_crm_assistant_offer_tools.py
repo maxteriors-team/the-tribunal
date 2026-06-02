@@ -14,6 +14,7 @@ from app.models.campaign import Campaign, CampaignStatus
 from app.models.contact import Contact
 from app.models.offer import Offer
 from app.models.pending_action import PendingAction
+from app.models.phone_number import PhoneNumber
 from app.models.segment import Segment
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tool_metadata import get_approved_action_executor
@@ -102,6 +103,22 @@ def _make_segment(**overrides: Any) -> Segment:
     }
     defaults.update(overrides)
     return Segment(**defaults)
+
+
+def _make_phone_number(**overrides: Any) -> PhoneNumber:
+    defaults: dict[str, Any] = {
+        "id": uuid.uuid4(),
+        "workspace_id": uuid.uuid4(),
+        "phone_number": "+15550001111",
+        "friendly_name": "Main line",
+        "sms_enabled": True,
+        "voice_enabled": True,
+        "is_active": True,
+        "created_at": datetime(2026, 5, 1, tzinfo=UTC),
+        "updated_at": datetime(2026, 5, 2, tzinfo=UTC),
+    }
+    defaults.update(overrides)
+    return PhoneNumber(**defaults)
 
 
 def _make_offer(**overrides: Any) -> Offer:
@@ -285,6 +302,24 @@ async def test_get_offer_details_returns_full_offer(
     assert result["data"]["terms"] == "New customers only"
     assert result["data"]["value_stack_items"] == offer.value_stack_items
     assert result["data"]["created_at"] == "2026-05-01T00:00:00+00:00"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "workspace_id" in compiled
+    assert workspace_id.hex in compiled
+
+
+async def test_get_offer_details_hides_cross_workspace_offers(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    db.execute.return_value = _ExecuteResult([])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute("get_offer_details", {"offer_id": str(uuid.uuid4())})
+
+    assert result == {"success": False, "error": "Offer not found"}
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "workspace_id" in compiled
+    assert workspace_id.hex in compiled
 
 
 async def test_create_offer_draft_forces_inactive_draft(
@@ -484,17 +519,55 @@ async def test_outbound_growth_workflow_asks_for_missing_context(
     assert "Choose an offer" in result["next_approval_step"]
 
 
+async def test_outbound_growth_workflow_rejects_cross_workspace_sending_number(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    offer = _make_offer(workspace_id=workspace_id)
+    segment = _make_segment(workspace_id=workspace_id)
+    db.execute.side_effect = [
+        _ExecuteResult([offer]),
+        _ExecuteResult([segment]),
+        _ExecuteResult([]),
+        _ExecuteResult([]),
+    ]
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute(
+        "plan_outbound_growth_workflow",
+        {
+            "intent": "reach out to dormant homeowners",
+            "offer_id": str(offer.id),
+            "segment_id": str(segment.id),
+            "from_phone_number": "+15559999999",
+        },
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "needs_input"
+    assert [item["field"] for item in result["missing_inputs"]] == ["from_phone_number"]
+    compiled = str(
+        db.execute.await_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "workspace_id" in compiled
+    assert workspace_id.hex in compiled
+    assert "+15559999999" in compiled
+    db.add.assert_not_called()
+
+
 async def test_outbound_growth_workflow_creates_draft_campaign(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
     offer = _make_offer(workspace_id=workspace_id)
     segment = _make_segment(workspace_id=workspace_id)
+    phone = _make_phone_number(workspace_id=workspace_id)
     contact = _make_contact(workspace_id=workspace_id)
     agent = _make_agent(workspace_id=workspace_id)
     db.execute.side_effect = [
         _ExecuteResult([offer]),
         _ExecuteResult([segment]),
+        _ExecuteResult([phone]),
         _ExecuteResult([contact]),
         _ExecuteResult([agent]),
         _ExecuteResult([1]),

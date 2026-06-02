@@ -5,8 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
-
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.agent import Agent
 from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.ai.crm_assistant._tool_context import (
@@ -47,19 +46,17 @@ class AgentAssistantTools:
         }
 
     async def get_agent_for_workspace(self, agent_id: uuid.UUID) -> Agent | None:
-        result = await self.context.db.execute(
-            select(Agent).where(
-                Agent.id == agent_id,
-                Agent.workspace_id == self.context.workspace_id,
-            )
+        return await get_workspace_owned(
+            self.context.db,
+            Agent,
+            agent_id,
+            self.context.workspace_id,
         )
-        return result.scalar_one_or_none()
 
     async def list_agents(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Agent)
-            .where(Agent.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Agent, self.context.workspace_id)
             .order_by(Agent.created_at.desc())
             .limit(limit)
         )

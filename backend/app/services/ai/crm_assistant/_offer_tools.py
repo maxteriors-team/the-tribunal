@@ -5,8 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import select
-
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.offer import Offer
 from app.schemas.offer import OfferCreate, OfferUpdate
 from app.services.ai.crm_assistant._tool_context import (
@@ -75,19 +74,17 @@ class OfferAssistantTools:
         }
 
     async def get_offer_for_workspace(self, offer_id: uuid.UUID) -> Offer | None:
-        result = await self.context.db.execute(
-            select(Offer).where(
-                Offer.id == offer_id,
-                Offer.workspace_id == self.context.workspace_id,
-            )
+        return await get_workspace_owned(
+            self.context.db,
+            Offer,
+            offer_id,
+            self.context.workspace_id,
         )
-        return result.scalar_one_or_none()
 
     async def list_offers(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Offer)
-            .where(Offer.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Offer, self.context.workspace_id)
             .order_by(Offer.created_at.desc())
             .limit(limit)
         )

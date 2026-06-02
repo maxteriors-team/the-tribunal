@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func
 
+from app.db.scope import select_workspace_owned
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
@@ -32,8 +33,7 @@ class ContactAssistantTools:
         pattern = f"%{query}%"
 
         stmt = (
-            select(Contact)
-            .where(Contact.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Contact, self.context.workspace_id)
             .where(
                 (Contact.first_name.ilike(pattern))
                 | (Contact.last_name.ilike(pattern))
@@ -67,8 +67,9 @@ class ContactAssistantTools:
     async def create_contact(self, args: ToolArguments) -> dict[str, object]:
         phone = args["phone"]
         existing = await self.context.db.execute(
-            select(Contact).where(
-                Contact.workspace_id == self.context.workspace_id,
+            select_workspace_owned(
+                Contact,
+                self.context.workspace_id,
                 Contact.phone_number == phone,
             )
         )
@@ -98,27 +99,28 @@ class ContactAssistantTools:
 
     async def get_dashboard_stats(self, _args: ToolArguments) -> dict[str, object]:
         contacts_count = await self.context.db.scalar(
-            select(func.count())
+            select_workspace_owned(Contact, self.context.workspace_id)
+            .with_only_columns(func.count())
             .select_from(Contact)
-            .where(Contact.workspace_id == self.context.workspace_id)
         )
         campaigns_count = await self.context.db.scalar(
-            select(func.count())
+            select_workspace_owned(Campaign, self.context.workspace_id)
+            .with_only_columns(func.count())
             .select_from(Campaign)
-            .where(Campaign.workspace_id == self.context.workspace_id)
         )
         conversations_count = await self.context.db.scalar(
-            select(func.count())
+            select_workspace_owned(Conversation, self.context.workspace_id)
+            .with_only_columns(func.count())
             .select_from(Conversation)
-            .where(Conversation.workspace_id == self.context.workspace_id)
         )
         appointments_count = await self.context.db.scalar(
-            select(func.count())
-            .select_from(Appointment)
-            .where(
-                Appointment.workspace_id == self.context.workspace_id,
+            select_workspace_owned(
+                Appointment,
+                self.context.workspace_id,
                 Appointment.scheduled_at >= datetime.now(UTC),
             )
+            .with_only_columns(func.count())
+            .select_from(Appointment)
         )
 
         return {

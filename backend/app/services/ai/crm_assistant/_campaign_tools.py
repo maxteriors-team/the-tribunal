@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import func, select
 
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.campaign import Campaign, CampaignContact
 from app.services.ai.crm_assistant._tool_context import (
     CRMToolContext,
@@ -51,8 +52,7 @@ class CampaignAssistantTools:
     async def list_campaigns(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Campaign)
-            .where(Campaign.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Campaign, self.context.workspace_id)
             .order_by(Campaign.created_at.desc())
             .limit(limit)
         )
@@ -85,20 +85,17 @@ class CampaignAssistantTools:
 
         from app.models.contact import Contact
 
-        contact_result = await self.context.db.execute(
-            select(Contact).where(
-                Contact.id == contact_id,
-                Contact.workspace_id == self.context.workspace_id,
-            )
+        contact = await get_workspace_owned(
+            self.context.db,
+            Contact,
+            contact_id,
+            self.context.workspace_id,
         )
-        contact = contact_result.scalar_one_or_none()
         if not contact:
             return {"success": False, "error": "Contact not found"}
 
         phone_result = await self.context.db.execute(
-            select(PhoneNumber)
-            .where(PhoneNumber.workspace_id == self.context.workspace_id)
-            .limit(1)
+            select_workspace_owned(PhoneNumber, self.context.workspace_id).limit(1)
         )
         phone = phone_result.scalar_one_or_none()
         if not phone:

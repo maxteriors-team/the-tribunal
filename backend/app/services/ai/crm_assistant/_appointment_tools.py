@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-
+from app.db.scope import select_workspace_owned
 from app.models.appointment import Appointment
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 
@@ -22,9 +21,9 @@ class AppointmentAssistantTools:
     async def list_appointments(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Appointment)
-            .where(
-                Appointment.workspace_id == self.context.workspace_id,
+            select_workspace_owned(
+                Appointment,
+                self.context.workspace_id,
                 Appointment.scheduled_at >= datetime.now(UTC),
             )
             .order_by(Appointment.scheduled_at)

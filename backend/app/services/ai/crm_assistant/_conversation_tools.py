@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import select
 
+from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.conversation import Conversation, Message
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
 from app.services.ai.crm_assistant._tool_context import (
@@ -34,13 +35,12 @@ class ConversationAssistantTools:
         self,
         conversation_id: uuid.UUID,
     ) -> Conversation | None:
-        result = await self.context.db.execute(
-            select(Conversation).where(
-                Conversation.id == conversation_id,
-                Conversation.workspace_id == self.context.workspace_id,
-            )
+        return await get_workspace_owned(
+            self.context.db,
+            Conversation,
+            conversation_id,
+            self.context.workspace_id,
         )
-        return result.scalar_one_or_none()
 
     async def assign_ai_responder(self, args: ToolArguments) -> dict[str, object]:
         conversation_id = parse_uuid(args.get("conversation_id"))
@@ -73,9 +73,9 @@ class ConversationAssistantTools:
         limit = min(args.get("limit", 20), 100)
 
         conv_result = await self.context.db.execute(
-            select(Conversation)
-            .where(
-                Conversation.workspace_id == self.context.workspace_id,
+            select_workspace_owned(
+                Conversation,
+                self.context.workspace_id,
                 Conversation.contact_id == contact_id,
             )
             .order_by(Conversation.last_message_at.desc())
@@ -110,8 +110,7 @@ class ConversationAssistantTools:
     async def list_recent_conversations(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
         stmt = (
-            select(Conversation)
-            .where(Conversation.workspace_id == self.context.workspace_id)
+            select_workspace_owned(Conversation, self.context.workspace_id)
             .order_by(Conversation.last_message_at.desc())
             .limit(limit)
         )

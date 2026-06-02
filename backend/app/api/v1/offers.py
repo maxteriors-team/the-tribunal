@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.crud import get_or_404
 from app.api.deps import DB, CurrentUser, get_workspace
 from app.db.pagination import paginate
-from app.db.scope import apply_workspace_scope
+from app.db.scope import apply_workspace_scope, select_workspace_owned
 from app.models.contact import Contact
 from app.models.lead_magnet import LeadMagnet
 from app.models.lead_magnet_lead import LeadMagnetLead
@@ -76,7 +76,7 @@ async def list_offers(
     active_only: bool = False,
 ) -> PaginatedOffers:
     """List offers in a workspace."""
-    query = apply_workspace_scope(select(Offer), Offer, workspace_id)
+    query = select_workspace_owned(Offer, workspace_id)
 
     if active_only:
         query = query.where(Offer.is_active.is_(True))
@@ -213,7 +213,9 @@ async def attach_lead_magnets(
 
     # Verify all lead magnets exist in this workspace
     result = await db.execute(
-        apply_workspace_scope(select(LeadMagnet), LeadMagnet, workspace_id).where(
+        select_workspace_owned(
+            LeadMagnet,
+            workspace_id,
             LeadMagnet.id.in_(lead_magnet_ids),
         )
     )

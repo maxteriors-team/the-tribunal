@@ -106,6 +106,12 @@ class TestContactAIStateService:
         assert conversation.assigned_agent_id == agent_id
         assert conversation.ai_enabled is True
         db.execute.assert_awaited_once()
+        compiled = str(
+            db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+        )
+        assert "workspace_id" in compiled
+        assert workspace_id.hex in compiled
+        assert "is_active" in compiled
         db.commit.assert_awaited_once()
         db.refresh.assert_awaited_once_with(conversation)
 
@@ -126,6 +132,12 @@ class TestContactAIStateService:
 
         with pytest.raises(ContactValidationError, match="Agent not found or inactive"):
             await service.assign_agent(7, workspace_id, uuid.uuid4())
+        compiled = str(
+            db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})
+        )
+        assert "workspace_id" in compiled
+        assert workspace_id.hex in compiled
+        db.commit.assert_not_awaited()
 
     async def test_get_or_create_links_existing_phone_conversation(self) -> None:
         workspace_id = uuid.uuid4()
