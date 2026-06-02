@@ -203,7 +203,7 @@ export default function VoiceTestPage() {
 
   // Fetch agents
   const { data: agentsData } = useQuery({
-    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
+    queryKey: queryKeys.agents.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return agentsApi.list(workspaceId);

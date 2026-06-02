@@ -208,4 +208,32 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     );
     expect(req.description).toBeUndefined();
   });
+
+  it("applies defaults for null optional fields coming from the API", () => {
+    const values = agentToEditFormValues(
+      makeAgent({
+        description: null,
+        ivr_navigation_goal: null,
+        calcom_event_type_id: null,
+        reminder_template: null,
+        noshow_day3_template: null,
+        noshow_day7_template: null,
+        never_booked_template: null,
+        value_reinforcement_template: null,
+        post_meeting_template: null,
+      }),
+    );
+
+    // Nullable string goal collapses to the IVR default (empty string).
+    expect(values.ivrNavigationGoal).toBe("");
+    // Empty description becomes a blank string the form can render.
+    expect(values.description).toBe("");
+    // Nullable id and templates pass through as null.
+    expect(values.calcomEventTypeId).toBeNull();
+    expect(values.reminderTemplate).toBeNull();
+    expect(values.noshowDay3Template).toBeNull();
+    expect(values.postMeetingTemplate).toBeNull();
+    // Result still satisfies the edit schema.
+    expect(editAgentFormSchema.safeParse(values).success).toBe(true);
+  });
 });

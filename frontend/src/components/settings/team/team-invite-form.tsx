@@ -34,7 +34,7 @@ export function TeamInviteForm({ workspaceId }: TeamInviteFormProps) {
   const queryClient = useQueryClient();
 
   const { data: pendingInvitations, isPending: invitationsLoading } = useQuery({
-    queryKey: queryKeys.invitations.bare(workspaceId ?? ""),
+    queryKey: queryKeys.invitations.all(workspaceId ?? ""),
     queryFn: () => invitationsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -44,7 +44,7 @@ export function TeamInviteForm({ workspaceId }: TeamInviteFormProps) {
       invitationsApi.cancel(workspaceId!, invitationId),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.invitations.bare(workspaceId ?? ""),
+        queryKey: queryKeys.invitations.all(workspaceId ?? ""),
       });
       toast.success("Invitation cancelled");
     },

@@ -72,7 +72,7 @@ export function IntegrationsSettingsTab() {
 
   // Fetch configured integrations (with credentials)
   const { data: configuredIntegrations } = useQuery({
-    queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
+    queryKey: queryKeys.integrations.all(workspaceId ?? ""),
     queryFn: () => integrationsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });

@@ -48,7 +48,7 @@ export function useContactSidebarData({
   });
 
   const { data: phoneNumbersData } = useQuery({
-    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
+    queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
     queryFn: () =>
       workspaceId
         ? phoneNumbersApi.list(workspaceId, { active_only: true })

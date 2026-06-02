@@ -82,7 +82,7 @@ export function CreateOpportunityDialog({
         stage_id: data.stage_id || undefined,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all(workspaceId ?? "") });
       toast.success("Opportunity created");
     },
   });

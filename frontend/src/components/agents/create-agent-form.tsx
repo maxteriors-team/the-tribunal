@@ -69,7 +69,7 @@ export function CreateAgentForm() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId) });
       }
       toast.success("Agent created successfully!");
       router.push("/agents");

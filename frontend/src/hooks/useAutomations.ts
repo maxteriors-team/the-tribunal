@@ -32,7 +32,7 @@ export function useToggleAutomation(workspaceId: string) {
     mutationFn: (automationId: string) =>
       automationsApi.toggle(workspaceId, automationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.automations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.automations.all(workspaceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.automations.root() });
     },
   });

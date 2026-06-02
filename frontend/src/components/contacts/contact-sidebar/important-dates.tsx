@@ -61,7 +61,7 @@ export function ImportantDatesSection({
         queryKey: contactQueryKeys.all(workspaceId ?? ""),
       });
       void queryClient.invalidateQueries({
-        queryKey: contactQueryKeys.get(workspaceId ?? "", contact.id),
+        queryKey: contactQueryKeys.detail(workspaceId ?? "", contact.id),
       });
       setSelectedContact(updatedContact);
       toast.success("Important dates updated");

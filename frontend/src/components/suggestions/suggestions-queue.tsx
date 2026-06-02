@@ -69,7 +69,10 @@ export function SuggestionsQueue({
     useState<ImprovementSuggestionResponse | null>(null);
 
   const { data: suggestions, isPending } = useQuery({
-    queryKey: queryKeys.improvementSuggestions.list(workspaceId ?? "", agentId, statusFilter),
+    queryKey: queryKeys.improvementSuggestions.list(workspaceId ?? "", {
+      agent_id: agentId ?? null,
+      status: statusFilter,
+    }),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return improvementSuggestionsApi.list(workspaceId, {

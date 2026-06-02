@@ -24,7 +24,7 @@ export default function NewExperimentPage() {
   const workspaceId = useWorkspaceId();
 
   const { data: contacts = [], isPending: contactsLoading } = useQuery({
-    queryKey: queryKeys.contacts.bare(workspaceId ?? ""),
+    queryKey: queryKeys.contacts.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return contactsApi.list(workspaceId);
@@ -34,7 +34,7 @@ export default function NewExperimentPage() {
   });
 
   const { data: agents = [], isPending: agentsLoading } = useQuery({
-    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
+    queryKey: queryKeys.agents.all(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       const response = await agentsApi.list(workspaceId);
@@ -44,7 +44,7 @@ export default function NewExperimentPage() {
   });
 
   const { data: phoneNumbers = [], isPending: phoneNumbersLoading } = useQuery({
-    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
+    queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       const response = await phoneNumbersApi.list(workspaceId);

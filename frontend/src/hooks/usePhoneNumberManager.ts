@@ -50,7 +50,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
 
   const invalidatePhoneNumbers = () =>
     queryClient.invalidateQueries({
-      queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
+      queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
     });
 
   const {

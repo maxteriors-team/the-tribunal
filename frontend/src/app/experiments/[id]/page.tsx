@@ -52,7 +52,7 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     isPending,
     error,
   } = useQuery({
-    queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
+    queryKey: queryKeys.messageTests.detail(workspaceId ?? "", testId),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTestsApi.get(workspaceId, testId);
@@ -67,9 +67,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
+        queryKey: queryKeys.messageTests.detail(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.all(workspaceId ?? "") });
       toast.success("Test started");
     },
     onError: (error) =>
@@ -83,9 +83,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
+        queryKey: queryKeys.messageTests.detail(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.all(workspaceId ?? "") });
       toast.success("Test paused");
     },
     onError: () => toast.error("Failed to pause test"),
@@ -98,9 +98,9 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTests.get(workspaceId ?? "", testId),
+        queryKey: queryKeys.messageTests.detail(workspaceId ?? "", testId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.all(workspaceId ?? "") });
       toast.success("Test completed");
     },
     onError: () => toast.error("Failed to complete test"),

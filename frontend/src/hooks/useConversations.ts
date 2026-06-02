@@ -33,7 +33,7 @@ export function useSendMessage(workspaceId: string) {
     mutationFn: (data: { conversationId: string; body: string }) =>
       conversationsApi.sendMessage(workspaceId, data.conversationId, data.body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }
@@ -48,7 +48,7 @@ export function useToggleConversationAI(workspaceId: string) {
     mutationFn: (data: { conversationId: string; enabled: boolean }) =>
       conversationsApi.toggleAI(workspaceId, data.conversationId, data.enabled),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }
@@ -63,7 +63,7 @@ export function useAssignAgent(workspaceId: string) {
     mutationFn: (data: { conversationId: string; agentId: string | null }) =>
       conversationsApi.assignAgent(workspaceId, data.conversationId, data.agentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }
@@ -78,7 +78,7 @@ export function useClearConversationHistory(workspaceId: string) {
     mutationFn: (conversationId: string) =>
       conversationsApi.clearHistory(workspaceId, conversationId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }

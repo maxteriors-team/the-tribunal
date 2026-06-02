@@ -181,7 +181,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
 
       // Invalidate timeline so the sent message appears immediately
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.contacts.timelineLegacy(
+        queryKey: queryKeys.contacts.timeline(
           workspaceId ?? "",
           selectedContact.id,
         ),
@@ -254,7 +254,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     clearHistoryMutation.mutate(contactConversation.id, {
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.contacts.timelineLegacy(
+          queryKey: queryKeys.contacts.timeline(
             workspaceId ?? "",
             selectedContact?.id,
           ),

@@ -73,7 +73,7 @@ export default function OffersPage() {
   const [deleteOfferId, setDeleteOfferId] = useState<string | null>(null);
 
   const { data, isPending } = useQuery({
-    queryKey: queryKeys.offers.bare(workspaceId ?? ""),
+    queryKey: queryKeys.offers.all(workspaceId ?? ""),
     queryFn: () => offersApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -81,7 +81,7 @@ export default function OffersPage() {
   const deleteMutation = useMutation({
     mutationFn: (offerId: string) => offersApi.delete(workspaceId!, offerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.offers.all(workspaceId ?? "") });
       setDeleteOfferId(null);
     },
   });
@@ -118,7 +118,7 @@ export default function OffersPage() {
         require_name: offer.require_name,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.offers.all(workspaceId ?? "") });
     },
   });
 

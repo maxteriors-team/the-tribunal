@@ -66,7 +66,7 @@ export function OpenAIChatGPTCard() {
         queryKey: queryKeys.settings.integrations(workspaceId),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.integrations.bare(workspaceId),
+        queryKey: queryKeys.integrations.all(workspaceId),
       }),
     ]);
   };

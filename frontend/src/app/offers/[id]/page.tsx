@@ -28,7 +28,7 @@ export default function EditOfferPage({ params }: EditOfferPageProps) {
     isPending,
     error,
   } = useQuery({
-    queryKey: queryKeys.offers.get(workspaceId ?? "", offerId),
+    queryKey: queryKeys.offers.detail(workspaceId ?? "", offerId),
     queryFn: () => offersApi.getWithLeadMagnets(workspaceId!, offerId),
     enabled: !!workspaceId,
   });

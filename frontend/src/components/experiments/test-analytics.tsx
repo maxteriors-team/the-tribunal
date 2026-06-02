@@ -115,7 +115,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
         queryKey: queryKeys.messageTests.analytics(workspaceId ?? "", testId),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTests.bare(workspaceId ?? ""),
+        queryKey: queryKeys.messageTests.all(workspaceId ?? ""),
       });
       toast.success("Winner selected");
       setShowWinnerDialog(false);
@@ -130,9 +130,9 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTests.bare(workspaceId ?? ""),
+        queryKey: queryKeys.messageTests.all(workspaceId ?? ""),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") });
       toast.success(data.message);
       setShowConvertDialog(false);
       convertForm.reset(defaultConvertValues);

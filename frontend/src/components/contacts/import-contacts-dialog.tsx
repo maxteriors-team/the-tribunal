@@ -95,7 +95,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
     onSuccess: (data) => {
       setResult(data);
       setStep("results");
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId ?? "") });
       if (data.successful > 0) {
         toast.success(`Successfully imported ${data.successful} contacts`);
       }

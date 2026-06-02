@@ -92,7 +92,7 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
       return contactsApi.create(workspaceId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId ?? "") });
       toast.success(messages.contacts.created);
     },
   });
@@ -107,7 +107,7 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
       queryClient.invalidateQueries({ queryKey: contactQueryKeys.all(workspaceId ?? "") });
       if (contact) {
         queryClient.invalidateQueries({
-          queryKey: contactQueryKeys.get(workspaceId ?? "", contact.id),
+          queryKey: contactQueryKeys.detail(workspaceId ?? "", contact.id),
         });
       }
       setSelectedContact(updatedContact);

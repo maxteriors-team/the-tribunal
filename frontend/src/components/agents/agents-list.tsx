@@ -94,7 +94,7 @@ export function AgentsList() {
     isPending,
     error,
   } = useQuery({
-    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
+    queryKey: queryKeys.agents.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return agentsApi.list(workspaceId, { active_only: false });
@@ -109,7 +109,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId ?? "") });
       }
       toast.success("Agent status updated");
     },
@@ -125,7 +125,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId ?? "") });
       }
       toast.success("Agent deleted");
     },
@@ -155,7 +155,7 @@ export function AgentsList() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId ?? "") });
       }
       toast.success("Agent duplicated");
     },
@@ -165,7 +165,7 @@ export function AgentsList() {
   });
 
   const { data: phoneNumbersData } = useQuery({
-    queryKey: queryKeys.phoneNumbers.legacyList(workspaceId ?? ""),
+    queryKey: queryKeys.phoneNumbers.list(workspaceId ?? "", { voice_enabled: true }),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.list(workspaceId, { voice_enabled: true });
@@ -230,7 +230,7 @@ export function AgentsList() {
         resourceName="agents"
         onRetry={() => {
           if (workspaceId) {
-            queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId ?? "") });
+            queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId ?? "") });
           }
         }}
       />

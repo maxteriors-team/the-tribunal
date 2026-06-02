@@ -25,8 +25,8 @@ export function useBulkTagContacts(workspaceId: string) {
   return useMutation({
     mutationFn: (data: BulkTagRequest) => tagsApi.bulkTag(workspaceId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags.bare(workspaceId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags.all(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId) });
     },
   });
 }

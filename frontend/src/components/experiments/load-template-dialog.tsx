@@ -37,7 +37,7 @@ export function LoadTemplateDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data, isPending } = useQuery({
-    queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
+    queryKey: queryKeys.messageTemplates.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return messageTemplatesApi.list(workspaceId);
@@ -52,7 +52,7 @@ export function LoadTemplateDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
+        queryKey: queryKeys.messageTemplates.all(workspaceId ?? ""),
       });
       toast.success("Template deleted");
     },

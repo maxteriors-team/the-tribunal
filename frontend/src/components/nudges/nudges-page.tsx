@@ -80,7 +80,7 @@ export function NudgesPage() {
   });
 
   const { data: nudgeList, isPending: listLoading } = useQuery({
-    queryKey: queryKeys.nudges.list(workspaceId ?? "", statusFilter, page),
+    queryKey: queryKeys.nudges.list(workspaceId ?? "", { status: statusFilter, page }),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return nudgesApi.list(workspaceId, {
@@ -94,7 +94,6 @@ export function NudgesPage() {
 
   const invalidateNudges = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.root() });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.statsRoot() });
   };
 
   const actMutation = useMutation({

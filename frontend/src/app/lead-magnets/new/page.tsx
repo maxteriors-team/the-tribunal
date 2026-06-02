@@ -183,7 +183,7 @@ export default function NewLeadMagnetPage() {
       return leadMagnetsApi.create(workspaceId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.all(workspaceId ?? "") });
       router.push("/lead-magnets");
     },
   });

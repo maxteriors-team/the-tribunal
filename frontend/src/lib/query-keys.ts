@@ -1,50 +1,129 @@
 /**
  * Centralized React Query key factory.
  *
- * Inspired by TkDodo's "Effective React Query Keys" — each resource exposes
- * builder functions that return `readonly` tuples, so invalidation, prefetch,
- * and cache access all share a single source of truth.
+ * Contract for workspace-scoped CRUD resources:
+ * - `root()` -> every query for the resource across workspaces.
+ * - `all(workspaceId)` -> every query for the resource in one workspace.
+ * - `list(workspaceId, params?)` -> list queries; unfiltered lists intentionally
+ *   share the workspace `all` key, while filtered lists append normalized params.
+ * - `detail(workspaceId, id)` -> one resource instance.
  *
- * @example
- * ```ts
- * import { queryKeys } from "@/lib/query-keys";
- *
- * useQuery({
- *   queryKey: queryKeys.contacts.detail(workspaceId, contactId),
- *   queryFn: () => fetchContact(contactId),
- * });
- *
- * // Invalidate every contact query for a workspace
- * queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId) });
- * ```
+ * Filtered-list helper names should delegate to `list(workspaceId, params)`.
+ * Mutation invalidation should use `all(workspaceId)` or, when intentionally
+ * broad, `root()`.
  *
  * RULE: never hand-write a `queryKey: [...]` literal. Add a builder here
  * instead. The `no-restricted-syntax` ESLint rule enforces this.
  */
 
-type Key = readonly unknown[];
+import type { ResourceId } from "@/types/api";
 
-const resource = <Name extends string>(name: Name) => ({
-  all: (workspaceId: string) => [name, workspaceId] as const,
-  list: (workspaceId: string, params?: Record<string, unknown>) =>
-    (params ? ([name, workspaceId, "list", params] as const) : ([name, workspaceId, "list"] as const)) as Key,
-  detail: (workspaceId: string, id: string) => [name, workspaceId, "detail", id] as const,
-});
+export type QueryKey = readonly unknown[];
+export type QueryKeyParams = Readonly<Record<string, unknown>>;
+
+export interface ResourceQueryKeys<Name extends string = string> {
+  root: () => readonly [Name];
+  all: (workspaceId: string) => readonly [Name, string];
+  list: (workspaceId: string, params?: QueryKeyParams | null) => QueryKey;
+  detail: (workspaceId: string, id: ResourceId | null | undefined) => QueryKey;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+
+function normalizeQueryKeyValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeQueryKeyValue);
+  }
+
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(
+      ([entryKey, entryValue]) =>
+        [entryKey, normalizeQueryKeyValue(entryValue)] as const,
+    );
+
+  return Object.fromEntries(entries);
+}
+
+function normalizeQueryKeyParams(
+  params: QueryKeyParams | null | undefined,
+): Record<string, unknown> | undefined {
+  if (!params) {
+    return undefined;
+  }
+
+  const normalized = normalizeQueryKeyValue(params) as Record<string, unknown>;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+export function createResourceQueryKeys<Name extends string>(
+  name: Name,
+): ResourceQueryKeys<Name> {
+  return {
+    root: () => [name] as const,
+    all: (workspaceId: string) => [name, workspaceId] as const,
+    list: (workspaceId: string, params?: QueryKeyParams | null) => {
+      const normalizedParams = normalizeQueryKeyParams(params);
+      return normalizedParams
+        ? ([name, workspaceId, normalizedParams] as const)
+        : ([name, workspaceId] as const);
+    },
+    detail: (workspaceId: string, id: ResourceId | null | undefined) =>
+      [name, workspaceId, id] as const,
+  };
+}
+
+export function getResourceInvalidationKeys(
+  resourceKey: string,
+  workspaceId: string,
+  relatedResourceKeys: readonly string[] = [],
+): QueryKey[] {
+  return [resourceKey, ...relatedResourceKeys].map((key) =>
+    createResourceQueryKeys(key).all(workspaceId),
+  );
+}
+
+const agents = createResourceQueryKeys("agents");
+const appointments = createResourceQueryKeys("appointments");
+const automations = createResourceQueryKeys("automations");
+const calls = createResourceQueryKeys("calls");
+const campaignReports = createResourceQueryKeys("campaign-reports");
+const campaigns = createResourceQueryKeys("campaigns");
+const contacts = createResourceQueryKeys("contacts");
+const conversations = createResourceQueryKeys("conversations");
+const improvementSuggestions = createResourceQueryKeys("suggestions");
+const integrations = createResourceQueryKeys("integrations");
+const invitations = createResourceQueryKeys("invitations");
+const leadMagnets = createResourceQueryKeys("lead-magnets");
+const leadSources = createResourceQueryKeys("lead-sources");
+const messageTemplates = createResourceQueryKeys("message-templates");
+const messageTests = createResourceQueryKeys("message-tests");
+const nudges = createResourceQueryKeys("nudges");
+const offers = createResourceQueryKeys("offers");
+const opportunities = createResourceQueryKeys("opportunities");
+const pendingActions = createResourceQueryKeys("pending-actions");
+const phoneNumbers = createResourceQueryKeys("phone-numbers");
+const segments = createResourceQueryKeys("segments");
 
 export const queryKeys = {
   agents: {
-    ...resource("agents"),
-    /** Bare `["agents", workspaceId]` — matches what `createResourceHooks` emits for `useList`/`useGet`. */
-    bare: (workspaceId: string) => ["agents", workspaceId] as const,
-    /** `["agents", workspaceId, id]` — matches `createResourceHooks` `useGet` shape. */
-    get: (workspaceId: string, agentId: string) => ["agents", workspaceId, agentId] as const,
-    /** `["agents", workspaceId, params]` — matches `createResourceHooks` `useList` with params. */
-    listWith: (workspaceId: string, params: object) =>
-      ["agents", workspaceId, params] as const,
+    ...agents,
     activeOnly: (workspaceId: string) =>
-      ["agents", workspaceId, { active_only: true }] as const,
+      agents.list(workspaceId, { active_only: true }),
     versions: (workspaceId: string, agentId: string) =>
-      ["agents", workspaceId, "detail", agentId, "versions"] as const,
+      [...agents.detail(workspaceId, agentId), "versions"] as const,
     promptVersions: (workspaceId: string, agentId: string) =>
       ["promptVersions", workspaceId, agentId] as const,
     promptVersionsAll: () => ["promptVersions"] as const,
@@ -52,11 +131,11 @@ export const queryKeys = {
       ["promptVersionComparison", workspaceId, agentId] as const,
     promptVersionComparisonAll: () => ["promptVersionComparison"] as const,
     humanProfile: (workspaceId: string, agentId: string) =>
-      ["humanProfile", workspaceId, agentId] as const,
+      [...agents.detail(workspaceId, agentId), "human-profile"] as const,
     knowledgeDocs: (workspaceId: string, agentId: string) =>
-      ["knowledgeDocs", workspaceId, agentId] as const,
+      [...agents.detail(workspaceId, agentId), "knowledge-documents"] as const,
     embed: (workspaceId: string, agentId: string) =>
-      ["agent-embed", workspaceId, agentId] as const,
+      [...agents.detail(workspaceId, agentId), "embed"] as const,
   },
   assistant: {
     all: (workspaceId: string) => ["assistant", workspaceId] as const,
@@ -67,14 +146,11 @@ export const queryKeys = {
     history: (workspaceId: string) => ["assistant", workspaceId, "history"] as const,
   },
   appointments: {
-    ...resource("appointments"),
-    /** Bare `["appointments", workspaceId]` — `createResourceHooks` `useList` shape. */
-    bare: (workspaceId: string) => ["appointments", workspaceId] as const,
-    listWith: (workspaceId: string, params: object) =>
-      ["appointments", workspaceId, params] as const,
-    stats: (workspaceId: string) => ["appointments", "stats", workspaceId] as const,
+    ...appointments,
+    stats: (workspaceId: string) =>
+      [...appointments.all(workspaceId), "stats"] as const,
     byContact: (workspaceId: string, contactId: number | string | undefined) =>
-      ["appointments", workspaceId, { contact_id: contactId }] as const,
+      appointments.list(workspaceId, { contact_id: contactId }),
   },
   auth: {
     currentUser: () => ["auth", "currentUser"] as const,
@@ -82,10 +158,9 @@ export const queryKeys = {
     user: () => ["user"] as const,
   },
   automations: {
-    ...resource("automations"),
-    bare: (workspaceId: string) => ["automations", workspaceId] as const,
-    root: () => ["automations"] as const,
-    stats: (workspaceId: string) => ["automationStats", workspaceId] as const,
+    ...automations,
+    stats: (workspaceId: string) =>
+      [...automations.all(workspaceId), "stats"] as const,
   },
   billing: {
     all: (workspaceId: string) => ["billing", workspaceId] as const,
@@ -95,74 +170,71 @@ export const queryKeys = {
     usage: (workspaceId: string) => ["billing", workspaceId, "usage"] as const,
   },
   calls: {
-    ...resource("calls"),
+    ...calls,
     listFiltered: (
       workspaceId: string,
       direction: string,
       status: string,
       search: string,
-    ) => ["calls", workspaceId, direction, status, search] as const,
+    ) => calls.list(workspaceId, { direction, search, status }),
     transcript: (workspaceId: string, callId: string) =>
-      ["calls", workspaceId, "detail", callId, "transcript"] as const,
+      [...calls.detail(workspaceId, callId), "transcript"] as const,
   },
   campaignReports: {
-    ...resource("campaign-reports"),
-    list: (workspaceId: string) => ["campaignReports", workspaceId] as const,
+    ...campaignReports,
     full: (workspaceId: string, reportIds: readonly string[]) =>
-      ["campaignReportsFull", workspaceId, reportIds] as const,
-    count: (workspaceId: string) => ["campaignReportsCount", workspaceId] as const,
+      [...campaignReports.all(workspaceId), "full", reportIds] as const,
+    count: (workspaceId: string) =>
+      [...campaignReports.all(workspaceId), "count"] as const,
   },
   campaigns: {
-    ...resource("campaigns"),
-    bare: (workspaceId: string) => ["campaigns", workspaceId] as const,
-    get: (workspaceId: string, campaignId: string) =>
-      ["campaigns", workspaceId, campaignId] as const,
+    ...campaigns,
     analytics: (workspaceId: string, campaignId: string) =>
-      ["campaignAnalytics", workspaceId, campaignId] as const,
+      [...campaigns.detail(workspaceId, campaignId), "analytics"] as const,
     guaranteeProgress: (workspaceId: string, campaignId: string) =>
-      ["guarantee-progress", workspaceId, campaignId] as const,
+      [...campaigns.detail(workspaceId, campaignId), "guarantee-progress"] as const,
   },
   contacts: {
-    ...resource("contacts"),
-    bare: (workspaceId: string) => ["contacts", workspaceId] as const,
-    listWith: (workspaceId: string, params: object) =>
-      ["contacts", workspaceId, params] as const,
-    ids: (workspaceId: string, params: object) =>
-      ["contact-ids", workspaceId, params] as const,
-    infinite: (workspaceId: string | null, filters: Record<string, unknown>) =>
-      ["contacts-infinite", workspaceId, filters] as const,
+    ...contacts,
+    ids: (workspaceId: string, params: QueryKeyParams) =>
+      [...contacts.all(workspaceId), "ids", normalizeQueryKeyParams(params)] as const,
+    infinite: (workspaceId: string | null, filters: QueryKeyParams) =>
+      ["contacts", workspaceId, "infinite", normalizeQueryKeyParams(filters)] as const,
     aiState: (workspaceId: string, contactId: number | string) =>
-      ["contact-ai-state", workspaceId, contactId] as const,
-    timeline: (workspaceId: string, contactId: string) =>
-      ["contacts", workspaceId, "detail", contactId, "timeline"] as const,
-    /** Legacy timeline key used by `useContactTimeline` and consumers that poll it. */
-    timelineLegacy: (
+      [...contacts.detail(workspaceId, contactId), "ai-state"] as const,
+    timeline: (
       workspaceId: string,
       contactId: number | string | null | undefined,
       limit?: number,
     ) =>
-      (limit === undefined
-        ? (["contact-timeline", workspaceId, contactId] as const)
-        : (["contact-timeline", workspaceId, contactId, limit] as const)) as Key,
+      limit === undefined
+        ? (["contacts", workspaceId, contactId ?? null, "timeline"] as const)
+        : ([
+            "contacts",
+            workspaceId,
+            contactId ?? null,
+            "timeline",
+            { limit },
+          ] as const),
     conversations: (workspaceId: string, contactId: string) =>
-      ["contacts", workspaceId, "detail", contactId, "conversations"] as const,
+      [...contacts.detail(workspaceId, contactId), "conversations"] as const,
     tags: (workspaceId: string, contactId: string) =>
-      ["contacts", workspaceId, "detail", contactId, "tags"] as const,
+      [...contacts.detail(workspaceId, contactId), "tags"] as const,
     engagementSummary: (workspaceId: string, contactId: string) =>
-      ["contacts", workspaceId, "detail", contactId, "engagement-summary"] as const,
+      [...contacts.detail(workspaceId, contactId), "engagement-summary"] as const,
   },
   conversations: {
-    ...resource("conversations"),
-    bare: (workspaceId: string) => ["conversations", workspaceId] as const,
+    ...conversations,
     byContact: (workspaceId: string, contactId: number | string | undefined | null) =>
-      ["conversations", workspaceId, contactId] as const,
-    detail: (workspaceId: string, conversationId: string) =>
-      ["conversation", workspaceId, conversationId] as const,
-    detailAll: () => ["conversation"] as const,
+      conversations.list(workspaceId, {
+        contact_id: contactId ?? null,
+        page: 1,
+        page_size: 100,
+      }),
     messages: (workspaceId: string, conversationId: string) =>
-      ["conversations", workspaceId, "detail", conversationId, "messages"] as const,
+      [...conversations.detail(workspaceId, conversationId), "messages"] as const,
     followupSettings: (workspaceId: string, conversationId: string) =>
-      ["followup-settings", workspaceId, conversationId] as const,
+      [...conversations.detail(workspaceId, conversationId), "followup-settings"] as const,
   },
   dashboard: {
     all: (workspaceId: string) => ["dashboard", workspaceId] as const,
@@ -171,98 +243,61 @@ export const queryKeys = {
     outboundGrowth: (workspaceId: string) =>
       ["dashboard", workspaceId, "outbound-growth"] as const,
   },
-  findLeadsAi: resource("find-leads-ai"),
-  humanProfiles: resource("human-profiles"),
+  findLeadsAi: createResourceQueryKeys("find-leads-ai"),
+  humanProfiles: createResourceQueryKeys("human-profiles"),
   improvementSuggestions: {
-    ...resource("improvement-suggestions"),
-    list: (workspaceId: string, agentId: string | null | undefined, statusFilter: string) =>
-      ["improvementSuggestions", workspaceId, agentId ?? null, statusFilter] as const,
+    ...improvementSuggestions,
     pendingCount: (workspaceId: string) =>
-      ["suggestionsPendingCount", workspaceId] as const,
-    stats: (workspaceId: string) => ["suggestionsStats", workspaceId] as const,
-    root: () => ["improvementSuggestions"] as const,
+      [...improvementSuggestions.all(workspaceId), "pending-count"] as const,
+    stats: (workspaceId: string) =>
+      [...improvementSuggestions.all(workspaceId), "stats"] as const,
   },
   integrations: {
-    ...resource("integrations"),
-    bare: (workspaceId: string) => ["integrations", workspaceId] as const,
-    openAIOAuth: (workspaceId: string) => ["integrations", workspaceId, "openai-oauth"] as const,
+    ...integrations,
+    openAIOAuth: (workspaceId: string) =>
+      [...integrations.all(workspaceId), "openai-oauth"] as const,
   },
   invitations: {
-    ...resource("invitations"),
-    bare: (workspaceId: string) => ["invitations", workspaceId] as const,
+    ...invitations,
     byToken: (token: string) => ["invitation", token] as const,
   },
-  knowledgeDocuments: resource("knowledge-documents"),
-  leadMagnets: {
-    ...resource("lead-magnets"),
-    bare: (workspaceId: string) => ["lead-magnets", workspaceId] as const,
-  },
-  leadSources: {
-    ...resource("lead-sources"),
-    bare: (workspaceId: string) => ["lead-sources", workspaceId] as const,
-  },
-  messageTemplates: {
-    ...resource("message-templates"),
-    bare: (workspaceId: string) => ["message-templates", workspaceId] as const,
-  },
+  knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
+  leadMagnets,
+  leadSources,
+  messageTemplates,
   messageTests: {
-    ...resource("message-tests"),
-    bare: (workspaceId: string) => ["message-tests", workspaceId] as const,
-    get: (workspaceId: string, testId: string) =>
-      ["message-test", workspaceId, testId] as const,
+    ...messageTests,
     analytics: (workspaceId: string, testId: string) =>
-      ["message-test-analytics", workspaceId, testId] as const,
+      [...messageTests.detail(workspaceId, testId), "analytics"] as const,
   },
   nudges: {
-    ...resource("nudges"),
-    list: (workspaceId: string, statusFilter: string, page: number) =>
-      ["nudges", workspaceId, statusFilter, page] as const,
-    root: () => ["nudges"] as const,
-    stats: (workspaceId: string) => ["nudgeStats", workspaceId] as const,
-    statsRoot: () => ["nudgeStats"] as const,
+    ...nudges,
+    stats: (workspaceId: string) => [...nudges.all(workspaceId), "stats"] as const,
     settings: (workspaceId: string) => ["nudge-settings", workspaceId] as const,
   },
-  offers: {
-    ...resource("offers"),
-    bare: (workspaceId: string) => ["offers", workspaceId] as const,
-    get: (workspaceId: string, offerId: string) =>
-      ["offers", workspaceId, offerId] as const,
-  },
+  offers,
   opportunities: {
-    ...resource("opportunities"),
-    bare: (workspaceId: string) => ["opportunities", workspaceId] as const,
-    list: (workspaceId: string, page: number, search: string) =>
-      ["opportunities", workspaceId, page, search] as const,
-    get: (workspaceId: string, opportunityId: string | undefined) =>
-      ["opportunity", workspaceId, opportunityId] as const,
-    pipelines: (workspaceId: string) => ["pipelines", workspaceId] as const,
+    ...opportunities,
+    pipelines: (workspaceId: string) =>
+      [...opportunities.all(workspaceId), "pipelines"] as const,
   },
   pendingActions: {
-    ...resource("pending-actions"),
-    list: (workspaceId: string, statusFilter: string, page: number) =>
-      ["pendingActions", workspaceId, statusFilter, page] as const,
-    root: () => ["pendingActions"] as const,
-    count: (workspaceId: string) => ["pending-actions", workspaceId, "count"] as const,
-    stats: (workspaceId: string) => ["pendingActionStats", workspaceId] as const,
-    statsRoot: () => ["pendingActionStats"] as const,
+    ...pendingActions,
+    count: (workspaceId: string) =>
+      [...pendingActions.all(workspaceId), "count"] as const,
+    stats: (workspaceId: string) =>
+      [...pendingActions.all(workspaceId), "stats"] as const,
   },
   phoneNumbers: {
-    ...resource("phone-numbers"),
-    bare: (workspaceId: string) => ["phone-numbers", workspaceId] as const,
-    listWith: (workspaceId: string, params: object) =>
-      ["phone-numbers", workspaceId, params] as const,
+    ...phoneNumbers,
     smsEnabled: (workspaceId: string) =>
-      ["phone-numbers", workspaceId, { sms_enabled: true }] as const,
+      phoneNumbers.list(workspaceId, { sms_enabled: true }),
     activeTextCapable: (workspaceId: string) =>
-      ["phone-numbers", workspaceId, { active_only: true, text_capable: true }] as const,
+      phoneNumbers.list(workspaceId, { active_only: true, text_capable: true }),
     activeOnlyFalse: (workspaceId: string) =>
-      ["phone-numbers", workspaceId, { active_only: false }] as const,
-    detail: (workspaceId: string, phoneNumberId: string) =>
-      ["phoneNumber", workspaceId, phoneNumberId] as const,
-    /** Legacy duplicate key used in agents-list — kept until that screen is refactored. */
-    legacyList: (workspaceId: string) => ["phoneNumbers", workspaceId] as const,
+      phoneNumbers.list(workspaceId, { active_only: false }),
   },
-  promptVersions: resource("prompt-versions"),
+  promptVersions: createResourceQueryKeys("prompt-versions"),
   publicDemo: {
     all: () => ["public-demo"] as const,
     detail: (slug: string) => ["public-demo", "detail", slug] as const,
@@ -279,11 +314,11 @@ export const queryKeys = {
     appointments: (workspaceId: string) =>
       ["realtor-appointments", workspaceId] as const,
   },
-  scraping: resource("scraping"),
+  scraping: createResourceQueryKeys("scraping"),
   segments: {
-    ...resource("segments"),
+    ...segments,
     contacts: (workspaceId: string, segmentId: string) =>
-      ["segment-contacts", workspaceId, segmentId] as const,
+      [...segments.detail(workspaceId, segmentId), "contacts"] as const,
   },
   settings: {
     all: (workspaceId: string) => ["settings", workspaceId] as const,
@@ -295,18 +330,12 @@ export const queryKeys = {
     integrations: (workspaceId: string) =>
       ["settings", "integrations", workspaceId] as const,
   },
-  smsCampaigns: resource("sms-campaigns"),
-  tags: {
-    ...resource("tags"),
-    bare: (workspaceId: string) => ["tags", workspaceId] as const,
-  },
-  voiceCampaigns: {
-    ...resource("voice-campaigns"),
-    bare: (workspaceId: string) => ["voice-campaigns", workspaceId] as const,
-  },
+  smsCampaigns: createResourceQueryKeys("sms-campaigns"),
+  tags: createResourceQueryKeys("tags"),
+  voiceCampaigns: createResourceQueryKeys("voice-campaigns"),
   workspaces: {
     all: () => ["workspaces"] as const,
-    detail: (workspaceId: string) => ["workspaces", "detail", workspaceId] as const,
-    members: (workspaceId: string) => ["workspaces", "detail", workspaceId, "members"] as const,
+    detail: (workspaceId: string) => ["workspaces", workspaceId] as const,
+    members: (workspaceId: string) => ["workspaces", workspaceId, "members"] as const,
   },
 } as const;

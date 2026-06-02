@@ -43,11 +43,10 @@ export function OpportunitiesList({ workspaceId }: OpportunitiesListProps) {
   const search = useDebouncedSearch({ delay: 300, onDebouncedChange: () => pagination.reset() });
 
   const { data, isPending } = useQuery({
-    queryKey: queryKeys.opportunities.list(
-      workspaceId ?? "",
-      pagination.page,
-      search.debouncedValue,
-    ),
+    queryKey: queryKeys.opportunities.list(workspaceId ?? "", {
+      page: pagination.page,
+      search: search.debouncedValue || undefined,
+    }),
     queryFn: () =>
       opportunitiesApi.list(workspaceId, {
         page: pagination.page,

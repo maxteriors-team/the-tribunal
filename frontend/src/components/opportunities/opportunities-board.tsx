@@ -241,7 +241,7 @@ export function OpportunitiesBoard({ workspaceId }: OpportunitiesBoardProps) {
   });
 
   const { data: opportunities, isPending: opportunitiesLoading } = useQuery({
-    queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
+    queryKey: queryKeys.opportunities.all(workspaceId ?? ""),
     queryFn: () => opportunitiesApi.list(workspaceId, { page_size: 500 }),
     enabled: !!workspaceId,
   });
@@ -255,7 +255,7 @@ export function OpportunitiesBoard({ workspaceId }: OpportunitiesBoardProps) {
       stageId: string;
     }) => opportunitiesApi.update(workspaceId, opportunityId, { stage_id: stageId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all(workspaceId ?? "") });
     },
   });
 

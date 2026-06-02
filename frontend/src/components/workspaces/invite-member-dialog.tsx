@@ -57,7 +57,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
     mutationFn: (data: CreateInvitationRequest) => invitationsApi.create(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.invitations.bare(workspaceId ?? ""),
+        queryKey: queryKeys.invitations.all(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.team(workspaceId ?? ""),

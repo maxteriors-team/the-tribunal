@@ -214,7 +214,7 @@ export function ContactsPage() {
     if (!workspaceId || selectedCount === 0) return;
     try {
       const result = await bulkUpdateStatusMutation.mutateAsync({ ids: selectedArray, status });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId ?? "") });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId ?? "") });
       toast.success(`Updated ${result.updated} contact${result.updated !== 1 ? "s" : ""} to ${status}`);
     } catch {
       toast.error("Failed to update status");

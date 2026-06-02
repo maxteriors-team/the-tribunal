@@ -166,7 +166,7 @@ export function OpportunityDetailSheet({
 
   // Fetch full opportunity details with activities
   const { data: opportunityDetail } = useQuery({
-    queryKey: queryKeys.opportunities.get(workspaceId ?? "", opportunity?.id),
+    queryKey: queryKeys.opportunities.detail(workspaceId ?? "", opportunity?.id),
     queryFn: () =>
       opportunity ? opportunitiesApi.get(workspaceId, opportunity.id) : null,
     enabled: !!opportunity && open,
@@ -202,10 +202,10 @@ export function OpportunityDetailSheet({
       opportunitiesApi.update(workspaceId, opportunity!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
+        queryKey: queryKeys.opportunities.all(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities.get(workspaceId ?? "", opportunity?.id),
+        queryKey: queryKeys.opportunities.detail(workspaceId ?? "", opportunity?.id),
       });
       setIsEditing(false);
     },
@@ -215,7 +215,7 @@ export function OpportunityDetailSheet({
     mutationFn: () => opportunitiesApi.delete(workspaceId, opportunity!.id),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.opportunities.bare(workspaceId ?? ""),
+        queryKey: queryKeys.opportunities.all(workspaceId ?? ""),
       });
       onOpenChange(false);
     },

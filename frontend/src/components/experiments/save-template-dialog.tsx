@@ -48,7 +48,7 @@ export function SaveTemplateDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.messageTemplates.bare(workspaceId ?? ""),
+        queryKey: queryKeys.messageTemplates.all(workspaceId ?? ""),
       });
       toast.success("Template saved successfully");
       setName("");

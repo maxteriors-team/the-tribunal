@@ -5,6 +5,11 @@
 
 import { useQuery, useMutation, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 
+import {
+  createResourceQueryKeys,
+  getResourceInvalidationKeys,
+  type ResourceQueryKeys,
+} from "@/lib/query-keys";
 import type { PaginatedResponse, ResourceId } from "@/types/api";
 
 import type { ApiClient } from "./create-api-client";
@@ -24,7 +29,7 @@ export interface CreateResourceHooksOptions<T, CreateData, UpdateData> {
   apiClient: ApiClient<T, CreateData, UpdateData>;
 
   /**
-   * Additional query keys to invalidate on mutations.
+   * Additional resource roots to invalidate on mutations.
    * Useful for invalidating related resources (e.g., invalidate "contacts" when updating "tags").
    */
   invalidateKeys?: string[];
@@ -53,15 +58,6 @@ export interface CreateResourceHooksOptions<T, CreateData, UpdateData> {
    * Whether to generate the useDelete hook. Default: true.
    */
   includeDelete?: boolean;
-}
-
-/**
- * Query key helpers for a resource.
- */
-export interface ResourceQueryKeys {
-  list: (workspaceId: string, params?: Record<string, unknown>) => readonly unknown[];
-  get: (workspaceId: string, id: ResourceId) => readonly unknown[];
-  all: (workspaceId: string) => readonly unknown[];
 }
 
 /**
@@ -113,28 +109,10 @@ export function createResourceHooks<T, CreateData, UpdateData>(
   } = options;
 
   // Build query key arrays
-  const queryKeys: ResourceQueryKeys = {
-    list: (workspaceId: string, params?: Record<string, unknown>) => {
-      const baseKey = [resourceKey, workspaceId] as const;
-      return params ? [...baseKey, params] : baseKey;
-    },
-    get: (workspaceId: string, id: ResourceId) => [resourceKey, workspaceId, id] as const,
-    all: (workspaceId: string) => [resourceKey, workspaceId] as const,
-  };
+  const queryKeys: ResourceQueryKeys = createResourceQueryKeys(resourceKey);
 
-  // Build invalidate keys
-  const buildInvalidateKeys = (workspaceId: string) => {
-    const keys: unknown[][] = [];
-    // Invalidate the resource itself
-    keys.push([resourceKey, workspaceId]);
-    // Invalidate single item queries for this resource
-    keys.push([resourceKey]);
-    // Invalidate additional keys
-    for (const key of invalidateKeys) {
-      keys.push([key, workspaceId]);
-    }
-    return keys;
-  };
+  const buildInvalidateKeys = (workspaceId: string) =>
+    getResourceInvalidationKeys(resourceKey, workspaceId, invalidateKeys);
 
   const hooks: ResourceHooks<T, CreateData, UpdateData> = {
     queryKeys,
@@ -149,7 +127,7 @@ export function createResourceHooks<T, CreateData, UpdateData>(
 
     useGet: (workspaceId: string, id: ResourceId): UseQueryResult<T> => {
       return useQuery({
-        queryKey: queryKeys.get(workspaceId, id),
+        queryKey: queryKeys.detail(workspaceId, id),
         queryFn: () => {
           if (!apiClient.get) {
             throw new Error(`API client for ${resourceKey} does not have a 'get' method`);

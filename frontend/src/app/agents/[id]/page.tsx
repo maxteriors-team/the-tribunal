@@ -146,8 +146,8 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
     isDeletingRef.current = true;
     setIsDeleting(true);
 
-    void queryClient.cancelQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
-    queryClient.removeQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
+    void queryClient.cancelQueries({ queryKey: queryKeys.agents.detail(workspaceId, agentId) });
+    queryClient.removeQueries({ queryKey: queryKeys.agents.detail(workspaceId, agentId) });
 
     try {
       await agentsApi.delete(workspaceId, agentId);
@@ -171,8 +171,8 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
     try {
       await agentsApi.update(workspaceId, agentId, request);
       toast.success(messages.agents.updated);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.bare(workspaceId) });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.get(workspaceId, agentId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(workspaceId, agentId) });
       router.push("/agents");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : messages.agents.updateFailed;

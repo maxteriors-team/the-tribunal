@@ -36,7 +36,7 @@ export function useUpdateFollowupSettings(workspaceId: string) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.followupSettings(workspaceId, variables.conversationId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.detailAll() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }
@@ -80,7 +80,7 @@ export function useSendFollowup(workspaceId: string) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.detail(workspaceId, variables.conversationId),
       });
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
     },
   });
 }

@@ -79,7 +79,7 @@ export function CampaignsList() {
   const queryClient = useQueryClient();
 
   const { data: campaignsData, isPending, error } = useQuery({
-    queryKey: queryKeys.campaigns.bare(workspaceId ?? ""),
+    queryKey: queryKeys.campaigns.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return campaignsApi.list(workspaceId);
@@ -95,7 +95,7 @@ export function CampaignsList() {
       return campaignsApi.pause(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") });
       toast.success("Campaign paused");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause campaign")),
@@ -107,7 +107,7 @@ export function CampaignsList() {
       return campaignsApi.start(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") });
       toast.success("Campaign started");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to start campaign")),
@@ -119,7 +119,7 @@ export function CampaignsList() {
       return campaignsApi.delete(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") });
       toast.success("Campaign deleted");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete campaign")),
@@ -131,7 +131,7 @@ export function CampaignsList() {
       return campaignsApi.duplicate(workspaceId, id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") });
       toast.success("Campaign duplicated");
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to duplicate campaign")),
@@ -167,7 +167,7 @@ export function CampaignsList() {
     return (
       <ResourceListError
         resourceName="campaigns"
-        onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId ?? "") })}
+        onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") })}
       />
     );
   }

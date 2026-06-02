@@ -63,7 +63,7 @@ export function PendingActionsPage() {
   });
 
   const { data: actionList, isPending: listLoading } = useQuery({
-    queryKey: queryKeys.pendingActions.list(workspaceId ?? "", statusFilter, page),
+    queryKey: queryKeys.pendingActions.list(workspaceId ?? "", { status: statusFilter, page }),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return pendingActionsApi.list(workspaceId, {
@@ -77,7 +77,6 @@ export function PendingActionsPage() {
 
   const invalidateActions = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.pendingActions.root() });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.pendingActions.statsRoot() });
   };
 
   const approveMutation = useMutation({

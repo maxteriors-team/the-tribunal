@@ -29,7 +29,7 @@ export default function NewSMSCampaignPage() {
 
   // Fetch offers from API (with fallback to empty array)
   const { data: offersData, isPending: offersLoading } = useQuery({
-    queryKey: queryKeys.offers.bare(workspaceId ?? ""),
+    queryKey: queryKeys.offers.all(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       try {
@@ -81,7 +81,7 @@ export default function NewSMSCampaignPage() {
     },
     onSuccess: () => {
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.offers.bare(workspaceId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.offers.all(workspaceId) });
       }
       toast.success(messages.offers.created);
     },
@@ -114,7 +114,7 @@ export default function NewSMSCampaignPage() {
     onSuccess: (campaign) => {
       toast.success(messages.campaigns.smsCreated);
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId) });
       }
       router.push(`/campaigns/${campaign.id}`);
     },

@@ -129,7 +129,7 @@ export default function LeadMagnetsPage() {
   });
 
   const { data, isPending } = useQuery({
-    queryKey: queryKeys.leadMagnets.bare(workspaceId ?? ""),
+    queryKey: queryKeys.leadMagnets.all(workspaceId ?? ""),
     queryFn: () => leadMagnetsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -138,7 +138,7 @@ export default function LeadMagnetsPage() {
     mutationFn: (data: CreateLeadMagnetRequest) =>
       leadMagnetsApi.create(workspaceId!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.all(workspaceId ?? "") });
       setShowCreateDialog(false);
       resetForm();
     },
@@ -148,7 +148,7 @@ export default function LeadMagnetsPage() {
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateLeadMagnetRequest> }) =>
       leadMagnetsApi.update(workspaceId!, id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.all(workspaceId ?? "") });
       setEditingMagnet(null);
       resetForm();
     },
@@ -157,7 +157,7 @@ export default function LeadMagnetsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => leadMagnetsApi.delete(workspaceId!, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadMagnets.all(workspaceId ?? "") });
       setDeleteMagnetId(null);
     },
   });

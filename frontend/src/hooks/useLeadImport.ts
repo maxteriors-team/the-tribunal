@@ -39,7 +39,7 @@ export function useLeadImport<TRequest, TResponse extends { imported: number }>(
     onSuccess: (data) => {
       opts.onSuccess?.(data);
       queryClient.invalidateQueries({
-        queryKey: queryKeys.contacts.bare(workspaceId ?? ""),
+        queryKey: queryKeys.contacts.all(workspaceId ?? ""),
       });
       const message =
         opts.successToast?.(data) ??

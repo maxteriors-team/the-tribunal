@@ -32,7 +32,7 @@ export { contactQueryKeys, useContacts, useContact, useCreateContact, useUpdateC
  */
 export function useContactsPaginated(workspaceId: string, params: ContactsListParams) {
   return useQuery({
-    queryKey: queryKeys.contacts.listWith(workspaceId, params),
+    queryKey: queryKeys.contacts.list(workspaceId, params),
     queryFn: () => contactsApi.list(workspaceId, params),
     enabled: !!workspaceId,
     placeholderData: keepPreviousData,
@@ -48,7 +48,7 @@ export function useBulkDeleteContacts(workspaceId: string) {
   return useMutation({
     mutationFn: (ids: number[]) => contactsApi.bulkDelete(workspaceId, ids),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId) });
     },
   });
 }
@@ -58,7 +58,7 @@ export function useBulkDeleteContacts(workspaceId: string) {
  */
 export function useContactTimeline(workspaceId: string, contactId: number, limit: number = 100) {
   return useQuery({
-    queryKey: queryKeys.contacts.timelineLegacy(workspaceId, contactId, limit),
+    queryKey: queryKeys.contacts.timeline(workspaceId, contactId, limit),
     queryFn: () => contactsApi.getTimeline(workspaceId, contactId, limit),
     enabled: !!workspaceId && !!contactId,
     ...REALTIME,
@@ -77,7 +77,7 @@ export function useBulkUpdateStatus(workspaceId: string) {
     mutationFn: (variables: { ids: number[]; status: ContactStatus }) =>
       contactsApi.bulkUpdateStatus(workspaceId, variables.ids, variables.status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId) });
     },
   });
 }
@@ -92,7 +92,7 @@ export function useContactIds(
   onSuccess?: (data: Awaited<ReturnType<typeof contactsApi.listIds>>) => void
 ) {
   return useQuery({
-    queryKey: queryKeys.contacts.ids(workspaceId, params),
+    queryKey: queryKeys.contacts.ids(workspaceId, { ...params }),
     queryFn: async () => {
       const data = await contactsApi.listIds(workspaceId, params);
       onSuccess?.(data);
@@ -113,7 +113,7 @@ export function useToggleContactAI(workspaceId: string) {
       contactsApi.toggleAI(workspaceId, variables.contactId, variables.enabled),
     onSuccess: (_, variables) => {
       // Invalidate conversations to refresh AI state
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
       queryClient.invalidateQueries({
         queryKey: queryKeys.contacts.aiState(workspaceId, variables.contactId),
       });
@@ -131,7 +131,7 @@ export function useAssignContactAgent(workspaceId: string) {
     mutationFn: (variables: { contactId: number; agentId: string | null }) =>
       contactsApi.assignAgent(workspaceId, variables.contactId, variables.agentId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.bare(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
       queryClient.invalidateQueries({
         queryKey: queryKeys.contacts.aiState(workspaceId, variables.contactId),
       });

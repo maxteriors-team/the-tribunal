@@ -139,13 +139,13 @@ function LeadSourceDialog({
 
   // Load agents and campaigns for action config
   const { data: agentsData } = useQuery({
-    queryKey: queryKeys.agents.bare(workspaceId ?? ""),
+    queryKey: queryKeys.agents.all(workspaceId ?? ""),
     queryFn: () => agentsApi.list(workspaceId),
     enabled: form.action === "auto_text" || form.action === "auto_call",
   });
 
   const { data: campaignsData } = useQuery({
-    queryKey: queryKeys.campaigns.bare(workspaceId ?? ""),
+    queryKey: queryKeys.campaigns.all(workspaceId ?? ""),
     queryFn: () => campaignsApi.list(workspaceId),
     enabled: form.action === "enroll_campaign",
   });
@@ -157,7 +157,7 @@ function LeadSourceDialog({
     mutationFn: (data: LeadSourceCreateRequest) =>
       leadSourcesApi.create(workspaceId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       onOpenChange(false);
     },
   });
@@ -166,7 +166,7 @@ function LeadSourceDialog({
     mutationFn: (data: LeadSourceUpdateRequest) =>
       leadSourcesApi.update(workspaceId, source!.id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       onOpenChange(false);
     },
   });
@@ -441,7 +441,7 @@ export function LeadSourcesSettingsTab() {
   const [deleteTarget, setDeleteTarget] = useState<LeadSource | null>(null);
 
   const { data: sources, isPending } = useQuery({
-    queryKey: queryKeys.leadSources.bare(workspaceId ?? ""),
+    queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
     queryFn: () => leadSourcesApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
@@ -449,7 +449,7 @@ export function LeadSourcesSettingsTab() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => leadSourcesApi.delete(workspaceId!, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       setDeleteTarget(null);
     },
   });
@@ -458,7 +458,7 @@ export function LeadSourcesSettingsTab() {
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       leadSourcesApi.update(workspaceId!, id, { enabled }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.bare(workspaceId ?? "") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
     },
   });
 

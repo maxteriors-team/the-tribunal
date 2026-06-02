@@ -195,4 +195,40 @@ describe("subscribeToEmbedMessages", () => {
 
     unsubscribe();
   });
+
+  it("accepts any origin when the allow-list is empty", () => {
+    const handler = vi.fn();
+    const unsubscribe = subscribeToEmbedMessages(handler, { allowedOrigins: [] });
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "ai-agent:close" },
+        origin: "https://anything.example",
+      }),
+    );
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
+
+  it("attaches the listener to a custom target window when provided", () => {
+    const handler = vi.fn();
+    const listeners = new Map<string, EventListener>();
+    const fakeTarget = {
+      addEventListener: vi.fn((type: string, cb: EventListener) => listeners.set(type, cb)),
+      removeEventListener: vi.fn((type: string) => listeners.delete(type)),
+    } as unknown as Window;
+
+    const unsubscribe = subscribeToEmbedMessages(handler, { target: fakeTarget });
+    expect(fakeTarget.addEventListener).toHaveBeenCalledWith("message", expect.any(Function));
+
+    // Drive the captured listener directly with a valid payload.
+    listeners.get("message")?.(
+      new MessageEvent("message", { data: { type: "ai-agent:start" } }),
+    );
+    expect(handler).toHaveBeenCalledWith({ type: "ai-agent:start" }, expect.any(MessageEvent));
+
+    unsubscribe();
+    expect(fakeTarget.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function));
+  });
 });

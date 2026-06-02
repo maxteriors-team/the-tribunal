@@ -8,7 +8,7 @@ import { queryKeys } from "@/lib/query-keys";
  */
 export function usePhoneNumbers(workspaceId: string, params: PhoneNumbersListParams = {}) {
   return useQuery({
-    queryKey: queryKeys.phoneNumbers.listWith(workspaceId, params),
+    queryKey: queryKeys.phoneNumbers.list(workspaceId, params),
     queryFn: () => phoneNumbersApi.list(workspaceId, params),
     enabled: !!workspaceId,
   });

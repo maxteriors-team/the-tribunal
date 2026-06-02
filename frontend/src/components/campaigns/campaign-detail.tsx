@@ -43,7 +43,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 
   // Load campaign data
   const { data: campaign, isPending, error } = useQuery({
-    queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
+    queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return campaignsApi.get(workspaceId, campaignId);
@@ -62,7 +62,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign started!");
       queryClient.invalidateQueries({
-        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
+        queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -79,7 +79,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign paused!");
       queryClient.invalidateQueries({
-        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
+        queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -96,7 +96,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign resumed!");
       queryClient.invalidateQueries({
-        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
+        queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {
@@ -113,7 +113,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
     onSuccess: () => {
       toast.success("Campaign cancelled!");
       queryClient.invalidateQueries({
-        queryKey: queryKeys.campaigns.get(workspaceId ?? "", campaignId),
+        queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
       });
     },
     onError: (err: unknown) => {

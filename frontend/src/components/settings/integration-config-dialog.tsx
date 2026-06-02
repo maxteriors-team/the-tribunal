@@ -276,7 +276,7 @@ export function IntegrationConfigDialog({
         queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
+        queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
       toast.success(`${config.name} connected successfully!`);
       onOpenChange(false);
@@ -299,7 +299,7 @@ export function IntegrationConfigDialog({
         queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.integrations.bare(workspaceId ?? ""),
+        queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
       toast.success(`${config.name} updated successfully!`);
       onOpenChange(false);

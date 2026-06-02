@@ -31,7 +31,7 @@ export default function NewVoiceCampaignPage() {
 
   // Fetch phone numbers from API - filter to voice-enabled only
   const { data: phoneNumbersData, isPending: phoneNumbersLoading } = useQuery({
-    queryKey: queryKeys.phoneNumbers.bare(workspaceId ?? ""),
+    queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
     queryFn: async () => {
       if (!workspaceId) return [];
       const response = await phoneNumbersApi.list(workspaceId);
@@ -79,9 +79,9 @@ export default function NewVoiceCampaignPage() {
     onSuccess: (campaign) => {
       toast.success(messages.campaigns.voiceCreated);
       if (workspaceId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.bare(workspaceId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId) });
         queryClient.invalidateQueries({
-          queryKey: queryKeys.voiceCampaigns.bare(workspaceId),
+          queryKey: queryKeys.voiceCampaigns.all(workspaceId),
         });
       }
       router.push(`/campaigns/${campaign.id}`);
