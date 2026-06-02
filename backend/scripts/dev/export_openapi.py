@@ -3,7 +3,7 @@
 
 Run locally with::
 
-    cd backend && uv run python scripts/export_openapi.py
+    cd backend && uv run python scripts/dev/export_openapi.py
 
 Or, once installed as a project script::
 
@@ -26,8 +26,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Make ``app`` importable when invoked as ``python scripts/export_openapi.py``.
-_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+# Make ``app`` importable when invoked as ``python scripts/dev/export_openapi.py``.
+# This file lives at ``backend/scripts/dev/export_openapi.py``; the backend root
+# (the directory containing ``app/`` and ``openapi.json``) is three levels up.
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 

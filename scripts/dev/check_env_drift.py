@@ -9,7 +9,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+# This file lives at ``scripts/dev/check_env_drift.py``; the repo root is two
+# directories up.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_CONFIG_PATH = REPO_ROOT / "backend" / "app" / "core" / "config.py"
 BACKEND_ENV_EXAMPLE_PATH = REPO_ROOT / "backend" / ".env.example"
 FRONTEND_ENV_EXAMPLE_PATH = REPO_ROOT / "frontend" / ".env.example"

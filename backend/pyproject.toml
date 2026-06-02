@@ -128,7 +128,7 @@ dependencies = [
 # Regenerate ``backend/openapi.json`` from the live FastAPI app. Run in CI
 # followed by ``git diff --exit-code backend/openapi.json`` to catch unreviewed
 # API contract changes.
-export-openapi = "scripts.export_openapi:main"
+export-openapi = "scripts.dev.export_openapi:main"
 # Run all in-process polling workers without mounting the FastAPI API server.
 backend-workers = "app.workers.runner:main"
 

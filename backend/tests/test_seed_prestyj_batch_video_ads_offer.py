@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.models.offer import Offer
-from scripts.seed_prestyj_batch_video_ads_offer import (
+from scripts.demo.seed_prestyj_batch_video_ads_offer import (
     PRESTYJ_BATCH_VIDEO_ADS_PUBLIC_SLUG,
     PRESTYJ_BATCH_VIDEO_ADS_TEMPLATE,
     upsert_prestyj_batch_video_ads_offer,

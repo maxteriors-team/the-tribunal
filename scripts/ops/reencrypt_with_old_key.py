@@ -9,7 +9,7 @@ Usage
 -----
 
     OLD_ENCRYPTION_KEY="<previous secret>" \
-        uv run python scripts/reencrypt_with_old_key.py [--dry-run]
+        uv run python scripts/ops/reencrypt_with_old_key.py --env local [--dry-run]
 
 The new key must already be set as ``ENCRYPTION_KEY`` in the same shell so the
 app's normal config-loading path picks it up.
@@ -28,9 +28,7 @@ Safety
 
 from __future__ import annotations
 
-import argparse
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -38,30 +36,57 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Make ``backend`` importable when invoked from the repo root.
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_BACKEND_DIR = os.path.join(_REPO_ROOT, "backend")
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+# --- harness bootstrap: locate ``backend/`` so ``app`` + ``scripts`` import ----
+_BACKEND_DIR = next(
+    p / "backend"
+    for p in Path(__file__).resolve().parents
+    if (p / "backend" / "scripts" / "_harness.py").is_file()
+)
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 
-from app.core.config import settings  # noqa: E402
+from app.core.config import settings  # noqa: E402  (settings.encryption_key drives the new hash)
 from app.core.encryption import (  # noqa: E402
     _derive_fernet_key,
-    _derive_hash_key,
+    _get_fernet,
     decrypt_json,
-    decrypt_value,
     encrypt_json,
-    encrypt_value,
+    hash_phone,
+    hash_value,
 )
 from app.db.session import AsyncSessionLocal  # noqa: E402
+from scripts._harness import (  # noqa: E402
+    EXIT_FAILURE,
+    EXIT_OK,
+    ExecutionContext,
+    ScriptAbortError,
+    bootstrap,
+    log_event,
+    run,
+)
 
 logger = logging.getLogger("rotate")
+
+
+def _encrypt_value(plaintext: str) -> str:
+    """Encrypt a string under the *current* (new) Fernet key."""
+    return _get_fernet().encrypt(plaintext.encode()).decode()
+
+
+def _decrypt_value(token: str) -> str:
+    """Decrypt a Fernet token under the *current* (new) key.
+
+    Raises :class:`InvalidToken` when the token was not produced by the new key,
+    which the rotation loop uses to detect rows still on the old key.
+    """
+    return _get_fernet().decrypt(token.encode()).decode()
 
 
 @dataclass(slots=True, frozen=True)
@@ -79,24 +104,25 @@ class _DryRunRollbackError(Exception):
 def _old_fernet() -> Fernet:
     secret = os.environ.get("OLD_ENCRYPTION_KEY")
     if not secret:
-        raise SystemExit(
-            "✗ OLD_ENCRYPTION_KEY env var not set. Export the *previous* "
+        raise ScriptAbortError(
+            "OLD_ENCRYPTION_KEY env var not set. Export the *previous* "
             "secret (the one currently used to encrypt the data on disk) "
             "before running this script."
         )
     return Fernet(_derive_fernet_key(secret))
 
 
-def _new_lookup_hash() -> Callable[[str], str]:
-    """Return a closure that hashes plaintext under the *new* hash key."""
-    new_hash_key = _derive_hash_key(settings.encryption_key)
+def _lookup_hash_for(column: str) -> Callable[[str], str]:
+    """Return the live app hasher matching a source column.
 
-    def _hash(value: str) -> str:
-        return hashlib.blake2b(
-            value.encode(), key=new_hash_key, digest_size=32
-        ).hexdigest()
-
-    return _hash
+    ``hash_value`` / ``hash_phone`` both key off the *current*
+    ``settings.encryption_key`` (the new key, set before this script runs), so
+    re-deriving through them keeps every ``*_hash`` sibling aligned with how the
+    running app resolves lookups.
+    """
+    if column == "phone_number":
+        return hash_phone
+    return hash_value
 
 
 async def _rotate_string_columns(
@@ -108,7 +134,6 @@ async def _rotate_string_columns(
     old_fernet: Fernet,
 ) -> RotationStats:
     """Rotate one model's ``EncryptedString`` columns + their ``LookupHash`` siblings."""
-    lookup_hash = _new_lookup_hash()
     scanned = rotated = invalid = 0
     table_name: str = getattr(model, "__tablename__", model.__name__)
 
@@ -122,7 +147,7 @@ async def _rotate_string_columns(
                 continue
             # Already encrypted under the new key?
             try:
-                decrypt_value(ct)
+                _decrypt_value(ct)
                 continue
             except InvalidToken:
                 pass
@@ -138,10 +163,10 @@ async def _rotate_string_columns(
                     col,
                 )
                 continue
-            setattr(row, col, encrypt_value(plaintext))
+            setattr(row, col, _encrypt_value(plaintext))
             hash_col = hash_columns.get(col)
             if hash_col is not None:
-                setattr(row, hash_col, lookup_hash(plaintext))
+                setattr(row, hash_col, _lookup_hash_for(col)(plaintext))
             row_changed = True
         if row_changed:
             rotated += 1
@@ -177,9 +202,7 @@ async def _rotate_workspace_credentials(
             plaintext_dict = json.loads(raw)
         except (InvalidToken, json.JSONDecodeError):
             invalid += 1
-            logger.warning(
-                "skip workspace.id=%s: credentials invalid under both keys", ws.id
-            )
+            logger.warning("skip workspace.id=%s: credentials invalid under both keys", ws.id)
             continue
         ws.encrypted_credentials = encrypt_json(plaintext_dict)
         rotated += 1
@@ -193,19 +216,19 @@ async def _rotate_workspace_credentials(
     )
 
 
-async def _run(dry_run: bool) -> int:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+async def _run(ctx: ExecutionContext) -> int:
     old_fernet = _old_fernet()
 
     # Sanity check: refuse if the two keys are identical — that means the
     # rotation hasn't actually happened yet.
     if os.environ["OLD_ENCRYPTION_KEY"] == settings.encryption_key:
-        raise SystemExit(
-            "✗ OLD_ENCRYPTION_KEY matches the current ENCRYPTION_KEY. "
+        raise ScriptAbortError(
+            "OLD_ENCRYPTION_KEY matches the current ENCRYPTION_KEY. "
             "Rotate the live secret first, then re-run this script."
         )
+
+    ctx.announce("re-encrypt Fernet columns")
+    ctx.confirm("re-encrypt all Fernet-encrypted columns")
 
     from app.models.contact import Contact
     from app.models.human_profile import HumanProfile
@@ -258,46 +281,56 @@ async def _run(dry_run: bool) -> int:
                     old_fernet=old_fernet,
                 )
                 all_stats.append(stats)
-                logger.info(
-                    "%-40s scanned=%d rotated=%d invalid=%d",
-                    stats.table,
-                    stats.scanned,
-                    stats.rotated,
-                    stats.skipped_invalid,
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "rotated table",
+                    table=stats.table,
+                    scanned=stats.scanned,
+                    rotated=stats.rotated,
+                    invalid=stats.skipped_invalid,
                 )
-            ws_stats = await _rotate_workspace_credentials(
-                session, old_fernet=old_fernet
-            )
+            ws_stats = await _rotate_workspace_credentials(session, old_fernet=old_fernet)
             all_stats.append(ws_stats)
-            logger.info(
-                "%-40s scanned=%d rotated=%d invalid=%d",
-                ws_stats.table,
-                ws_stats.scanned,
-                ws_stats.rotated,
-                ws_stats.skipped_invalid,
+            log_event(
+                logger,
+                logging.INFO,
+                "rotated table",
+                table=ws_stats.table,
+                scanned=ws_stats.scanned,
+                rotated=ws_stats.rotated,
+                invalid=ws_stats.skipped_invalid,
             )
-            if dry_run:
-                logger.info("dry-run: rolling back, no writes committed")
+            if ctx.dry_run:
+                log_event(logger, logging.WARNING, "dry-run: rolling back, no writes committed")
                 raise _DryRunRollbackError
     except _DryRunRollbackError:
-        logger.info("dry-run complete; no changes persisted")
-        return 0
+        log_event(logger, logging.INFO, "dry-run complete; no changes persisted")
+        return EXIT_OK
 
     elapsed = time.monotonic() - started
     total_rotated = sum(s.rotated for s in all_stats)
     total_invalid = sum(s.skipped_invalid for s in all_stats)
-    logger.info(
-        "done in %.2fs — rotated=%d invalid=%d", elapsed, total_rotated, total_invalid
+    log_event(
+        logger,
+        logging.INFO,
+        "done",
+        elapsed_s=round(elapsed, 2),
+        rotated=total_rotated,
+        invalid=total_invalid,
     )
-    return 1 if total_invalid else 0
+    return EXIT_FAILURE if total_invalid else EXIT_OK
+
+
+def main() -> int:
+    """Parse arguments and run the re-encryption pass."""
+    ctx, _ = bootstrap(
+        description=__doc__ or "Re-encrypt Fernet columns after ENCRYPTION_KEY rotation.",
+        writes=True,
+        logger_name="rotate",
+    )
+    return asyncio.run(_run(ctx))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Decrypt + re-encrypt in memory and roll back the transaction.",
-    )
-    args = parser.parse_args()
-    sys.exit(asyncio.run(_run(args.dry_run)))
+    raise SystemExit(run(main))

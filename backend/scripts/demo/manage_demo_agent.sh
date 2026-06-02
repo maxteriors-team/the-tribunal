@@ -2,10 +2,13 @@
 # Demo Agent Management Script for Railway Production
 # This script provides consistent management of the Alyx demo agent on Railway
 
-set -e
+set -euo pipefail
+IFS=$'\n\t'
 
+# This script lives at ``backend/scripts/demo/``; the backend project dir (which
+# contains the importable ``scripts`` package) is two directories up.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -64,7 +67,7 @@ update_on_railway() {
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_success "Running create_demo_agent.py on Railway..."
-        railway run python scripts/create_demo_agent.py
+        railway run python scripts/demo/create_demo_agent.py --env production
         print_success "Demo agent updated!"
     else
         print_warning "Cancelled"
@@ -114,7 +117,7 @@ run_locally() {
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_success "Running locally..."
-        uv run python scripts/create_demo_agent.py
+        uv run python scripts/demo/create_demo_agent.py --env local
     else
         print_warning "Cancelled"
     fi
@@ -123,7 +126,7 @@ run_locally() {
 # Main loop
 while true; do
     show_menu
-    read -p "Select an option: " choice
+    read -r -p "Select an option: " choice
     echo ""
 
     case $choice in
@@ -152,6 +155,6 @@ while true; do
     esac
 
     echo ""
-    read -p "Press Enter to continue..."
+    read -r -p "Press Enter to continue..."
     clear
 done

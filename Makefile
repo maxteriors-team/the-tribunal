@@ -123,7 +123,7 @@ ci.frontend.deps:
 
 .PHONY: ci.env
 ci.env: ## Verify env templates match backend config and frontend env usage.
-	python3 scripts/check_env_drift.py
+	python3 scripts/dev/check_env_drift.py
 
 .PHONY: ci.backend
 ci.backend: ci.backend.deps ci.env ## Run backend CI parity: env drift, lint, format, type-check, and coverage.
@@ -251,7 +251,7 @@ audit.secrets: ## Scan the working tree for committed secrets (gitleaks).
 
 .PHONY: rotate.encryption-key
 rotate.encryption-key: ## Interactive rotation of ENCRYPTION_KEY on Railway + re-encrypt rows.
-	@./scripts/rotate_encryption_key.sh
+	@./scripts/ops/rotate_encryption_key.sh
 
 .PHONY: db.backup.local
 db.backup.local: ## pg_dump the local dev Postgres (custom format) into backend/backups/.

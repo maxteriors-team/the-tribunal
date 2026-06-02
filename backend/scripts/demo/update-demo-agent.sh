@@ -2,12 +2,15 @@
 # Quick update script for demo agent on Railway production
 # Usage: ./update-demo-agent.sh
 
-set -e
+set -euo pipefail
+IFS=$'\n\t'
 
+# This script lives at ``backend/scripts/demo/``; the backend project dir (which
+# contains the importable ``scripts`` package) is two directories up.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-echo "🚀 Updating Alyx demo agent on Railway production..."
+echo "🚀 Updating Alyx demo agent on Railway production (--env production)..."
 echo ""
 
 cd "$PROJECT_DIR"
@@ -23,8 +26,9 @@ if ! railway status 2>&1 | grep -q "Service:"; then
     exit 1
 fi
 
-# Run the create_demo_agent script on Railway
-railway run python scripts/create_demo_agent.py
+# Run the create_demo_agent script on Railway. The script's own --env production
+# guard prompts for typed confirmation before it writes.
+railway run python scripts/demo/create_demo_agent.py --env production
 
 echo ""
 echo "✅ Demo agent updated successfully!"

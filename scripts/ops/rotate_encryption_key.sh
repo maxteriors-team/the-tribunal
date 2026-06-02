@@ -7,7 +7,7 @@
 #   3. Sets the new secret on Railway via `railway variables --set`.
 #   4. Prompts for the OLD key (so the re-encryption script can decrypt
 #      existing rows) and offers a dry-run, then a live run, of
-#      ``scripts/reencrypt_with_old_key.py`` against your *local* dev DB.
+#      ``scripts/ops/reencrypt_with_old_key.py`` against your *local* dev DB.
 #
 # This script never touches production data directly — it only mutates Railway
 # *variables* and runs re-encryption against ``DATABASE_URL`` as configured in
@@ -15,9 +15,13 @@
 # (e.g. tunnel to staging Postgres).
 
 set -euo pipefail
+IFS=$'\n\t'
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# This script lives at ``scripts/ops/rotate_encryption_key.sh``; the repo root is
+# therefore two directories up.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BACKEND_DIR="${REPO_ROOT}/backend"
+REENCRYPT_SCRIPT="${REPO_ROOT}/scripts/ops/reencrypt_with_old_key.py"
 
 bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -44,7 +48,7 @@ require uv
 bold "▶ rotate.encryption-key — interactive"
 echo
 echo "This rotates ENCRYPTION_KEY on Railway and re-encrypts all Fernet-encrypted"
-echo "columns. Read scripts/reencrypt_with_old_key.py before continuing."
+echo "columns. Read scripts/ops/reencrypt_with_old_key.py before continuing."
 echo
 
 # ─── 1. Generate new Fernet key ────────────────────────────────────────────────
@@ -115,7 +119,7 @@ confirm "Run a --dry-run pass first?" && {
     OLD_ENCRYPTION_KEY="${OLD_KEY}" \
     ENCRYPTION_KEY="${NEW_KEY}" \
         uv run --project "${BACKEND_DIR}" \
-        python "${REPO_ROOT}/scripts/reencrypt_with_old_key.py" --dry-run
+        python "${REENCRYPT_SCRIPT}" --env local --dry-run
     echo
 }
 confirm "Run the LIVE re-encryption now?" || {
@@ -123,13 +127,13 @@ confirm "Run the LIVE re-encryption now?" || {
     yellow "Re-run later with:"
     echo
     echo "    OLD_ENCRYPTION_KEY=<old> ENCRYPTION_KEY=<new> \\"
-    echo "        uv run --project backend python scripts/reencrypt_with_old_key.py"
+    echo "        uv run --project backend python scripts/ops/reencrypt_with_old_key.py --env local"
     exit 0
 }
 OLD_ENCRYPTION_KEY="${OLD_KEY}" \
 ENCRYPTION_KEY="${NEW_KEY}" \
     uv run --project "${BACKEND_DIR}" \
-    python "${REPO_ROOT}/scripts/reencrypt_with_old_key.py"
+    python "${REENCRYPT_SCRIPT}" --env local
 
 echo
 green "✓ rotation complete. Don't forget to:"
