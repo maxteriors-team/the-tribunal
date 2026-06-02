@@ -10,6 +10,8 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
+from app.models.contact import Contact
+from app.models.tag import ContactTag, Tag
 from app.schemas.contact import (
     BulkDeleteRequest,
     BulkDeleteResponse,
@@ -186,6 +188,58 @@ class TestContactResponse:
         """workspace_id is a UUID."""
         response = self._make_response()
         assert isinstance(response.workspace_id, uuid.UUID)
+
+    def test_response_derives_tags_from_normalized_relationships(self) -> None:
+        """ORM responses expose tag names from loaded ContactTag relationships."""
+        workspace_id = uuid.uuid4()
+        now = datetime.now()
+        vip = Tag(
+            id=uuid.uuid4(),
+            workspace_id=workspace_id,
+            name="vip",
+            color="#6366f1",
+            created_at=now,
+            updated_at=now,
+        )
+        warm = Tag(
+            id=uuid.uuid4(),
+            workspace_id=workspace_id,
+            name="warm",
+            color="#6366f1",
+            created_at=now,
+            updated_at=now,
+        )
+        contact = Contact(
+            id=1,
+            workspace_id=workspace_id,
+            first_name="Alice",
+            phone_number="+15551234567",
+            company_name=None,
+            status="new",
+            lead_score=0,
+            is_qualified=False,
+            qualification_signals=None,
+            qualified_at=None,
+            notes=None,
+            important_dates=None,
+            source=None,
+            source_campaign_id=None,
+            noshow_count=0,
+            last_appointment_status=None,
+            last_engaged_at=None,
+            engagement_score=0,
+            created_at=now,
+            updated_at=now,
+            contact_tags=[
+                ContactTag(contact_id=1, tag_id=vip.id, tag=vip),
+                ContactTag(contact_id=1, tag_id=warm.id, tag=warm),
+            ],
+        )
+
+        response = ContactResponse.model_validate(contact)
+
+        assert response.tags == ["vip", "warm"]
+        assert [tag.name for tag in response.tag_objects] == ["vip", "warm"]
 
 
 class TestQualificationSignals:

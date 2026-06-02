@@ -23,7 +23,7 @@ Example::
     assert contact.workspace_id == workspace.id
 
 Post-generation hooks attach optional many-to-many relations — pass
-``tags=[tag1, tag2]`` to ``ContactFactory`` to wire up ``ContactTag`` rows.
+``tag_objects=[tag1, tag2]`` to ``ContactFactory`` to wire up ``ContactTag`` rows.
 """
 
 from __future__ import annotations
@@ -176,7 +176,6 @@ class ContactFactory(BaseFactory):
     qualification_signals = None
     qualified_at = None
 
-    tags = None  # ARRAY(Text) column on Contact — distinct from the Tag model
     notes = None
     important_dates = None
 

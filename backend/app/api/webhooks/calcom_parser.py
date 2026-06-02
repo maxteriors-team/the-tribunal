@@ -1,7 +1,6 @@
 """Cal.com webhook payload parsing helpers.
 
 Pure-ish parsing / lookup utilities used by the Cal.com webhook handlers:
-- Contact tag mutation helper
 - Attendee -> Contact resolution (email, phone-fallback)
 
 Signature verification for Cal.com webhooks lives in
@@ -17,13 +16,6 @@ from typing import Any
 from sqlalchemy import select
 
 from app.models.contact import Contact
-
-
-def apply_contact_tag(contact: Any, tag: str) -> None:
-    """Add *tag* to ``contact.tags`` if not already present."""
-    current_tags: list[str] = contact.tags or []
-    if tag not in current_tags:
-        contact.tags = current_tags + [tag]
 
 
 async def find_contact_by_attendee(

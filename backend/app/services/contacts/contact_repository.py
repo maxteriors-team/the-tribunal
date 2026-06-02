@@ -10,10 +10,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.encryption import hash_phone, hash_value
 from app.db.pagination import paginate_rows
+from app.db.scope import get_workspace_owned
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.tag import ContactTag
 from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
+from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
 logger = structlog.get_logger()
@@ -149,15 +151,13 @@ async def get_contact_by_id(
     Returns:
         Contact object or None if not found
     """
-    result = await db.execute(
-        select(Contact)
-        .where(
-            Contact.id == contact_id,
-            Contact.workspace_id == workspace_id,
-        )
-        .options(selectinload(Contact.contact_tags).selectinload(ContactTag.tag))
+    return await get_workspace_owned(
+        db,
+        Contact,
+        contact_id,
+        workspace_id,
+        options=[selectinload(Contact.contact_tags).selectinload(ContactTag.tag)],
     )
-    return result.scalar_one_or_none()
 
 
 async def create_contact(
@@ -202,15 +202,19 @@ async def create_contact(
         phone_hash=hash_phone(phone_number) if phone_number else None,
         company_name=company_name,
         status=status,
-        tags=tags,
         notes=notes,
         source=source,
         important_dates=important_dates,
     )
     db.add(contact)
+    await db.flush()
+    await TagService(db).add_tags_to_contact(
+        workspace_id=workspace_id,
+        contact_id=contact.id,
+        names=tags,
+    )
     await db.commit()
-    await db.refresh(contact)
-    return contact
+    return await get_contact_by_id(contact.id, workspace_id, db) or contact
 
 
 async def update_contact(
@@ -228,6 +232,8 @@ async def update_contact(
     Returns:
         Updated contact
     """
+    tag_names = update_data.pop("tags", None)
+
     for field, value in update_data.items():
         setattr(contact, field, value)
         if field == "email":
@@ -235,9 +241,15 @@ async def update_contact(
         elif field == "phone_number" and value:
             contact.phone_hash = hash_phone(value)
 
+    if tag_names is not None:
+        await TagService(db).replace_contact_tags_by_name(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            names=tag_names,
+        )
+
     await db.commit()
-    await db.refresh(contact)
-    return contact
+    return await get_contact_by_id(contact.id, contact.workspace_id, db) or contact
 
 
 async def delete_contact(

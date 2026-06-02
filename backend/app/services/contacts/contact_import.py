@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
 from app.services.contacts.exceptions import ContactValidationError
+from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
 logger = structlog.get_logger()
@@ -528,12 +529,19 @@ class ContactImportService:
             if not contact_data:
                 continue
 
+            tag_names = contact_data.pop("tags", None)
             contact = Contact(
                 workspace_id=workspace_id,
                 source=source,
                 **contact_data,
             )
             self.db.add(contact)
+            await self.db.flush()
+            await TagService(self.db).add_tags_to_contact(
+                workspace_id=workspace_id,
+                contact_id=contact.id,
+                names=tag_names,
+            )
             created_contacts.append(contact)
             existing_phones.add(contact_data["phone_number"])
 

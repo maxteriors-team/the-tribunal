@@ -4,9 +4,11 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.schemas.tag import TagResponse
+
+_NOT_LOADED = object()
 
 
 class ContactCreate(BaseModel):
@@ -115,6 +117,29 @@ class ContactResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_tags_from_relationships(cls, value: Any) -> Any:
+        """Expose normalized tag names on the legacy ``tags`` response field."""
+        if isinstance(value, dict):
+            return value
+        loaded = getattr(value, "__dict__", {})
+        contact_tags = loaded.get("contact_tags", _NOT_LOADED)
+        tag_names: list[str] = []
+        tag_objects: list[Any] = []
+        if contact_tags not in (_NOT_LOADED, None):
+            tag_objects = [contact_tag.tag for contact_tag in contact_tags if contact_tag.tag]
+            tag_names = [tag.name for tag in tag_objects]
+
+        data = {
+            field: getattr(value, field)
+            for field in cls.model_fields
+            if field not in {"tags", "tag_objects"} and hasattr(value, field)
+        }
+        data["tags"] = sorted(tag_names, key=str.lower) if tag_names else None
+        data["tag_objects"] = tag_objects
+        return data
 
 
 class ContactWithConversationResponse(ContactResponse):

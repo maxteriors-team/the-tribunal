@@ -20,7 +20,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, exists, select, text
+from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -29,8 +29,10 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
+from app.models.tag import ContactTag, Tag
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.services.tags import TagService
 from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -107,6 +109,18 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
             )
         )
 
+        blocked_by_lifecycle_tag = exists(
+            select(ContactTag.id)
+            .join(Tag, Tag.id == ContactTag.tag_id)
+            .where(
+                and_(
+                    ContactTag.contact_id == Contact.id,
+                    Tag.workspace_id == agent.workspace_id,
+                    Tag.name.in_(["appointment-scheduled", "never-booked-reengaged"]),
+                )
+            )
+        )
+
         result = await db.execute(
             select(Contact)
             .where(
@@ -114,10 +128,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
                     Contact.workspace_id == agent.workspace_id,
                     has_inbound,
                     has_recent_conversation,
-                    # Never booked — no "appointment-scheduled" tag
-                    ~Contact.tags.contains(["appointment-scheduled"]),
-                    # Not already re-engaged
-                    ~Contact.tags.contains(["never-booked-reengaged"]),
+                    ~blocked_by_lifecycle_tag,
                 )
             )
             .order_by(Contact.updated_at)
@@ -198,19 +209,12 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
 
     @staticmethod
     async def _tag_contact(contact: Contact, tag: str, db: AsyncSession) -> None:
-        """Append a tag to contact.tags using PostgreSQL array_append (idempotent)."""
-        await db.execute(
-            text(
-                "UPDATE contacts "
-                "SET tags = array_append(COALESCE(tags, ARRAY[]::text[]), :tag) "
-                "WHERE id = :contact_id AND NOT (COALESCE(tags, ARRAY[]::text[]) @> ARRAY[:tag])"
-            ),
-            {"tag": tag, "contact_id": contact.id},
+        """Apply a normalized workspace tag to a contact idempotently."""
+        await TagService(db).add_tag_to_contact(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            name=tag,
         )
-        current = list(contact.tags or [])
-        if tag not in current:
-            current.append(tag)
-        contact.tags = current
 
     def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
         """Render a template with {first_name} and {booking_link} placeholders."""

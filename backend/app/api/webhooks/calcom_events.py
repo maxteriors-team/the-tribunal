@@ -20,7 +20,6 @@ import structlog
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.webhooks.calcom_parser import apply_contact_tag
 from app.core.config import settings
 from app.models.agent import Agent
 from app.models.appointment import Appointment
@@ -39,7 +38,6 @@ logger = structlog.get_logger()
 # Re-exported for handler convenience.
 __all__ = [
     "DEFAULT_CONFIRMATION_BODY",
-    "apply_contact_tag",
     "build_confirmation_body",
     "find_recent_voice_message",
     "get_workspace_owner",

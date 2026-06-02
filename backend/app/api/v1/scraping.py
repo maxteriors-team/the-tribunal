@@ -16,6 +16,7 @@ from app.schemas.scraping import (
 )
 from app.services.rate_limiting.scraping_limiter import enforce_scraping_rate_limit
 from app.services.scraping.google_places import GooglePlacesError, GooglePlacesService
+from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
 router = APIRouter()
@@ -152,10 +153,15 @@ async def import_leads(
                 phone_number=normalized_phone,
                 status=request.default_status,
                 source="scraped",
-                tags=tags if tags else None,
                 notes=_format_business_notes(lead),
             )
             db.add(contact)
+            await db.flush()
+            await TagService(db).add_tags_to_contact(
+                workspace_id=workspace.id,
+                contact_id=contact.id,
+                names=tags,
+            )
             existing_phones.add(normalized_phone)
             imported += 1
 

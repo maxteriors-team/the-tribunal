@@ -21,7 +21,7 @@ from app.api.webhooks.calcom_events import (
     resolve_campaign_id,
     send_lifecycle_sms,
 )
-from app.api.webhooks.calcom_parser import apply_contact_tag, find_contact_by_attendee
+from app.api.webhooks.calcom_parser import find_contact_by_attendee
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
@@ -31,6 +31,7 @@ from app.models.workspace import Workspace
 from app.services.campaigns.guarantee_tracker import increment_completed_and_check_guarantee
 from app.services.email import send_appointment_booked_notification
 from app.services.push_notifications import push_notification_service
+from app.services.tags import TagService
 from app.utils.background_tasks import spawn_background_task
 
 
@@ -91,7 +92,11 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
             return
 
         # Apply lifecycle tag and status for scheduled appointment
-        apply_contact_tag(contact, "appointment-scheduled")
+        await TagService(db).add_tag_to_contact(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            name="appointment-scheduled",
+        )
         contact.last_appointment_status = "scheduled"
         db.add(contact)
 
@@ -486,7 +491,11 @@ async def handle_booking_cancelled(data: dict[str, Any], log: Any) -> None:  # n
         )
         _cancelled_contact_pre = cancelled_contact_result.scalar_one_or_none()
         if _cancelled_contact_pre:
-            apply_contact_tag(_cancelled_contact_pre, "appointment-cancelled")
+            await TagService(db).add_tag_to_contact(
+                workspace_id=_cancelled_contact_pre.workspace_id,
+                contact_id=_cancelled_contact_pre.id,
+                name="appointment-cancelled",
+            )
             _cancelled_contact_pre.last_appointment_status = "cancelled"
             db.add(_cancelled_contact_pre)
 
@@ -676,11 +685,19 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
         meeting_contact = meeting_contact_result.scalar_one_or_none()
         if meeting_contact:
             if is_no_show:
-                apply_contact_tag(meeting_contact, "no-show")
+                await TagService(db).add_tag_to_contact(
+                    workspace_id=meeting_contact.workspace_id,
+                    contact_id=meeting_contact.id,
+                    name="no-show",
+                )
                 meeting_contact.last_appointment_status = "no_show"
                 meeting_contact.noshow_count = (meeting_contact.noshow_count or 0) + 1
             else:
-                apply_contact_tag(meeting_contact, "showed-up")
+                await TagService(db).add_tag_to_contact(
+                    workspace_id=meeting_contact.workspace_id,
+                    contact_id=meeting_contact.id,
+                    name="showed-up",
+                )
                 meeting_contact.last_appointment_status = "completed"
             db.add(meeting_contact)
 

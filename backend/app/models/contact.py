@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, event
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
@@ -81,21 +81,6 @@ class Contact(Base):
     qualified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Organization
-    # TODO(tags-migration): Legacy ARRAY(Text) column. Superseded by the
-    # normalized Tag / ContactTag tables (see app.models.tag), but still
-    # actively read/written by automation_worker, never_booked_worker, and
-    # noshow_reengagement_worker for lifecycle marker tags
-    # (e.g. "no-show", "noshow-day3-sent", "never-booked-reengaged",
-    # "appointment-scheduled"). Migration plan:
-    #   1. Port those three workers to use ContactTag rows (create tags
-    #      lazily via TagService, query via join instead of
-    #      Contact.tags.contains([...])).
-    #   2. Backfill: for every distinct value currently in contacts.tags,
-    #      upsert a Tag row per workspace and insert matching ContactTag
-    #      rows in an alembic data migration.
-    #   3. Drop this column (op.drop_column("contacts", "tags")) and remove
-    #      this Mapped attribute.
-    tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     important_dates: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Structure: {

@@ -23,7 +23,7 @@ Supported action type values
 -----------------------------
 - ``send_sms``       : send an SMS via Telnyx using a resolved from-number
 - ``enroll_campaign``: create a CampaignContact record (idempotent via upsert)
-- ``apply_tag``      : add a tag string to contact.tags (ARRAY column)
+- ``apply_tag``      : add a normalized workspace tag to the contact
 - ``wait`` / ``delay``: no-op in the current cycle (action is recorded as
                         "scheduled" and re-evaluated on subsequent poll)
 """
@@ -43,8 +43,10 @@ from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
+from app.models.tag import ContactTag, Tag
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
+from app.services.tags import TagService
 from app.services.telephony.text_provider import get_text_message_provider
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -229,23 +231,20 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         since: datetime,
         db: AsyncSession,
     ) -> list[Contact]:
-        """Contacts who carry a specific tag and were updated recently.
-
-        The ``tags`` column is a PostgreSQL ARRAY(Text).  SQLAlchemy exposes
-        the ``any_()`` / ``contains()`` operators for array columns.
-        """
-        if not tag_name:
+        """Contacts who carry a specific normalized tag and were updated recently."""
+        tag = tag_name.strip()
+        if not tag:
             return []
 
-        # ARRAY contains operator: Contact.tags.any_(tag_name) works for
-        # simple text arrays — fall back to a "contains" style filter.
         result = await db.execute(
             select(Contact)
+            .join(ContactTag, ContactTag.contact_id == Contact.id)
+            .join(Tag, Tag.id == ContactTag.tag_id)
             .where(
                 and_(
                     *base_filters,
-                    Contact.tags.is_not(None),
-                    Contact.tags.contains([tag_name]),
+                    Tag.workspace_id == Contact.workspace_id,
+                    Tag.name == tag,
                     Contact.updated_at >= since,
                 )
             )
@@ -523,9 +522,9 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         self,
         contact: Contact,
         config: dict[str, Any],
-        db: AsyncSession,  # noqa: ARG002
+        db: AsyncSession,
     ) -> None:
-        """Append a tag to contact.tags (ARRAY column).
+        """Apply a normalized workspace tag to the contact.
 
         Config keys:
             tag (str): Tag name to apply.
@@ -538,14 +537,16 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
-        existing: list[str] = list(contact.tags or [])
-        if tag not in existing:
-            contact.tags = existing + [tag]
-            self.logger.info(
-                "Tag applied to contact",
-                contact_id=contact.id,
-                tag=tag,
-            )
+        await TagService(db).add_tag_to_contact(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            name=tag,
+        )
+        self.logger.info(
+            "Tag applied to contact",
+            contact_id=contact.id,
+            tag=tag,
+        )
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

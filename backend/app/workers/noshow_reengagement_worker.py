@@ -4,7 +4,7 @@ Runs a multi-day drip sequence for contacts who missed their appointment:
   - Day 3 (> 2 days after no-show): send agent.noshow_day3_template
   - Day 7 (> 6 days after no-show, Day-3 already sent): send agent.noshow_day7_template
 
-Progress is tracked via tags on the Contact:
+Progress is tracked via normalized contact tags:
   - "noshow-day3-sent"  — Day-3 message has been delivered
   - "noshow-day7-sent"  — Day-7 message has been delivered
   - "reengaged-booked"  — contact rebooked; stop all re-engagement
@@ -17,8 +17,9 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -26,8 +27,10 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
+from app.models.tag import ContactTag, Tag
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.services.tags import TagService
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -94,11 +97,11 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
                     Contact.workspace_id == agent.workspace_id,
                     Contact.last_appointment_status == "no_show",
                     Contact.updated_at <= day3_cutoff,
-                    # tags MUST contain "no-show"
-                    Contact.tags.contains(["no-show"]),
-                    # tags must NOT contain these sentinel values
-                    ~Contact.tags.contains(["noshow-day3-sent"]),
-                    ~Contact.tags.contains(["reengaged-booked"]),
+                    self._has_tag(agent.workspace_id, "no-show"),
+                    ~self._has_any_tag(
+                        agent.workspace_id,
+                        ["noshow-day3-sent", "reengaged-booked"],
+                    ),
                 )
             )
             .order_by(Contact.updated_at)
@@ -115,9 +118,11 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
                     Contact.workspace_id == agent.workspace_id,
                     Contact.last_appointment_status == "no_show",
                     Contact.updated_at <= day7_cutoff,
-                    Contact.tags.contains(["noshow-day3-sent"]),
-                    ~Contact.tags.contains(["noshow-day7-sent"]),
-                    ~Contact.tags.contains(["reengaged-booked"]),
+                    self._has_tag(agent.workspace_id, "noshow-day3-sent"),
+                    ~self._has_any_tag(
+                        agent.workspace_id,
+                        ["noshow-day7-sent", "reengaged-booked"],
+                    ),
                 )
             )
             .order_by(Contact.updated_at)
@@ -235,20 +240,32 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
 
     @staticmethod
     async def _tag_contact(contact: Contact, tag: str, db: AsyncSession) -> None:
-        """Append a tag to contact.tags using PostgreSQL array_append."""
-        await db.execute(
-            text(
-                "UPDATE contacts "
-                "SET tags = array_append(COALESCE(tags, ARRAY[]::text[]), :tag) "
-                "WHERE id = :contact_id AND NOT (COALESCE(tags, ARRAY[]::text[]) @> ARRAY[:tag])"
-            ),
-            {"tag": tag, "contact_id": contact.id},
+        """Apply a normalized workspace tag to a contact idempotently."""
+        await TagService(db).add_tag_to_contact(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            name=tag,
         )
-        # Sync in-memory list
-        current = list(contact.tags or [])
-        if tag not in current:
-            current.append(tag)
-        contact.tags = current
+
+    @staticmethod
+    def _has_tag(workspace_id: uuid.UUID, tag_name: str) -> ColumnElement[bool]:
+        """Build an EXISTS predicate for one normalized tag."""
+        return NoshowReengagementWorker._has_any_tag(workspace_id, [tag_name])
+
+    @staticmethod
+    def _has_any_tag(workspace_id: uuid.UUID, tag_names: list[str]) -> ColumnElement[bool]:
+        """Build an EXISTS predicate for any normalized tag name."""
+        return exists(
+            select(ContactTag.id)
+            .join(Tag, Tag.id == ContactTag.tag_id)
+            .where(
+                and_(
+                    ContactTag.contact_id == Contact.id,
+                    Tag.workspace_id == workspace_id,
+                    Tag.name.in_(tag_names),
+                )
+            )
+        )
 
     def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
         """Render a re-engagement template with placeholders."""

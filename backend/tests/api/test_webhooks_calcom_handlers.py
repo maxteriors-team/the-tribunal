@@ -142,6 +142,12 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     )
     stubs["send_appointment_booked_notification"] = send_appointment_booked
 
+    tag_service = MagicMock()
+    tag_service.add_tag_to_contact = AsyncMock(return_value=None)
+    tag_service_factory = MagicMock(return_value=tag_service)
+    monkeypatch.setattr(handlers, "TagService", tag_service_factory)
+    stubs["tag_service"] = tag_service
+
     increment_guarantee = AsyncMock(return_value=None)
     monkeypatch.setattr(
         handlers, "increment_completed_and_check_guarantee", increment_guarantee
@@ -165,7 +171,6 @@ def _make_contact(
     contact.last_name = "Client"
     contact.phone_number = "+14155552671"
     contact.email = "client@example.com"
-    contact.tags = []
     contact.last_appointment_status = None
     contact.noshow_count = 0
     return contact
@@ -317,8 +322,12 @@ async def test_booking_created_new_appointment_full_flow(
 
     await handlers.handle_booking_created(booking_created, _make_log())
 
-    # Contact mutated and added
-    assert "appointment-scheduled" in contact.tags
+    # Contact lifecycle marker moved through normalized TagService
+    stubs["tag_service"].add_tag_to_contact.assert_any_await(
+        workspace_id=contact.workspace_id,
+        contact_id=contact.id,
+        name="appointment-scheduled",
+    )
     assert contact.last_appointment_status == "scheduled"
 
     # Appointment created (db.add called with a new Appointment)
@@ -548,7 +557,11 @@ async def test_booking_cancelled_by_attendee_fires_rebook_sms(
     )
 
     assert appt.status == AppointmentStatus.CANCELLED
-    assert "appointment-cancelled" in contact.tags
+    stubs["tag_service"].add_tag_to_contact.assert_any_await(
+        workspace_id=contact.workspace_id,
+        contact_id=contact.id,
+        name="appointment-cancelled",
+    )
     assert contact.last_appointment_status == "cancelled"
     stubs["send_lifecycle_sms"].assert_awaited_once()
     stubs["push"].send_to_workspace_members.assert_awaited()
@@ -651,7 +664,11 @@ async def test_meeting_ended_marks_completed_and_increments_guarantee(
     await handlers.handle_meeting_ended(meeting_ended_completed, _make_log())
 
     assert appt.status == AppointmentStatus.COMPLETED
-    assert "showed-up" in contact.tags
+    stubs["tag_service"].add_tag_to_contact.assert_any_await(
+        workspace_id=contact.workspace_id,
+        contact_id=contact.id,
+        name="showed-up",
+    )
     assert contact.last_appointment_status == "completed"
     stubs["increment_completed_and_check_guarantee"].assert_awaited_once()
     # No agent → post_meeting_template branch doesn't fire
@@ -684,7 +701,11 @@ async def test_meeting_ended_marks_no_show_and_increments_count(
     await handlers.handle_meeting_ended(meeting_ended_no_show, _make_log())
 
     assert appt.status == AppointmentStatus.NO_SHOW
-    assert "no-show" in contact.tags
+    stubs["tag_service"].add_tag_to_contact.assert_any_await(
+        workspace_id=contact.workspace_id,
+        contact_id=contact.id,
+        name="no-show",
+    )
     assert contact.last_appointment_status == "no_show"
     assert contact.noshow_count == 2
     # No agent → default no-show SMS body is sent

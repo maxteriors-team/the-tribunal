@@ -1,15 +1,10 @@
 """Tests for ``app.api.webhooks.calcom_parser``.
 
-The parser module is two functions:
+The parser module exposes :func:`find_contact_by_attendee`, a SQLAlchemy lookup
+that prefers an exact-email match and falls back to a phone-suffix LIKE query.
 
-- :func:`apply_contact_tag` — pure mutation helper that adds a tag to a
-  contact only when not already present.
-- :func:`find_contact_by_attendee` — SQLAlchemy lookup that prefers an
-  exact-email match, falls back to a phone-suffix LIKE query.
-
-Both are exercised here with mocked async sessions and ORM stand-ins,
-plus real-shape Cal.com attendee payloads loaded from
-``tests/fixtures/webhooks/calcom/``.
+It is exercised here with mocked async sessions and ORM stand-ins, plus
+real-shape Cal.com attendee payloads loaded from ``tests/fixtures/webhooks/calcom/``.
 """
 
 from __future__ import annotations
@@ -19,74 +14,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.api.webhooks.calcom_parser import (
-    apply_contact_tag,
-    find_contact_by_attendee,
-)
+from app.api.webhooks.calcom_parser import find_contact_by_attendee
 from tests.fixtures.webhooks import load_fixture
-
-# --------------------------------------------------------------------------- #
-# apply_contact_tag — pure helper, no I/O
-# --------------------------------------------------------------------------- #
-
-
-def test_apply_contact_tag_adds_to_empty_list() -> None:
-    contact = MagicMock()
-    contact.tags = []
-
-    apply_contact_tag(contact, "appointment-scheduled")
-
-    assert contact.tags == ["appointment-scheduled"]
-
-
-def test_apply_contact_tag_appends_when_missing() -> None:
-    contact = MagicMock()
-    contact.tags = ["lead", "warm"]
-
-    apply_contact_tag(contact, "appointment-scheduled")
-
-    assert contact.tags == ["lead", "warm", "appointment-scheduled"]
-
-
-def test_apply_contact_tag_is_idempotent() -> None:
-    """Re-applying an existing tag must not duplicate or mutate ordering."""
-    contact = MagicMock()
-    contact.tags = ["lead", "appointment-scheduled"]
-    original = list(contact.tags)
-
-    apply_contact_tag(contact, "appointment-scheduled")
-
-    assert contact.tags == original
-
-
-def test_apply_contact_tag_treats_none_tags_as_empty() -> None:
-    """Contacts whose ``tags`` column is NULL must still accept new tags."""
-    contact = MagicMock()
-    contact.tags = None
-
-    apply_contact_tag(contact, "no-show")
-
-    assert contact.tags == ["no-show"]
-
-
-def test_apply_contact_tag_does_not_mutate_input_list_in_place() -> None:
-    """Implementation must return a *new* list to keep SQLAlchemy change-detection happy.
-
-    SQLAlchemy ORM only marks ``tags`` dirty when the attribute is
-    reassigned (not when an existing list is mutated in place). This
-    guards against a regression where ``apply_contact_tag`` would call
-    ``contact.tags.append(...)`` and silently fail to persist.
-    """
-    contact = MagicMock()
-    original_list: list[str] = ["lead"]
-    contact.tags = original_list
-
-    apply_contact_tag(contact, "appointment-scheduled")
-
-    assert original_list == ["lead"]  # untouched
-    assert contact.tags == ["lead", "appointment-scheduled"]
-    assert contact.tags is not original_list
-
 
 # --------------------------------------------------------------------------- #
 # find_contact_by_attendee — DB lookups

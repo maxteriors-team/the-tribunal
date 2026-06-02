@@ -25,6 +25,7 @@ from app.schemas.scraping import (
 from app.services.rate_limiting.scraping_limiter import enforce_scraping_rate_limit
 from app.services.scraping.enrichment_service import enrich_contact_data
 from app.services.scraping.google_places import GooglePlacesError, GooglePlacesService
+from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
 router = APIRouter()
@@ -261,7 +262,6 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
                 phone_number=normalized_phone,
                 status=request.default_status,
                 source="scraped_ai",
-                tags=tags if tags else None,
                 notes=_format_business_notes(lead),
                 website_url=lead.website,
                 linkedin_url=enrichment_result["linkedin_url"],
@@ -275,6 +275,12 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
                 ),
             )
             db.add(contact)
+            await db.flush()
+            await TagService(db).add_tags_to_contact(
+                workspace_id=workspace.id,
+                contact_id=contact.id,
+                names=tags,
+            )
             imported += 1
             lead_details.append(
                 LeadImportDetail(
