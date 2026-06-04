@@ -24,7 +24,9 @@ dependencies = [
     "uvicorn[standard]>=0.47.0",
     # runtime requirement: lower bound only — fastapi pins the effective upper. Kept explicit so a future
     # fastapi downgrade cannot silently drag in pre-CVE-2025-54121 starlette. Real floor is fastapi's.
-    "starlette>=0.40.0",
+    # CVE fix: starlette 1.0.1 patches GHSA-86qp-5c8j-p5mr / PYSEC-2026-161 (BadHost: missing Host-header
+    # validation poisons request.url.path, bypassing path-based security checks). Do not lower below 1.0.1.
+    "starlette>=1.0.1",
     # WebSocket client (Grok realtime, audio streaming)
     # feature floor: websockets 14 introduced the new asyncio API used in app/websockets/voice_bridge.py.
     "websockets>=14.0",
@@ -108,7 +110,10 @@ dependencies = [
     # security hardening: sentry-sdk 2.60 dropped a leaky breadcrumb path for FastAPI form data.
     "sentry-sdk[fastapi]>=2.60.0",
     # feature floor: 7.1 added the `inprogress_name` arg we configure in app/main.py.
-    "prometheus-fastapi-instrumentator>=7.1.0",
+    # runtime requirement: 8.0.0 ported the instrumentator to Starlette v1 (its 7.x line pins
+    # starlette<1.0.0, which would otherwise cap us below the GHSA-86qp-5c8j-p5mr fix). Keep in lockstep
+    # with the starlette>=1.0.1 floor above.
+    "prometheus-fastapi-instrumentator>=8.0.0",
     # feature floor: tenacity 9.1 introduced the typed `retry_if_exception_type` overloads used in
     # app/services/telephony/telnyx_sms.py.
     "tenacity>=9.1.4",
