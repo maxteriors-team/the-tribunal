@@ -6762,6 +6762,11 @@ export interface components {
         AssistantChatRequest: {
             /** Conversation Id */
             conversation_id?: string | null;
+            /**
+             * Image
+             * @description Optional base64 image data URL (data:image/<type>;base64,...) for the assistant to reference. JPEG/PNG/WebP/GIF up to 5 MB.
+             */
+            image?: string | null;
             /** Message */
             message: string;
         };
@@ -8174,6 +8179,11 @@ export interface components {
             conversation_history: {
                 [key: string]: string;
             }[];
+            /**
+             * Image
+             * @description Optional base64 image data URL (data:image/<type>;base64,...) for the AI to reference when answering. JPEG/PNG/WebP/GIF up to 5 MB.
+             */
+            image?: string | null;
             /** Message */
             message: string;
         };

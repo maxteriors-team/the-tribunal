@@ -20,6 +20,8 @@ export interface AssistantMessageResponse {
   id: string;
   role: AssistantRole;
   content: string;
+  /** Local-only: data URL of an image attached to a user turn (not persisted). */
+  image?: string | null;
   tool_calls?: { id: string; function: { name: string; arguments: string } }[] | null;
   tool_call_id?: string | null;
   created_at: string;
@@ -58,6 +60,7 @@ interface StreamChatParams {
   workspaceId: string;
   conversationId?: string | null;
   message: string;
+  image?: string | null;
   signal?: AbortSignal;
   onEvent: (event: AssistantStreamEvent) => void;
 }
@@ -95,10 +98,11 @@ export const assistantApi = {
     workspaceId: string,
     message: string,
     conversationId?: string | null,
+    image?: string | null,
   ): Promise<AssistantChatResponse> => {
     const { data } = await api.post<AssistantChatResponse>(
       `${basePath(workspaceId)}/chat`,
-      { message, conversation_id: conversationId ?? null },
+      { message, conversation_id: conversationId ?? null, image: image ?? null },
     );
     return data;
   },
@@ -142,6 +146,7 @@ export const assistantApi = {
     workspaceId,
     conversationId,
     message,
+    image,
     signal,
     onEvent,
   }: StreamChatParams): Promise<void> => {
@@ -150,7 +155,11 @@ export const assistantApi = {
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       signal,
-      body: JSON.stringify({ message, conversation_id: conversationId ?? null }),
+      body: JSON.stringify({
+        message,
+        conversation_id: conversationId ?? null,
+        image: image ?? null,
+      }),
     });
 
     if (!response.ok) {

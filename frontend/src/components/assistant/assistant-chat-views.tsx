@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Bot,
   CheckCircle2,
+  ImagePlus,
   Loader2,
   MessageSquare,
   Plus,
@@ -13,14 +14,17 @@ import {
   Trash2,
   User,
   Wrench,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useRef, useState } from "react";
 
 import { OutboundWorkflowCard } from "@/components/assistant/outbound-workflow-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { IMAGE_ACCEPT_ATTR, readImageFile } from "@/lib/ai/image-upload";
 import type { AssistantConversationMetaResponse, AssistantMessageResponse } from "@/lib/api/assistant";
 import {
   parseWorkflowPayload,
@@ -240,7 +244,9 @@ export function MessageComposer({
   input,
   isStreaming,
   canSend,
+  imageDataUrl,
   onInputChange,
+  onImageChange,
   onSubmit,
   onKeyDown,
   onStop,
@@ -248,14 +254,72 @@ export function MessageComposer({
   input: string;
   isStreaming: boolean;
   canSend: boolean;
+  imageDataUrl: string | null;
   onInputChange: (value: string) => void;
+  onImageChange: (value: string | null) => void;
   onSubmit: (event: React.FormEvent) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onStop: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const { dataUrl, error } = await readImageFile(file);
+    if (error || !dataUrl) {
+      setImageError(error ?? "Could not read the image file.");
+      return;
+    }
+    setImageError(null);
+    onImageChange(dataUrl);
+  };
+
   return (
     <form onSubmit={onSubmit} className="border-t bg-background/95 p-4">
+      {imageDataUrl ? (
+        <div className="mb-2 inline-flex">
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local preview of a data URL */}
+            <img
+              src={imageDataUrl}
+              alt="Attachment preview"
+              className="max-h-24 w-auto rounded-lg border"
+            />
+            <button
+              type="button"
+              onClick={() => onImageChange(null)}
+              aria-label="Remove image"
+              className="absolute -right-2 -top-2 flex size-5 items-center justify-center rounded-full bg-foreground text-background shadow"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {imageError ? (
+        <p className="mb-2 text-xs text-destructive">{imageError}</p>
+      ) : null}
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={IMAGE_ACCEPT_ATTR}
+          className="hidden"
+          onChange={(event) => void handleFileChange(event)}
+        />
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!canSend || isStreaming}
+          aria-label="Attach image"
+        >
+          <ImagePlus className="size-4" />
+        </Button>
         <Textarea
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
@@ -274,7 +338,7 @@ export function MessageComposer({
           <Button
             type="submit"
             size="icon"
-            disabled={!input.trim() || !canSend}
+            disabled={(!input.trim() && !imageDataUrl) || !canSend}
             aria-label="Send message"
           >
             <Send className="size-4" />
@@ -282,7 +346,7 @@ export function MessageComposer({
         )}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        Press Enter to send, Shift+Enter for a new line.
+        Press Enter to send, Shift+Enter for a new line. Attach a photo for the assistant to read.
       </p>
     </form>
   );
@@ -308,7 +372,19 @@ export function MessageBubble({ message }: { message: AssistantMessageResponse }
         {workflowPayload ? (
           <OutboundWorkflowCard payload={workflowPayload} />
         ) : (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <>
+            {message.image ? (
+              // eslint-disable-next-line @next/next/no-img-element -- user-supplied data URL, not a static asset
+              <img
+                src={message.image}
+                alt="Attached"
+                className="mb-2 max-h-48 w-auto rounded-lg"
+              />
+            ) : null}
+            {message.content ? (
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            ) : null}
+          </>
         )}
         {tools.length > 0 ? <ToolChips tools={tools} /> : null}
         <p

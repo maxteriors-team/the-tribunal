@@ -111,6 +111,7 @@ async def chat_with_assistant(
         user_id=current_user.id,
         message=request.message,
         conversation_id=request.conversation_id,
+        image=request.image,
     )
     return AssistantChatResponse(
         response=result["response"],
@@ -136,6 +137,7 @@ async def stream_chat_with_assistant(
             user_id=current_user.id,
             message=request.message,
             conversation_id=request.conversation_id,
+            image=request.image,
         ):
             yield _sse_frame(event)
 

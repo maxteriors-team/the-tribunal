@@ -40,6 +40,8 @@ export interface UseAssistantChatResult {
   visibleMessages: AssistantMessageResponse[];
   input: string;
   setInput: (value: string) => void;
+  imageDataUrl: string | null;
+  setImageDataUrl: (value: string | null) => void;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   handleNewConversation: () => void;
   handleSelectConversation: (conversationId: string) => void;
@@ -72,6 +74,7 @@ export function useAssistantChat(): UseAssistantChatResult {
     {},
   );
   const [input, setInput] = useState("");
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllersRef = useRef<Record<string, AbortController>>({});
   const accumulatorsRef = useRef<Record<string, StreamAccumulator>>({});
@@ -189,7 +192,8 @@ export function useAssistantChat(): UseAssistantChatResult {
   const sendMessage = useCallback(
     async (rawMessage: string) => {
       const trimmed = rawMessage.trim();
-      if (!trimmed || !workspaceId) return;
+      const attachedImage = imageDataUrl;
+      if ((!trimmed && !attachedImage) || !workspaceId) return;
 
       const conversationId = resolvedActiveConversationId;
       setActiveConversationId(conversationId);
@@ -201,6 +205,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         id: `user-${requestId}`,
         role: "user",
         content: trimmed,
+        image: attachedImage,
         created_at: new Date().toISOString(),
       };
       const controller = new AbortController();
@@ -208,6 +213,7 @@ export function useAssistantChat(): UseAssistantChatResult {
       accumulatorsRef.current[conversationId] = emptyAccumulator();
 
       setInput("");
+      setImageDataUrl(null);
       setRuntimes((current) => {
         const runtime =
           current[conversationId] ??
@@ -225,6 +231,7 @@ export function useAssistantChat(): UseAssistantChatResult {
           workspaceId,
           conversationId,
           message: trimmed,
+          image: attachedImage,
           signal: controller.signal,
           onEvent: (event) => applyStreamEvent(conversationId, event),
         });
@@ -254,6 +261,7 @@ export function useAssistantChat(): UseAssistantChatResult {
       conversationsQuery,
       createConversationRuntime,
       draftConversationId,
+      imageDataUrl,
       patchRuntime,
       resolvedActiveConversationId,
       runtimes,
@@ -319,6 +327,8 @@ export function useAssistantChat(): UseAssistantChatResult {
     visibleMessages,
     input,
     setInput,
+    imageDataUrl,
+    setImageDataUrl,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,

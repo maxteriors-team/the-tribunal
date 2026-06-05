@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.ai.image_input import ImageValidationError, validate_image_data_url
+
 
 class EmbedConfigResponse(BaseModel):
     """Public configuration for embed widget."""
@@ -41,6 +43,24 @@ class ChatRequest(BaseModel):
         default_factory=list,
         json_schema_extra={"default": []},
     )
+    image: str | None = Field(
+        default=None,
+        description=(
+            "Optional base64 image data URL (data:image/<type>;base64,...) for the "
+            "AI to reference when answering. JPEG/PNG/WebP/GIF up to 5 MB."
+        ),
+    )
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str | None) -> str | None:
+        """Reject unsupported or oversized images before forwarding to OpenAI."""
+        if value is None:
+            return None
+        try:
+            return validate_image_data_url(value)
+        except ImageValidationError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class ChatResponse(BaseModel):

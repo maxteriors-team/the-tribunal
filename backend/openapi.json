@@ -2102,6 +2102,18 @@
             ],
             "title": "Conversation Id"
           },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional base64 image data URL (data:image/<type>;base64,...) for the assistant to reference. JPEG/PNG/WebP/GIF up to 5 MB.",
+            "title": "Image"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -5596,6 +5608,18 @@
             },
             "title": "Conversation History",
             "type": "array"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional base64 image data URL (data:image/<type>;base64,...) for the AI to reference when answering. JPEG/PNG/WebP/GIF up to 5 MB.",
+            "title": "Image"
           },
           "message": {
             "title": "Message",

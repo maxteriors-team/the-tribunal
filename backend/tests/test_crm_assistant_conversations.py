@@ -173,6 +173,7 @@ async def _noop_stream(
     user_id: int,
     message: str,
     conversation_id: uuid.UUID | None = None,
+    image: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     yield {"type": "delta", "text": "Hello"}
     yield {

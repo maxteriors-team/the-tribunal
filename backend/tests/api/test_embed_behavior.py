@@ -183,6 +183,78 @@ class TestEmbedChatAndVoiceFlows:
             {"role": "user", "content": "Can you help?"},
         ]
 
+    async def test_chat_flow_forwards_image_part_to_openai(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+        data_url = (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+            "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        )
+        fake_http_client = _fake_http_client(
+            {"choices": [{"message": {"content": "Based on the photo, the flashing is cracked."}}]}
+        )
+
+        with (
+            patch(
+                "app.services.embed.access.enforce_chat_rate_limits",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.services.embed.openai.resolve_openai_credentials",
+                new=AsyncMock(return_value=_openai_context()),
+            ),
+            patch(
+                "app.services.embed.openai.httpx.AsyncClient",
+                return_value=fake_http_client,
+            ),
+        ):
+            response = await client.post(
+                "/api/v1/p/embed/demo-public-id/chat",
+                headers={"Origin": "https://allowed.example"},
+                json={
+                    "message": "What is wrong with this roof?",
+                    "conversation_history": [],
+                    "image": data_url,
+                },
+            )
+
+        assert response.status_code == 200
+        payload = fake_http_client.post.await_args.kwargs["json"]
+        assert payload["messages"][-1] == {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is wrong with this roof?"},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ],
+        }
+
+    async def test_chat_flow_rejects_invalid_image(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+
+        with patch(
+            "app.services.embed.access.enforce_chat_rate_limits",
+            new=AsyncMock(),
+        ):
+            response = await client.post(
+                "/api/v1/p/embed/demo-public-id/chat",
+                headers={"Origin": "https://allowed.example"},
+                json={
+                    "message": "look at this",
+                    "conversation_history": [],
+                    "image": "data:application/pdf;base64,Zm9v",
+                },
+            )
+
+        assert response.status_code == 422
+
     async def test_voice_flow_mints_realtime_client_secret(
         self,
         client: AsyncClient,

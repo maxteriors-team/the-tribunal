@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.agent import Agent
 from app.schemas.embed import ChatRequest, ChatResponse, TokenResponse
+from app.services.ai.image_input import build_chat_user_message_with_image
 from app.services.ai.openai_credentials import OpenAICredentialError, resolve_openai_credentials
 from app.services.ai.openai_realtime_config import (
     RealtimeSessionConfig,
@@ -65,11 +66,16 @@ def build_embed_realtime_session(agent: Agent) -> RealtimeSessionConfig:
     )
 
 
-def build_embed_chat_messages(agent: Agent, body: ChatRequest) -> list[dict[str, str]]:
-    """Build OpenAI Chat Completions messages from embed request state."""
-    messages: list[dict[str, str]] = [{"role": "system", "content": agent.system_prompt}]
+def build_embed_chat_messages(agent: Agent, body: ChatRequest) -> list[dict[str, Any]]:
+    """Build OpenAI Chat Completions messages from embed request state.
+
+    When the request carries an image, the latest user turn is sent as a
+    multimodal content array so the vision-capable model can "see" the photo
+    and ground its reply in it.
+    """
+    messages: list[dict[str, Any]] = [{"role": "system", "content": agent.system_prompt}]
     messages.extend(body.conversation_history[-agent.text_max_context_messages :])
-    messages.append({"role": "user", "content": body.message})
+    messages.append(build_chat_user_message_with_image(body.message, body.image))
     return messages
 
 

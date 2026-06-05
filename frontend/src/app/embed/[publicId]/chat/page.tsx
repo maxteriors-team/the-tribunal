@@ -1,9 +1,10 @@
 "use client";
 
-import { Send, X, MessageSquare, Loader2 } from "lucide-react";
+import { Send, X, MessageSquare, Loader2, ImagePlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
 
+import { IMAGE_ACCEPT_ATTR, readImageFile } from "@/lib/ai/image-upload";
 import {
   postToParent,
   subscribeToEmbedMessages,
@@ -26,6 +27,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  image?: string;
   timestamp: Date;
 }
 
@@ -46,9 +48,11 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
     if (typeof window === "undefined") return "light";
@@ -130,18 +134,37 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     });
   }, [isOpen, config]);
 
-  const sendMessage = useCallback(async () => {
-    if (!inputValue.trim() || isLoading || !config) return;
+  const handleFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+      const { dataUrl, error: readError } = await readImageFile(file);
+      if (readError || !dataUrl) {
+        setError(readError ?? "Could not read the image file.");
+        return;
+      }
+      setError(null);
+      setImageDataUrl(dataUrl);
+    },
+    [],
+  );
 
+  const sendMessage = useCallback(async () => {
+    if ((!inputValue.trim() && !imageDataUrl) || isLoading || !config) return;
+
+    const attachedImage = imageDataUrl;
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
       content: inputValue.trim(),
+      image: attachedImage ?? undefined,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setImageDataUrl(null);
     setIsLoading(true);
 
     try {
@@ -159,6 +182,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
         body: JSON.stringify({
           message: userMessage.content,
           conversation_history: conversationHistory,
+          image: attachedImage ?? null,
         }),
       });
 
@@ -182,7 +206,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, isLoading, config, messages, publicId]);
+  }, [inputValue, imageDataUrl, isLoading, config, messages, publicId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -303,7 +327,17 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                         : "none",
                   }}
                 >
-                  <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                  {message.image && (
+                    // eslint-disable-next-line @next/next/no-img-element -- user-supplied data URL, not a static asset
+                    <img
+                      src={message.image}
+                      alt="Attached"
+                      className="mb-2 max-h-40 w-auto rounded-lg"
+                    />
+                  )}
+                  {message.content && (
+                    <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -351,7 +385,46 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
             {error && (
               <p className="mb-2 text-xs text-red-500">{error}</p>
             )}
+            {imageDataUrl && (
+              <div className="mb-2 inline-flex items-start gap-1">
+                <div className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- local preview of a data URL */}
+                  <img
+                    src={imageDataUrl}
+                    alt="Attachment preview"
+                    className="max-h-20 w-auto rounded-lg border"
+                    style={{ borderColor: isDark ? "#4b5563" : "#e5e7eb" }}
+                  />
+                  <button
+                    onClick={() => setImageDataUrl(null)}
+                    aria-label="Remove image"
+                    className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-white shadow"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT_ATTR}
+                onChange={(e) => void handleFileChange(e)}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                aria-label="Attach image"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all hover:scale-105 disabled:opacity-50"
+                style={{
+                  backgroundColor: isDark ? "#374151" : "#f3f4f6",
+                  color: isDark ? "#f3f4f6" : "#1f2937",
+                }}
+              >
+                <ImagePlus className="h-5 w-5" />
+              </button>
               <input
                 ref={inputRef}
                 type="text"
@@ -369,7 +442,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
               />
               <button
                 onClick={() => void sendMessage()}
-                disabled={!inputValue.trim() || isLoading}
+                disabled={(!inputValue.trim() && !imageDataUrl) || isLoading}
                 className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 disabled:opacity-50"
                 style={{ backgroundColor: primaryColor }}
               >

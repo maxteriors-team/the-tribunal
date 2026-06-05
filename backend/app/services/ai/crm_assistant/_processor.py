@@ -33,6 +33,7 @@ from app.models.assistant_conversation import AssistantConversation, AssistantMe
 from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tools import get_crm_tools
+from app.services.ai.image_input import build_chat_image_content_part
 from app.services.ai.openai_credentials import create_openai_client
 
 logger = structlog.get_logger()
@@ -245,6 +246,31 @@ async def _append_assistant_message(
     return assistant_message
 
 
+def _attach_image_to_last_user_message(
+    api_messages: list[dict[str, Any]],
+    image: str | None,
+) -> None:
+    """Attach an image content part to the most recent user message in place.
+
+    The image is forwarded to the model for this turn only; it is never
+    persisted to the message log (the DB row keeps the plain text), keeping the
+    conversation history small and image data out of storage.
+    """
+    if not image:
+        return
+    for msg in reversed(api_messages):
+        if msg.get("role") != "user":
+            continue
+        existing = msg.get("content")
+        text = existing if isinstance(existing, str) else ""
+        content: list[dict[str, Any]] = []
+        if text:
+            content.append({"type": "text", "text": text})
+        content.append(build_chat_image_content_part(image))
+        msg["content"] = content
+        return
+
+
 async def _build_api_messages(
     db: AsyncSession,
     conversation_id: uuid.UUID,
@@ -366,6 +392,7 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
     user_id: int,
     message: str,
     conversation_id: uuid.UUID | None = None,
+    image: str | None = None,
 ) -> AsyncIterator[AssistantStreamEvent]:
     """Process an operator message and yield assistant stream events."""
     log = logger.bind(
@@ -388,6 +415,7 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
     client = create_openai_client()
     cache_key = _cache_key(workspace_id, user_id)
     api_messages = await maybe_summarize(client, api_messages)
+    _attach_image_to_last_user_message(api_messages, image)
 
     actions_taken: list[dict[str, Any]] = []
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id)
@@ -519,6 +547,7 @@ async def process_assistant_message(  # noqa: PLR0915
     user_id: int,
     message: str,
     conversation_id: uuid.UUID | None = None,
+    image: str | None = None,
     response_channel: str = "in_app",
     sms_from_number: str | None = None,
     sms_to_number: str | None = None,
@@ -557,6 +586,7 @@ async def process_assistant_message(  # noqa: PLR0915
     # Compact older history if we're over budget. Preserves the system
     # prefix so prompt caching keeps hitting.
     api_messages = await maybe_summarize(client, api_messages)
+    _attach_image_to_last_user_message(api_messages, image)
 
     actions_taken: list[dict[str, Any]] = []
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id)

@@ -224,6 +224,27 @@ class ResponseCreatePayload(TypedDict):
     response: dict[str, list[str] | str]
 
 
+class RealtimeInputTextPart(TypedDict):
+    """GA Realtime ``input_text`` user content part."""
+
+    type: Literal["input_text"]
+    text: str
+
+
+class RealtimeInputImagePart(TypedDict):
+    """GA Realtime ``input_image`` user content part.
+
+    ``image_url`` is the base64 ``data:`` URL string itself (not a nested
+    object), per the GA ``gpt-realtime``/``gpt-realtime-2`` image-input shape.
+    """
+
+    type: Literal["input_image"]
+    image_url: str
+
+
+type RealtimeUserContentPart = RealtimeInputTextPart | RealtimeInputImagePart
+
+
 def normalize_openai_voice(
     voice: str | None,
     *,
@@ -431,6 +452,33 @@ def build_realtime_session_config(
         session["reasoning"] = {"effort": reasoning_effort}
 
     return session
+
+
+def build_realtime_image_input_item(
+    *,
+    image_url: str,
+    text: str | None = None,
+) -> dict[str, Any]:
+    """Build a ``conversation.item.create`` event carrying a user image.
+
+    ``gpt-realtime`` and ``gpt-realtime-2`` accept images as ``input_image``
+    content parts on a user message, where ``image_url`` is a base64 ``data:``
+    URL string. An optional ``text`` is added as a leading ``input_text`` part
+    so the model has a caption/question alongside the photo. Validate the data
+    URL with ``image_input.validate_image_data_url`` before passing it here.
+    """
+    content: list[RealtimeUserContentPart] = []
+    if text:
+        content.append({"type": "input_text", "text": text})
+    content.append({"type": "input_image", "image_url": image_url})
+    return {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "user",
+            "content": content,
+        },
+    }
 
 
 def build_session_update_event(session: RealtimeSessionConfig) -> dict[str, Any]:

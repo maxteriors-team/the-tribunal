@@ -4,7 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.services.ai.image_input import ImageValidationError, validate_image_data_url
 
 AssistantRole = Literal["user", "assistant", "tool"]
 
@@ -14,6 +16,24 @@ class AssistantChatRequest(BaseModel):
 
     message: str
     conversation_id: uuid.UUID | None = None
+    image: str | None = Field(
+        default=None,
+        description=(
+            "Optional base64 image data URL (data:image/<type>;base64,...) for the "
+            "assistant to reference. JPEG/PNG/WebP/GIF up to 5 MB."
+        ),
+    )
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, value: str | None) -> str | None:
+        """Reject unsupported or oversized images before forwarding to OpenAI."""
+        if value is None:
+            return None
+        try:
+            return validate_image_data_url(value)
+        except ImageValidationError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class ActionSummary(BaseModel):

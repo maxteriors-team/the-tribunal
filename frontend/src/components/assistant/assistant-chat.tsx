@@ -21,6 +21,8 @@ export function AssistantChat({ className }: { className?: string }) {
     visibleMessages,
     input,
     setInput,
+    imageDataUrl,
+    setImageDataUrl,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,
@@ -61,7 +63,9 @@ export function AssistantChat({ className }: { className?: string }) {
           input={input}
           isStreaming={activeRuntime.isStreaming}
           canSend={Boolean(workspaceId)}
+          imageDataUrl={imageDataUrl}
           onInputChange={setInput}
+          onImageChange={setImageDataUrl}
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
           onStop={handleStop}
