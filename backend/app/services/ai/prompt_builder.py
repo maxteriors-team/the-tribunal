@@ -194,6 +194,30 @@ You can use these auditory cues naturally in your responses to sound more human:
             "making something up."
         )
 
+    def get_caller_record_guidance(self) -> str:
+        """Get guidance for the read-only ``lookup_caller_record`` tool.
+
+        Returned only when the agent has the tool enabled. Instructs the agent to
+        read the caller's own account record on demand for account-specific
+        questions, and to never fabricate details for unknown callers.
+        """
+        if not self.agent or not self.agent.enabled_tools:
+            return ""
+        if "lookup_caller_record" not in self.agent.enabled_tools:
+            return ""
+
+        return (
+            "\n\n# Caller Account Lookup\n"
+            "You have a lookup_caller_record tool that returns THIS caller's own "
+            "account record — their upcoming appointments, open deals, status, and "
+            "recent activity. When the caller asks about their own account (e.g. "
+            "'when is my appointment?', 'what's my status?', 'do I have anything "
+            "booked?'), call it and answer ONLY from what it returns. It is "
+            "read-only and only ever returns this caller's data. If it reports no "
+            "record, do NOT invent details — say you don't have a record on file "
+            "and offer to take their information."
+        )
+
     def get_ivr_navigation_guidance(
         self,
         ivr_status: "IVRStatus | None" = None,
@@ -521,6 +545,9 @@ AVAILABILITY ACCURACY RULES:
         # 6b. Knowledge base (on-demand retrieval) guidance
         if include_knowledge:
             parts.append(self.get_knowledge_guidance())
+
+        # 6c. Caller account record (read-only) guidance
+        parts.append(self.get_caller_record_guidance())
 
         # 7. IVR/DTMF navigation guidance (before booking, critical for outbound)
         if include_ivr_guidance:

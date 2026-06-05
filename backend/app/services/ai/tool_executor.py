@@ -15,6 +15,7 @@ Usage:
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
@@ -27,7 +28,13 @@ logger = structlog.get_logger()
 # Read-only tools that never mutate state and so bypass the HITL approval gate.
 # Gating a knowledge lookup behind operator approval would stall the live call
 # for a harmless retrieval, so it is always allowed to run.
-GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge"})
+GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge", "lookup_caller_record"})
+
+# Caps on how much of the caller's own record we read back into the live call.
+# Bounded so a chatty record can't blow up latency or the prompt window.
+MAX_LOOKUP_APPOINTMENTS = 5
+MAX_LOOKUP_OPPORTUNITIES = 5
+MAX_LOOKUP_NOTES_CHARS = 500
 
 PRESTYJ_APPLICATION_URL = "https://prestyj.com/founding-cohort"
 PRESTYJ_APPLICATION_SMS_BODY = (
@@ -126,6 +133,9 @@ class VoiceToolExecutor(BaseToolExecutor):
                 query=arguments.get("query", ""),
                 top_k=arguments.get("top_k"),
             )
+
+        if function_name == "lookup_caller_record":
+            return await self._execute_lookup_caller_record()
 
         if function_name == "send_application_link":
             return await self._execute_send_application_link()
@@ -431,6 +441,205 @@ class VoiceToolExecutor(BaseToolExecutor):
                 query=query,
                 top_k=top_k,
             )
+
+    async def _execute_lookup_caller_record(self) -> dict[str, Any]:
+        """Read the CURRENT caller's own CRM record for account-specific answers.
+
+        Strictly read-only. Every query is hard-scoped to BOTH the call's
+        ``workspace_id`` AND the resolved ``contact_id``, so the receptionist can
+        only ever read this one caller's record — never another contact's and
+        never another workspace's. Unknown callers (no resolvable contact) get a
+        safe ``found: False`` response so the model can gracefully say it has no
+        record rather than inventing one.
+
+        Returns the caller's upcoming appointments, open opportunities, contact
+        status/notes, and a short last-interaction summary.
+        """
+        from sqlalchemy import or_, select
+        from sqlalchemy.orm import selectinload
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.appointment import Appointment, AppointmentStatus
+        from app.models.contact import Contact
+        from app.models.conversation import Message as MessageModel
+        from app.models.opportunity import Opportunity, opportunity_contact_table
+
+        not_found = {
+            "success": True,
+            "found": False,
+            "message": (
+                "No account record was found for this caller. Do NOT make up any "
+                "appointment, status, or deal details — let them know you don't "
+                "have a record on file and offer to take their information."
+            ),
+        }
+
+        if not self.call_control_id:
+            self.log.warning("lookup_caller_record_no_call_control_id")
+            return not_found
+
+        async with AsyncSessionLocal() as db:
+            msg_result = await db.execute(
+                select(MessageModel)
+                .options(selectinload(MessageModel.conversation))
+                .where(MessageModel.provider_message_id == self.call_control_id)
+            )
+            call_message = msg_result.scalar_one_or_none()
+            if not call_message or not call_message.conversation:
+                self.log.warning(
+                    "lookup_caller_record_no_call_message",
+                    call_control_id=self.call_control_id,
+                )
+                return not_found
+
+            conversation = call_message.conversation
+            # Workspace scope comes from the call itself, never from the model.
+            workspace_id = self.workspace_id or conversation.workspace_id
+            contact_id = conversation.contact_id
+            if workspace_id is None or contact_id is None:
+                return not_found
+
+            # Load the contact scoped to BOTH workspace and id (defense in depth):
+            # a contact row only matches if it belongs to this call's workspace.
+            contact_result = await db.execute(
+                select(Contact).where(
+                    Contact.id == contact_id,
+                    Contact.workspace_id == workspace_id,
+                )
+            )
+            contact = contact_result.scalar_one_or_none()
+            if contact is None:
+                self.log.warning(
+                    "lookup_caller_record_contact_not_in_workspace",
+                    contact_id=str(contact_id),
+                    workspace_id=str(workspace_id),
+                )
+                return not_found
+
+            now = datetime.now(UTC)
+
+            # Upcoming appointments: workspace + contact scoped, future + scheduled.
+            appt_result = await db.execute(
+                select(Appointment)
+                .where(
+                    Appointment.workspace_id == workspace_id,
+                    Appointment.contact_id == contact_id,
+                    Appointment.scheduled_at >= now,
+                    Appointment.status == AppointmentStatus.SCHEDULED,
+                )
+                .order_by(Appointment.scheduled_at.asc())
+                .limit(MAX_LOOKUP_APPOINTMENTS)
+            )
+            appointments = list(appt_result.scalars().all())
+
+            # Open opportunities: workspace scoped, still open + active, and linked
+            # to this caller either as primary contact or via the m2m table.
+            opp_result = await db.execute(
+                select(Opportunity)
+                .outerjoin(
+                    opportunity_contact_table,
+                    opportunity_contact_table.c.opportunity_id == Opportunity.id,
+                )
+                .where(
+                    Opportunity.workspace_id == workspace_id,
+                    Opportunity.status == "open",
+                    Opportunity.is_active.is_(True),
+                    or_(
+                        Opportunity.primary_contact_id == contact_id,
+                        opportunity_contact_table.c.contact_id == contact_id,
+                    ),
+                )
+                .order_by(Opportunity.created_at.desc())
+                .distinct()
+                .limit(MAX_LOOKUP_OPPORTUNITIES)
+            )
+            opportunities = list(opp_result.scalars().all())
+
+            record = self._format_caller_record(
+                contact=contact,
+                appointments=appointments,
+                opportunities=opportunities,
+                conversation=conversation,
+            )
+
+        self.log.info(
+            "lookup_caller_record_executed",
+            call_control_id=self.call_control_id,
+            contact_id=str(contact_id),
+            workspace_id=str(workspace_id),
+            appointment_count=len(record["upcoming_appointments"]),
+            opportunity_count=len(record["open_opportunities"]),
+        )
+        return record
+
+    def _format_caller_record(
+        self,
+        *,
+        contact: Any,
+        appointments: list[Any],
+        opportunities: list[Any],
+        conversation: Any,
+    ) -> dict[str, Any]:
+        """Shape a caller's own record into a safe, voice-friendly tool response."""
+        try:
+            tz = ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            tz = ZoneInfo("America/New_York")
+
+        appt_list = [
+            {
+                "when": appt.scheduled_at.astimezone(tz).strftime("%A, %B %d at %I:%M %p"),
+                "iso": appt.scheduled_at.astimezone(tz).isoformat(),
+                "duration_minutes": appt.duration_minutes,
+                "status": str(appt.status),
+                "service_type": appt.service_type,
+            }
+            for appt in appointments
+        ]
+
+        opp_list = [
+            {
+                "name": opp.name,
+                "status": opp.status,
+                "amount": float(opp.amount) if opp.amount is not None else None,
+                "currency": opp.currency,
+            }
+            for opp in opportunities
+        ]
+
+        notes = contact.notes
+        if notes and len(notes) > MAX_LOOKUP_NOTES_CHARS:
+            notes = notes[:MAX_LOOKUP_NOTES_CHARS].rstrip() + "…"
+
+        last_interaction: dict[str, Any] | None = None
+        if conversation.last_message_at is not None:
+            last_interaction = {
+                "when": conversation.last_message_at.astimezone(tz).strftime(
+                    "%A, %B %d at %I:%M %p"
+                ),
+                "direction": conversation.last_message_direction,
+                "preview": conversation.last_message_preview,
+                "channel": conversation.channel,
+            }
+
+        return {
+            "success": True,
+            "found": True,
+            "contact": {
+                "name": contact.full_name,
+                "status": contact.status,
+                "is_qualified": contact.is_qualified,
+                "notes": notes,
+            },
+            "upcoming_appointments": appt_list,
+            "open_opportunities": opp_list,
+            "last_interaction": last_interaction,
+            "message": (
+                "This is the caller's own account record. Use ONLY these details "
+                "to answer their account questions, and do not reveal information "
+                "about anyone else."
+            ),
+        }
 
     async def _execute_transfer_call(
         self,

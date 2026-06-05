@@ -153,6 +153,33 @@ SEARCH_KNOWLEDGE_TOOL: dict[str, Any] = {
     },
 }
 
+# Read-only caller account lookup tool.
+# Lets the receptionist answer account-specific questions about the *current
+# caller* ("when's my appointment?", "what's my status?") by reading only that
+# caller's own CRM record. Execution is strictly read-only and hard-scoped to the
+# call's workspace + resolved contact, so it can never read another tenant's or
+# another person's data. Takes no arguments — the caller is implicit (the active
+# call), so the model cannot point it at a different contact.
+LOOKUP_CALLER_RECORD_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "lookup_caller_record",
+    "description": (
+        "Look up the CURRENT caller's own account record to answer questions "
+        "about THEIR appointments, status, or deals — e.g. 'when is my "
+        "appointment?', 'what's my status?', 'do I have anything booked?'. "
+        "Returns the caller's upcoming appointments, open opportunities/deals, "
+        "contact status and notes, and a short summary of the last interaction. "
+        "This is READ-ONLY and only ever returns THIS caller's record — you "
+        "cannot look up anyone else. If the caller is not recognized it returns "
+        "no record; in that case, do NOT invent details — offer to take their "
+        "information instead. Takes no arguments."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {},
+    },
+}
+
 APPLICATION_LINK_SMS_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "send_application_link",
@@ -344,6 +371,7 @@ def build_tools_list(
     enable_application_link_sms: bool = False,
     enable_transfer: bool = False,
     enable_search_knowledge: bool = False,
+    enable_lookup_caller_record: bool = False,
     timezone: str = "America/New_York",
 ) -> list[dict[str, Any]]:
     """Build a complete tools list based on enabled features.
@@ -356,6 +384,7 @@ def build_tools_list(
         enable_application_link_sms: Include fixed Prestyj application-link SMS tool
         enable_transfer: Include live human transfer/handoff tool
         enable_search_knowledge: Include the on-demand knowledge retrieval tool
+        enable_lookup_caller_record: Include the read-only caller record lookup tool
         timezone: Timezone for booking tools date context
 
     Returns:
@@ -373,6 +402,10 @@ def build_tools_list(
     # On-demand knowledge retrieval (replaces static CAG prompt-stuffing)
     if enable_search_knowledge:
         tools.append(SEARCH_KNOWLEDGE_TOOL)
+
+    # Read-only lookup of the current caller's own CRM record
+    if enable_lookup_caller_record:
+        tools.append(LOOKUP_CALLER_RECORD_TOOL)
 
     # DTMF for IVR
     if enable_dtmf:
@@ -461,6 +494,7 @@ def get_tools_from_agent_config(
         enable_application_link_sms=application_link_sms_enabled,
         enable_transfer=is_transfer_enabled(agent),
         enable_search_knowledge=is_search_knowledge_enabled(agent),
+        enable_lookup_caller_record=is_lookup_caller_record_enabled(agent),
         timezone=timezone,
     )
 
@@ -475,6 +509,19 @@ def is_search_knowledge_enabled(agent: Any) -> bool:
     if not agent:
         return False
     return "search_knowledge" in (agent.enabled_tools or [])
+
+
+def is_lookup_caller_record_enabled(agent: Any) -> bool:
+    """Return whether the read-only caller record lookup tool should be exposed.
+
+    Opt-in via ``"lookup_caller_record"`` in the agent's ``enabled_tools``. The
+    tool reads the caller's own CRM record (appointments, deals, status), so
+    operators enable it explicitly for receptionist-style agents rather than
+    exposing account data on every agent by default.
+    """
+    if not agent:
+        return False
+    return "lookup_caller_record" in (agent.enabled_tools or [])
 
 
 # Grok available voices (for validation)
