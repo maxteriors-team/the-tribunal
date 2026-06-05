@@ -489,6 +489,24 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                 except Exception as e:
                     log.exception("sms_fallback_trigger_failed", error=str(e))
 
+            # Automatic missed-call text-back: for unanswered INBOUND calls,
+            # invite the caller to book via SMS. The service is idempotent on
+            # call_control_id and only acts when the workspace has opted in, so
+            # it is safe to call on every hangup (including Telnyx retries).
+            if classification.outcome and message.direction == "inbound":
+                try:
+                    from app.services.telephony.missed_call_textback import (
+                        send_missed_call_textback,
+                    )
+
+                    await send_missed_call_textback(
+                        call_control_id=call_control_id,
+                        call_outcome=classification.outcome,
+                        log=log,
+                    )
+                except Exception as e:
+                    log.exception("missed_call_textback_failed", error=str(e))
+
 
 async def _handle_transfer_leg_answered(call_control_id: str, log: Any) -> bool:
     """Speak the warm-transfer briefing when the human closer's leg answers.
@@ -642,6 +660,23 @@ async def handle_machine_detection(payload: dict[Any, Any], log: Any) -> None:
             )
         except Exception as e:
             log.exception("sms_fallback_trigger_failed", error=str(e))
+
+        # Automatic missed-call text-back for voicemail-detected calls. The
+        # service self-guards on inbound direction and is idempotent on
+        # call_control_id, so it no-ops for outbound voicemails and never
+        # double-texts if the subsequent call.hangup also triggers it.
+        try:
+            from app.services.telephony.missed_call_textback import (
+                send_missed_call_textback,
+            )
+
+            await send_missed_call_textback(
+                call_control_id=call_control_id,
+                call_outcome=call_outcome,
+                log=log,
+            )
+        except Exception as e:
+            log.exception("missed_call_textback_failed", error=str(e))
 
 
 async def auto_answer_call_if_agent_assigned(
