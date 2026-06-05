@@ -329,6 +329,11 @@ export const queryKeys = {
     appointments: (workspaceId: string) =>
       ["realtor-appointments", workspaceId] as const,
   },
+  scorecard: {
+    all: (workspaceId: string) => ["scorecard", workspaceId] as const,
+    range: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["scorecard", workspaceId, normalizeQueryKeyParams(params)] as const,
+  },
   scraping: createResourceQueryKeys("scraping"),
   segments: {
     ...segments,

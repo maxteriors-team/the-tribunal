@@ -42,6 +42,7 @@ from app.api.v1 import (
     prompt_versions,
     realtime,
     reviews,
+    scorecard,
     scraping,
     segments,
     settings,
@@ -180,6 +181,11 @@ api_router.include_router(
     dashboard.router,
     prefix="/workspaces/{workspace_id}/dashboard",
     tags=["Dashboard"],
+)
+api_router.include_router(
+    scorecard.router,
+    prefix="/workspaces/{workspace_id}/scorecard",
+    tags=["Receptionist Scorecard"],
 )
 api_router.include_router(
     integrations.router,

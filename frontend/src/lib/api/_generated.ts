@@ -5105,6 +5105,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/scorecard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Receptionist Scorecard
+         * @description Return the receptionist scorecard for a workspace over a date range.
+         *
+         *     Aggregates calls answered, appointments booked, revenue/deposits booked,
+         *     missed calls and missed-call recovery (via the text-back/voicemail flow),
+         *     top call reasons, after-hours coverage, and average handle time.
+         *
+         *     The range defaults to the last 30 days when ``start_date``/``end_date`` are
+         *     omitted; both bounds are inclusive calendar dates.
+         */
+        get: operations["get_receptionist_scorecard_api_v1_workspaces__workspace_id__scorecard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/scraping/import": {
         parameters: {
             query?: never;
@@ -5882,6 +5909,7 @@ export interface paths {
          *     - call.answered: Call was answered
          *     - call.hangup: Call ended
          *     - call.machine.detection.ended: Voicemail/human detection result
+         *     - call.recording.saved: Recording stored (drives AI voicemail handling)
          *     - call.speak.ended: Spoken audio finished (used to bridge warm transfers)
          */
         post: operations["telnyx_voice_webhook_webhooks_telnyx_voice_post"];
@@ -7653,6 +7681,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * CallReasonStat
+         * @description A single call reason and how often it came up in the range.
+         */
+        CallReasonStat: {
+            /** Count */
+            count: number;
+            /** Reason */
+            reason: string;
         };
         /**
          * CallResponse
@@ -13277,6 +13315,54 @@ export interface components {
             time: string;
             /** Type */
             type: string;
+        };
+        /**
+         * ReceptionistScorecard
+         * @description Aggregated receptionist performance for a workspace over a date range.
+         */
+        ReceptionistScorecard: {
+            /** After Hours Answered */
+            after_hours_answered: number;
+            /** After Hours Calls */
+            after_hours_calls: number;
+            /** After Hours Coverage Rate */
+            after_hours_coverage_rate: number | null;
+            /** Answer Rate */
+            answer_rate: number | null;
+            /** Appointments Booked */
+            appointments_booked: number;
+            /** Avg Handle Time Seconds */
+            avg_handle_time_seconds: number | null;
+            /** Calls Answered */
+            calls_answered: number;
+            /** Calls Total */
+            calls_total: number;
+            /** Currency */
+            currency: string;
+            /** Deposits Booked */
+            deposits_booked: number;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Missed Calls */
+            missed_calls: number;
+            /** Missed Calls Recovered */
+            missed_calls_recovered: number;
+            /** Missed Calls Textback Sent */
+            missed_calls_textback_sent: number;
+            /** Recovery Rate */
+            recovery_rate: number | null;
+            /** Revenue Booked */
+            revenue_booked: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Top Call Reasons */
+            top_call_reasons: components["schemas"]["CallReasonStat"][];
         };
         /**
          * RegisterTokenRequest
@@ -25399,6 +25485,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeneratedReviewReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_receptionist_scorecard_api_v1_workspaces__workspace_id__scorecard_get: {
+        parameters: {
+            query?: {
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceptionistScorecard"];
                 };
             };
             /** @description Validation Error */

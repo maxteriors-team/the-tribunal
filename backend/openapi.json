@@ -4188,6 +4188,25 @@
         "title": "CallOutcomeWithContextResponse",
         "type": "object"
       },
+      "CallReasonStat": {
+        "description": "A single call reason and how often it came up in the range.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "count"
+        ],
+        "title": "CallReasonStat",
+        "type": "object"
+      },
       "CallResponse": {
         "description": "Voice call response.",
         "properties": {
@@ -19661,6 +19680,138 @@
           "time"
         ],
         "title": "RecentActivity",
+        "type": "object"
+      },
+      "ReceptionistScorecard": {
+        "description": "Aggregated receptionist performance for a workspace over a date range.",
+        "properties": {
+          "after_hours_answered": {
+            "title": "After Hours Answered",
+            "type": "integer"
+          },
+          "after_hours_calls": {
+            "title": "After Hours Calls",
+            "type": "integer"
+          },
+          "after_hours_coverage_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Hours Coverage Rate"
+          },
+          "answer_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Rate"
+          },
+          "appointments_booked": {
+            "title": "Appointments Booked",
+            "type": "integer"
+          },
+          "avg_handle_time_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Handle Time Seconds"
+          },
+          "calls_answered": {
+            "title": "Calls Answered",
+            "type": "integer"
+          },
+          "calls_total": {
+            "title": "Calls Total",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "deposits_booked": {
+            "title": "Deposits Booked",
+            "type": "number"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "missed_calls": {
+            "title": "Missed Calls",
+            "type": "integer"
+          },
+          "missed_calls_recovered": {
+            "title": "Missed Calls Recovered",
+            "type": "integer"
+          },
+          "missed_calls_textback_sent": {
+            "title": "Missed Calls Textback Sent",
+            "type": "integer"
+          },
+          "recovery_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Rate"
+          },
+          "revenue_booked": {
+            "title": "Revenue Booked",
+            "type": "number"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "top_call_reasons": {
+            "items": {
+              "$ref": "#/components/schemas/CallReasonStat"
+            },
+            "title": "Top Call Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "start_date",
+          "end_date",
+          "calls_total",
+          "calls_answered",
+          "answer_rate",
+          "missed_calls",
+          "missed_calls_textback_sent",
+          "missed_calls_recovered",
+          "recovery_rate",
+          "appointments_booked",
+          "revenue_booked",
+          "deposits_booked",
+          "currency",
+          "after_hours_calls",
+          "after_hours_answered",
+          "after_hours_coverage_rate",
+          "avg_handle_time_seconds",
+          "top_call_reasons"
+        ],
+        "title": "ReceptionistScorecard",
         "type": "object"
       },
       "RegisterTokenRequest": {
@@ -43952,6 +44103,89 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/scorecard": {
+      "get": {
+        "description": "Return the receptionist scorecard for a workspace over a date range.\n\nAggregates calls answered, appointments booked, revenue/deposits booked,\nmissed calls and missed-call recovery (via the text-back/voicemail flow),\ntop call reasons, after-hours coverage, and average handle time.\n\nThe range defaults to the last 30 days when ``start_date``/``end_date`` are\nomitted; both bounds are inclusive calendar dates.",
+        "operationId": "get_receptionist_scorecard_api_v1_workspaces__workspace_id__scorecard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceptionistScorecard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Receptionist Scorecard",
+        "tags": [
+          "Receptionist Scorecard"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/scraping/import": {
       "post": {
         "description": "Import selected leads as contacts.\n\nCreates contacts from the selected business results.\nSkips duplicates based on phone number.",
@@ -46448,7 +46682,7 @@
     },
     "/webhooks/telnyx/voice": {
       "post": {
-        "description": "Handle incoming Telnyx voice webhooks.\n\nTelnyx sends webhooks for:\n- call.initiated: Incoming call received\n- call.answered: Call was answered\n- call.hangup: Call ended\n- call.machine.detection.ended: Voicemail/human detection result\n- call.speak.ended: Spoken audio finished (used to bridge warm transfers)",
+        "description": "Handle incoming Telnyx voice webhooks.\n\nTelnyx sends webhooks for:\n- call.initiated: Incoming call received\n- call.answered: Call was answered\n- call.hangup: Call ended\n- call.machine.detection.ended: Voicemail/human detection result\n- call.recording.saved: Recording stored (drives AI voicemail handling)\n- call.speak.ended: Spoken audio finished (used to bridge warm transfers)",
         "operationId": "telnyx_voice_webhook_webhooks_telnyx_voice_post",
         "responses": {
           "200": {
