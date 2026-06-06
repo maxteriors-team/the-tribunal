@@ -362,6 +362,12 @@ export const queryKeys = {
     team: (workspaceId: string) => ["settings", "team", workspaceId] as const,
     integrations: (workspaceId: string) =>
       ["settings", "integrations", workspaceId] as const,
+    speedToLead: (workspaceId: string) =>
+      ["settings", "speed-to-lead", workspaceId] as const,
+    speedToLeadMetrics: (workspaceId: string) =>
+      ["settings", "speed-to-lead-metrics", workspaceId] as const,
+    missedCallTextback: (workspaceId: string) =>
+      ["settings", "missed-call-textback", workspaceId] as const,
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),

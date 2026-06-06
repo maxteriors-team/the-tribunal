@@ -7484,6 +7484,9 @@
           "revenue_stats": {
             "$ref": "#/components/schemas/RevenueStats"
           },
+          "speed_to_lead_stats": {
+            "$ref": "#/components/schemas/SpeedToLeadStats"
+          },
           "stats": {
             "$ref": "#/components/schemas/DashboardStats"
           },
@@ -7498,7 +7501,8 @@
           "agent_stats",
           "today_overview",
           "appointment_stats",
-          "revenue_stats"
+          "revenue_stats",
+          "speed_to_lead_stats"
         ],
         "title": "DashboardResponse",
         "type": "object"
@@ -13363,6 +13367,119 @@
           "variants"
         ],
         "title": "MessageTestWithVariantsResponse",
+        "type": "object"
+      },
+      "MissedCallTextbackSettingsResponse": {
+        "description": "Per-workspace missed-call text-back configuration.",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "template": {
+            "default": "Sorry we missed you — want me to book you in?",
+            "title": "Template",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "MissedCallTextbackSettingsResponse",
+        "type": "object"
+      },
+      "MissedCallTextbackSettingsUpdate": {
+        "description": "Partial update for missed-call text-back configuration.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "title": "MissedCallTextbackSettingsUpdate",
         "type": "object"
       },
       "MissionStatus": {
@@ -22474,6 +22591,323 @@
         "title": "SequenceEnrollmentStatus",
         "type": "string"
       },
+      "SpeedToLeadMetrics": {
+        "description": "First-response SLA rollup over the recent window (operator-facing).",
+        "properties": {
+          "avg_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Response Seconds"
+          },
+          "fastest_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fastest Response Seconds"
+          },
+          "leads_measured": {
+            "title": "Leads Measured",
+            "type": "integer"
+          },
+          "median_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Response Seconds"
+          },
+          "pct_within_sla": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Within Sla"
+          },
+          "sla_seconds": {
+            "title": "Sla Seconds",
+            "type": "integer"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "within_sla": {
+            "title": "Within Sla",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "sla_seconds",
+          "leads_measured",
+          "within_sla",
+          "pct_within_sla",
+          "avg_response_seconds",
+          "median_response_seconds",
+          "fastest_response_seconds"
+        ],
+        "title": "SpeedToLeadMetrics",
+        "type": "object"
+      },
+      "SpeedToLeadProofResponse": {
+        "description": "Public, origin-validated proof badge for the lead-form widget.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "leads_measured": {
+            "title": "Leads Measured",
+            "type": "integer"
+          },
+          "median_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Response Seconds"
+          },
+          "pct_within_sla": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Within Sla"
+          },
+          "sla_seconds": {
+            "title": "Sla Seconds",
+            "type": "integer"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "sla_seconds",
+          "window_days",
+          "leads_measured",
+          "pct_within_sla",
+          "median_response_seconds",
+          "headline"
+        ],
+        "title": "SpeedToLeadProofResponse",
+        "type": "object"
+      },
+      "SpeedToLeadSettingsResponse": {
+        "description": "Per-workspace speed-to-lead SLA configuration.",
+        "properties": {
+          "alert_enabled": {
+            "default": true,
+            "title": "Alert Enabled",
+            "type": "boolean"
+          },
+          "badge_enabled": {
+            "default": false,
+            "title": "Badge Enabled",
+            "type": "boolean"
+          },
+          "badge_window_days": {
+            "default": 30,
+            "title": "Badge Window Days",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "sla_seconds": {
+            "default": 60,
+            "title": "Sla Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "SpeedToLeadSettingsResponse",
+        "type": "object"
+      },
+      "SpeedToLeadSettingsUpdate": {
+        "description": "Partial update for speed-to-lead SLA configuration.",
+        "properties": {
+          "alert_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alert Enabled"
+          },
+          "badge_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge Enabled"
+          },
+          "badge_window_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badge Window Days"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "sla_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Seconds"
+          }
+        },
+        "title": "SpeedToLeadSettingsUpdate",
+        "type": "object"
+      },
+      "SpeedToLeadStats": {
+        "description": "First-response (speed-to-lead) SLA performance for the dashboard.",
+        "properties": {
+          "avg_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Response Seconds"
+          },
+          "fastest_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fastest Response Seconds"
+          },
+          "leads_measured": {
+            "title": "Leads Measured",
+            "type": "integer"
+          },
+          "median_response_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Response Seconds"
+          },
+          "pct_within_sla": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Within Sla"
+          },
+          "sla_seconds": {
+            "title": "Sla Seconds",
+            "type": "integer"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "within_sla": {
+            "title": "Within Sla",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "sla_seconds",
+          "leads_measured",
+          "within_sla",
+          "pct_within_sla",
+          "avg_response_seconds",
+          "median_response_seconds",
+          "fastest_response_seconds"
+        ],
+        "title": "SpeedToLeadStats",
+        "type": "object"
+      },
       "TagCreate": {
         "description": "Schema for creating a tag.",
         "properties": {
@@ -26537,6 +26971,88 @@
         ]
       }
     },
+    "/api/v1/p/leads/{public_key}/proof": {
+      "get": {
+        "description": "Public speed-to-lead proof badge for embedding on a lead-form widget.\n\nOrigin-validated against the lead source's allowed domains. Returns a\ndisabled badge (no stats) unless the workspace opted in and has enough\nmeasured leads to publish an honest headline.",
+        "operationId": "get_lead_form_proof_api_v1_p_leads__public_key__proof_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "public_key",
+            "required": true,
+            "schema": {
+              "title": "Public Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeedToLeadProofResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Lead Form Proof",
+        "tags": [
+          "Public Lead Form"
+        ]
+      },
+      "options": {
+        "description": "Handle CORS preflight for the public speed-to-lead proof badge.",
+        "operationId": "lead_form_proof_preflight_api_v1_p_leads__public_key__proof_options",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "public_key",
+            "required": true,
+            "schema": {
+              "title": "Public Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lead Form Proof Preflight",
+        "tags": [
+          "Public Lead Form"
+        ]
+      }
+    },
     "/api/v1/p/offers/{slug}": {
       "get": {
         "description": "Get a public offer by its slug.",
@@ -27872,6 +28388,267 @@
           }
         ],
         "summary": "Get Integrations",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/missed-call-textback": {
+      "get": {
+        "description": "Get workspace missed-call text-back settings.",
+        "operationId": "get_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissedCallTextbackSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Missed Call Textback",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update workspace missed-call text-back settings.",
+        "operationId": "update_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MissedCallTextbackSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissedCallTextbackSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Missed Call Textback",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/speed-to-lead": {
+      "get": {
+        "description": "Get workspace speed-to-lead SLA settings.",
+        "operationId": "get_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeedToLeadSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Speed To Lead",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update workspace speed-to-lead SLA settings.",
+        "operationId": "update_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedToLeadSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeedToLeadSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Speed To Lead",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/speed-to-lead/metrics": {
+      "get": {
+        "description": "Get live first-response SLA metrics for the workspace.",
+        "operationId": "get_speed_to_lead_metrics_api_v1_settings_workspaces__workspace_id__speed_to_lead_metrics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeedToLeadMetrics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Speed To Lead Metrics",
         "tags": [
           "Settings"
         ]

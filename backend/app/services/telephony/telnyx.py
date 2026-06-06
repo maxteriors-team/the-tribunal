@@ -293,6 +293,13 @@ class TelnyxSMSService:
         conversation.last_message_at = datetime.now(UTC)
         conversation.last_message_direction = "outbound"
 
+        # Speed-to-lead SLA: a successful outbound text is a "first response" to
+        # an inbound-led conversation. No-ops for outbound-first conversations.
+        if message.status != MessageStatus.FAILED:
+            from app.services.sla import record_first_response_and_maybe_alert
+
+            await record_first_response_and_maybe_alert(db, conversation, message.sent_at, log)
+
         await db.commit()
         await db.refresh(message)
 
@@ -381,6 +388,11 @@ class TelnyxSMSService:
         conversation.last_message_at = datetime.now(UTC)
         conversation.last_message_direction = "inbound"
         conversation.unread_count += 1
+
+        # Speed-to-lead SLA: anchor the lead's first inbound touch.
+        from app.services.sla import mark_inbound_lead
+
+        mark_inbound_lead(conversation)
 
         # NOTE: Opt-out detection has been moved to process_inbound_with_ai()
         # where we use AI classification to distinguish between:

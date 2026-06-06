@@ -6,6 +6,13 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.speed_to_lead import (
+    MissedCallTextbackSettingsResponse,
+    MissedCallTextbackSettingsUpdate,
+    SpeedToLeadMetrics,
+    SpeedToLeadSettingsResponse,
+    SpeedToLeadSettingsUpdate,
+)
 from app.schemas.user import (
     BusinessHoursSettings,
     BusinessHoursUpdate,
@@ -18,6 +25,16 @@ from app.schemas.user import (
     TeamMemberResponse,
     UserProfileResponse,
     UserProfileUpdate,
+)
+from app.services.sla.speed_to_lead import (
+    SETTINGS_KEY as SPEED_TO_LEAD_KEY,
+)
+from app.services.sla.speed_to_lead import (
+    compute_sla_metrics,
+    get_speed_to_lead_settings,
+)
+from app.services.telephony.missed_call_textback import (
+    SETTINGS_KEY as MISSED_CALL_TEXTBACK_KEY,
 )
 
 router = APIRouter()
@@ -267,6 +284,120 @@ async def update_call_forwarding(
     await db.refresh(workspace)
 
     return CallForwardingSettings(**workspace.settings.get("call_forwarding", {}))
+
+
+@router.get(
+    "/workspaces/{workspace_id}/speed-to-lead",
+    response_model=SpeedToLeadSettingsResponse,
+)
+async def get_speed_to_lead(
+    workspace: WorkspaceAccess,
+) -> SpeedToLeadSettingsResponse:
+    """Get workspace speed-to-lead SLA settings."""
+    config = get_speed_to_lead_settings(workspace)
+    return SpeedToLeadSettingsResponse(
+        enabled=config.enabled,
+        sla_seconds=config.sla_seconds,
+        alert_enabled=config.alert_enabled,
+        badge_enabled=config.badge_enabled,
+        badge_window_days=config.badge_window_days,
+    )
+
+
+@router.put(
+    "/workspaces/{workspace_id}/speed-to-lead",
+    response_model=SpeedToLeadSettingsResponse,
+)
+async def update_speed_to_lead(
+    update: SpeedToLeadSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> SpeedToLeadSettingsResponse:
+    """Update workspace speed-to-lead SLA settings."""
+    current_settings = dict(workspace.settings)
+    speed_to_lead = dict(current_settings.get(SPEED_TO_LEAD_KEY, {}))
+    speed_to_lead.update(update.model_dump(exclude_unset=True))
+    current_settings[SPEED_TO_LEAD_KEY] = speed_to_lead
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    config = get_speed_to_lead_settings(workspace)
+    return SpeedToLeadSettingsResponse(
+        enabled=config.enabled,
+        sla_seconds=config.sla_seconds,
+        alert_enabled=config.alert_enabled,
+        badge_enabled=config.badge_enabled,
+        badge_window_days=config.badge_window_days,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/speed-to-lead/metrics",
+    response_model=SpeedToLeadMetrics,
+)
+async def get_speed_to_lead_metrics(
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> SpeedToLeadMetrics:
+    """Get live first-response SLA metrics for the workspace."""
+    config = get_speed_to_lead_settings(workspace)
+    metrics = await compute_sla_metrics(
+        db,
+        workspace.id,
+        sla_seconds=config.sla_seconds,
+        window_days=config.badge_window_days,
+    )
+    return SpeedToLeadMetrics(
+        window_days=metrics.window_days,
+        sla_seconds=metrics.sla_seconds,
+        leads_measured=metrics.leads_measured,
+        within_sla=metrics.within_sla,
+        pct_within_sla=metrics.pct_within_sla,
+        avg_response_seconds=metrics.avg_response_seconds,
+        median_response_seconds=metrics.median_response_seconds,
+        fastest_response_seconds=metrics.fastest_response_seconds,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/missed-call-textback",
+    response_model=MissedCallTextbackSettingsResponse,
+)
+async def get_missed_call_textback(
+    workspace: WorkspaceAccess,
+) -> MissedCallTextbackSettingsResponse:
+    """Get workspace missed-call text-back settings."""
+    raw = workspace.settings.get(MISSED_CALL_TEXTBACK_KEY, {})
+    if not isinstance(raw, dict):
+        raw = {}
+    return MissedCallTextbackSettingsResponse(**raw)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/missed-call-textback",
+    response_model=MissedCallTextbackSettingsResponse,
+)
+async def update_missed_call_textback(
+    update: MissedCallTextbackSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> MissedCallTextbackSettingsResponse:
+    """Update workspace missed-call text-back settings."""
+    current_settings = dict(workspace.settings)
+    textback = dict(current_settings.get(MISSED_CALL_TEXTBACK_KEY, {}))
+    textback.update(update.model_dump(exclude_unset=True))
+    current_settings[MISSED_CALL_TEXTBACK_KEY] = textback
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    refreshed = workspace.settings.get(MISSED_CALL_TEXTBACK_KEY, {})
+    if not isinstance(refreshed, dict):
+        refreshed = {}
+    return MissedCallTextbackSettingsResponse(**refreshed)
 
 
 @router.get("/workspaces/{workspace_id}/card-settings")

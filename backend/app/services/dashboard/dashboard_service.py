@@ -27,7 +27,12 @@ from app.schemas.dashboard import (
     RecentActivity,
     RevenueAttributionStat,
     RevenueStats,
+    SpeedToLeadStats,
     TodayOverview,
+)
+from app.services.sla.speed_to_lead import (
+    compute_sla_metrics,
+    get_speed_to_lead_settings,
 )
 
 logger = structlog.get_logger()
@@ -709,6 +714,26 @@ class DashboardService:
 
         return by_agent, by_campaign, by_prompt_version
 
+    async def get_speed_to_lead_stats(self, workspace: Workspace) -> SpeedToLeadStats:
+        """Compute first-response SLA performance over the configured window."""
+        config = get_speed_to_lead_settings(workspace)
+        metrics = await compute_sla_metrics(
+            self.db,
+            workspace.id,
+            sla_seconds=config.sla_seconds,
+            window_days=config.badge_window_days,
+        )
+        return SpeedToLeadStats(
+            window_days=metrics.window_days,
+            sla_seconds=metrics.sla_seconds,
+            leads_measured=metrics.leads_measured,
+            within_sla=metrics.within_sla,
+            pct_within_sla=metrics.pct_within_sla,
+            avg_response_seconds=metrics.avg_response_seconds,
+            median_response_seconds=metrics.median_response_seconds,
+            fastest_response_seconds=metrics.fastest_response_seconds,
+        )
+
     async def get_full_dashboard(self, workspace: Workspace) -> DashboardResponse:
         """Get full dashboard data with Redis caching (5-minute TTL)."""
         cache_key = f"dashboard:stats:{workspace.id}"
@@ -731,6 +756,7 @@ class DashboardService:
         today_overview = await self.get_today_overview(workspace)
         appointment_stats = await self.get_appointment_stats(workspace)
         revenue_stats = await self.get_revenue_stats(workspace)
+        speed_to_lead_stats = await self.get_speed_to_lead_stats(workspace)
 
         response = DashboardResponse(
             stats=stats,
@@ -740,6 +766,7 @@ class DashboardService:
             today_overview=today_overview,
             appointment_stats=appointment_stats,
             revenue_stats=revenue_stats,
+            speed_to_lead_stats=speed_to_lead_stats,
         )
 
         try:

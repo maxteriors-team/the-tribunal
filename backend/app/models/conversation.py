@@ -91,6 +91,14 @@ class Conversation(Base):
             "last_message_at",
             postgresql_ops={"last_message_at": "DESC"},
         ),
+        # Speed-to-lead SLA: aggregate first-response stats per workspace over
+        # a recent window. Partial-friendly composite index keeps the badge /
+        # dashboard rollups cheap.
+        Index(
+            "ix_conversations_workspace_first_response_at",
+            "workspace_id",
+            "first_response_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -150,6 +158,20 @@ class Conversation(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     last_message_direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Speed-to-lead SLA tracking. ``first_inbound_at`` anchors when the lead
+    # first reached out (first inbound message/call); ``first_response_at`` is
+    # when the AI/team first responded. ``first_response_seconds`` is the
+    # denormalized delta, populated once at response time so SLA rollups and
+    # the public proof badge avoid scanning the messages table. NULL until the
+    # conversation is an inbound-led lead that has received its first response.
+    first_inbound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_response_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_response_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Origin tracking
     initiated_by: Mapped[str] = mapped_column(

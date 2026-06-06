@@ -21,10 +21,16 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.demo_request import DemoRequest
 from app.models.lead_source import LeadSource
-from app.models.workspace import WorkspaceMembership
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
+from app.schemas.speed_to_lead import SpeedToLeadProofResponse
 from app.services.idempotency import derive_outbound_key
 from app.services.push_notifications import push_notification_service
+from app.services.sla.speed_to_lead import (
+    MIN_LEADS_FOR_PUBLIC_BADGE,
+    compute_sla_metrics,
+    get_speed_to_lead_settings,
+)
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
@@ -285,6 +291,100 @@ async def lead_form_preflight(
             },
         )
     return Response(status_code=403)
+
+
+def _empty_proof(sla_seconds: int, window_days: int) -> SpeedToLeadProofResponse:
+    """Return a disabled proof badge (off, or sample too small to publish)."""
+    return SpeedToLeadProofResponse(
+        enabled=False,
+        sla_seconds=sla_seconds,
+        window_days=window_days,
+        leads_measured=0,
+        pct_within_sla=None,
+        median_response_seconds=None,
+        headline=None,
+    )
+
+
+@router.options("/{public_key}/proof")
+async def lead_form_proof_preflight(
+    public_key: str,
+    request: Request,
+    db: DB,
+) -> Response:
+    """Handle CORS preflight for the public speed-to-lead proof badge."""
+    result = await db.execute(
+        select(LeadSource).where(
+            LeadSource.public_key == public_key,
+            LeadSource.enabled.is_(True),
+        )
+    )
+    lead_source = result.scalar_one_or_none()
+    origin = request.headers.get("origin", "")
+    if lead_source and validate_origin(request, lead_source.allowed_domains):
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
+    return Response(status_code=403)
+
+
+@router.get("/{public_key}/proof", response_model=SpeedToLeadProofResponse)
+async def get_lead_form_proof(
+    public_key: str,
+    request: Request,
+    response: Response,
+    db: DB,
+) -> SpeedToLeadProofResponse:
+    """Public speed-to-lead proof badge for embedding on a lead-form widget.
+
+    Origin-validated against the lead source's allowed domains. Returns a
+    disabled badge (no stats) unless the workspace opted in and has enough
+    measured leads to publish an honest headline.
+    """
+    result = await db.execute(select(LeadSource).where(LeadSource.public_key == public_key))
+    lead_source = result.scalar_one_or_none()
+    if not lead_source or not lead_source.enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead source not found")
+    if not validate_origin(request, lead_source.allowed_domains):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
+
+    origin = request.headers.get("origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+
+    workspace = await db.get(Workspace, lead_source.workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    config = get_speed_to_lead_settings(workspace)
+    if not (config.enabled and config.badge_enabled):
+        return _empty_proof(config.sla_seconds, config.badge_window_days)
+
+    metrics = await compute_sla_metrics(
+        db,
+        workspace.id,
+        sla_seconds=config.sla_seconds,
+        window_days=config.badge_window_days,
+    )
+    if metrics.leads_measured < MIN_LEADS_FOR_PUBLIC_BADGE or metrics.pct_within_sla is None:
+        return _empty_proof(config.sla_seconds, config.badge_window_days)
+
+    headline = f"{metrics.pct_within_sla}% of leads answered in under {config.sla_seconds}s"
+    return SpeedToLeadProofResponse(
+        enabled=True,
+        sla_seconds=config.sla_seconds,
+        window_days=config.badge_window_days,
+        leads_measured=metrics.leads_measured,
+        pct_within_sla=metrics.pct_within_sla,
+        median_response_seconds=metrics.median_response_seconds,
+        headline=headline,
+    )
 
 
 @router.post("/{public_key}", response_model=LeadSubmitResponse)

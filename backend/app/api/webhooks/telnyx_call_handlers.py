@@ -123,6 +123,11 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:
         conversation.last_message_preview = "Incoming call"
         conversation.last_message_at = datetime.now(UTC)
 
+        # Speed-to-lead SLA: anchor the lead's first inbound touch (the call).
+        from app.services.sla import mark_inbound_lead
+
+        mark_inbound_lead(conversation)
+
         await db.commit()
         await db.refresh(message)
 
@@ -190,6 +195,15 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
             return
 
         message.status = MessageStatus.ANSWERED
+
+        # Speed-to-lead SLA: answering an inbound call is the first response.
+        if message.direction == "inbound" and message.conversation is not None:
+            from app.services.sla import record_first_response_and_maybe_alert
+
+            await record_first_response_and_maybe_alert(
+                db, message.conversation, datetime.now(UTC), log
+            )
+
         await db.commit()
 
         # Determine agent_id: prefer message.agent_id, fall back to conversation's assigned_agent_id

@@ -106,6 +106,19 @@ class RevenueStats(BaseModel):
     by_prompt_version: list[RevenueAttributionStat]
 
 
+class SpeedToLeadStats(BaseModel):
+    """First-response (speed-to-lead) SLA performance for the dashboard."""
+
+    window_days: int
+    sla_seconds: int
+    leads_measured: int
+    within_sla: int
+    pct_within_sla: float | None  # null when no leads measured in window
+    avg_response_seconds: int | None
+    median_response_seconds: int | None
+    fastest_response_seconds: int | None
+
+
 class DashboardResponse(BaseModel):
     """Complete dashboard response."""
 
@@ -116,3 +129,4 @@ class DashboardResponse(BaseModel):
     today_overview: TodayOverview
     appointment_stats: AppointmentStats
     revenue_stats: RevenueStats
+    speed_to_lead_stats: SpeedToLeadStats

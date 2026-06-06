@@ -513,6 +513,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/leads/{public_key}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lead Form Proof
+         * @description Public speed-to-lead proof badge for embedding on a lead-form widget.
+         *
+         *     Origin-validated against the lead source's allowed domains. Returns a
+         *     disabled badge (no stats) unless the workspace opted in and has enough
+         *     measured leads to publish an honest headline.
+         */
+        get: operations["get_lead_form_proof_api_v1_p_leads__public_key__proof_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        /**
+         * Lead Form Proof Preflight
+         * @description Handle CORS preflight for the public speed-to-lead proof badge.
+         */
+        options: operations["lead_form_proof_preflight_api_v1_p_leads__public_key__proof_options"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/offers/{slug}": {
         parameters: {
             query?: never;
@@ -949,6 +977,74 @@ export interface paths {
          * @description Get workspace integration statuses.
          */
         get: operations["get_integrations_api_v1_settings_workspaces__workspace_id__integrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/missed-call-textback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Missed Call Textback
+         * @description Get workspace missed-call text-back settings.
+         */
+        get: operations["get_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_get"];
+        /**
+         * Update Missed Call Textback
+         * @description Update workspace missed-call text-back settings.
+         */
+        put: operations["update_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/speed-to-lead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Speed To Lead
+         * @description Get workspace speed-to-lead SLA settings.
+         */
+        get: operations["get_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_get"];
+        /**
+         * Update Speed To Lead
+         * @description Update workspace speed-to-lead SLA settings.
+         */
+        put: operations["update_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/speed-to-lead/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Speed To Lead Metrics
+         * @description Get live first-response SLA metrics for the workspace.
+         */
+        get: operations["get_speed_to_lead_metrics_api_v1_settings_workspaces__workspace_id__speed_to_lead_metrics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8991,6 +9087,7 @@ export interface components {
             /** Recent Activity */
             recent_activity: components["schemas"]["RecentActivity"][];
             revenue_stats: components["schemas"]["RevenueStats"];
+            speed_to_lead_stats: components["schemas"]["SpeedToLeadStats"];
             stats: components["schemas"]["DashboardStats"];
             today_overview: components["schemas"]["TodayOverview"];
         };
@@ -11302,6 +11399,44 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * MissedCallTextbackSettingsResponse
+         * @description Per-workspace missed-call text-back configuration.
+         */
+        MissedCallTextbackSettingsResponse: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
+            /**
+             * Template
+             * @default Sorry we missed you — want me to book you in?
+             */
+            template: string;
+            /** Timezone */
+            timezone?: string | null;
+        };
+        /**
+         * MissedCallTextbackSettingsUpdate
+         * @description Partial update for missed-call text-back configuration.
+         */
+        MissedCallTextbackSettingsUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
+            /** Template */
+            template?: string | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /**
          * MissionStatus
@@ -14616,6 +14751,117 @@ export interface components {
          */
         SequenceEnrollmentStatus: "active" | "paused" | "completed" | "replied" | "opted_out" | "converted" | "failed" | "cancelled";
         /**
+         * SpeedToLeadMetrics
+         * @description First-response SLA rollup over the recent window (operator-facing).
+         */
+        SpeedToLeadMetrics: {
+            /** Avg Response Seconds */
+            avg_response_seconds: number | null;
+            /** Fastest Response Seconds */
+            fastest_response_seconds: number | null;
+            /** Leads Measured */
+            leads_measured: number;
+            /** Median Response Seconds */
+            median_response_seconds: number | null;
+            /** Pct Within Sla */
+            pct_within_sla: number | null;
+            /** Sla Seconds */
+            sla_seconds: number;
+            /** Window Days */
+            window_days: number;
+            /** Within Sla */
+            within_sla: number;
+        };
+        /**
+         * SpeedToLeadProofResponse
+         * @description Public, origin-validated proof badge for the lead-form widget.
+         */
+        SpeedToLeadProofResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /** Headline */
+            headline: string | null;
+            /** Leads Measured */
+            leads_measured: number;
+            /** Median Response Seconds */
+            median_response_seconds: number | null;
+            /** Pct Within Sla */
+            pct_within_sla: number | null;
+            /** Sla Seconds */
+            sla_seconds: number;
+            /** Window Days */
+            window_days: number;
+        };
+        /**
+         * SpeedToLeadSettingsResponse
+         * @description Per-workspace speed-to-lead SLA configuration.
+         */
+        SpeedToLeadSettingsResponse: {
+            /**
+             * Alert Enabled
+             * @default true
+             */
+            alert_enabled: boolean;
+            /**
+             * Badge Enabled
+             * @default false
+             */
+            badge_enabled: boolean;
+            /**
+             * Badge Window Days
+             * @default 30
+             */
+            badge_window_days: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Sla Seconds
+             * @default 60
+             */
+            sla_seconds: number;
+        };
+        /**
+         * SpeedToLeadSettingsUpdate
+         * @description Partial update for speed-to-lead SLA configuration.
+         */
+        SpeedToLeadSettingsUpdate: {
+            /** Alert Enabled */
+            alert_enabled?: boolean | null;
+            /** Badge Enabled */
+            badge_enabled?: boolean | null;
+            /** Badge Window Days */
+            badge_window_days?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Sla Seconds */
+            sla_seconds?: number | null;
+        };
+        /**
+         * SpeedToLeadStats
+         * @description First-response (speed-to-lead) SLA performance for the dashboard.
+         */
+        SpeedToLeadStats: {
+            /** Avg Response Seconds */
+            avg_response_seconds: number | null;
+            /** Fastest Response Seconds */
+            fastest_response_seconds: number | null;
+            /** Leads Measured */
+            leads_measured: number;
+            /** Median Response Seconds */
+            median_response_seconds: number | null;
+            /** Pct Within Sla */
+            pct_within_sla: number | null;
+            /** Sla Seconds */
+            sla_seconds: number;
+            /** Window Days */
+            window_days: number;
+            /** Within Sla */
+            within_sla: number;
+        };
+        /**
          * TagCreate
          * @description Schema for creating a tag.
          */
@@ -16533,6 +16779,68 @@ export interface operations {
             };
         };
     };
+    get_lead_form_proof_api_v1_p_leads__public_key__proof_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeedToLeadProofResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lead_form_proof_preflight_api_v1_p_leads__public_key__proof_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_public_offer_api_v1_p_offers__slug__get: {
         parameters: {
             query?: never;
@@ -17390,6 +17698,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissedCallTextbackSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MissedCallTextbackSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissedCallTextbackSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeedToLeadSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_speed_to_lead_api_v1_settings_workspaces__workspace_id__speed_to_lead_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeedToLeadSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeedToLeadSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_speed_to_lead_metrics_api_v1_settings_workspaces__workspace_id__speed_to_lead_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeedToLeadMetrics"];
                 };
             };
             /** @description Validation Error */

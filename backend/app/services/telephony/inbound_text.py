@@ -260,6 +260,11 @@ async def persist_inbound_text_message(
     conversation.last_message_direction = "inbound"
     conversation.unread_count += 1
 
+    # Speed-to-lead SLA: anchor the lead's first inbound touch.
+    from app.services.sla import mark_inbound_lead
+
+    mark_inbound_lead(conversation)
+
     if conversation.contact_id:
         try:
             from app.services.contacts.engagement_score import record_engagement
