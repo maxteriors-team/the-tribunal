@@ -282,6 +282,10 @@ export const queryKeys = {
     ...opportunities,
     pipelines: (workspaceId: string) =>
       [...opportunities.all(workspaceId), "pipelines"] as const,
+    coach: (workspaceId: string, opportunityId: string) =>
+      [...opportunities.detail(workspaceId, opportunityId), "coach"] as const,
+    atRisk: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [...opportunities.all(workspaceId), "at-risk", params ?? null] as const,
   },
   pendingActions: {
     ...pendingActions,

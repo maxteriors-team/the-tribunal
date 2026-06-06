@@ -4199,6 +4199,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/opportunities/coaching/at-risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List At Risk Deals
+         * @description Rank open opportunities by AI deal-risk score (most at-risk first).
+         */
+        get: operations["list_at_risk_deals_api_v1_workspaces__workspace_id__opportunities_coaching_at_risk_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/opportunities/pipelines": {
         parameters: {
             query?: never;
@@ -4314,6 +4334,46 @@ export interface paths {
          * @description Delete an opportunity.
          */
         delete: operations["delete_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/coach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coach Opportunity
+         * @description Get the AI Deal Coach card for one opportunity.
+         */
+        get: operations["coach_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/coach/draft-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft Coach Action
+         * @description Queue the coach's drafted next-best action through the approval gate.
+         */
+        post: operations["draft_coach_action_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_draft_action_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6998,6 +7058,65 @@ export interface components {
             }[] | null;
         };
         /**
+         * AtRiskDeal
+         * @description One ranked at-risk deal for the proactive list view.
+         */
+        AtRiskDeal: {
+            /** Amount */
+            amount?: number | null;
+            /**
+             * Amount At Risk
+             * @default 0
+             */
+            amount_at_risk: number;
+            /** Contact Name */
+            contact_name?: string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /** Days Since Last Contact */
+            days_since_last_contact?: number | null;
+            /**
+             * Deal Health
+             * @enum {string}
+             */
+            deal_health: "healthy" | "watch" | "at_risk" | "critical";
+            /** Health Score */
+            health_score: number;
+            /** Name */
+            name: string;
+            /**
+             * Opportunity Id
+             * Format: uuid
+             */
+            opportunity_id: string;
+            /** Primary Contact Id */
+            primary_contact_id?: number | null;
+            /** Risk Score */
+            risk_score: number;
+            /** Stage Name */
+            stage_name?: string | null;
+            /** Top Risk */
+            top_risk: string;
+        };
+        /**
+         * AtRiskDealsResponse
+         * @description Ranked list of at-risk deals (most at-risk first).
+         */
+        AtRiskDealsResponse: {
+            /** Items */
+            items: components["schemas"]["AtRiskDeal"][];
+            /** Total */
+            total: number;
+            /**
+             * Total Amount At Risk
+             * @default 0
+             */
+            total_amount_at_risk: number;
+        };
+        /**
          * AutomationActionSchema
          * @description Schema for automation action.
          */
@@ -8910,6 +9029,123 @@ export interface components {
             open: string;
         };
         /**
+         * DealCoachCard
+         * @description The full coaching card for one opportunity.
+         */
+        DealCoachCard: {
+            /** Amount */
+            amount?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Deal Health
+             * @enum {string}
+             */
+            deal_health: "healthy" | "watch" | "at_risk" | "critical";
+            drafted_action: components["schemas"]["DraftedAction"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Generated By
+             * @enum {string}
+             */
+            generated_by: "llm" | "heuristic";
+            /** Health Score */
+            health_score: number;
+            /** Health Summary */
+            health_summary: string;
+            /** Name */
+            name: string;
+            next_best_action: components["schemas"]["NextBestAction"];
+            /**
+             * Opportunity Id
+             * Format: uuid
+             */
+            opportunity_id: string;
+            /** Primary Contact Id */
+            primary_contact_id?: number | null;
+            /** Risk Factors */
+            risk_factors?: string[];
+            signals: components["schemas"]["DealSignals"];
+            /** Top Risk */
+            top_risk: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * DealSignals
+         * @description Deterministic per-deal signals aggregated from existing data.
+         *
+         *     These are computed (not invented by the LLM) and are surfaced so the
+         *     operator can see the evidence behind the coaching.
+         */
+        DealSignals: {
+            /**
+             * Awaiting Reply
+             * @default false
+             */
+            awaiting_reply: boolean;
+            /**
+             * Call Count
+             * @default 0
+             */
+            call_count: number;
+            /** Days In Stage */
+            days_in_stage?: number | null;
+            /** Days Since Last Contact */
+            days_since_last_contact?: number | null;
+            /**
+             * Engagement Score
+             * @default 0
+             */
+            engagement_score: number;
+            /**
+             * Expected Close Overdue
+             * @default false
+             */
+            expected_close_overdue: boolean;
+            /** Last Call Sentiment */
+            last_call_sentiment?: string | null;
+            /**
+             * Lead Score
+             * @default 0
+             */
+            lead_score: number;
+            /** Objections */
+            objections?: string[];
+            /** Open Next Steps */
+            open_next_steps?: string[];
+            /**
+             * Probability
+             * @default 0
+             */
+            probability: number;
+            /**
+             * Sentiment Trend
+             * @default unknown
+             * @enum {string}
+             */
+            sentiment_trend: "improving" | "declining" | "flat" | "unknown";
+            /**
+             * Sms Count
+             * @default 0
+             */
+            sms_count: number;
+            /** Stage Name */
+            stage_name?: string | null;
+        };
+        /**
          * DeliveryMethod
          * @description How the lead magnet is delivered.
          * @enum {string}
@@ -8959,6 +9195,59 @@ export interface components {
          * @enum {string}
          */
         DiscoverySourceType: "google_places" | "web_scrape" | "csv_import" | "manual" | "api" | "linkedin" | "other";
+        /**
+         * DraftActionRequest
+         * @description Optional operator overrides when queuing the drafted action.
+         */
+        DraftActionRequest: {
+            /** Body */
+            body?: string | null;
+            /** Channel */
+            channel?: ("sms" | "call" | "email" | "offer" | "task") | null;
+            /** Description */
+            description?: string | null;
+        };
+        /**
+         * DraftActionResponse
+         * @description Result of queuing a drafted action through the approval gate.
+         */
+        DraftActionResponse: {
+            /** Action Type */
+            action_type: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "pending" | "auto" | "blocked";
+            /** Description */
+            description: string;
+            /** Pending Action Id */
+            pending_action_id?: string | null;
+        };
+        /**
+         * DraftedAction
+         * @description A ready-to-approve draft of the next-best action.
+         *
+         *     Maps directly onto a PendingAction so a single click queues it through
+         *     the existing HITL approval gate.
+         */
+        DraftedAction: {
+            /** Action Type */
+            action_type: string;
+            /** Body */
+            body: string;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "call" | "email" | "offer" | "task";
+            /** Description */
+            description: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * DripCampaignCreate
          * @description Request to create a drip campaign.
@@ -11020,6 +11309,23 @@ export interface components {
          * @enum {string}
          */
         MissionStatus: "draft" | "active" | "paused" | "completed" | "archived";
+        /**
+         * NextBestAction
+         * @description The single recommended next move for the operator.
+         */
+        NextBestAction: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "call" | "email" | "offer" | "task";
+            /** Rationale */
+            rationale: string;
+            /** Timing */
+            timing: string;
+            /** Title */
+            title: string;
+        };
         /**
          * NotificationSettings
          * @description Schema for notification settings.
@@ -23925,6 +24231,40 @@ export interface operations {
             };
         };
     };
+    list_at_risk_deals_api_v1_workspaces__workspace_id__opportunities_coaching_at_risk_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                min_risk_score?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtRiskDealsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_pipelines_api_v1_workspaces__workspace_id__opportunities_pipelines_get: {
         parameters: {
             query?: never;
@@ -24248,6 +24588,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coach_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealCoachCard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_coach_action_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_draft_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DraftActionRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftActionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -2289,6 +2289,148 @@
         "title": "AssistantMessageResponse",
         "type": "object"
       },
+      "AtRiskDeal": {
+        "description": "One ranked at-risk deal for the proactive list view.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "amount_at_risk": {
+            "default": 0.0,
+            "title": "Amount At Risk",
+            "type": "number"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "days_since_last_contact": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Contact"
+          },
+          "deal_health": {
+            "enum": [
+              "healthy",
+              "watch",
+              "at_risk",
+              "critical"
+            ],
+            "title": "Deal Health",
+            "type": "string"
+          },
+          "health_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Health Score",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opportunity_id": {
+            "format": "uuid",
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "primary_contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Contact Id"
+          },
+          "risk_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Risk Score",
+            "type": "integer"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Name"
+          },
+          "top_risk": {
+            "title": "Top Risk",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "name",
+          "deal_health",
+          "health_score",
+          "risk_score",
+          "top_risk"
+        ],
+        "title": "AtRiskDeal",
+        "type": "object"
+      },
+      "AtRiskDealsResponse": {
+        "description": "Ranked list of at-risk deals (most at-risk first).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AtRiskDeal"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_amount_at_risk": {
+            "default": 0.0,
+            "title": "Total Amount At Risk",
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AtRiskDealsResponse",
+        "type": "object"
+      },
       "AutomationActionSchema": {
         "description": "Schema for automation action.",
         "properties": {
@@ -7434,6 +7576,243 @@
         "title": "DaySchedule",
         "type": "object"
       },
+      "DealCoachCard": {
+        "description": "The full coaching card for one opportunity.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "deal_health": {
+            "enum": [
+              "healthy",
+              "watch",
+              "at_risk",
+              "critical"
+            ],
+            "title": "Deal Health",
+            "type": "string"
+          },
+          "drafted_action": {
+            "$ref": "#/components/schemas/DraftedAction"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "generated_by": {
+            "enum": [
+              "llm",
+              "heuristic"
+            ],
+            "title": "Generated By",
+            "type": "string"
+          },
+          "health_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Health Score",
+            "type": "integer"
+          },
+          "health_summary": {
+            "title": "Health Summary",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_best_action": {
+            "$ref": "#/components/schemas/NextBestAction"
+          },
+          "opportunity_id": {
+            "format": "uuid",
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "primary_contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Contact Id"
+          },
+          "risk_factors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Factors",
+            "type": "array"
+          },
+          "signals": {
+            "$ref": "#/components/schemas/DealSignals"
+          },
+          "top_risk": {
+            "title": "Top Risk",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "workspace_id",
+          "name",
+          "deal_health",
+          "health_score",
+          "health_summary",
+          "top_risk",
+          "next_best_action",
+          "drafted_action",
+          "signals",
+          "generated_by",
+          "generated_at"
+        ],
+        "title": "DealCoachCard",
+        "type": "object"
+      },
+      "DealSignals": {
+        "description": "Deterministic per-deal signals aggregated from existing data.\n\nThese are computed (not invented by the LLM) and are surfaced so the\noperator can see the evidence behind the coaching.",
+        "properties": {
+          "awaiting_reply": {
+            "default": false,
+            "title": "Awaiting Reply",
+            "type": "boolean"
+          },
+          "call_count": {
+            "default": 0,
+            "title": "Call Count",
+            "type": "integer"
+          },
+          "days_in_stage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days In Stage"
+          },
+          "days_since_last_contact": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Contact"
+          },
+          "engagement_score": {
+            "default": 0,
+            "title": "Engagement Score",
+            "type": "integer"
+          },
+          "expected_close_overdue": {
+            "default": false,
+            "title": "Expected Close Overdue",
+            "type": "boolean"
+          },
+          "last_call_sentiment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Call Sentiment"
+          },
+          "lead_score": {
+            "default": 0,
+            "title": "Lead Score",
+            "type": "integer"
+          },
+          "objections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Objections",
+            "type": "array"
+          },
+          "open_next_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Next Steps",
+            "type": "array"
+          },
+          "probability": {
+            "default": 0,
+            "title": "Probability",
+            "type": "integer"
+          },
+          "sentiment_trend": {
+            "default": "unknown",
+            "enum": [
+              "improving",
+              "declining",
+              "flat",
+              "unknown"
+            ],
+            "title": "Sentiment Trend",
+            "type": "string"
+          },
+          "sms_count": {
+            "default": 0,
+            "title": "Sms Count",
+            "type": "integer"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Name"
+          }
+        },
+        "title": "DealSignals",
+        "type": "object"
+      },
       "DeliveryMethod": {
         "description": "How the lead magnet is delivered.",
         "enum": [
@@ -7527,6 +7906,136 @@
         ],
         "title": "DiscoverySourceType",
         "type": "string"
+      },
+      "DraftActionRequest": {
+        "additionalProperties": false,
+        "description": "Optional operator overrides when queuing the drafted action.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sms",
+                  "call",
+                  "email",
+                  "offer",
+                  "task"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "title": "DraftActionRequest",
+        "type": "object"
+      },
+      "DraftActionResponse": {
+        "description": "Result of queuing a drafted action through the approval gate.",
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "pending",
+              "auto",
+              "blocked"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "pending_action_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action Id"
+          }
+        },
+        "required": [
+          "decision",
+          "action_type",
+          "description"
+        ],
+        "title": "DraftActionResponse",
+        "type": "object"
+      },
+      "DraftedAction": {
+        "description": "A ready-to-approve draft of the next-best action.\n\nMaps directly onto a PendingAction so a single click queues it through\nthe existing HITL approval gate.",
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "sms",
+              "call",
+              "email",
+              "offer",
+              "task"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "action_type",
+          "channel",
+          "description",
+          "body"
+        ],
+        "title": "DraftedAction",
+        "type": "object"
       },
       "DripCampaignCreate": {
         "description": "Request to create a drip campaign.",
@@ -12867,6 +13376,42 @@
         ],
         "title": "MissionStatus",
         "type": "string"
+      },
+      "NextBestAction": {
+        "description": "The single recommended next move for the operator.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "sms",
+              "call",
+              "email",
+              "offer",
+              "task"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "timing": {
+            "title": "Timing",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "rationale",
+          "channel",
+          "timing"
+        ],
+        "title": "NextBestAction",
+        "type": "object"
       },
       "NotificationSettings": {
         "description": "Schema for notification settings.",
@@ -40794,6 +41339,79 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/opportunities/coaching/at-risk": {
+      "get": {
+        "description": "Rank open opportunities by AI deal-risk score (most at-risk first).",
+        "operationId": "list_at_risk_deals_api_v1_workspaces__workspace_id__opportunities_coaching_at_risk_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_risk_score",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Min Risk Score",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtRiskDealsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List At Risk Deals",
+        "tags": [
+          "Opportunities"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/opportunities/pipelines": {
       "get": {
         "description": "List all pipelines in a workspace.",
@@ -41399,6 +42017,141 @@
           }
         ],
         "summary": "Update Opportunity",
+        "tags": [
+          "Opportunities"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/coach": {
+      "get": {
+        "description": "Get the AI Deal Coach card for one opportunity.",
+        "operationId": "coach_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Opportunity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DealCoachCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Coach Opportunity",
+        "tags": [
+          "Opportunities"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/coach/draft-action": {
+      "post": {
+        "description": "Queue the coach's drafted next-best action through the approval gate.",
+        "operationId": "draft_coach_action_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_draft_action_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Opportunity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DraftActionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Draft Coach Action",
         "tags": [
           "Opportunities"
         ]

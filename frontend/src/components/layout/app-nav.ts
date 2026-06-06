@@ -6,6 +6,7 @@ import {
   CreditCard,
   ClipboardList,
   FlaskConical,
+  Gauge,
   Gift,
   LayoutDashboard,
   Lightbulb,
@@ -72,6 +73,13 @@ export const workspaceNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
     badgeKey: "pending-actions",
+  },
+  {
+    title: "Deal Coach",
+    url: "/deal-coach",
+    icon: Gauge,
+    sidebar: true,
+    commandPalette: true,
   },
   {
     title: "Contacts",

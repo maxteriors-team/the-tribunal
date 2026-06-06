@@ -61,6 +61,29 @@ class OutboundFollowUpCampaignSuggestionHandler:
 
 
 @dataclass(slots=True, frozen=True)
+class DealCoachFollowUpActionHandler:
+    """Acknowledge an approved Deal Coach drafted follow-up action.
+
+    The Deal Coach drafts a next-best action (e.g. a re-engagement SMS or a
+    book-a-call nudge) and queues it for human approval. Approval records the
+    operator's intent; actual outbound delivery is handled by the operator's
+    normal send path, so execution here just acknowledges the decision.
+    """
+
+    action_type: str = "deal_coach.follow_up"
+
+    async def execute(self, db: AsyncSession, action: PendingAction) -> dict[str, Any]:
+        payload = action.action_payload
+        return {
+            "status": "acknowledged",
+            "channel": payload.get("channel"),
+            "opportunity_id": action.context.get("opportunity_id"),
+            "contact_id": action.context.get("contact_id"),
+            "source": action.context.get("source"),
+        }
+
+
+@dataclass(slots=True, frozen=True)
 class BookAppointmentActionHandler:
     """Execute a book_appointment pending action via BookingService."""
 
@@ -138,7 +161,8 @@ class ApprovalGateService:
         book_appointment_handler: ApprovedActionHandler = BookAppointmentActionHandler()
         send_sms_handler: ApprovedActionHandler = SendSmsActionHandler()
         outbound_handler: ApprovedActionHandler = OutboundFollowUpCampaignSuggestionHandler()
-        return (book_appointment_handler, send_sms_handler, outbound_handler)
+        deal_coach_handler: ApprovedActionHandler = DealCoachFollowUpActionHandler()
+        return (book_appointment_handler, send_sms_handler, outbound_handler, deal_coach_handler)
 
     async def check_and_execute_or_queue(
         self,

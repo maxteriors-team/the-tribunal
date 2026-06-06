@@ -1,5 +1,13 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
-import type { Opportunity, Pipeline, PipelineStage } from "@/types";
+import type {
+  AtRiskDealsResponse,
+  DealCoachCard,
+  DraftActionRequest,
+  DraftActionResponse,
+  Opportunity,
+  Pipeline,
+  PipelineStage,
+} from "@/types";
 
 import { createApiClient } from "./create-api-client";
 
@@ -204,6 +212,37 @@ export const opportunitiesApi = {
   ): Promise<void> => {
     await apiDelete(
       `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages/${stageId}`
+    );
+  },
+
+  // Deal Coach endpoints
+  coach: async (
+    workspaceId: string,
+    opportunityId: string
+  ): Promise<DealCoachCard> => {
+    return apiGet<DealCoachCard>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/coach`
+    );
+  },
+
+  listAtRisk: async (
+    workspaceId: string,
+    params: { limit?: number; min_risk_score?: number } = {}
+  ): Promise<AtRiskDealsResponse> => {
+    return apiGet<AtRiskDealsResponse>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/coaching/at-risk`,
+      { params }
+    );
+  },
+
+  draftCoachAction: async (
+    workspaceId: string,
+    opportunityId: string,
+    data: DraftActionRequest = {}
+  ): Promise<DraftActionResponse> => {
+    return apiPost<DraftActionResponse>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/coach/draft-action`,
+      data
     );
   },
 };

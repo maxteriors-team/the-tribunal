@@ -10,6 +10,12 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.deps import DB, CurrentUser, get_workspace
 from app.api.service_errors import ServiceErrorRoute
 from app.models.workspace import Workspace
+from app.schemas.deal_coach import (
+    AtRiskDealsResponse,
+    DealCoachCard,
+    DraftActionRequest,
+    DraftActionResponse,
+)
 from app.schemas.opportunity import (
     OpportunityCreate,
     OpportunityDetailResponse,
@@ -26,6 +32,7 @@ from app.schemas.opportunity import (
     PipelineUpdate,
 )
 from app.services.opportunities import OpportunityService
+from app.services.opportunities.deal_coach_service import DealCoachService
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -173,6 +180,24 @@ async def list_opportunities(
     )
 
 
+# Deal Coach endpoints
+#
+# ``/coaching/at-risk`` is declared before ``/{opportunity_id}`` so the literal
+# path is never parsed as an opportunity UUID.
+@router.get("/coaching/at-risk", response_model=AtRiskDealsResponse)
+async def list_at_risk_deals(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    min_risk_score: Annotated[int, Query(ge=0, le=100)] = 25,
+) -> AtRiskDealsResponse:
+    """Rank open opportunities by AI deal-risk score (most at-risk first)."""
+    service = DealCoachService(db)
+    return await service.list_at_risk(workspace_id, limit=limit, min_risk_score=min_risk_score)
+
+
 @router.post("", response_model=OpportunityResponse, status_code=status.HTTP_201_CREATED)
 async def create_opportunity(
     workspace_id: uuid.UUID,
@@ -226,6 +251,49 @@ async def delete_opportunity(
     """Delete an opportunity."""
     service = OpportunityService(db)
     await service.delete_opportunity(workspace_id, opportunity_id)
+
+
+@router.get("/{opportunity_id}/coach", response_model=DealCoachCard)
+async def coach_opportunity(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+) -> DealCoachCard:
+    """Get the AI Deal Coach card for one opportunity."""
+    service = DealCoachService(db)
+    return await service.coach_opportunity(workspace_id, opportunity_id)
+
+
+@router.post(
+    "/{opportunity_id}/coach/draft-action",
+    response_model=DraftActionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def draft_coach_action(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+    body: DraftActionRequest | None = None,
+) -> DraftActionResponse:
+    """Queue the coach's drafted next-best action through the approval gate."""
+    service = DealCoachService(db)
+    decision, action_id, action_type, description = await service.queue_drafted_action(
+        workspace_id,
+        opportunity_id,
+        channel=body.channel if body else None,
+        body=body.body if body else None,
+        description=body.description if body else None,
+    )
+    return DraftActionResponse(
+        decision=decision,  # type: ignore[arg-type]
+        pending_action_id=action_id,
+        action_type=action_type,
+        description=description,
+    )
 
 
 # Line items endpoints
