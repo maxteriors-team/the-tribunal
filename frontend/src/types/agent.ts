@@ -15,6 +15,7 @@ export interface Agent {
   text_response_delay_ms: number;
   text_max_context_messages: number;
   calcom_event_type_id: number | null;
+  assignment_strategy: string;
   enabled_tools: string[];
   tool_settings: Record<string, string[]>;
   is_active: boolean;

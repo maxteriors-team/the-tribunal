@@ -3,12 +3,14 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ad_library,
     agents,
     api_keys,
     appointments,
     auth,
     automations,
     billing,
+    bookable_staff,
     call_feedback,
     call_outcomes,
     calls,
@@ -102,6 +104,11 @@ api_router.include_router(
     prompt_versions.router,
     prefix="/workspaces/{workspace_id}/agents/{agent_id}/prompts",
     tags=["Prompt Versions"],
+)
+api_router.include_router(
+    bookable_staff.router,
+    prefix="/workspaces/{workspace_id}/agents/{agent_id}/staff",
+    tags=["Bookable Staff"],
 )
 api_router.include_router(
     improvement_suggestions.router,
@@ -222,6 +229,11 @@ api_router.include_router(
     outbound_missions.router,
     prefix="/workspaces/{workspace_id}/outbound-missions",
     tags=["Outbound Missions"],
+)
+api_router.include_router(
+    ad_library.router,
+    prefix="/workspaces/{workspace_id}/ad-library",
+    tags=["Ad Library"],
 )
 # Public invitation endpoints (token-based)
 api_router.include_router(

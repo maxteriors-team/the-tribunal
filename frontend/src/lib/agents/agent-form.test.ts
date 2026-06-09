@@ -36,6 +36,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     text_response_delay_ms: 40_000,
     text_max_context_messages: 12,
     calcom_event_type_id: 42,
+    assignment_strategy: "single",
     enabled_tools: ["calendar"],
     tool_settings: { calendar: ["book"] },
     is_active: false,
@@ -185,9 +186,7 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
   });
 
   it("falls back to provider default voice when missing", () => {
-    const values = agentToEditFormValues(
-      makeAgent({ voice_id: "", voice_provider: "hume" }),
-    );
+    const values = agentToEditFormValues(makeAgent({ voice_id: "", voice_provider: "hume" }));
     expect(values.voiceId).toBe("kora");
   });
 
@@ -222,6 +221,21 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     expect(req.transfer_briefing_template).toBe("Hi {caller_name}");
   });
 
+  it("round-trips the booking assignment strategy", () => {
+    const agent = makeAgent({ assignment_strategy: "skill_based" });
+    const values = agentToEditFormValues(agent);
+    expect(values.assignmentStrategy).toBe("skill_based");
+
+    const req = buildUpdateAgentRequest(values);
+    expect(req.assignment_strategy).toBe("skill_based");
+  });
+
+  it("defaults an unknown assignment strategy to single on load", () => {
+    const agent = makeAgent({ assignment_strategy: "" as unknown as string });
+    const values = agentToEditFormValues(agent);
+    expect(values.assignmentStrategy).toBe("single");
+  });
+
   it("normalizes a blank transfer destination to null", () => {
     const req = buildUpdateAgentRequest(
       agentToEditFormValues(makeAgent({ transfer_destination_number: "   " })),
@@ -230,9 +244,7 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
   });
 
   it("normalizes empty description to undefined in update request", () => {
-    const req = buildUpdateAgentRequest(
-      agentToEditFormValues(makeAgent({ description: null })),
-    );
+    const req = buildUpdateAgentRequest(agentToEditFormValues(makeAgent({ description: null })));
     expect(req.description).toBeUndefined();
   });
 

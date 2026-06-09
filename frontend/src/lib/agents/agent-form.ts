@@ -1,9 +1,6 @@
 import * as z from "zod";
 
-import type {
-  CreateAgentRequest,
-  UpdateAgentRequest,
-} from "@/lib/api/agents";
+import type { CreateAgentRequest, UpdateAgentRequest } from "@/lib/api/agents";
 import {
   TEXT_RESPONSE_DEFAULT_DELAY_MS,
   TEXT_RESPONSE_MAX_DELAY_MS,
@@ -186,12 +183,10 @@ export const editAgentFormSchema = z.object({
   ...voiceFields,
   systemPrompt: z.string().min(10, { error: "System prompt is required" }),
   temperature: z.number().min(0).max(2),
-  textResponseDelayMs: z
-    .number()
-    .min(TEXT_RESPONSE_MIN_DELAY_MS)
-    .max(TEXT_RESPONSE_MAX_DELAY_MS),
+  textResponseDelayMs: z.number().min(TEXT_RESPONSE_MIN_DELAY_MS).max(TEXT_RESPONSE_MAX_DELAY_MS),
   textMaxContextMessages: z.number().min(1).max(50),
   calcomEventTypeId: z.number().optional().nullable(),
+  assignmentStrategy: z.enum(["single", "round_robin", "skill_based"]),
   isActive: z.boolean(),
   ...toolsFields,
   ...ivrFields,
@@ -234,6 +229,7 @@ export const EDIT_AGENT_FORM_DEFAULTS: EditAgentFormValues = {
   textResponseDelayMs: TEXT_RESPONSE_DEFAULT_DELAY_MS,
   textMaxContextMessages: 10,
   calcomEventTypeId: null,
+  assignmentStrategy: "single",
   isActive: true,
   ...TOOLS_DEFAULTS,
   ...IVR_DEFAULTS,
@@ -266,6 +262,7 @@ export const TAB_FIELDS: Record<string, (keyof EditAgentFormValues)[]> = {
     "textResponseDelayMs",
     "textMaxContextMessages",
     "calcomEventTypeId",
+    "assignmentStrategy",
     "reminderEnabled",
     "reminderMinutesBefore",
     "reminderOffsets",
@@ -335,6 +332,7 @@ export function buildUpdateAgentRequest(data: EditAgentFormValues): UpdateAgentR
     text_response_delay_ms: clampTextResponseDelayMs(data.textResponseDelayMs),
     text_max_context_messages: data.textMaxContextMessages,
     calcom_event_type_id: data.calcomEventTypeId ?? undefined,
+    assignment_strategy: data.assignmentStrategy,
     is_active: data.isActive,
     enabled_tools: data.enabledTools,
     tool_settings: data.enabledToolIds,
@@ -368,6 +366,21 @@ export function buildUpdateAgentRequest(data: EditAgentFormValues): UpdateAgentR
   };
 }
 
+export type AssignmentStrategy = "single" | "round_robin" | "skill_based";
+
+const ASSIGNMENT_STRATEGIES: readonly AssignmentStrategy[] = [
+  "single",
+  "round_robin",
+  "skill_based",
+];
+
+/** Coerce a (possibly empty/unknown) strategy string to a valid value. */
+function normalizeAssignmentStrategy(value: string | null | undefined): AssignmentStrategy {
+  return ASSIGNMENT_STRATEGIES.includes(value as AssignmentStrategy)
+    ? (value as AssignmentStrategy)
+    : "single";
+}
+
 /** Map a loaded agent record into edit-screen form values. */
 export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
   return {
@@ -382,6 +395,7 @@ export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
     textResponseDelayMs: clampTextResponseDelayMs(agent.text_response_delay_ms),
     textMaxContextMessages: agent.text_max_context_messages ?? 10,
     calcomEventTypeId: agent.calcom_event_type_id,
+    assignmentStrategy: normalizeAssignmentStrategy(agent.assignment_strategy),
     isActive: agent.is_active,
     enabledTools: agent.enabled_tools ?? [],
     enabledToolIds: agent.tool_settings ?? {},
@@ -392,7 +406,8 @@ export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
     ivrPostDtmfCooldownMs: agent.ivr_post_dtmf_cooldown_ms ?? IVR_DEFAULTS.ivrPostDtmfCooldownMs,
     ivrMenuBufferSilenceMs: agent.ivr_menu_buffer_silence_ms ?? IVR_DEFAULTS.ivrMenuBufferSilenceMs,
     reminderEnabled: agent.reminder_enabled ?? REMINDER_CORE_DEFAULTS.reminderEnabled,
-    reminderMinutesBefore: agent.reminder_minutes_before ?? REMINDER_CORE_DEFAULTS.reminderMinutesBefore,
+    reminderMinutesBefore:
+      agent.reminder_minutes_before ?? REMINDER_CORE_DEFAULTS.reminderMinutesBefore,
     reminderOffsets: agent.reminder_offsets ?? [...REMINDER_EXTENDED_DEFAULTS.reminderOffsets],
     reminderTemplate: agent.reminder_template ?? null,
     noshowSmsEnabled: agent.noshow_sms_enabled ?? false,
@@ -410,8 +425,7 @@ export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
     postMeetingTemplate: agent.post_meeting_template ?? null,
     transferDestinationNumber:
       agent.transfer_destination_number ?? TRANSFER_DEFAULTS.transferDestinationNumber,
-    transferMode:
-      (agent.transfer_mode as "warm" | "cold") ?? TRANSFER_DEFAULTS.transferMode,
+    transferMode: (agent.transfer_mode as "warm" | "cold") ?? TRANSFER_DEFAULTS.transferMode,
     transferBriefingTemplate:
       agent.transfer_briefing_template ?? TRANSFER_DEFAULTS.transferBriefingTemplate,
     autoEvaluate: agent.auto_evaluate ?? AUTO_EVALUATION_DEFAULT.autoEvaluate,

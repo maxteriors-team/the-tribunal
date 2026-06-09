@@ -10,9 +10,11 @@ from app.models.auth_rate_limit import AuthRateLimit
 from app.models.automation import Automation
 from app.models.automation_execution import AutomationExecution
 from app.models.bandit_decision import BanditDecision, DecisionType
+from app.models.bookable_staff import BookableStaff
 from app.models.call_feedback import CallFeedback
 from app.models.call_outcome import CallOutcome
 from app.models.call_payment import CallPayment, CallPaymentStatus
+from app.models.caller_memory import CallerMemory
 from app.models.campaign import Campaign, CampaignContact
 from app.models.campaign_number_pool import CampaignNumberPool
 from app.models.campaign_report import CampaignReport
@@ -130,6 +132,7 @@ __all__ = [
     "CampaignNumberPool",
     "CampaignReport",
     "Appointment",
+    "BookableStaff",
     "PhoneNumber",
     "PhoneNumberProvider",
     "PhoneNumberDailyStats",
@@ -181,6 +184,7 @@ __all__ = [
     "CallFeedback",
     "CallPayment",
     "CallPaymentStatus",
+    "CallerMemory",
     "BanditDecision",
     "DecisionType",
     "Tag",

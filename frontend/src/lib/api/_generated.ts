@@ -1764,6 +1764,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Bookable Staff
+         * @description List the bookable staff in an agent's assignment pool.
+         */
+        get: operations["list_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_get"];
+        put?: never;
+        /**
+         * Create Bookable Staff
+         * @description Add a staff member to an agent's pool.
+         */
+        post: operations["create_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/staff/{staff_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Bookable Staff
+         * @description Update a staff member's configuration.
+         */
+        put: operations["update_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__put"];
+        post?: never;
+        /**
+         * Delete Bookable Staff
+         * @description Remove a staff member from the pool.
+         */
+        delete: operations["delete_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/api-keys/": {
         parameters: {
             query?: never;
@@ -2187,6 +2235,30 @@ export interface paths {
          *         Created Message record for the call
          */
         post: operations["initiate_call_api_v1_workspaces__workspace_id__calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/calls/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Live Calls
+         * @description List calls currently in progress in this workspace (supervision roster).
+         *
+         *     Backed by the in-process live-call registry, so it reflects calls served by
+         *     this backend instance. Used by the operator live-call panel to expose
+         *     monitor / whisper / barge controls.
+         */
+        get: operations["list_live_calls_api_v1_workspaces__workspace_id__calls_live_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7104,6 +7176,11 @@ export interface components {
          */
         AgentCreate: {
             /**
+             * Assignment Strategy
+             * @default single
+             */
+            assignment_strategy: string;
+            /**
              * Auto Evaluate
              * @default false
              */
@@ -7280,6 +7357,11 @@ export interface components {
          * @description Agent response schema.
          */
         AgentResponse: {
+            /**
+             * Assignment Strategy
+             * @default single
+             */
+            assignment_strategy: string;
             /** Auto Evaluate */
             auto_evaluate: boolean;
             /** Calcom Event Type Id */
@@ -7434,6 +7516,8 @@ export interface components {
          * @description Schema for updating an agent.
          */
         AgentUpdate: {
+            /** Assignment Strategy */
+            assignment_strategy?: string | null;
             /** Auto Evaluate */
             auto_evaluate?: boolean | null;
             /** Calcom Event Type Id */
@@ -8139,6 +8223,105 @@ export interface components {
         Body_verify_fub_api_v1_realtor_verify_fub_post: {
             /** Api Key */
             api_key: string;
+        };
+        /**
+         * BookableStaffCreate
+         * @description Schema for creating a bookable staff member.
+         */
+        BookableStaffCreate: {
+            /** Calcom Event Type Id */
+            calcom_event_type_id?: number | null;
+            /** Email */
+            email?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Priority
+             * @default 0
+             */
+            priority: number;
+            /**
+             * Skills
+             * @default []
+             */
+            skills: string[];
+        };
+        /**
+         * BookableStaffList
+         * @description List of bookable staff for an agent.
+         */
+        BookableStaffList: {
+            /** Items */
+            items: components["schemas"]["BookableStaffResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * BookableStaffResponse
+         * @description Bookable staff response schema.
+         */
+        BookableStaffResponse: {
+            /** Agent Id */
+            agent_id: string | null;
+            /** Assignment Count */
+            assignment_count: number;
+            /** Calcom Event Type Id */
+            calcom_event_type_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Assigned At */
+            last_assigned_at: string | null;
+            /** Name */
+            name: string;
+            /** Priority */
+            priority: number;
+            /** Skills */
+            skills: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * BookableStaffUpdate
+         * @description Schema for updating a bookable staff member.
+         */
+        BookableStaffUpdate: {
+            /** Calcom Event Type Id */
+            calcom_event_type_id?: number | null;
+            /** Email */
+            email?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Priority */
+            priority?: number | null;
+            /** Skills */
+            skills?: string[] | null;
         };
         /**
          * BulkDeleteRequest
@@ -11865,6 +12048,40 @@ export interface components {
             enabled?: boolean | null;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * LiveCallResponse
+         * @description A live (in-progress) call available for operator supervision.
+         */
+        LiveCallResponse: {
+            /** Agent Name */
+            agent_name?: string | null;
+            /** Barged */
+            barged: boolean;
+            /** Call Id */
+            call_id: string;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Direction */
+            direction: string;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Started At */
+            started_at: string;
+            /** Supervisor Count */
+            supervisor_count: number;
+            /** Workspace Id */
+            workspace_id: string;
+        };
+        /**
+         * LiveCallsResponse
+         * @description Roster of live calls in a workspace.
+         */
+        LiveCallsResponse: {
+            /** Items */
+            items: components["schemas"]["LiveCallResponse"][];
         };
         /**
          * MemberResponse
@@ -20282,6 +20499,142 @@ export interface operations {
             };
         };
     };
+    list_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookableStaffCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                agent_id: string;
+                staff_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookableStaffUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                agent_id: string;
+                staff_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_api_keys_api_v1_workspaces__workspace_id__api_keys__get: {
         parameters: {
             query?: never;
@@ -21134,6 +21487,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CallResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_live_calls_api_v1_workspaces__workspace_id__calls_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveCallsResponse"];
                 };
             };
             /** @description Validation Error */

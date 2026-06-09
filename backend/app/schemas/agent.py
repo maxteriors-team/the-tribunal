@@ -32,6 +32,16 @@ def _clamp_text_response_delay_value(value: object) -> object:
 
 _VALID_TRANSFER_MODES = {"warm", "cold"}
 
+_VALID_ASSIGNMENT_STRATEGIES = {"single", "round_robin", "skill_based"}
+
+
+def _normalize_assignment_strategy(value: object) -> object:
+    """Coerce the assignment strategy, defaulting unknowns to 'single'."""
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip().lower()
+    return normalized if normalized in _VALID_ASSIGNMENT_STRATEGIES else "single"
+
 
 def _normalize_transfer_mode(value: object) -> object:
     """Coerce the transfer mode to 'warm'/'cold', defaulting unknowns to 'warm'."""
@@ -59,6 +69,7 @@ class AgentCreate(BaseModel):
     )
     text_max_context_messages: int = 20
     calcom_event_type_id: int | None = None
+    assignment_strategy: str = "single"
     enabled_tools: list[str] = []
     tool_settings: dict[str, list[str]] = {}
     # IVR navigation settings
@@ -115,6 +126,12 @@ class AgentCreate(BaseModel):
         """Normalize the transfer mode to one of the supported values."""
         return _normalize_transfer_mode(value)
 
+    @field_validator("assignment_strategy", mode="before")
+    @classmethod
+    def validate_assignment_strategy(cls, value: object) -> object:
+        """Normalize the booking assignment strategy to a supported value."""
+        return _normalize_assignment_strategy(value)
+
 
 class AgentUpdate(BaseModel):
     """Schema for updating an agent."""
@@ -134,6 +151,7 @@ class AgentUpdate(BaseModel):
     )
     text_max_context_messages: int | None = None
     calcom_event_type_id: int | None = None
+    assignment_strategy: str | None = None
     is_active: bool | None = None
     enabled_tools: list[str] | None = None
     tool_settings: dict[str, list[str]] | None = None
@@ -193,6 +211,14 @@ class AgentUpdate(BaseModel):
             return None
         return _normalize_transfer_mode(value)
 
+    @field_validator("assignment_strategy", mode="before")
+    @classmethod
+    def validate_assignment_strategy(cls, value: object) -> object:
+        """Normalize the assignment strategy, leaving None untouched for partial updates."""
+        if value is None:
+            return None
+        return _normalize_assignment_strategy(value)
+
 
 class AgentResponse(BaseModel):
     """Agent response schema."""
@@ -210,6 +236,7 @@ class AgentResponse(BaseModel):
     text_response_delay_ms: int
     text_max_context_messages: int
     calcom_event_type_id: int | None
+    assignment_strategy: str = "single"
     enabled_tools: list[str]
     tool_settings: dict[str, list[str]]
     is_active: bool

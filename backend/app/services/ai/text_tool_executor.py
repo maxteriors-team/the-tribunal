@@ -20,6 +20,7 @@ Usage:
 """
 
 import json
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
@@ -180,12 +181,14 @@ class TextToolExecutor(BaseToolExecutor):
                 email=arguments.get("email"),
                 duration_minutes=arguments.get("duration_minutes", 30),
                 notes=arguments.get("notes"),
+                required_skill=arguments.get("skill"),
             )
         if function_name == "check_availability":
             try:
                 return await self.execute_check_availability(
                     start_date_str=arguments.get("start_date", ""),
                     end_date_str=arguments.get("end_date"),
+                    required_skill=arguments.get("skill"),
                 )
             except Exception as e:
                 self.log.exception("availability_check_failed", error=str(e))
@@ -234,6 +237,7 @@ class TextToolExecutor(BaseToolExecutor):
         email: str | None = None,
         duration_minutes: int = 30,
         notes: str | None = None,
+        required_skill: str | None = None,
     ) -> dict[str, Any]:
         """Resolve contact, validate datetime, then delegate to base booking."""
         # Check config early (before contact lookup)
@@ -291,6 +295,7 @@ class TextToolExecutor(BaseToolExecutor):
                 email=booking_email,
                 duration_minutes=duration_minutes,
                 notes=notes,
+                required_skill=required_skill,
             )
         except Exception as e:
             self.log.exception("booking_failed", error=str(e))
@@ -393,11 +398,23 @@ class TextToolExecutor(BaseToolExecutor):
         # Resolve campaign_id from conversation
         campaign_id_val = getattr(self.conversation, "campaign_id", None)
 
+        assigned_staff_id = None
+        resolved_event_type_id = self.agent.calcom_event_type_id
+        if self.assigned_staff and self.assigned_staff.get("id"):
+            try:
+                assigned_staff_id = uuid.UUID(str(self.assigned_staff["id"]))
+            except (ValueError, TypeError):
+                assigned_staff_id = None
+            resolved_event_type_id = (
+                self.assigned_staff.get("calcom_event_type_id") or resolved_event_type_id
+            )
+
         appointment = Appointment(
             workspace_id=self.conversation.workspace_id,
             contact_id=contact.id,
             agent_id=self.agent.id,
             campaign_id=campaign_id_val,
+            bookable_staff_id=assigned_staff_id,
             scheduled_at=self._appointment_datetime,
             duration_minutes=duration_minutes,
             status="scheduled",
@@ -405,7 +422,7 @@ class TextToolExecutor(BaseToolExecutor):
             notes=notes,
             calcom_booking_uid=result.booking_uid,
             calcom_booking_id=result.booking_id,
-            calcom_event_type_id=self.agent.calcom_event_type_id,
+            calcom_event_type_id=resolved_event_type_id,
             sync_status="synced",
             last_synced_at=datetime.now(UTC),
         )

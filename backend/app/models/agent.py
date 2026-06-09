@@ -23,6 +23,7 @@ def generate_public_id() -> str:
 
 if TYPE_CHECKING:
     from app.models.appointment import Appointment
+    from app.models.bookable_staff import BookableStaff
     from app.models.campaign import Campaign
     from app.models.conversation import Conversation, Message
     from app.models.message_test import MessageTest
@@ -85,6 +86,13 @@ class Agent(Base):
 
     # Cal.com integration
     calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # How the booking tool picks which Cal.com event type / staff member to book.
+    #   "single"       -> always use calcom_event_type_id (legacy default)
+    #   "round_robin"  -> distribute across the agent's active bookable_staff pool
+    #   "skill_based"  -> match the requested skill, then round-robin among matches
+    assignment_strategy: Mapped[str] = mapped_column(
+        String(20), default="single", server_default="single", nullable=False
+    )
 
     # Tools enabled
     enabled_tools: Mapped[list[str]] = mapped_column(
@@ -222,6 +230,9 @@ class Agent(Base):
         "Campaign", back_populates="agent", foreign_keys="Campaign.agent_id"
     )
     appointments: Mapped[list["Appointment"]] = relationship("Appointment", back_populates="agent")
+    bookable_staff: Mapped[list["BookableStaff"]] = relationship(
+        "BookableStaff", back_populates="agent", cascade="all, delete-orphan"
+    )
     phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
         "PhoneNumber", back_populates="assigned_agent"
     )

@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
 from app.models.workspace import Workspace
 from app.services.campaigns.guarantee_tracker import increment_completed_and_check_guarantee
@@ -105,6 +106,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
 
         # Look up agent by event type ID if provided
         agent = None
+        bookable_staff = None
         if event_type_id:
             agent_result = await db.execute(
                 select(Agent).where(
@@ -113,6 +115,23 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 )
             )
             agent = agent_result.scalar_one_or_none()
+
+            # The booking may have landed on a staff member's own Cal.com event
+            # type (round-robin / skill-based routing). Resolve the staff record
+            # and, when the agent wasn't matched by its default event type,
+            # fall back to the staff member's owning agent.
+            staff_result = await db.execute(
+                select(BookableStaff).where(
+                    BookableStaff.workspace_id == workspace_id,
+                    BookableStaff.calcom_event_type_id == int(event_type_id),
+                )
+            )
+            bookable_staff = staff_result.scalars().first()
+            if bookable_staff and agent is None and bookable_staff.agent_id:
+                agent_by_staff = await db.execute(
+                    select(Agent).where(Agent.id == bookable_staff.agent_id)
+                )
+                agent = agent_by_staff.scalar_one_or_none()
 
         # Check if appointment already exists
         existing = await db.execute(
@@ -130,6 +149,8 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
             appointment.duration_minutes = duration_minutes
             appointment.calcom_booking_id = booking_id
             appointment.calcom_event_type_id = int(event_type_id) if event_type_id else None
+            if bookable_staff is not None:
+                appointment.bookable_staff_id = bookable_staff.id
             appointment.sync_status = "synced"
             appointment.last_synced_at = datetime.now(UTC)
             appointment.sync_error = None  # Clear any previous sync errors
@@ -146,6 +167,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 workspace_id=workspace_id,
                 contact_id=contact.id,
                 agent_id=agent.id if agent else None,
+                bookable_staff_id=bookable_staff.id if bookable_staff else None,
                 message_id=message_id,
                 campaign_id=campaign_id_val,
                 scheduled_at=scheduled_at,

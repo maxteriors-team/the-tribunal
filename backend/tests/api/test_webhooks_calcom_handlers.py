@@ -43,6 +43,7 @@ def _make_log() -> MagicMock:
     log.bind = MagicMock(return_value=log)
     return log
 
+
 # --------------------------------------------------------------------------- #
 # Shared mock plumbing
 # --------------------------------------------------------------------------- #
@@ -69,6 +70,9 @@ class _Result:
     def scalars(self) -> MagicMock:
         wrapper = MagicMock()
         wrapper.all = MagicMock(return_value=self._scalars_list)
+        wrapper.first = MagicMock(
+            return_value=self._scalars_list[0] if self._scalars_list else None
+        )
         return wrapper
 
     def first(self) -> Any:
@@ -119,9 +123,7 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     stubs["send_lifecycle_sms"] = send_lifecycle_sms
 
     find_recent_voice_message = AsyncMock(return_value=None)
-    monkeypatch.setattr(
-        handlers, "find_recent_voice_message", find_recent_voice_message
-    )
+    monkeypatch.setattr(handlers, "find_recent_voice_message", find_recent_voice_message)
     stubs["find_recent_voice_message"] = find_recent_voice_message
 
     resolve_campaign_id = AsyncMock(return_value=None)
@@ -137,9 +139,7 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     stubs["spawn_background_task"] = spawn_background_task
 
     send_appointment_booked = MagicMock(return_value=MagicMock())
-    monkeypatch.setattr(
-        handlers, "send_appointment_booked_notification", send_appointment_booked
-    )
+    monkeypatch.setattr(handlers, "send_appointment_booked_notification", send_appointment_booked)
     stubs["send_appointment_booked_notification"] = send_appointment_booked
 
     tag_service = MagicMock()
@@ -149,9 +149,7 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     stubs["tag_service"] = tag_service
 
     increment_guarantee = AsyncMock(return_value=None)
-    monkeypatch.setattr(
-        handlers, "increment_completed_and_check_guarantee", increment_guarantee
-    )
+    monkeypatch.setattr(handlers, "increment_completed_and_check_guarantee", increment_guarantee)
     stubs["increment_completed_and_check_guarantee"] = increment_guarantee
 
     build_confirmation_body = MagicMock(return_value="Confirmation SMS body")
@@ -162,7 +160,9 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
 
 
 def _make_contact(
-    *, contact_id: int = 100, workspace_id: uuid.UUID | None = None,
+    *,
+    contact_id: int = 100,
+    workspace_id: uuid.UUID | None = None,
 ) -> MagicMock:
     contact = MagicMock()
     contact.id = contact_id
@@ -299,15 +299,17 @@ async def test_booking_created_new_appointment_full_flow(
 
     # execute() call order in handle_booking_created with a NEW booking:
     #   1. Agent lookup (eventTypeId present)
-    #   2. Appointment lookup by uid          (returns None → new)
-    #   3. Workspace lookup for SMS timezone
-    #   4. Other-scheduled-appointments query (returns [] → no double-book)
+    #   2. BookableStaff lookup by event type (returns [] → none)
+    #   3. Appointment lookup by uid          (returns None → new)
+    #   4. Workspace lookup for SMS timezone
+    #   5. Other-scheduled-appointments query (returns [] → no double-book)
     db = _make_db(
         execute_returns=[
-            _Result(scalar=None),       # Agent
-            _Result(scalar=None),       # Existing Appointment
+            _Result(scalar=None),  # Agent
+            _Result(scalars_list=[]),  # BookableStaff
+            _Result(scalar=None),  # Existing Appointment
             _Result(scalar=workspace),  # Workspace
-            _Result(scalars_list=[]),   # Other scheduled
+            _Result(scalars_list=[]),  # Other scheduled
         ]
     )
 
@@ -332,9 +334,7 @@ async def test_booking_created_new_appointment_full_flow(
 
     # Appointment created (db.add called with a new Appointment)
     add_calls = [c.args[0] for c in db.add.call_args_list]
-    appointment_added = [
-        a for a in add_calls if type(a).__name__ == "Appointment"
-    ]
+    appointment_added = [a for a in add_calls if type(a).__name__ == "Appointment"]
     assert len(appointment_added) == 1
     appt = appointment_added[0]
     assert appt.calcom_booking_uid == "calcom-booking-uid-created-001"
@@ -362,7 +362,8 @@ async def test_booking_created_existing_appointment_does_not_send_sms(
     workspace_id = uuid.uuid4()
     contact = _make_contact(workspace_id=workspace_id)
     existing_appt = _make_appointment(
-        workspace_id=workspace_id, contact_id=contact.id,
+        workspace_id=workspace_id,
+        contact_id=contact.id,
     )
 
     monkeypatch.setattr(
@@ -373,9 +374,10 @@ async def test_booking_created_existing_appointment_does_not_send_sms(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=None),           # Agent
+            _Result(scalar=None),  # Agent
+            _Result(scalars_list=[]),  # BookableStaff
             _Result(scalar=existing_appt),  # Existing Appointment found
-            _Result(scalars_list=[]),       # Other scheduled
+            _Result(scalars_list=[]),  # Other scheduled
         ]
     )
     _patch_session_local(monkeypatch, db)
@@ -400,7 +402,9 @@ async def test_booking_created_double_booking_triggers_alert(
     workspace_id = uuid.uuid4()
     contact = _make_contact(workspace_id=workspace_id)
     earlier_appt = _make_appointment(
-        appt_id=900, workspace_id=workspace_id, contact_id=contact.id,
+        appt_id=900,
+        workspace_id=workspace_id,
+        contact_id=contact.id,
     )
     earlier_appt.created_at = datetime(2026, 5, 1, tzinfo=UTC)
 
@@ -415,10 +419,11 @@ async def test_booking_created_double_booking_triggers_alert(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=None),                       # Agent
-            _Result(scalar=None),                       # New Appointment
-            _Result(scalar=workspace),                  # Workspace for SMS
-            _Result(scalars_list=[earlier_appt]),       # One earlier scheduled
+            _Result(scalar=None),  # Agent
+            _Result(scalars_list=[]),  # BookableStaff
+            _Result(scalar=None),  # New Appointment
+            _Result(scalar=workspace),  # Workspace for SMS
+            _Result(scalars_list=[earlier_appt]),  # One earlier scheduled
         ]
     )
 
@@ -436,8 +441,7 @@ async def test_booking_created_double_booking_triggers_alert(
     # Two push notifications: booking-confirmation + double-booking alert.
     assert stubs["push"].send_to_workspace_members.await_count == 2
     titles = [
-        call.kwargs["title"]
-        for call in stubs["push"].send_to_workspace_members.await_args_list
+        call.kwargs["title"] for call in stubs["push"].send_to_workspace_members.await_args_list
     ]
     assert any("Double Booking" in t for t in titles)
 
@@ -487,10 +491,10 @@ async def test_booking_rescheduled_updates_and_resets_reminder(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=appt),       # Appointment lookup
-            _Result(scalar=contact),    # Contact lookup for SMS
+            _Result(scalar=appt),  # Appointment lookup
+            _Result(scalar=contact),  # Contact lookup for SMS
             _Result(scalar=workspace),  # Workspace lookup for tz
-            _Result(scalar=contact),    # Contact lookup for push
+            _Result(scalar=contact),  # Contact lookup for push
         ]
     )
     _patch_session_local(monkeypatch, db)
@@ -544,7 +548,7 @@ async def test_booking_cancelled_by_attendee_fires_rebook_sms(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=appt),     # Appointment
+            _Result(scalar=appt),  # Appointment
             _Result(scalar=contact),  # Contact for tag update
             _Result(scalar=contact),  # Contact for SMS
             _Result(scalar=contact),  # Contact for push
@@ -553,7 +557,8 @@ async def test_booking_cancelled_by_attendee_fires_rebook_sms(
     _patch_session_local(monkeypatch, db)
 
     await handlers.handle_booking_cancelled(
-        booking_cancelled_by_attendee, _make_log(),
+        booking_cancelled_by_attendee,
+        _make_log(),
     )
 
     assert appt.status == AppointmentStatus.CANCELLED
@@ -579,7 +584,7 @@ async def test_booking_cancelled_by_host_skips_rebook_sms(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=appt),     # Appointment
+            _Result(scalar=appt),  # Appointment
             _Result(scalar=contact),  # Contact for tag update
             _Result(scalar=contact),  # Contact for push (no SMS lookup branch)
         ]
@@ -587,7 +592,8 @@ async def test_booking_cancelled_by_host_skips_rebook_sms(
     _patch_session_local(monkeypatch, db)
 
     await handlers.handle_booking_cancelled(
-        booking_cancelled_by_host, _make_log(),
+        booking_cancelled_by_host,
+        _make_log(),
     )
 
     assert appt.status == AppointmentStatus.CANCELLED
@@ -654,7 +660,7 @@ async def test_meeting_ended_marks_completed_and_increments_guarantee(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=appt),     # Appointment
+            _Result(scalar=appt),  # Appointment
             _Result(scalar=contact),  # Contact for tag
             _Result(scalar=contact),  # Contact for post-meeting SMS branch
         ]
@@ -691,7 +697,7 @@ async def test_meeting_ended_marks_no_show_and_increments_count(
 
     db = _make_db(
         execute_returns=[
-            _Result(scalar=appt),     # Appointment
+            _Result(scalar=appt),  # Appointment
             _Result(scalar=contact),  # Contact for tag update
             _Result(scalar=contact),  # Contact for no-show SMS
         ]
@@ -740,7 +746,8 @@ async def _test_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def _make_signed_request(
-    payload: dict[str, Any], secret: str,
+    payload: dict[str, Any],
+    secret: str,
 ) -> tuple[bytes, dict[str, str]]:
     body = _json.dumps(payload).encode()
     signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -775,17 +782,21 @@ async def test_router_rejects_request_without_signature(
 
     handler = AsyncMock()
     monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler,
+        calcom_module._EVENT_DISPATCH,
+        "BOOKING_CREATED",
+        handler,
     )
 
     async with await _client() as ac:
         response = await ac.post(
             "/webhooks/calcom/booking",
-            content=_json.dumps({
-                "trigger": "BOOKING_CREATED",
-                "createdAt": "2026-05-15T10:00:00Z",
-                "data": booking_created,
-            }),
+            content=_json.dumps(
+                {
+                    "trigger": "BOOKING_CREATED",
+                    "createdAt": "2026-05-15T10:00:00Z",
+                    "data": booking_created,
+                }
+            ),
             headers={"content-type": "application/json"},
         )
 
@@ -802,17 +813,21 @@ async def test_router_rejects_request_with_invalid_signature(
 
     handler = AsyncMock()
     monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler,
+        calcom_module._EVENT_DISPATCH,
+        "BOOKING_CREATED",
+        handler,
     )
 
     async with await _client() as ac:
         response = await ac.post(
             "/webhooks/calcom/booking",
-            content=_json.dumps({
-                "trigger": "BOOKING_CREATED",
-                "createdAt": "2026-05-15T10:00:00Z",
-                "data": booking_created,
-            }),
+            content=_json.dumps(
+                {
+                    "trigger": "BOOKING_CREATED",
+                    "createdAt": "2026-05-15T10:00:00Z",
+                    "data": booking_created,
+                }
+            ),
             headers={
                 "content-type": "application/json",
                 "x-cal-signature-256": "deadbeef" * 8,
@@ -866,11 +881,15 @@ async def test_router_accepts_valid_signature_and_dispatches(
 
     handler = AsyncMock()
     monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler,
+        calcom_module._EVENT_DISPATCH,
+        "BOOKING_CREATED",
+        handler,
     )
     # Force the dedupe slot claim to succeed (avoid talking to Redis).
     monkeypatch.setattr(
-        calcom_module, "_claim_webhook_delivery", AsyncMock(return_value=True),
+        calcom_module,
+        "_claim_webhook_delivery",
+        AsyncMock(return_value=True),
     )
 
     payload = {
@@ -882,7 +901,9 @@ async def test_router_accepts_valid_signature_and_dispatches(
 
     async with await _client() as ac:
         response = await ac.post(
-            "/webhooks/calcom/booking", content=body, headers=headers,
+            "/webhooks/calcom/booking",
+            content=body,
+            headers=headers,
         )
 
     assert response.status_code == 200
@@ -904,11 +925,15 @@ async def test_router_replay_returns_200_without_invoking_handler(
 
     handler = AsyncMock()
     monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler,
+        calcom_module._EVENT_DISPATCH,
+        "BOOKING_CREATED",
+        handler,
     )
     # Second delivery → dedupe slot already taken → False.
     monkeypatch.setattr(
-        calcom_module, "_claim_webhook_delivery", AsyncMock(return_value=False),
+        calcom_module,
+        "_claim_webhook_delivery",
+        AsyncMock(return_value=False),
     )
 
     payload = {
@@ -920,7 +945,9 @@ async def test_router_replay_returns_200_without_invoking_handler(
 
     async with await _client() as ac:
         response = await ac.post(
-            "/webhooks/calcom/booking", content=body, headers=headers,
+            "/webhooks/calcom/booking",
+            content=body,
+            headers=headers,
         )
 
     assert response.status_code == 200

@@ -24,6 +24,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
+    from app.models.bookable_staff import BookableStaff
     from app.models.campaign import Campaign
     from app.models.contact import Contact
     from app.models.conversation import Message
@@ -82,6 +83,13 @@ class Appointment(Base):
         nullable=True,
         index=True,
     )
+    # Staff member assigned by round-robin / skill-based routing (if any).
+    bookable_staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("bookable_staff.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Booking details
     scheduled_at: Mapped[datetime] = mapped_column(
@@ -137,6 +145,7 @@ class Appointment(Base):
     agent: Mapped["Agent | None"] = relationship("Agent", back_populates="appointments")
     message: Mapped["Message | None"] = relationship("Message", back_populates="appointment")
     campaign: Mapped["Campaign | None"] = relationship("Campaign", back_populates="appointments")
+    bookable_staff: Mapped["BookableStaff | None"] = relationship("BookableStaff")
 
     def __repr__(self) -> str:
         return (

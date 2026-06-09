@@ -30,6 +30,7 @@ export interface CreateAgentRequest {
   text_response_delay_ms?: number;
   text_max_context_messages?: number;
   calcom_event_type_id?: number;
+  assignment_strategy?: string;
   enabled_tools?: string[];
   tool_settings?: Record<string, string[]>;
   // IVR navigation settings
@@ -63,6 +64,7 @@ export interface UpdateAgentRequest {
   text_response_delay_ms?: number;
   text_max_context_messages?: number;
   calcom_event_type_id?: number;
+  assignment_strategy?: string;
   is_active?: boolean;
   enabled_tools?: string[];
   tool_settings?: Record<string, string[]>;
@@ -135,21 +137,21 @@ export const agentsApi = {
 
   getEmbedSettings: async (
     workspaceId: string,
-    agentId: string
+    agentId: string,
   ): Promise<EmbedSettingsResponse> => {
     return apiGet<EmbedSettingsResponse>(
-      `/api/v1/workspaces/${workspaceId}/agents/${agentId}/embed`
+      `/api/v1/workspaces/${workspaceId}/agents/${agentId}/embed`,
     );
   },
 
   updateEmbedSettings: async (
     workspaceId: string,
     agentId: string,
-    data: EmbedSettingsUpdate
+    data: EmbedSettingsUpdate,
   ): Promise<EmbedSettingsResponse> => {
     return apiPut<EmbedSettingsResponse>(
       `/api/v1/workspaces/${workspaceId}/agents/${agentId}/embed`,
-      data
+      data,
     );
   },
 };

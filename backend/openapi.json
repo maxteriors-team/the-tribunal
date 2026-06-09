@@ -1750,6 +1750,11 @@
       "AgentCreate": {
         "description": "Schema for creating an agent.",
         "properties": {
+          "assignment_strategy": {
+            "default": "single",
+            "title": "Assignment Strategy",
+            "type": "string"
+          },
           "auto_evaluate": {
             "default": false,
             "title": "Auto Evaluate",
@@ -2065,6 +2070,11 @@
       "AgentResponse": {
         "description": "Agent response schema.",
         "properties": {
+          "assignment_strategy": {
+            "default": "single",
+            "title": "Assignment Strategy",
+            "type": "string"
+          },
           "auto_evaluate": {
             "title": "Auto Evaluate",
             "type": "boolean"
@@ -2442,6 +2452,17 @@
       "AgentUpdate": {
         "description": "Schema for updating an agent.",
         "properties": {
+          "assignment_strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Strategy"
+          },
           "auto_evaluate": {
             "anyOf": [
               {
@@ -4387,6 +4408,273 @@
           "api_key"
         ],
         "title": "Body_verify_fub_api_v1_realtor_verify_fub_post",
+        "type": "object"
+      },
+      "BookableStaffCreate": {
+        "description": "Schema for creating a bookable staff member.",
+        "properties": {
+          "calcom_event_type_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calcom Event Type Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "default": 0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "skills": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "BookableStaffCreate",
+        "type": "object"
+      },
+      "BookableStaffList": {
+        "description": "List of bookable staff for an agent.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BookableStaffResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "BookableStaffList",
+        "type": "object"
+      },
+      "BookableStaffResponse": {
+        "description": "Bookable staff response schema.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "assignment_count": {
+            "title": "Assignment Count",
+            "type": "integer"
+          },
+          "calcom_event_type_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calcom Event Type Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_assigned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Assigned At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "agent_id",
+          "name",
+          "email",
+          "calcom_event_type_id",
+          "skills",
+          "is_active",
+          "priority",
+          "assignment_count",
+          "last_assigned_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BookableStaffResponse",
+        "type": "object"
+      },
+      "BookableStaffUpdate": {
+        "description": "Schema for updating a bookable staff member.",
+        "properties": {
+          "calcom_event_type_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calcom Event Type Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          }
+        },
+        "title": "BookableStaffUpdate",
         "type": "object"
       },
       "BulkDeleteRequest": {
@@ -14086,6 +14374,100 @@
           }
         },
         "title": "LeadSourceUpdate",
+        "type": "object"
+      },
+      "LiveCallResponse": {
+        "description": "A live (in-progress) call available for operator supervision.",
+        "properties": {
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
+          },
+          "barged": {
+            "title": "Barged",
+            "type": "boolean"
+          },
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "supervisor_count": {
+            "title": "Supervisor Count",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "workspace_id",
+          "direction",
+          "started_at",
+          "duration_seconds",
+          "supervisor_count",
+          "barged"
+        ],
+        "title": "LiveCallResponse",
+        "type": "object"
+      },
+      "LiveCallsResponse": {
+        "description": "Roster of live calls in a workspace.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LiveCallResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LiveCallsResponse",
         "type": "object"
       },
       "MemberResponse": {
@@ -33454,6 +33836,271 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/staff": {
+      "get": {
+        "description": "List the bookable staff in an agent's assignment pool.",
+        "operationId": "list_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookableStaffList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Bookable Staff",
+        "tags": [
+          "Bookable Staff"
+        ]
+      },
+      "post": {
+        "description": "Add a staff member to an agent's pool.",
+        "operationId": "create_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookableStaffCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookableStaffResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Bookable Staff",
+        "tags": [
+          "Bookable Staff"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/staff/{staff_id}": {
+      "delete": {
+        "description": "Remove a staff member from the pool.",
+        "operationId": "delete_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "staff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Staff Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Bookable Staff",
+        "tags": [
+          "Bookable Staff"
+        ]
+      },
+      "put": {
+        "description": "Update a staff member's configuration.",
+        "operationId": "update_bookable_staff_api_v1_workspaces__workspace_id__agents__agent_id__staff__staff_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "staff_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Staff Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookableStaffUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookableStaffResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Bookable Staff",
+        "tags": [
+          "Bookable Staff"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/api-keys/": {
       "get": {
         "description": "List all API keys for this workspace (redacted).",
@@ -35101,6 +35748,55 @@
           }
         ],
         "summary": "Initiate Call",
+        "tags": [
+          "Voice Calls"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/calls/live": {
+      "get": {
+        "description": "List calls currently in progress in this workspace (supervision roster).\n\nBacked by the in-process live-call registry, so it reflects calls served by\nthis backend instance. Used by the operator live-call panel to expose\nmonitor / whisper / barge controls.",
+        "operationId": "list_live_calls_api_v1_workspaces__workspace_id__calls_live_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveCallsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Live Calls",
         "tags": [
           "Voice Calls"
         ]

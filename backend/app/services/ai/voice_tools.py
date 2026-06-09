@@ -367,6 +367,16 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Optional notes about the appointment",
                 },
+                "skill": {
+                    "type": "string",
+                    "description": (
+                        "Optional skill, specialty, or service the appointment needs "
+                        "(e.g. 'spanish', 'mortgage', 'new car sales'). When set, the "
+                        "system routes the booking to an available staff member who has "
+                        "that skill. Only pass this if the caller's need clearly maps to "
+                        "a specialty; otherwise leave it out."
+                    ),
+                },
             },
             "required": ["date", "time", "email"],
         },
@@ -388,6 +398,13 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
                 "end_date": {
                     "type": "string",
                     "description": "End date in YYYY-MM-DD (defaults to start)",
+                },
+                "skill": {
+                    "type": "string",
+                    "description": (
+                        "Optional skill/specialty needed; restricts availability to "
+                        "staff with that skill when skill-based routing is enabled."
+                    ),
                 },
             },
             "required": ["start_date"],
@@ -488,6 +505,13 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                     "end_date": {
                         "type": "string",
                         "description": "End date in YYYY-MM-DD (defaults to start_date)",
+                    },
+                    "skill": {
+                        "type": "string",
+                        "description": (
+                            "Optional skill/specialty needed; restricts availability to "
+                            "staff with that skill when skill-based routing is enabled."
+                        ),
                     },
                 },
                 "required": ["start_date"],
@@ -812,6 +836,15 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                             "type": "string",
                             "description": "Optional notes about the appointment",
                         },
+                        "skill": {
+                            "type": "string",
+                            "description": (
+                                "Optional skill, specialty, or service the appointment "
+                                "needs (e.g. 'spanish', 'mortgage'). When set, routes the "
+                                "booking to a staff member with that skill. Leave out "
+                                "unless the need clearly maps to a specialty."
+                            ),
+                        },
                     },
                     "required": ["date", "time", "email"],
                 },
@@ -838,6 +871,13 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         "end_date": {
                             "type": "string",
                             "description": "End date in YYYY-MM-DD (defaults to start)",
+                        },
+                        "skill": {
+                            "type": "string",
+                            "description": (
+                                "Optional skill/specialty needed; restricts availability "
+                                "to staff with that skill when skill-based routing is on."
+                            ),
                         },
                     },
                     "required": ["start_date"],

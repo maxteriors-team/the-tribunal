@@ -4,16 +4,13 @@ import { type UseFormReturn, useWatch } from "react-hook-form";
 import type { EditAgentFormValues } from "@/components/agents/agent-edit-schema";
 import { PostMeetingSmsSection } from "@/components/agents/tabs/advanced/post-meeting-sms-section";
 import { RemindersSection } from "@/components/agents/tabs/advanced/reminders-section";
+import { StaffRoutingSection } from "@/components/agents/tabs/advanced/staff-routing-section";
 import { TextSettingsSection } from "@/components/agents/tabs/advanced/text-settings-section";
 import { TransferSection } from "@/components/agents/tabs/advanced/transfer-section";
 import { ValueReinforcementSection } from "@/components/agents/tabs/advanced/value-reinforcement-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   FormControl,
   FormDescription,
@@ -38,7 +35,10 @@ interface AdvancedTabProps {
 export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
   const { control } = form;
   const noshowReengagementEnabled = useWatch({ control, name: "noshowReengagementEnabled" });
-  const neverBookedReengagementEnabled = useWatch({ control, name: "neverBookedReengagementEnabled" });
+  const neverBookedReengagementEnabled = useWatch({
+    control,
+    name: "neverBookedReengagementEnabled",
+  });
   const ivrNavigationEnabled = useWatch({ control, name: "enableIvrNavigation" });
 
   return (
@@ -62,15 +62,14 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                     placeholder="Enter Event Type ID"
                     value={field.value ?? ""}
                     onChange={(e) => {
-                      const value = e.target.value
-                        ? parseInt(e.target.value)
-                        : null;
+                      const value = e.target.value ? parseInt(e.target.value) : null;
                       field.onChange(value);
                     }}
                   />
                 </FormControl>
                 <FormDescription>
-                  Optional: Connect to Cal.com for appointment booking
+                  Optional: Connect to Cal.com for appointment booking. Used directly when the
+                  assignment strategy below is &ldquo;Single calendar&rdquo;.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -78,6 +77,8 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
           />
         </CardContent>
       </Card>
+
+      <StaffRoutingSection control={control} workspaceId={agent.workspace_id} agentId={agent.id} />
 
       <RemindersSection control={control} />
 
@@ -96,7 +97,8 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                 <div className="space-y-0.5">
                   <FormLabel className="text-base">Enable Multi-Day Re-engagement</FormLabel>
                   <FormDescription>
-                    Automatically send Day-3 and Day-7 SMS messages to no-show contacts to win them back
+                    Automatically send Day-3 and Day-7 SMS messages to no-show contacts to win them
+                    back
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -125,9 +127,14 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                     <FormDescription>
                       Sent ~3 days after the no-show. Leave blank to use the default message.
                       Supports{" "}
-                      <code className="text-xs font-mono bg-muted rounded px-1">{"{first_name}"}</code>{" "}
+                      <code className="text-xs font-mono bg-muted rounded px-1">
+                        {"{first_name}"}
+                      </code>{" "}
                       and{" "}
-                      <code className="text-xs font-mono bg-muted rounded px-1">{"{reschedule_link}"}</code>.
+                      <code className="text-xs font-mono bg-muted rounded px-1">
+                        {"{reschedule_link}"}
+                      </code>
+                      .
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -203,9 +210,7 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 7)}
                         />
                       </FormControl>
-                      <FormDescription>
-                        How many days of inactivity before sending
-                      </FormDescription>
+                      <FormDescription>How many days of inactivity before sending</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -227,9 +232,7 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                           onChange={(e) => field.onChange(parseInt(e.target.value) || 2)}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Maximum messages per contact
-                      </FormDescription>
+                      <FormDescription>Maximum messages per contact</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -252,9 +255,14 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                     </FormControl>
                     <FormDescription>
                       Leave blank to use the default message. Supports{" "}
-                      <code className="text-xs font-mono bg-muted rounded px-1">{"{first_name}"}</code>{" "}
+                      <code className="text-xs font-mono bg-muted rounded px-1">
+                        {"{first_name}"}
+                      </code>{" "}
                       and{" "}
-                      <code className="text-xs font-mono bg-muted rounded px-1">{"{booking_link}"}</code>.
+                      <code className="text-xs font-mono bg-muted rounded px-1">
+                        {"{booking_link}"}
+                      </code>
+                      .
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -282,7 +290,8 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                 <div className="space-y-0.5">
                   <FormLabel className="text-base">Auto-Evaluate Experiments</FormLabel>
                   <FormDescription>
-                    Automatically declare winners and eliminate underperformers when statistical confidence is reached (95% threshold)
+                    Automatically declare winners and eliminate underperformers when statistical
+                    confidence is reached (95% threshold)
                   </FormDescription>
                 </div>
                 <FormControl>
@@ -346,7 +355,12 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
 
                 <Collapsible>
                   <CollapsibleTrigger asChild>
-                    <Button type="button" variant="outline" size="sm" className="w-full justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between"
+                    >
                       <span className="flex items-center gap-2">
                         <Phone className="h-4 w-4" />
                         Advanced IVR Timing
@@ -455,15 +469,11 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
             </div>
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Created</p>
-              <p className="text-sm font-medium">
-                {formatDate(agent.created_at)}
-              </p>
+              <p className="text-sm font-medium">{formatDate(agent.created_at)}</p>
             </div>
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Last Updated</p>
-              <p className="text-sm font-medium">
-                {formatDate(agent.updated_at)}
-              </p>
+              <p className="text-sm font-medium">{formatDate(agent.updated_at)}</p>
             </div>
           </div>
         </CardContent>

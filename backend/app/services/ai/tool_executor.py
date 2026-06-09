@@ -115,6 +115,7 @@ class VoiceToolExecutor(BaseToolExecutor):
             return await self.execute_check_availability(
                 start_date_str=arguments.get("start_date", ""),
                 end_date_str=arguments.get("end_date"),
+                required_skill=arguments.get("skill"),
             )
 
         if function_name == "book_appointment":
@@ -124,6 +125,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                 email=arguments.get("email"),
                 duration_minutes=arguments.get("duration_minutes", 30),
                 notes=arguments.get("notes"),
+                required_skill=arguments.get("skill"),
             )
 
             # Persist booking outcome to message record
@@ -236,13 +238,16 @@ class VoiceToolExecutor(BaseToolExecutor):
         duration_minutes: int,
     ) -> dict[str, Any]:
         display_time = _format_time_12h(time_str)
+        staff_name = (self.assigned_staff or {}).get("name")
+        with_staff = f" with {staff_name}" if staff_name else ""
         return {
             "success": True,
             "booking_id": result.booking_uid,
             "booking_uid": result.booking_uid,
             "calcom_id": result.booking_id,
+            "assigned_staff": self.assigned_staff,
             "message": (
-                f"Appointment booked for {contact_name} on {date_str} "
+                f"Appointment booked for {contact_name}{with_staff} on {date_str} "
                 f"at {display_time}. "
                 f"Confirmation email sent to {email}."
             ),
@@ -328,12 +333,20 @@ class VoiceToolExecutor(BaseToolExecutor):
                 # Resolve campaign_id from conversation
                 campaign_id_val = getattr(message.conversation, "campaign_id", None)
 
+                assigned_staff_id = None
+                if self.assigned_staff and self.assigned_staff.get("id"):
+                    try:
+                        assigned_staff_id = uuid.UUID(str(self.assigned_staff["id"]))
+                    except (ValueError, TypeError):
+                        assigned_staff_id = None
+
                 appointment = Appointment(
                     workspace_id=message.conversation.workspace_id,
                     contact_id=message.conversation.contact_id,
                     agent_id=message.agent_id,
                     message_id=message.id,
                     campaign_id=campaign_id_val,
+                    bookable_staff_id=assigned_staff_id,
                     scheduled_at=scheduled_at,
                     duration_minutes=duration_minutes,
                     status="scheduled",

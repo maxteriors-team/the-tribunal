@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from app.models.agent import Agent
     from app.models.appointment import Appointment
     from app.models.automation import Automation
+    from app.models.bookable_staff import BookableStaff
     from app.models.campaign import Campaign
     from app.models.contact import Contact
     from app.models.conversation import Conversation
@@ -75,6 +76,9 @@ class Workspace(Base):
     )
     appointments: Mapped[list["Appointment"]] = relationship(
         "Appointment", back_populates="workspace", cascade="all, delete-orphan"
+    )
+    bookable_staff: Mapped[list["BookableStaff"]] = relationship(
+        "BookableStaff", back_populates="workspace", cascade="all, delete-orphan"
     )
     phone_numbers: Mapped[list["PhoneNumber"]] = relationship(
         "PhoneNumber", back_populates="workspace", cascade="all, delete-orphan"
