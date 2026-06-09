@@ -306,6 +306,109 @@ class TestRedisProbe:
         fake_client.ping.assert_awaited_once()
 
 
+class TestWorkerHeartbeatProbe:
+    """Unit tests for the worker-heartbeat probe helper."""
+
+    async def test_empty_labels_short_circuits(self) -> None:
+        """Pre-startup (no running workers) returns ok without touching Redis."""
+        from app.api.v1 import health
+
+        with (
+            patch.object(health, "_expected_worker_labels", return_value=[]),
+            patch.object(
+                health,
+                "get_redis",
+                new=AsyncMock(side_effect=AssertionError("Redis must not be touched")),
+            ),
+        ):
+            ok, per_worker, err = await health._check_worker_heartbeats()
+        assert ok is True
+        assert per_worker == {}
+        assert err is None
+
+    async def test_many_workers_use_single_round_trip(self) -> None:
+        """All heartbeat keys are fetched in one MGET, not a per-worker fan-out.
+
+        This is the deploy-blocking regression: a fan-out of one ``exists()``
+        per worker borrowed one Redis connection each, exhausting the bounded
+        pool (``MaxConnectionsError``) once the worker count climbed to 24.
+        A single ``MGET`` borrows at most one connection regardless of count.
+        """
+        from app.api.v1 import health
+        from app.workers.base import heartbeat_key
+
+        labels = [f"worker_{i}" for i in range(24)]
+
+        fake_client = AsyncMock()
+        # MGET returns values ordered identically to keys; non-None ⇒ present.
+        fake_client.mget = AsyncMock(return_value=["1700000000"] * len(labels))
+        fake_client.exists = AsyncMock(
+            side_effect=AssertionError("per-worker exists() fan-out must not be used")
+        )
+
+        async def _get_redis() -> AsyncMock:
+            return fake_client
+
+        with (
+            patch.object(health, "_expected_worker_labels", return_value=labels),
+            patch.object(health, "get_redis", new=_get_redis),
+        ):
+            ok, per_worker, err = await health._check_worker_heartbeats()
+
+        assert ok is True
+        assert err is None
+        assert per_worker == dict.fromkeys(labels, True)
+        # Exactly one Redis round-trip for all 24 workers.
+        fake_client.mget.assert_awaited_once_with([heartbeat_key(label) for label in labels])
+
+    async def test_missing_keys_map_to_per_worker_false(self) -> None:
+        """A ``None`` value (missing/expired key) flips that worker to False."""
+        from app.api.v1 import health
+
+        labels = ["alpha", "bravo", "charlie"]
+
+        fake_client = AsyncMock()
+        fake_client.mget = AsyncMock(return_value=["1700000000", None, "1700000001"])
+
+        async def _get_redis() -> AsyncMock:
+            return fake_client
+
+        with (
+            patch.object(health, "_expected_worker_labels", return_value=labels),
+            patch.object(health, "get_redis", new=_get_redis),
+        ):
+            ok, per_worker, err = await health._check_worker_heartbeats()
+
+        assert ok is False
+        assert err is None
+        assert per_worker == {"alpha": True, "bravo": False, "charlie": True}
+
+    async def test_redis_error_reports_all_workers_down(self) -> None:
+        """A Redis failure surfaces the error class with all workers False."""
+        from app.api.v1 import health
+
+        labels = ["alpha", "bravo"]
+
+        class FakeMaxConnectionsError(Exception):
+            pass
+
+        fake_client = AsyncMock()
+        fake_client.mget = AsyncMock(side_effect=FakeMaxConnectionsError("pool exhausted"))
+
+        async def _get_redis() -> AsyncMock:
+            return fake_client
+
+        with (
+            patch.object(health, "_expected_worker_labels", return_value=labels),
+            patch.object(health, "get_redis", new=_get_redis),
+        ):
+            ok, per_worker, err = await health._check_worker_heartbeats()
+
+        assert ok is False
+        assert err == "FakeMaxConnectionsError"
+        assert per_worker == dict.fromkeys(labels, False)
+
+
 class TestVersion:
     """GET /version — git SHA from RAILWAY_GIT_COMMIT_SHA."""
 

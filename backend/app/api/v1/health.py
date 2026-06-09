@@ -107,10 +107,19 @@ async def _check_worker_heartbeats() -> tuple[bool, dict[str, bool], str | None]
 
         async def _run() -> dict[str, bool]:
             client = await get_redis()
-            results = await asyncio.gather(
-                *(client.exists(heartbeat_key(label)) for label in labels)
-            )
-            return {label: bool(exists) for label, exists in zip(labels, results, strict=True)}
+            keys = [heartbeat_key(label) for label in labels]
+            # Single round-trip: ``MGET key1 key2 ...`` borrows at most one
+            # connection from the shared Redis pool regardless of worker count,
+            # returning values ordered identically to ``keys`` (``None`` for a
+            # missing/expired key). A per-worker ``exists()`` fan-out via
+            # ``asyncio.gather`` borrowed one connection each and exhausted the
+            # bounded pool, raising ``MaxConnectionsError`` and reporting every
+            # worker as down.
+            values = await client.mget(keys)
+            return {
+                label: value is not None
+                for label, value in zip(labels, values, strict=True)
+            }
 
         per_worker = await asyncio.wait_for(_run(), timeout=_PROBE_TIMEOUT_SECONDS)
     except TimeoutError:

@@ -29,7 +29,11 @@ async def get_redis() -> redis.Redis:
         if redis_client is None:
             pool = redis.ConnectionPool.from_url(
                 settings.redis_url,
-                max_connections=20,
+                # Headroom over the worker count (currently 24 heartbeat-required
+                # workers) plus concurrent-probe slack. The /readyz heartbeat
+                # check itself borrows a single connection (MGET round-trip), so
+                # this cap is defensive rather than load-bearing.
+                max_connections=50,
                 socket_timeout=5,
                 socket_connect_timeout=2,
                 health_check_interval=30,
