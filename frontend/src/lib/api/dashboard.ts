@@ -80,6 +80,68 @@ export interface RevenueStats {
   by_prompt_version: RevenueAttributionStat[];
 }
 
+export interface SpeedToLeadStats {
+  window_days: number;
+  sla_seconds: number;
+  leads_measured: number;
+  within_sla: number;
+  /** null when no leads measured in window */
+  pct_within_sla: number | null;
+  avg_response_seconds: number | null;
+  median_response_seconds: number | null;
+  fastest_response_seconds: number | null;
+}
+
+export interface ReviewsStats {
+  average_rating: number;
+  total_reviews: number;
+  reputation_score: number;
+  new_count: number;
+  public_reviews: number;
+  private_feedback: number;
+  requests_sent: number;
+  requests_rated: number;
+  response_rate: number;
+}
+
+export interface DealCoachDealStat {
+  opportunity_id: string;
+  name: string;
+  deal_health: string;
+  top_risk: string;
+  amount_at_risk: number;
+  currency: string;
+}
+
+export interface DealCoachStats {
+  open_deals: number;
+  at_risk_count: number;
+  critical_count: number;
+  watch_count: number;
+  next_best_action_count: number;
+  total_amount_at_risk: number;
+  currency: string;
+  top_deals: DealCoachDealStat[];
+}
+
+export interface RoleplayStats {
+  total_runs: number;
+  runs_this_week: number;
+  completed_runs: number;
+  /** null when no completed runs */
+  avg_overall_score: number | null;
+  /** relative time of the most recent run, null when none */
+  last_run_at: string | null;
+}
+
+export interface KnowledgeBaseStats {
+  total_documents: number;
+  active_documents: number;
+  total_chunks: number;
+  total_tokens: number;
+  agents_with_knowledge: number;
+}
+
 export interface DashboardResponse {
   stats: DashboardStats;
   recent_activity: RecentActivity[];
@@ -88,6 +150,11 @@ export interface DashboardResponse {
   today_overview: TodayOverview;
   appointment_stats: AppointmentStats;
   revenue_stats: RevenueStats;
+  speed_to_lead_stats: SpeedToLeadStats;
+  reviews_stats: ReviewsStats;
+  deal_coach_stats: DealCoachStats;
+  roleplay_stats: RoleplayStats;
+  knowledge_base_stats: KnowledgeBaseStats;
 }
 
 export const dashboardApi = {

@@ -9266,6 +9266,12 @@
             "title": "Campaign Stats",
             "type": "array"
           },
+          "deal_coach_stats": {
+            "$ref": "#/components/schemas/DealCoachStats"
+          },
+          "knowledge_base_stats": {
+            "$ref": "#/components/schemas/KnowledgeBaseStats"
+          },
           "recent_activity": {
             "items": {
               "$ref": "#/components/schemas/RecentActivity"
@@ -9275,6 +9281,12 @@
           },
           "revenue_stats": {
             "$ref": "#/components/schemas/RevenueStats"
+          },
+          "reviews_stats": {
+            "$ref": "#/components/schemas/ReviewsStats"
+          },
+          "roleplay_stats": {
+            "$ref": "#/components/schemas/RoleplayStats"
           },
           "speed_to_lead_stats": {
             "$ref": "#/components/schemas/SpeedToLeadStats"
@@ -9294,7 +9306,11 @@
           "today_overview",
           "appointment_stats",
           "revenue_stats",
-          "speed_to_lead_stats"
+          "speed_to_lead_stats",
+          "reviews_stats",
+          "deal_coach_stats",
+          "roleplay_stats",
+          "knowledge_base_stats"
         ],
         "title": "DashboardResponse",
         "type": "object"
@@ -9496,6 +9512,97 @@
           "generated_at"
         ],
         "title": "DealCoachCard",
+        "type": "object"
+      },
+      "DealCoachDealStat": {
+        "description": "One at-risk deal surfaced on the deal-coach dashboard card.",
+        "properties": {
+          "amount_at_risk": {
+            "title": "Amount At Risk",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "deal_health": {
+            "title": "Deal Health",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opportunity_id": {
+            "title": "Opportunity Id",
+            "type": "string"
+          },
+          "top_risk": {
+            "title": "Top Risk",
+            "type": "string"
+          }
+        },
+        "required": [
+          "opportunity_id",
+          "name",
+          "deal_health",
+          "top_risk",
+          "amount_at_risk",
+          "currency"
+        ],
+        "title": "DealCoachDealStat",
+        "type": "object"
+      },
+      "DealCoachStats": {
+        "description": "AI deal-coach pipeline-health metrics for the dashboard.",
+        "properties": {
+          "at_risk_count": {
+            "title": "At Risk Count",
+            "type": "integer"
+          },
+          "critical_count": {
+            "title": "Critical Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "next_best_action_count": {
+            "title": "Next Best Action Count",
+            "type": "integer"
+          },
+          "open_deals": {
+            "title": "Open Deals",
+            "type": "integer"
+          },
+          "top_deals": {
+            "items": {
+              "$ref": "#/components/schemas/DealCoachDealStat"
+            },
+            "title": "Top Deals",
+            "type": "array"
+          },
+          "total_amount_at_risk": {
+            "title": "Total Amount At Risk",
+            "type": "number"
+          },
+          "watch_count": {
+            "title": "Watch Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "open_deals",
+          "at_risk_count",
+          "critical_count",
+          "watch_count",
+          "next_best_action_count",
+          "total_amount_at_risk",
+          "currency",
+          "top_deals"
+        ],
+        "title": "DealCoachStats",
         "type": "object"
       },
       "DealSignals": {
@@ -12867,6 +12974,40 @@
           "created_at"
         ],
         "title": "InvitationResponse",
+        "type": "object"
+      },
+      "KnowledgeBaseStats": {
+        "description": "Knowledge-base (CAG) usage metrics for the dashboard.",
+        "properties": {
+          "active_documents": {
+            "title": "Active Documents",
+            "type": "integer"
+          },
+          "agents_with_knowledge": {
+            "title": "Agents With Knowledge",
+            "type": "integer"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          },
+          "total_documents": {
+            "title": "Total Documents",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_documents",
+          "active_documents",
+          "total_chunks",
+          "total_tokens",
+          "agents_with_knowledge"
+        ],
+        "title": "KnowledgeBaseStats",
         "type": "object"
       },
       "KnowledgeDocumentCreate": {
@@ -24439,6 +24580,108 @@
           }
         },
         "title": "ReviewUpdate",
+        "type": "object"
+      },
+      "ReviewsStats": {
+        "description": "Reviews & reputation metrics for the dashboard.",
+        "properties": {
+          "average_rating": {
+            "title": "Average Rating",
+            "type": "number"
+          },
+          "new_count": {
+            "title": "New Count",
+            "type": "integer"
+          },
+          "private_feedback": {
+            "title": "Private Feedback",
+            "type": "integer"
+          },
+          "public_reviews": {
+            "title": "Public Reviews",
+            "type": "integer"
+          },
+          "reputation_score": {
+            "title": "Reputation Score",
+            "type": "integer"
+          },
+          "requests_rated": {
+            "title": "Requests Rated",
+            "type": "integer"
+          },
+          "requests_sent": {
+            "title": "Requests Sent",
+            "type": "integer"
+          },
+          "response_rate": {
+            "title": "Response Rate",
+            "type": "number"
+          },
+          "total_reviews": {
+            "title": "Total Reviews",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "average_rating",
+          "total_reviews",
+          "reputation_score",
+          "new_count",
+          "public_reviews",
+          "private_feedback",
+          "requests_sent",
+          "requests_rated",
+          "response_rate"
+        ],
+        "title": "ReviewsStats",
+        "type": "object"
+      },
+      "RoleplayStats": {
+        "description": "Roleplay / practice-arena activity metrics for the dashboard.",
+        "properties": {
+          "avg_overall_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Overall Score"
+          },
+          "completed_runs": {
+            "title": "Completed Runs",
+            "type": "integer"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "runs_this_week": {
+            "title": "Runs This Week",
+            "type": "integer"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_runs",
+          "runs_this_week",
+          "completed_runs",
+          "avg_overall_score",
+          "last_run_at"
+        ],
+        "title": "RoleplayStats",
         "type": "object"
       },
       "SearchPhoneNumbersRequest": {

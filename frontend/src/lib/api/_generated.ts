@@ -9984,9 +9984,13 @@ export interface components {
             appointment_stats: components["schemas"]["AppointmentStats"];
             /** Campaign Stats */
             campaign_stats: components["schemas"]["CampaignStat"][];
+            deal_coach_stats: components["schemas"]["DealCoachStats"];
+            knowledge_base_stats: components["schemas"]["KnowledgeBaseStats"];
             /** Recent Activity */
             recent_activity: components["schemas"]["RecentActivity"][];
             revenue_stats: components["schemas"]["RevenueStats"];
+            reviews_stats: components["schemas"]["ReviewsStats"];
+            roleplay_stats: components["schemas"]["RoleplayStats"];
             speed_to_lead_stats: components["schemas"]["SpeedToLeadStats"];
             stats: components["schemas"]["DashboardStats"];
             today_overview: components["schemas"]["TodayOverview"];
@@ -10079,6 +10083,46 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * DealCoachDealStat
+         * @description One at-risk deal surfaced on the deal-coach dashboard card.
+         */
+        DealCoachDealStat: {
+            /** Amount At Risk */
+            amount_at_risk: number;
+            /** Currency */
+            currency: string;
+            /** Deal Health */
+            deal_health: string;
+            /** Name */
+            name: string;
+            /** Opportunity Id */
+            opportunity_id: string;
+            /** Top Risk */
+            top_risk: string;
+        };
+        /**
+         * DealCoachStats
+         * @description AI deal-coach pipeline-health metrics for the dashboard.
+         */
+        DealCoachStats: {
+            /** At Risk Count */
+            at_risk_count: number;
+            /** Critical Count */
+            critical_count: number;
+            /** Currency */
+            currency: string;
+            /** Next Best Action Count */
+            next_best_action_count: number;
+            /** Open Deals */
+            open_deals: number;
+            /** Top Deals */
+            top_deals: components["schemas"]["DealCoachDealStat"][];
+            /** Total Amount At Risk */
+            total_amount_at_risk: number;
+            /** Watch Count */
+            watch_count: number;
         };
         /**
          * DealSignals
@@ -11513,6 +11557,22 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * KnowledgeBaseStats
+         * @description Knowledge-base (CAG) usage metrics for the dashboard.
+         */
+        KnowledgeBaseStats: {
+            /** Active Documents */
+            active_documents: number;
+            /** Agents With Knowledge */
+            agents_with_knowledge: number;
+            /** Total Chunks */
+            total_chunks: number;
+            /** Total Documents */
+            total_documents: number;
+            /** Total Tokens */
+            total_tokens: number;
         };
         /**
          * KnowledgeDocumentCreate
@@ -15653,6 +15713,46 @@ export interface components {
             /** Reply Sent */
             reply_sent?: boolean | null;
             status?: components["schemas"]["ReviewStatusSchema"] | null;
+        };
+        /**
+         * ReviewsStats
+         * @description Reviews & reputation metrics for the dashboard.
+         */
+        ReviewsStats: {
+            /** Average Rating */
+            average_rating: number;
+            /** New Count */
+            new_count: number;
+            /** Private Feedback */
+            private_feedback: number;
+            /** Public Reviews */
+            public_reviews: number;
+            /** Reputation Score */
+            reputation_score: number;
+            /** Requests Rated */
+            requests_rated: number;
+            /** Requests Sent */
+            requests_sent: number;
+            /** Response Rate */
+            response_rate: number;
+            /** Total Reviews */
+            total_reviews: number;
+        };
+        /**
+         * RoleplayStats
+         * @description Roleplay / practice-arena activity metrics for the dashboard.
+         */
+        RoleplayStats: {
+            /** Avg Overall Score */
+            avg_overall_score: number | null;
+            /** Completed Runs */
+            completed_runs: number;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Runs This Week */
+            runs_this_week: number;
+            /** Total Runs */
+            total_runs: number;
         };
         /**
          * SearchPhoneNumbersRequest

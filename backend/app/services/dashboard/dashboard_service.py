@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.db.redis import get_redis
@@ -15,8 +16,11 @@ from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
+from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.knowledge_document import KnowledgeDocument
 from app.models.opportunity import Opportunity
 from app.models.prompt_version import PromptVersion
+from app.models.roleplay import RehearsalRun, RehearsalStatus
 from app.models.workspace import Workspace
 from app.schemas.dashboard import (
     AgentStat,
@@ -24,12 +28,19 @@ from app.schemas.dashboard import (
     CampaignStat,
     DashboardResponse,
     DashboardStats,
+    DealCoachDealStat,
+    DealCoachStats,
+    KnowledgeBaseStats,
     RecentActivity,
     RevenueAttributionStat,
     RevenueStats,
+    ReviewsStats,
+    RoleplayStats,
     SpeedToLeadStats,
     TodayOverview,
 )
+from app.services.opportunities.deal_coach_service import _days_since, assess_risk
+from app.services.reviews.review_service import ReviewService
 from app.services.sla.speed_to_lead import (
     compute_sla_metrics,
     get_speed_to_lead_settings,
@@ -734,6 +745,167 @@ class DashboardService:
             fastest_response_seconds=metrics.fastest_response_seconds,
         )
 
+    async def get_reviews_stats(self, workspace: Workspace) -> ReviewsStats:
+        """Get reviews & reputation metrics for the dashboard."""
+        summary = await ReviewService(self.db).get_summary(workspace.id)
+        return ReviewsStats(
+            average_rating=summary.average_rating,
+            total_reviews=summary.total_reviews,
+            reputation_score=summary.reputation_score,
+            new_count=summary.new_count,
+            public_reviews=summary.public_reviews,
+            private_feedback=summary.private_feedback,
+            requests_sent=summary.requests_sent,
+            requests_rated=summary.requests_rated,
+            response_rate=summary.response_rate,
+        )
+
+    async def get_deal_coach_stats(self, workspace: Workspace) -> DealCoachStats:
+        """Assess open-deal health and surface the most at-risk deals.
+
+        Reuses the canonical deterministic ``assess_risk`` heuristic so the
+        dashboard buckets match the deal-coach list view exactly. A deal earns
+        a recommended next-best action once it crosses the ``watch`` threshold.
+        """
+        now = datetime.now(UTC)
+        result = await self.db.execute(
+            select(Opportunity)
+            .where(
+                Opportunity.workspace_id == workspace.id,
+                Opportunity.status == "open",
+                Opportunity.is_active.is_(True),
+            )
+            .options(
+                selectinload(Opportunity.stage),
+                selectinload(Opportunity.primary_contact),
+            )
+        )
+        opportunities = result.scalars().unique().all()
+
+        at_risk_count = 0
+        critical_count = 0
+        watch_count = 0
+        total_amount_at_risk = 0.0
+        currency = "USD"
+        scored: list[tuple[int, float, DealCoachDealStat]] = []
+        for opp in opportunities:
+            contact = opp.primary_contact
+            days_since = _days_since(contact.last_engaged_at if contact else None, now=now)
+            days_in_stage = _days_since(opp.stage_changed_at, now=now)
+            overdue = bool(
+                opp.expected_close_date is not None and opp.expected_close_date < now.date()
+            )
+            assessment = assess_risk(
+                days_since_last_contact=days_since,
+                days_in_stage=days_in_stage,
+                engagement_score=contact.engagement_score if contact else 0,
+                lead_score=contact.lead_score if contact else 0,
+                last_sentiment=None,
+                awaiting_reply=False,
+                objections=[],
+                expected_close_overdue=overdue,
+            )
+            if assessment.health == "critical":
+                critical_count += 1
+            elif assessment.health == "at_risk":
+                at_risk_count += 1
+            elif assessment.health == "watch":
+                watch_count += 1
+
+            amount = float(opp.amount) if opp.amount is not None else None
+            amount_at_risk = (amount or 0.0) * (assessment.risk_score / 100.0)
+            if assessment.health in ("watch", "at_risk", "critical"):
+                total_amount_at_risk += amount_at_risk
+                currency = opp.currency or currency
+                scored.append(
+                    (
+                        assessment.risk_score,
+                        amount or 0.0,
+                        DealCoachDealStat(
+                            opportunity_id=str(opp.id),
+                            name=opp.name,
+                            deal_health=assessment.health,
+                            top_risk=assessment.top_risk,
+                            amount_at_risk=round(amount_at_risk, 2),
+                            currency=opp.currency or "USD",
+                        ),
+                    )
+                )
+
+        scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        top_deals = [row[2] for row in scored[:5]]
+        next_best_action_count = watch_count + at_risk_count + critical_count
+
+        return DealCoachStats(
+            open_deals=len(opportunities),
+            at_risk_count=at_risk_count,
+            critical_count=critical_count,
+            watch_count=watch_count,
+            next_best_action_count=next_best_action_count,
+            total_amount_at_risk=round(total_amount_at_risk, 2),
+            currency=currency,
+            top_deals=top_deals,
+        )
+
+    async def get_roleplay_stats(self, workspace: Workspace) -> RoleplayStats:
+        """Get roleplay / practice-arena activity metrics for the dashboard."""
+        week_ago = datetime.now(UTC) - timedelta(days=7)
+
+        agg_result = await self.db.execute(
+            select(
+                func.count(),
+                func.count().filter(RehearsalRun.created_at >= week_ago),
+                func.count().filter(
+                    RehearsalRun.status == RehearsalStatus.COMPLETED.value
+                ),
+                func.avg(RehearsalRun.overall_score).filter(
+                    RehearsalRun.overall_score.isnot(None)
+                ),
+                func.max(RehearsalRun.created_at),
+            ).where(RehearsalRun.workspace_id == workspace.id)
+        )
+        total_runs, runs_this_week, completed_runs, avg_score, last_run = agg_result.one()
+
+        return RoleplayStats(
+            total_runs=int(total_runs or 0),
+            runs_this_week=int(runs_this_week or 0),
+            completed_runs=int(completed_runs or 0),
+            avg_overall_score=round(float(avg_score), 1) if avg_score is not None else None,
+            last_run_at=_format_time_ago(last_run) if last_run is not None else None,
+        )
+
+    async def get_knowledge_base_stats(self, workspace: Workspace) -> KnowledgeBaseStats:
+        """Get knowledge-base (CAG) usage metrics for the dashboard."""
+        doc_result = await self.db.execute(
+            select(
+                func.count(),
+                func.count().filter(KnowledgeDocument.is_active.is_(True)),
+                func.coalesce(
+                    func.sum(KnowledgeDocument.token_count).filter(
+                        KnowledgeDocument.is_active.is_(True)
+                    ),
+                    0,
+                ),
+                func.count(func.distinct(KnowledgeDocument.agent_id)),
+            ).where(KnowledgeDocument.workspace_id == workspace.id)
+        )
+        total_documents, active_documents, total_tokens, agents_with_knowledge = doc_result.one()
+
+        chunks_result = await self.db.execute(
+            select(func.count())
+            .select_from(KnowledgeChunk)
+            .where(KnowledgeChunk.workspace_id == workspace.id)
+        )
+        total_chunks = chunks_result.scalar() or 0
+
+        return KnowledgeBaseStats(
+            total_documents=int(total_documents or 0),
+            active_documents=int(active_documents or 0),
+            total_chunks=int(total_chunks),
+            total_tokens=int(total_tokens or 0),
+            agents_with_knowledge=int(agents_with_knowledge or 0),
+        )
+
     async def get_full_dashboard(self, workspace: Workspace) -> DashboardResponse:
         """Get full dashboard data with Redis caching (5-minute TTL)."""
         cache_key = f"dashboard:stats:{workspace.id}"
@@ -757,6 +929,10 @@ class DashboardService:
         appointment_stats = await self.get_appointment_stats(workspace)
         revenue_stats = await self.get_revenue_stats(workspace)
         speed_to_lead_stats = await self.get_speed_to_lead_stats(workspace)
+        reviews_stats = await self.get_reviews_stats(workspace)
+        deal_coach_stats = await self.get_deal_coach_stats(workspace)
+        roleplay_stats = await self.get_roleplay_stats(workspace)
+        knowledge_base_stats = await self.get_knowledge_base_stats(workspace)
 
         response = DashboardResponse(
             stats=stats,
@@ -767,6 +943,10 @@ class DashboardService:
             appointment_stats=appointment_stats,
             revenue_stats=revenue_stats,
             speed_to_lead_stats=speed_to_lead_stats,
+            reviews_stats=reviews_stats,
+            deal_coach_stats=deal_coach_stats,
+            roleplay_stats=roleplay_stats,
+            knowledge_base_stats=knowledge_base_stats,
         )
 
         try:

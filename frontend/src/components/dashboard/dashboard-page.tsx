@@ -6,6 +6,8 @@ import Link from "next/link";
 
 import { AppointmentPerformanceCard } from "@/components/dashboard/appointment-performance-card";
 import { DashboardStatsGrid } from "@/components/dashboard/dashboard-stats";
+import { DealCoachCard } from "@/components/dashboard/deal-coach-card";
+import { KnowledgeBaseCard } from "@/components/dashboard/knowledge-base-card";
 import {
   ActiveCampaignsCard,
   AgentsCard,
@@ -13,6 +15,9 @@ import {
 } from "@/components/dashboard/performance-metrics";
 import { RecentActivityFeed } from "@/components/dashboard/recent-activity-feed";
 import { RevenueRoiCard } from "@/components/dashboard/revenue-roi-card";
+import { ReviewsCard } from "@/components/dashboard/reviews-card";
+import { RoleplayCard } from "@/components/dashboard/roleplay-card";
+import { SpeedToLeadCard } from "@/components/dashboard/speed-to-lead-card";
 import {
   NudgesCard,
   QuickActionsCard,
@@ -86,6 +91,60 @@ export function DashboardPage() {
       >
         <AppointmentStatsCard
           appointmentStats={data?.appointment_stats}
+          isPending={isPending}
+        />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.16 }}
+      >
+        <SpeedToLeadCard
+          speedToLeadStats={data?.speed_to_lead_stats}
+          isPending={isPending}
+        />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.17 }}
+      >
+        <DealCoachCard
+          dealCoachStats={data?.deal_coach_stats}
+          isPending={isPending}
+        />
+      </motion.div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+        >
+          <ReviewsCard reviewsStats={data?.reviews_stats} isPending={isPending} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.19 }}
+        >
+          <RoleplayCard
+            roleplayStats={data?.roleplay_stats}
+            isPending={isPending}
+          />
+        </motion.div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        <KnowledgeBaseCard
+          knowledgeBaseStats={data?.knowledge_base_stats}
           isPending={isPending}
         />
       </motion.div>

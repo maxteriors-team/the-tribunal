@@ -119,6 +119,64 @@ class SpeedToLeadStats(BaseModel):
     fastest_response_seconds: int | None
 
 
+class ReviewsStats(BaseModel):
+    """Reviews & reputation metrics for the dashboard."""
+
+    average_rating: float  # mean star rating across collected reviews (0-5)
+    total_reviews: int
+    reputation_score: int  # 0-100, average rating dampened by volume
+    new_count: int  # reviews awaiting operator triage
+    public_reviews: int  # high ratings routed to public review sites
+    private_feedback: int  # low ratings captured by the negative-feedback firewall
+    requests_sent: int  # review-request SMS dispatched
+    requests_rated: int  # review requests that received a rating
+    response_rate: float  # requests_rated / requests_sent, as a percentage
+
+
+class DealCoachDealStat(BaseModel):
+    """One at-risk deal surfaced on the deal-coach dashboard card."""
+
+    opportunity_id: str
+    name: str
+    deal_health: str  # healthy | watch | at_risk | critical
+    top_risk: str  # the single highest-weighted risk factor
+    amount_at_risk: float  # deal amount weighted by risk score
+    currency: str
+
+
+class DealCoachStats(BaseModel):
+    """AI deal-coach pipeline-health metrics for the dashboard."""
+
+    open_deals: int  # active open opportunities assessed
+    at_risk_count: int  # deals in the at_risk bucket
+    critical_count: int  # deals in the critical bucket
+    watch_count: int  # deals in the watch bucket
+    next_best_action_count: int  # deals with a recommended next-best action (watch+)
+    total_amount_at_risk: float  # sum of risk-weighted deal amounts
+    currency: str
+    top_deals: list[DealCoachDealStat]  # most at-risk deals, highest risk first
+
+
+class RoleplayStats(BaseModel):
+    """Roleplay / practice-arena activity metrics for the dashboard."""
+
+    total_runs: int  # all rehearsal runs
+    runs_this_week: int  # rehearsal runs created in the last 7 days
+    completed_runs: int  # runs that finished scoring
+    avg_overall_score: float | None  # mean overall score of completed runs, null when none
+    last_run_at: str | None  # relative time of the most recent run, null when none
+
+
+class KnowledgeBaseStats(BaseModel):
+    """Knowledge-base (CAG) usage metrics for the dashboard."""
+
+    total_documents: int
+    active_documents: int  # documents currently injectable into agent context
+    total_chunks: int  # embedded + keyword-indexed slices
+    total_tokens: int  # sum of token_count across active documents
+    agents_with_knowledge: int  # distinct agents that have at least one document
+
+
 class DashboardResponse(BaseModel):
     """Complete dashboard response."""
 
@@ -130,3 +188,7 @@ class DashboardResponse(BaseModel):
     appointment_stats: AppointmentStats
     revenue_stats: RevenueStats
     speed_to_lead_stats: SpeedToLeadStats
+    reviews_stats: ReviewsStats
+    deal_coach_stats: DealCoachStats
+    roleplay_stats: RoleplayStats
+    knowledge_base_stats: KnowledgeBaseStats
