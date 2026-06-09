@@ -328,12 +328,65 @@ async def send_missed_call_textback(  # noqa: PLR0911, PLR0912
         )
         await db.commit()
 
+        await _notify_textback_sent(
+            db,
+            workspace=workspace,
+            contact=contact,
+            contact_phone=contact_phone,
+            body=body,
+            call_control_id=call_control_id,
+            log=log,
+        )
+
         log.info(
             "missed_call_textback_sent",
             workspace_id=str(workspace_id),
             message_id=str(delivery.message.id),
         )
         return True
+
+
+async def _notify_textback_sent(
+    db: AsyncSession,
+    *,
+    workspace: Workspace,
+    contact: Contact | None,
+    contact_phone: str,
+    body: str,
+    call_control_id: str,
+    log: Any,
+) -> None:
+    """Push + email workspace members that a missed-call text-back went out."""
+    from app.services.notifications import notify_workspace_event
+
+    who = (contact.full_name if contact and contact.full_name else None) or contact_phone
+    title = "Missed-call text-back sent"
+    message = f"We auto-texted {who} after a missed call."
+    try:
+        await notify_workspace_event(
+            db,
+            workspace_id=workspace.id,
+            notification_type="missed_call_textback",
+            title=title,
+            body=message,
+            data={
+                "type": "missed_call_textback",
+                "contactPhone": contact_phone,
+                "screen": "/(tabs)/conversations",
+            },
+            channel_id="messages",
+            email_subject=title,
+            email_heading="Missed-Call Text-Back Sent",
+            email_intro=message,
+            email_details={
+                "Contact": who,
+                "Phone": contact_phone,
+                "Message sent": body,
+            },
+            dedupe_key=call_control_id,
+        )
+    except Exception as exc:
+        log.warning("missed_call_textback_notification_failed", error=str(exc))
 
 
 async def _enter_ai_sms_mode(

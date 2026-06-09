@@ -471,6 +471,12 @@ class ReviewService:
                 contact_id=review_request.contact_id,
                 payload=event_payload,
             )
+            await self._notify_review(
+                workspace=workspace,
+                rating=rating,
+                is_positive=is_positive,
+                dedupe_key=str(review_request.id),
+            )
             await self.db.commit()
         else:
             # Re-derive routing from the original rating.
@@ -643,9 +649,53 @@ class ReviewService:
             contact_id=contact_id,
             payload={"rating": rating, "source": source, "is_public": is_public},
         )
+        workspace = await self._load_workspace(workspace_id)
+        await self._notify_review(
+            workspace=workspace,
+            rating=rating,
+            is_positive=rating >= 4,
+            dedupe_key=str(review.id),
+        )
         await self.db.commit()
         await self.db.refresh(review)
         return review
+
+    async def _notify_review(
+        self,
+        *,
+        workspace: Workspace,
+        rating: int,
+        is_positive: bool,
+        dedupe_key: str,
+    ) -> None:
+        """Push + email workspace members about a new review/rating (best-effort)."""
+        from app.services.notifications import notify_workspace_event
+
+        business = workspace.name
+        sentiment = "positive" if is_positive else "needs attention"
+        title = f"New {rating}\u2605 review"
+        body = f"{business} received a {rating}-star review ({sentiment})."
+        try:
+            await notify_workspace_event(
+                self.db,
+                workspace_id=workspace.id,
+                notification_type="review",
+                title=title,
+                body=body,
+                data={"type": "review", "rating": rating, "screen": "/(tabs)/reviews"},
+                channel_id="reviews",
+                email_subject=title,
+                email_heading="New Review Received",
+                email_intro=body,
+                email_details={
+                    "Rating": f"{rating} / 5",
+                    "Sentiment": sentiment,
+                    "Business": business,
+                },
+                dedupe_key=dedupe_key,
+            )
+        except Exception:
+            self.log.warning("review_notification_failed", dedupe_key=dedupe_key)
 
     async def update_review(
         self,

@@ -524,12 +524,58 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             execution.status = "completed"
             execution.executed_at = datetime.now(UTC)
             automation.last_triggered_at = datetime.now(UTC)
+            await self._notify_automation_triggered(automation, contact, execution, db)
             log.info("Automation executed successfully")
 
         except Exception as exc:
             execution.status = "failed"
             execution.error = str(exc)
             log.exception("Automation execution failed", error=str(exc))
+
+    async def _notify_automation_triggered(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        execution: AutomationExecution,
+        db: AsyncSession,
+    ) -> None:
+        """Push + email workspace members when an automation runs (best-effort)."""
+        from app.services.notifications import notify_workspace_event
+
+        title = "Automation triggered"
+        body = f"Automation '{automation.name}' ran for your workspace."
+        details = {
+            "Automation": automation.name,
+            "Trigger": automation.trigger_type,
+        }
+        if contact is not None:
+            who = contact.full_name or contact.email or contact.phone_number
+            if who:
+                details["Contact"] = who
+        try:
+            await notify_workspace_event(
+                db,
+                workspace_id=automation.workspace_id,
+                notification_type="automation",
+                title=title,
+                body=body,
+                data={
+                    "type": "automation",
+                    "automationId": str(automation.id),
+                    "screen": "/(tabs)/automations",
+                },
+                channel_id="automations",
+                email_subject=title,
+                email_heading="Automation Triggered",
+                email_intro=body,
+                email_details=details,
+                dedupe_key=str(execution.id),
+            )
+        except Exception:
+            self.logger.warning(
+                "automation_notification_failed",
+                automation_id=str(automation.id),
+            )
 
     # ------------------------------------------------------------------ #
     # Individual action implementations                                    #

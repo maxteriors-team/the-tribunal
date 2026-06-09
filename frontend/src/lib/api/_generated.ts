@@ -12476,10 +12476,20 @@ export interface components {
             notification_push: boolean;
             /** Notification Push Appointments */
             notification_push_appointments: boolean;
+            /** Notification Push Automations */
+            notification_push_automations: boolean;
             /** Notification Push Calls */
             notification_push_calls: boolean;
+            /** Notification Push Deal Alerts */
+            notification_push_deal_alerts: boolean;
             /** Notification Push Messages */
             notification_push_messages: boolean;
+            /** Notification Push Missed Call Textback */
+            notification_push_missed_call_textback: boolean;
+            /** Notification Push Reviews */
+            notification_push_reviews: boolean;
+            /** Notification Push Roleplay */
+            notification_push_roleplay: boolean;
             /** Notification Push Voicemail */
             notification_push_voicemail: boolean;
             /** Notification Sms */
@@ -12496,10 +12506,20 @@ export interface components {
             notification_push?: boolean | null;
             /** Notification Push Appointments */
             notification_push_appointments?: boolean | null;
+            /** Notification Push Automations */
+            notification_push_automations?: boolean | null;
             /** Notification Push Calls */
             notification_push_calls?: boolean | null;
+            /** Notification Push Deal Alerts */
+            notification_push_deal_alerts?: boolean | null;
             /** Notification Push Messages */
             notification_push_messages?: boolean | null;
+            /** Notification Push Missed Call Textback */
+            notification_push_missed_call_textback?: boolean | null;
+            /** Notification Push Reviews */
+            notification_push_reviews?: boolean | null;
+            /** Notification Push Roleplay */
+            notification_push_roleplay?: boolean | null;
             /** Notification Push Voicemail */
             notification_push_voicemail?: boolean | null;
             /** Notification Sms */

@@ -41,6 +41,39 @@ export function NotificationsSettingsTab() {
     notificationsMutation.mutate({ [key]: value });
   };
 
+  // Per-type toggles for actionable workspace events (push + email).
+  const eventTypeToggles: {
+    key: keyof NotificationSettings;
+    label: string;
+    description: string;
+  }[] = [
+    {
+      key: "notification_push_reviews",
+      label: "Reviews",
+      description: "New reviews and rating responses",
+    },
+    {
+      key: "notification_push_deal_alerts",
+      label: "At-risk deals",
+      description: "Deal-coach alerts for deals losing momentum",
+    },
+    {
+      key: "notification_push_missed_call_textback",
+      label: "Missed-call text-backs",
+      description: "When a missed-call follow-up text is sent",
+    },
+    {
+      key: "notification_push_roleplay",
+      label: "Roleplay runs",
+      description: "When a practice roleplay finishes and is scored",
+    },
+    {
+      key: "notification_push_automations",
+      label: "Automations",
+      description: "When an automation triggers for your workspace",
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <Card>
@@ -131,6 +164,43 @@ export function NotificationsSettingsTab() {
                 disabled={notificationsMutation.isPending}
               />
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Event Notifications</CardTitle>
+          <CardDescription>
+            Choose which actionable events notify you by push and email
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {notificationsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            eventTypeToggles.map((toggle) => (
+              <div
+                key={toggle.key}
+                className="flex items-center justify-between"
+              >
+                <div className="space-y-0.5">
+                  <Label>{toggle.label}</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {toggle.description}
+                  </p>
+                </div>
+                <Switch
+                  checked={notifications?.[toggle.key] ?? true}
+                  onCheckedChange={(checked) =>
+                    handleNotificationChange(toggle.key, checked)
+                  }
+                  disabled={notificationsMutation.isPending}
+                />
+              </div>
+            ))
           )}
         </CardContent>
       </Card>

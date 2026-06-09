@@ -77,6 +77,11 @@ class NotificationSettings(BaseModel):
     notification_push_messages: bool
     notification_push_voicemail: bool
     notification_push_appointments: bool
+    notification_push_reviews: bool
+    notification_push_deal_alerts: bool
+    notification_push_missed_call_textback: bool
+    notification_push_roleplay: bool
+    notification_push_automations: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -89,6 +94,11 @@ class NotificationSettingsUpdate(BaseModel):
     notification_push_messages: bool | None = None
     notification_push_voicemail: bool | None = None
     notification_push_appointments: bool | None = None
+    notification_push_reviews: bool | None = None
+    notification_push_deal_alerts: bool | None = None
+    notification_push_missed_call_textback: bool | None = None
+    notification_push_roleplay: bool | None = None
+    notification_push_automations: bool | None = None
 
 
 class IntegrationStatus(BaseModel):

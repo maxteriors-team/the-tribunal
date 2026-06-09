@@ -356,7 +356,56 @@ class DealCoachService:
         action_id: uuid.UUID | None = None
         if metadata and metadata.get("action_id"):
             action_id = uuid.UUID(str(metadata["action_id"]))
+
+        if card.deal_health in ("at_risk", "critical"):
+            await self._notify_at_risk_deal(
+                workspace_id=workspace_id,
+                card=card,
+                dedupe_key=str(action_id or opportunity_id),
+            )
+
         return decision, action_id, _DRAFT_ACTION_TYPE, final_description
+
+    async def _notify_at_risk_deal(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        card: DealCoachCard,
+        dedupe_key: str,
+    ) -> None:
+        """Push + email workspace members about an at-risk deal (best-effort)."""
+        from app.services.notifications import notify_workspace_event
+
+        health = card.deal_health.replace("_", " ").title()
+        title = f"At-risk deal: {card.name}"
+        body = f"{card.name} is {health.lower()} \u2014 {card.top_risk}."
+        try:
+            await notify_workspace_event(
+                self.db,
+                workspace_id=workspace_id,
+                notification_type="deal_alert",
+                title=title,
+                body=body,
+                data={
+                    "type": "deal_alert",
+                    "opportunityId": str(card.opportunity_id),
+                    "screen": f"/(tabs)/opportunities/{card.opportunity_id}",
+                },
+                channel_id="deals",
+                email_subject=title,
+                email_heading="Deal at Risk",
+                email_intro=body,
+                email_details={
+                    "Deal": card.name,
+                    "Health": health,
+                    "Health score": f"{card.health_score}/100",
+                    "Top risk": card.top_risk,
+                    "Next best action": card.next_best_action.title,
+                },
+                dedupe_key=dedupe_key,
+            )
+        except Exception:
+            self.log.warning("deal_alert_notification_failed", dedupe_key=dedupe_key)
 
     # ------------------------------------------------------------------
     # Aggregation

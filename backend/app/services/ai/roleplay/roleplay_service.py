@@ -375,6 +375,43 @@ class RoleplayService:
                 else str(run.rehearsee),
             },
         )
+        await self._notify_roleplay_completed(run)
+
+    async def _notify_roleplay_completed(self, run: RehearsalRun) -> None:
+        """Push + email workspace members about a completed rehearsal (best-effort)."""
+        from app.services.notifications import notify_workspace_event
+
+        agent = run.agent_name or "an agent"
+        persona = run.persona_name or "a persona"
+        score = run.overall_score
+        score_text = f"{score}/100" if score is not None else "not scored"
+        title = "Roleplay completed"
+        body = f"{agent} finished a rehearsal vs {persona} (score {score_text})."
+        try:
+            await notify_workspace_event(
+                self.db,
+                workspace_id=run.workspace_id,
+                notification_type="roleplay",
+                title=title,
+                body=body,
+                data={
+                    "type": "roleplay",
+                    "runId": str(run.id),
+                    "screen": f"/(tabs)/roleplay/{run.id}",
+                },
+                channel_id="roleplay",
+                email_subject=title,
+                email_heading="Roleplay Completed",
+                email_intro=body,
+                email_details={
+                    "Agent": agent,
+                    "Persona": persona,
+                    "Score": score_text,
+                },
+                dedupe_key=str(run.id),
+            )
+        except Exception:
+            logger.warning("roleplay_notification_failed", run_id=str(run.id))
 
     async def _apply_report(
         self,

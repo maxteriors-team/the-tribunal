@@ -23,12 +23,30 @@ export interface NotificationSettings {
   notification_email: boolean;
   notification_sms: boolean;
   notification_push: boolean;
+  notification_push_calls: boolean;
+  notification_push_messages: boolean;
+  notification_push_voicemail: boolean;
+  notification_push_appointments: boolean;
+  notification_push_reviews: boolean;
+  notification_push_deal_alerts: boolean;
+  notification_push_missed_call_textback: boolean;
+  notification_push_roleplay: boolean;
+  notification_push_automations: boolean;
 }
 
 export interface UpdateNotificationRequest {
   notification_email?: boolean;
   notification_sms?: boolean;
   notification_push?: boolean;
+  notification_push_calls?: boolean;
+  notification_push_messages?: boolean;
+  notification_push_voicemail?: boolean;
+  notification_push_appointments?: boolean;
+  notification_push_reviews?: boolean;
+  notification_push_deal_alerts?: boolean;
+  notification_push_missed_call_textback?: boolean;
+  notification_push_roleplay?: boolean;
+  notification_push_automations?: boolean;
 }
 
 // Integration types

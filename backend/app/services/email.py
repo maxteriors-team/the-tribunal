@@ -89,6 +89,81 @@ def _text_to_html(body: str) -> str:
 </html>"""
 
 
+async def send_event_notification_email(
+    to_email: str,
+    subject: str,
+    heading: str,
+    intro: str,
+    details: dict[str, str] | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email an operator about a new actionable workspace event.
+
+    Generic transactional template shared by the actionable-event notifications
+    (reviews, at-risk deals, missed-call text-backs, roleplay runs, automation
+    triggers). ``intro`` and the ``details`` label/value pairs are all
+    operator/contact-derived free text and are HTML-escaped here so they can
+    never inject markup. Returns True only when the provider accepted the send.
+    """
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
+    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
+
+    detail_rows = ""
+    if details:
+        rows = []
+        for label, value in details.items():
+            rows.append(
+                f'<p style="{label_style}">{html_escape(label)}</p>'
+                f'<p style="{value_style}">{html_escape(value)}</p>'
+            )
+        detail_rows = (
+            '<div style="background-color: #f8f9fa; padding: 20px; '
+            'border-radius: 8px; margin: 24px 0;">' + "".join(rows) + "</div>"
+        )
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1a1a1a; margin-bottom: 5px;">{html_escape(heading)}</h1>
+    </div>
+    <p>{html_escape(intro)}</p>
+    {detail_rows}
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="color: #999; font-size: 12px; text-align: center;">
+        Sent by The Tribunal
+    </p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "event_notification_email_sent",
+        to_email=to_email,
+        subject=subject,
+        email_id=response.get("id"),
+    )
+    return True
+
+
 async def send_automation_email(
     to_email: str,
     subject: str,

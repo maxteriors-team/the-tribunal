@@ -39,6 +39,30 @@ from app.services.telephony.missed_call_textback import (
 
 router = APIRouter()
 
+# Notification preference attributes exposed via the settings API. Keeping a
+# single list keeps the GET/PUT handlers and the response builder in sync.
+_NOTIFICATION_PREF_FIELDS = (
+    "notification_email",
+    "notification_sms",
+    "notification_push",
+    "notification_push_calls",
+    "notification_push_messages",
+    "notification_push_voicemail",
+    "notification_push_appointments",
+    "notification_push_reviews",
+    "notification_push_deal_alerts",
+    "notification_push_missed_call_textback",
+    "notification_push_roleplay",
+    "notification_push_automations",
+)
+
+
+def _notification_settings(user: object) -> NotificationSettings:
+    """Build a NotificationSettings response from a user's preference columns."""
+    return NotificationSettings(
+        **{field: getattr(user, field) for field in _NOTIFICATION_PREF_FIELDS}
+    )
+
 
 # Known integration types with display names and descriptions
 KNOWN_INTEGRATIONS = [
@@ -117,15 +141,7 @@ async def update_profile(
 @router.get("/users/me/notifications", response_model=NotificationSettings)
 async def get_notifications(current_user: CurrentUser) -> NotificationSettings:
     """Get current user's notification settings."""
-    return NotificationSettings(
-        notification_email=current_user.notification_email,
-        notification_sms=current_user.notification_sms,
-        notification_push=current_user.notification_push,
-        notification_push_calls=current_user.notification_push_calls,
-        notification_push_messages=current_user.notification_push_messages,
-        notification_push_voicemail=current_user.notification_push_voicemail,
-        notification_push_appointments=current_user.notification_push_appointments,
-    )
+    return _notification_settings(current_user)
 
 
 @router.put("/users/me/notifications", response_model=NotificationSettings)
@@ -135,35 +151,15 @@ async def update_notifications(
     db: DB,
 ) -> NotificationSettings:
     """Update current user's notification settings."""
-    if notification_update.notification_email is not None:
-        current_user.notification_email = notification_update.notification_email
-    if notification_update.notification_sms is not None:
-        current_user.notification_sms = notification_update.notification_sms
-    if notification_update.notification_push is not None:
-        current_user.notification_push = notification_update.notification_push
-    if notification_update.notification_push_calls is not None:
-        current_user.notification_push_calls = notification_update.notification_push_calls
-    if notification_update.notification_push_messages is not None:
-        current_user.notification_push_messages = notification_update.notification_push_messages
-    if notification_update.notification_push_voicemail is not None:
-        current_user.notification_push_voicemail = notification_update.notification_push_voicemail
-    if notification_update.notification_push_appointments is not None:
-        current_user.notification_push_appointments = (
-            notification_update.notification_push_appointments
-        )
+    updates = notification_update.model_dump(exclude_unset=True)
+    for field in _NOTIFICATION_PREF_FIELDS:
+        if updates.get(field) is not None:
+            setattr(current_user, field, updates[field])
 
     await db.commit()
     await db.refresh(current_user)
 
-    return NotificationSettings(
-        notification_email=current_user.notification_email,
-        notification_sms=current_user.notification_sms,
-        notification_push=current_user.notification_push,
-        notification_push_calls=current_user.notification_push_calls,
-        notification_push_messages=current_user.notification_push_messages,
-        notification_push_voicemail=current_user.notification_push_voicemail,
-        notification_push_appointments=current_user.notification_push_appointments,
-    )
+    return _notification_settings(current_user)
 
 
 @router.get("/workspaces/{workspace_id}/integrations", response_model=IntegrationsResponse)

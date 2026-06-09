@@ -22,6 +22,11 @@ NOTIFICATION_TYPE_PREFS = {
     "message": "notification_push_messages",
     "voicemail": "notification_push_voicemail",
     "appointment": "notification_push_appointments",
+    "review": "notification_push_reviews",
+    "deal_alert": "notification_push_deal_alerts",
+    "missed_call_textback": "notification_push_missed_call_textback",
+    "roleplay": "notification_push_roleplay",
+    "automation": "notification_push_automations",
 }
 
 
