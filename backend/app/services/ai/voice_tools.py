@@ -180,6 +180,70 @@ LOOKUP_CALLER_RECORD_TOOL: dict[str, Any] = {
     },
 }
 
+# "Take a message" capture tool.
+# Lets the receptionist capture a structured message for a human when the
+# caller wants someone to call them back or to relay something — instead of
+# transferring or booking. The execution layer persists the message and
+# notifies operators (push + email). Opt-in via ``take_message`` in the agent's
+# enabled_tools so it is only exposed on receptionist-style agents.
+TAKE_MESSAGE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "take_message",
+    "description": (
+        "Take a message for a human team member when the caller wants someone to "
+        "call them back or to relay information — and you cannot resolve it "
+        "yourself or transfer/book. Collect as much structure as the caller will "
+        "give: their name, the best callback number, the reason/topic, how urgent "
+        "it is, when they'd prefer to be called back, and the message itself. "
+        "Confirm the callback number back to the caller before sending. Call this "
+        "ONCE you have gathered the details; the team is notified immediately. "
+        "Do not invent details the caller did not give — leave fields out instead."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "caller_name": {
+                "type": "string",
+                "description": "The caller's name (who the message is from).",
+            },
+            "callback_number": {
+                "type": "string",
+                "description": (
+                    "The best phone number to call the caller back on. Read it "
+                    "back to confirm before sending."
+                ),
+            },
+            "reason": {
+                "type": "string",
+                "description": (
+                    "Short reason or topic for the message (e.g. 'billing "
+                    "question', 'wants a quote', 'following up on order')."
+                ),
+            },
+            "urgency": {
+                "type": "string",
+                "enum": ["low", "medium", "high"],
+                "description": (
+                    "How urgent the callback is. Use 'high' only when the caller "
+                    "says it's urgent/time-sensitive."
+                ),
+            },
+            "preferred_callback_time": {
+                "type": "string",
+                "description": (
+                    "When the caller would prefer to be called back, in their own "
+                    "words (e.g. 'tomorrow afternoon', 'after 5pm', 'anytime')."
+                ),
+            },
+            "message": {
+                "type": "string",
+                "description": "The full free-text message the caller wants relayed.",
+            },
+        },
+        "required": ["message"],
+    },
+}
+
 APPLICATION_LINK_SMS_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "send_application_link",
@@ -372,6 +436,7 @@ def build_tools_list(
     enable_transfer: bool = False,
     enable_search_knowledge: bool = False,
     enable_lookup_caller_record: bool = False,
+    enable_take_message: bool = False,
     timezone: str = "America/New_York",
 ) -> list[dict[str, Any]]:
     """Build a complete tools list based on enabled features.
@@ -385,6 +450,7 @@ def build_tools_list(
         enable_transfer: Include live human transfer/handoff tool
         enable_search_knowledge: Include the on-demand knowledge retrieval tool
         enable_lookup_caller_record: Include the read-only caller record lookup tool
+        enable_take_message: Include the "take a message" capture tool
         timezone: Timezone for booking tools date context
 
     Returns:
@@ -406,6 +472,10 @@ def build_tools_list(
     # Read-only lookup of the current caller's own CRM record
     if enable_lookup_caller_record:
         tools.append(LOOKUP_CALLER_RECORD_TOOL)
+
+    # Structured "take a message" capture for operator follow-up
+    if enable_take_message:
+        tools.append(TAKE_MESSAGE_TOOL)
 
     # DTMF for IVR
     if enable_dtmf:
@@ -495,6 +565,7 @@ def get_tools_from_agent_config(
         enable_transfer=is_transfer_enabled(agent),
         enable_search_knowledge=is_search_knowledge_enabled(agent),
         enable_lookup_caller_record=is_lookup_caller_record_enabled(agent),
+        enable_take_message=is_take_message_enabled(agent),
         timezone=timezone,
     )
 
@@ -522,6 +593,18 @@ def is_lookup_caller_record_enabled(agent: Any) -> bool:
     if not agent:
         return False
     return "lookup_caller_record" in (agent.enabled_tools or [])
+
+
+def is_take_message_enabled(agent: Any) -> bool:
+    """Return whether the "take a message" capture tool should be exposed.
+
+    Opt-in via ``"take_message"`` in the agent's ``enabled_tools``. The tool
+    persists a structured message and notifies operators, so it is enabled
+    explicitly for receptionist-style agents rather than on every agent.
+    """
+    if not agent:
+        return False
+    return "take_message" in (agent.enabled_tools or [])
 
 
 # Grok available voices (for validation)

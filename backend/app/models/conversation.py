@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from app.models.campaign import CampaignContact
     from app.models.contact import Contact
     from app.models.message_test import TestContact
+    from app.models.phone_message import PhoneMessage
     from app.models.phone_number import PhoneNumber
     from app.models.prompt_version import PromptVersion
     from app.models.workspace import Workspace
@@ -392,6 +393,12 @@ class Message(Base):
     feedback: Mapped[list["CallFeedback"]] = relationship("CallFeedback", back_populates="message")
     appointment: Mapped["Appointment | None"] = relationship(
         "Appointment", back_populates="message", uselist=False
+    )
+    phone_messages: Mapped[list["PhoneMessage"]] = relationship(
+        "PhoneMessage",
+        back_populates="message",
+        foreign_keys="PhoneMessage.message_id",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

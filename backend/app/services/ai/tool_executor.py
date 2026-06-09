@@ -28,7 +28,14 @@ logger = structlog.get_logger()
 # Read-only tools that never mutate state and so bypass the HITL approval gate.
 # Gating a knowledge lookup behind operator approval would stall the live call
 # for a harmless retrieval, so it is always allowed to run.
-GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge", "lookup_caller_record"})
+# ``take_message`` is included: it only captures a structured message + notifies
+# operators (no outbound action, no spend), and gating it behind approval would
+# stall the live call and risk losing the message the caller is dictating.
+GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
+    {"search_knowledge", "lookup_caller_record", "take_message"}
+)
+
+_ALLOWED_MESSAGE_URGENCIES: frozenset[str] = frozenset({"low", "medium", "high"})
 
 # Caps on how much of the caller's own record we read back into the live call.
 # Bounded so a chatty record can't blow up latency or the prompt window.
@@ -136,6 +143,16 @@ class VoiceToolExecutor(BaseToolExecutor):
 
         if function_name == "lookup_caller_record":
             return await self._execute_lookup_caller_record()
+
+        if function_name == "take_message":
+            return await self._execute_take_message(
+                caller_name=arguments.get("caller_name"),
+                callback_number=arguments.get("callback_number"),
+                reason=arguments.get("reason"),
+                urgency=arguments.get("urgency"),
+                preferred_callback_time=arguments.get("preferred_callback_time"),
+                message=arguments.get("message"),
+            )
 
         if function_name == "send_application_link":
             return await self._execute_send_application_link()
@@ -640,6 +657,197 @@ class VoiceToolExecutor(BaseToolExecutor):
                 "about anyone else."
             ),
         }
+
+    async def _execute_take_message(
+        self,
+        *,
+        caller_name: str | None,
+        callback_number: str | None,
+        reason: str | None,
+        urgency: str | None,
+        preferred_callback_time: str | None,
+        message: str | None,
+    ) -> dict[str, Any]:
+        """Capture a structured "take a message" note and notify operators.
+
+        Persists a :class:`PhoneMessage` linked to the current call's message +
+        conversation/contact, then notifies workspace operators via push + email.
+        Hard-scoped to the live call: workspace/contact/agent come from the call
+        context, never from the model.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.conversation import Message as MessageModel
+        from app.models.phone_message import (
+            PhoneMessage,
+            PhoneMessageUrgency,
+        )
+
+        if not self.call_control_id:
+            self.log.warning("take_message_no_call_control_id")
+            return {
+                "success": False,
+                "error": "No active call found to attach this message to.",
+            }
+
+        normalized_urgency = (urgency or "").strip().lower()
+        if normalized_urgency not in _ALLOWED_MESSAGE_URGENCIES:
+            normalized_urgency = "medium"
+
+        def _clip(value: str | None, limit: int) -> str | None:
+            if value is None:
+                return None
+            text = value.strip()
+            if not text:
+                return None
+            return text[:limit]
+
+        caller_name = _clip(caller_name, 200)
+        callback_number = _clip(callback_number, 32)
+        reason = _clip(reason, 500)
+        preferred_callback_time = _clip(preferred_callback_time, 200)
+        message_body = message.strip() if message else None
+
+        async with AsyncSessionLocal() as db:
+            msg_result = await db.execute(
+                select(MessageModel)
+                .options(selectinload(MessageModel.conversation))
+                .where(MessageModel.provider_message_id == self.call_control_id)
+            )
+            call_message = msg_result.scalar_one_or_none()
+            if not call_message or not call_message.conversation:
+                self.log.warning(
+                    "take_message_no_call_message", call_control_id=self.call_control_id
+                )
+                return {
+                    "success": False,
+                    "error": "Could not find the current call to attach this message to.",
+                }
+
+            conversation = call_message.conversation
+            workspace_id = self.workspace_id or conversation.workspace_id
+
+            # Sensible fallbacks from the call context (never from the model).
+            if not callback_number:
+                callback_number = _clip(conversation.contact_phone, 32)
+            if not caller_name:
+                caller_name = _clip(self.get_contact_name(), 200)
+
+            phone_message = PhoneMessage(
+                workspace_id=workspace_id,
+                message_id=call_message.id,
+                conversation_id=conversation.id,
+                contact_id=conversation.contact_id,
+                agent_id=call_message.agent_id,
+                caller_name=caller_name,
+                callback_number=callback_number,
+                reason=reason,
+                urgency=PhoneMessageUrgency(normalized_urgency),
+                preferred_callback_time=preferred_callback_time,
+                message_body=message_body,
+            )
+            db.add(phone_message)
+            await db.commit()
+            await db.refresh(phone_message)
+
+            phone_message_id = phone_message.id
+            self.log.info(
+                "take_message_captured",
+                call_control_id=self.call_control_id,
+                phone_message_id=str(phone_message_id),
+                urgency=normalized_urgency,
+            )
+
+            await self._notify_message_operators(
+                db,
+                workspace_id=workspace_id,
+                phone_message=phone_message,
+            )
+
+        return {
+            "success": True,
+            "message_id": str(phone_message_id),
+            "message": (
+                "Got it — I've taken the message and the team has been notified. "
+                "Let the caller know their message has been passed along."
+            ),
+        }
+
+    async def _notify_message_operators(
+        self,
+        db: Any,
+        *,
+        workspace_id: uuid.UUID,
+        phone_message: Any,
+    ) -> None:
+        """Notify workspace operators of a newly taken message (push + email)."""
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from app.models.workspace import Workspace, WorkspaceMembership
+        from app.services.email import send_taken_message_notification
+        from app.services.idempotency import derive_outbound_key
+        from app.services.push_notifications import push_notification_service
+
+        workspace = await db.get(Workspace, workspace_id)
+        workspace_name = workspace.name if workspace else "your workspace"
+
+        who = phone_message.caller_name or phone_message.callback_number or "a caller"
+        urgency = str(phone_message.urgency)
+        summary = phone_message.reason or phone_message.message_body or "New message"
+        title = f"New Message ({urgency})"
+        body = f"{who}: {summary}"[:300]
+
+        try:
+            await push_notification_service.send_to_workspace_members(
+                db=db,
+                workspace_id=str(workspace_id),
+                title=title,
+                body=body,
+                data={
+                    "type": "message",
+                    "phoneMessageId": str(phone_message.id),
+                    "urgency": urgency,
+                    "screen": (
+                        f"/(tabs)/calls/{phone_message.message_id}"
+                        if phone_message.message_id
+                        else "/(tabs)/calls"
+                    ),
+                },
+                notification_type="message",
+                channel_id="calls",
+            )
+        except Exception as exc:
+            self.log.exception("take_message_push_failed", error=str(exc))
+
+        try:
+            members = await db.execute(
+                select(User)
+                .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+                .where(WorkspaceMembership.workspace_id == workspace_id)
+            )
+            sent = 0
+            for user in members.scalars().all():
+                if not user.notification_email or not user.email:
+                    continue
+                idem = derive_outbound_key("take_message_email", phone_message.id, user.id)
+                ok = await send_taken_message_notification(
+                    to_email=user.email,
+                    workspace_name=workspace_name,
+                    caller_name=phone_message.caller_name,
+                    callback_number=phone_message.callback_number,
+                    reason=phone_message.reason,
+                    urgency=urgency,
+                    preferred_callback_time=phone_message.preferred_callback_time,
+                    message_body=phone_message.message_body,
+                    idempotency_key=idem,
+                )
+                sent += 1 if ok else 0
+            self.log.info("take_message_email_dispatched", recipients=sent)
+        except Exception as exc:
+            self.log.exception("take_message_email_failed", error=str(exc))
 
     async def _execute_transfer_call(
         self,

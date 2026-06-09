@@ -14,7 +14,12 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
-from app.schemas.call import CallCreate, CallResponse, PaginatedCalls
+from app.schemas.call import (
+    CallCreate,
+    CallResponse,
+    CapturedMessageResponse,
+    PaginatedCalls,
+)
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
 router = APIRouter()
@@ -104,6 +109,25 @@ async def initiate_call(
         await voice_service.close()
 
 
+def _build_captured_messages(message: Message) -> list[CapturedMessageResponse]:
+    """Map a call's loaded phone_messages relationship to response models."""
+    captures = getattr(message, "phone_messages", None) or []
+    return [
+        CapturedMessageResponse(
+            id=pm.id,
+            caller_name=pm.caller_name,
+            callback_number=pm.callback_number,
+            reason=pm.reason,
+            urgency=str(pm.urgency),
+            preferred_callback_time=pm.preferred_callback_time,
+            message_body=pm.message_body,
+            status=str(pm.status),
+            created_at=pm.created_at,
+        )
+        for pm in sorted(captures, key=lambda pm: pm.created_at)
+    ]
+
+
 def _build_call_response(
     message: Message,
     conversation: Conversation,
@@ -140,6 +164,7 @@ def _build_call_response(
         agent_name=agent_name,
         is_ai=message.is_ai,
         booking_outcome=message.booking_outcome,
+        captured_messages=_build_captured_messages(message),
     )
 
 
@@ -171,7 +196,7 @@ async def list_calls(
     Returns:
         Paginated list of calls
     """
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import joinedload, selectinload
 
     # Query voice messages with their conversations, agents, and contacts
     query = (
@@ -179,6 +204,7 @@ async def list_calls(
         .options(
             joinedload(Message.conversation).joinedload(Conversation.contact),
             joinedload(Message.agent),
+            selectinload(Message.phone_messages),
         )
         .join(Conversation, Message.conversation_id == Conversation.id)
         .where(Message.channel == "voice")
@@ -266,7 +292,7 @@ async def get_call(
     Returns:
         Message record with call details
     """
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import joinedload, selectinload
 
     # Get the message with conversation, agent, and contact
     result = await db.execute(
@@ -274,6 +300,7 @@ async def get_call(
         .options(
             joinedload(Message.conversation).joinedload(Conversation.contact),
             joinedload(Message.agent),
+            selectinload(Message.phone_messages),
         )
         .where(
             Message.id == call_id,

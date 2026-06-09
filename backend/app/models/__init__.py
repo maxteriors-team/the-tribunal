@@ -1,5 +1,7 @@
 """Database models."""
 
+from app.models.ad_advertiser import AdAdvertiser, AdPlatform
+from app.models.ad_creative import AdCreative, AdMediaType
 from app.models.agent import Agent
 from app.models.api_key import APIKey
 from app.models.appointment import Appointment
@@ -71,6 +73,11 @@ from app.models.outbound_sequence import (
     SequenceStepChannel,
 )
 from app.models.pending_action import PendingAction
+from app.models.phone_message import (
+    PhoneMessage,
+    PhoneMessageStatus,
+    PhoneMessageUrgency,
+)
 from app.models.phone_number import PhoneNumber, PhoneNumberProvider
 from app.models.phone_number_stats import PhoneNumberDailyStats
 from app.models.pipeline import Pipeline, PipelineStage
@@ -102,6 +109,10 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
 
 __all__ = [
+    "AdAdvertiser",
+    "AdPlatform",
+    "AdCreative",
+    "AdMediaType",
     "APIKey",
     "User",
     "Workspace",
@@ -196,6 +207,9 @@ __all__ = [
     "KnowledgeChunk",
     "LinkClick",
     "PendingAction",
+    "PhoneMessage",
+    "PhoneMessageStatus",
+    "PhoneMessageUrgency",
     "AssistantConversation",
     "AssistantMessage",
     "AuthRateLimit",

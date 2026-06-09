@@ -218,6 +218,30 @@ You can use these auditory cues naturally in your responses to sound more human:
             "and offer to take their information."
         )
 
+    def get_take_message_guidance(self) -> str:
+        """Get guidance for the "take a message" capture tool.
+
+        Returned only when the agent has the tool enabled. Instructs the agent to
+        capture a structured message for a human when it can't resolve, book, or
+        transfer — and to confirm the callback number before sending.
+        """
+        if not self.agent or not self.agent.enabled_tools:
+            return ""
+        if "take_message" not in self.agent.enabled_tools:
+            return ""
+
+        return (
+            "\n\n# Taking a Message\n"
+            "You have a take_message tool. When the caller wants a human to call "
+            "them back or to relay something, and you can't resolve it, book, or "
+            "transfer, offer to take a message. Gather their name, the best "
+            "callback number, the reason/topic, how urgent it is, when they'd "
+            "prefer a callback, and the message itself. Read the callback number "
+            "back to confirm it, then call take_message once. After it succeeds, "
+            "reassure the caller their message has been passed along. Do not "
+            "invent details the caller didn't give."
+        )
+
     def get_ivr_navigation_guidance(
         self,
         ivr_status: "IVRStatus | None" = None,
@@ -548,6 +572,9 @@ AVAILABILITY ACCURACY RULES:
 
         # 6c. Caller account record (read-only) guidance
         parts.append(self.get_caller_record_guidance())
+
+        # 6d. "Take a message" capture guidance
+        parts.append(self.get_take_message_guidance())
 
         # 7. IVR/DTMF navigation guidance (before booking, critical for outbound)
         if include_ivr_guidance:

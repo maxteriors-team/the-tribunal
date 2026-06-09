@@ -1,5 +1,17 @@
 // Call record types
 
+export interface CapturedMessage {
+  id: string;
+  caller_name?: string | null;
+  callback_number?: string | null;
+  reason?: string | null;
+  urgency: "low" | "medium" | "high" | string;
+  preferred_callback_time?: string | null;
+  message_body?: string | null;
+  status: string;
+  created_at: string;
+}
+
 export interface CallRecord {
   id: string;
   conversation_id: string;
@@ -18,6 +30,7 @@ export interface CallRecord {
   agent_name?: string;
   is_ai?: boolean;
   booking_outcome?: string;
+  captured_messages?: CapturedMessage[];
   created_at: string;
   // Optional fields for active calls
   started_at?: string;

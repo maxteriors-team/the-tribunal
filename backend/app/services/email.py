@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from html import escape as html_escape
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
@@ -143,6 +144,163 @@ async def send_invitation_email(
         "invitation_email_sent",
         to_email=to_email,
         workspace=workspace_name,
+        email_id=response.get("id"),
+    )
+    return True
+
+
+async def send_voicemail_notification(
+    to_email: str,
+    workspace_name: str,
+    contact_phone: str,
+    summary: str,
+    transcript: str,
+    intent: str,
+    urgency: str,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email an operator about a new transcribed inbound voicemail."""
+    subject = f"New Voicemail ({urgency.upper()}) — {contact_phone}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
+    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
+
+    # The transcript is caller-supplied text; escape it so it cannot inject markup.
+    safe_transcript = html_escape(transcript) if transcript else "(no transcript available)"
+    safe_summary = html_escape(summary) if summary else "(no summary)"
+    safe_intent = html_escape(intent)
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1a1a1a; margin-bottom: 5px;">New Voicemail</h1>
+    </div>
+    <p>A new voicemail was left for <strong>{html_escape(workspace_name)}</strong>.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
+        <p style="{label_style}">From</p>
+        <p style="{value_style}">{html_escape(contact_phone)}</p>
+        <p style="{label_style}">Intent</p>
+        <p style="{value_style}">{safe_intent}</p>
+        <p style="{label_style}">Urgency</p>
+        <p style="{value_style}">{html_escape(urgency)}</p>
+        <p style="{label_style}">Summary</p>
+        <p style="{value_style}">{safe_summary}</p>
+        <p style="{label_style}">Transcript</p>
+        <p style="font-size: 15px; color: #333; margin: 2px 0;">{safe_transcript}</p>
+    </div>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="color: #999; font-size: 12px; text-align: center;">
+        Sent by your AI voicemail assistant
+    </p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "voicemail_notification_sent",
+        to_email=to_email,
+        urgency=urgency,
+        intent=intent,
+        email_id=response.get("id"),
+    )
+    return True
+
+
+async def send_taken_message_notification(
+    to_email: str,
+    workspace_name: str,
+    caller_name: str | None,
+    callback_number: str | None,
+    reason: str | None,
+    urgency: str,
+    preferred_callback_time: str | None,
+    message_body: str | None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email an operator about a message the AI receptionist took from a caller."""
+    who = caller_name or callback_number or "a caller"
+    subject = f"New Message ({urgency.upper()}) — {who}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
+    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
+
+    # All fields are caller-supplied free text; escape so they cannot inject markup.
+    safe_caller = html_escape(caller_name) if caller_name else "(not given)"
+    safe_number = html_escape(callback_number) if callback_number else "(not given)"
+    safe_reason = html_escape(reason) if reason else "(not given)"
+    safe_when = html_escape(preferred_callback_time) if preferred_callback_time else "(not given)"
+    safe_message = html_escape(message_body) if message_body else "(no message)"
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1a1a1a; margin-bottom: 5px;">New Message</h1>
+    </div>
+    <p>Your AI receptionist took a message for <strong>{html_escape(workspace_name)}</strong>.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
+        <p style="{label_style}">From</p>
+        <p style="{value_style}">{safe_caller}</p>
+        <p style="{label_style}">Callback Number</p>
+        <p style="{value_style}">{safe_number}</p>
+        <p style="{label_style}">Reason</p>
+        <p style="{value_style}">{safe_reason}</p>
+        <p style="{label_style}">Urgency</p>
+        <p style="{value_style}">{html_escape(urgency)}</p>
+        <p style="{label_style}">Preferred Callback Time</p>
+        <p style="{value_style}">{safe_when}</p>
+        <p style="{label_style}">Message</p>
+        <p style="font-size: 15px; color: #333; margin: 2px 0;">{safe_message}</p>
+    </div>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="color: #999; font-size: 12px; text-align: center;">
+        Sent by your AI receptionist
+    </p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "taken_message_notification_sent",
+        to_email=to_email,
+        urgency=urgency,
         email_id=response.get("id"),
     )
     return True

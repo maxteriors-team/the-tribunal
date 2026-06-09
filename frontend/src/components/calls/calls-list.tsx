@@ -14,6 +14,7 @@ import {
   Download,
   Loader2,
   CalendarCheck,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -326,6 +327,12 @@ export function CallsList() {
                                 Booked
                               </Badge>
                             )}
+                            {(call.captured_messages?.length ?? 0) > 0 && (
+                              <Badge variant="outline" className="bg-info/10 text-info border-info/20">
+                                <MessageSquare className="size-3 mr-1" />
+                                Message
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -440,6 +447,61 @@ export function CallsList() {
                                       <span className="font-mono">{call.to_number || "N/A"}</span>
                                     </div>
                                   </div>
+                                  {(call.captured_messages?.length ?? 0) > 0 && (
+                                    <div className="space-y-2">
+                                      <h4 className="flex items-center gap-1.5 font-medium">
+                                        <MessageSquare className="size-4" />
+                                        Messages Taken
+                                      </h4>
+                                      {call.captured_messages!.map((msg) => (
+                                        <div
+                                          key={msg.id}
+                                          className="rounded-md border bg-muted/40 p-3 space-y-2 text-sm"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <span className="font-medium">
+                                              {msg.caller_name || "Unknown caller"}
+                                            </span>
+                                            <Badge
+                                              variant="outline"
+                                              className={
+                                                msg.urgency === "high"
+                                                  ? "bg-destructive/10 text-destructive border-destructive/20"
+                                                  : msg.urgency === "low"
+                                                    ? "bg-muted text-muted-foreground"
+                                                    : "bg-warning/10 text-warning border-warning/20"
+                                              }
+                                            >
+                                              {msg.urgency} urgency
+                                            </Badge>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                            {msg.callback_number && (
+                                              <div>
+                                                <span className="text-muted-foreground">Callback: </span>
+                                                <span className="font-mono">{msg.callback_number}</span>
+                                              </div>
+                                            )}
+                                            {msg.reason && (
+                                              <div>
+                                                <span className="text-muted-foreground">Reason: </span>
+                                                {msg.reason}
+                                              </div>
+                                            )}
+                                            {msg.preferred_callback_time && (
+                                              <div>
+                                                <span className="text-muted-foreground">Prefers: </span>
+                                                {msg.preferred_callback_time}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {msg.message_body && (
+                                            <p className="whitespace-pre-wrap">{msg.message_body}</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   {call.transcript && (
                                     <div className="space-y-2">
                                       <h4 className="font-medium">Transcript</h4>

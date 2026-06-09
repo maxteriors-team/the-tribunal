@@ -6,6 +6,20 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class CapturedMessageResponse(BaseModel):
+    """A structured "take a message" capture from a voice call."""
+
+    id: uuid.UUID
+    caller_name: str | None = None
+    callback_number: str | None = None
+    reason: str | None = None
+    urgency: str
+    preferred_callback_time: str | None = None
+    message_body: str | None = None
+    status: str
+    created_at: datetime
+
+
 class CallCreate(BaseModel):
     """Request to initiate a call."""
 
@@ -39,6 +53,8 @@ class CallResponse(BaseModel):
     agent_name: str | None = None
     is_ai: bool = False
     booking_outcome: str | None = None
+    # Structured messages captured during the call via the take_message tool
+    captured_messages: list[CapturedMessageResponse] = []
 
 
 class PaginatedCalls(BaseModel):
