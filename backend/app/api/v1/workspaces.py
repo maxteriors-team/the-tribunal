@@ -21,6 +21,7 @@ from app.schemas.workspace import (
     WorkspaceUpdate,
     WorkspaceWithMembership,
 )
+from app.services.opportunities import ensure_default_pipeline
 
 router = APIRouter()
 
@@ -83,6 +84,10 @@ async def create_workspace(
         is_default=True,
     )
     db.add(membership)
+
+    # Provision a default pipeline so opportunities (e.g. ad-library promotions)
+    # land in a real pipeline and the opportunities board has columns to render.
+    await ensure_default_pipeline(db, workspace.id)
 
     await db.commit()
     await db.refresh(workspace)

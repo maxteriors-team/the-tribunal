@@ -29,17 +29,12 @@ from app.schemas.opportunity import (
     PipelineUpdate,
 )
 from app.services.exceptions import NotFoundError
+from app.services.opportunities.default_pipeline import DEFAULT_PIPELINE_STAGES
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
 
 logger = structlog.get_logger()
 
-_DEFAULT_STAGES = [
-    {"name": "New", "order": 0, "probability": 0, "stage_type": "active"},
-    {"name": "Qualified", "order": 1, "probability": 25, "stage_type": "active"},
-    {"name": "Proposal", "order": 2, "probability": 50, "stage_type": "active"},
-    {"name": "Won", "order": 3, "probability": 100, "stage_type": "won"},
-    {"name": "Lost", "order": 4, "probability": 0, "stage_type": "lost"},
-]
+_DEFAULT_STAGES = DEFAULT_PIPELINE_STAGES
 
 
 class OpportunityService:
@@ -232,7 +227,11 @@ class OpportunityService:
             created_before=created_before,
         ).order_by(Opportunity.created_at.desc())
 
-        result = await paginate(self.db, query, page=page, page_size=page_size)
+        # Eager-load line_items: OpportunityResponse serializes them, and a lazy
+        # load during async serialization raises MissingGreenlet.
+        query = query.options(selectinload(Opportunity.line_items))
+
+        result = await paginate(self.db, query, page=page, page_size=page_size, unique=True)
         return result.build_response(
             item_model=OpportunityResponse,
             response_builder=PaginatedOpportunities,
@@ -265,7 +264,9 @@ class OpportunityService:
         )
         self.db.add(opportunity)
         await self.db.commit()
-        await self.db.refresh(opportunity)
+        # Refresh line_items so the response can serialize the (empty) collection
+        # without triggering a lazy load outside the async greenlet.
+        await self.db.refresh(opportunity, ["line_items"])
 
         return OpportunityResponse.model_validate(opportunity)
 
@@ -276,7 +277,14 @@ class OpportunityService:
     ) -> OpportunityDetailResponse:
         """Get an opportunity by ID."""
         opportunity = await get_or_404(
-            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+            self.db,
+            Opportunity,
+            opportunity_id,
+            workspace_id=workspace_id,
+            options=[
+                selectinload(Opportunity.line_items),
+                selectinload(Opportunity.activities),
+            ],
         )
         return OpportunityDetailResponse.model_validate(opportunity)
 
@@ -355,7 +363,7 @@ class OpportunityService:
             opportunity.closed_by_id = user_id if is_closed else None
 
         await self.db.commit()
-        await self.db.refresh(opportunity)
+        await self.db.refresh(opportunity, ["line_items"])
 
         return OpportunityResponse.model_validate(opportunity)
 

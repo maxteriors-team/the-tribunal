@@ -12,6 +12,7 @@ from app.core.security import get_password_hash
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.opportunities import ensure_default_pipeline
 from app.utils.pii import mask_email
 
 # Workspace ID used by frontend. Overridable via env var for non-default deployments;
@@ -72,6 +73,8 @@ async def create_default_workspace(db: AsyncSession) -> Workspace:
         is_active=True,
     )
     db.add(workspace)
+    await db.flush()
+    await ensure_default_pipeline(db, workspace.id)
     await db.commit()
     await db.refresh(workspace)
     print(f"Created default workspace: {workspace.name} (id={workspace.id})")
@@ -123,6 +126,9 @@ async def seed_database() -> None:
         user = await create_admin_user(db)
         workspace = await create_default_workspace(db)
         await create_workspace_membership(db, user, workspace)
+        # Idempotent: provisions a default pipeline for a pre-existing workspace too.
+        await ensure_default_pipeline(db, workspace.id)
+        await db.commit()
         print("\nSeeding complete!")
 
 
