@@ -1125,6 +1125,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Advertisers
+         * @description List tracked advertisers ranked by opportunity score (ICP fit).
+         */
+        get: operations["list_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/bulk-promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Promote Advertisers
+         * @description Promote many advertisers into the CRM in one call.
+         */
+        post: operations["bulk_promote_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_bulk_promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/{advertiser_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Advertiser
+         * @description Return one advertiser with creatives, signal breakdown, and traced contact.
+         */
+        get: operations["get_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/{advertiser_id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Promote Advertiser
+         * @description Promote one advertiser into the CRM (advertiser -> prospect -> contact).
+         */
+        post: operations["promote_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job
+         * @description Return the status of an ad-library discovery job.
+         */
+        get: operations["get_job_api_v1_workspaces__workspace_id__ad_library_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Monitors
+         * @description List saved ad-library monitors (recurring ICP searches).
+         */
+        get: operations["list_monitors_api_v1_workspaces__workspace_id__ad_library_monitors_get"];
+        put?: never;
+        /**
+         * Create Monitor
+         * @description Create a saved monitor that re-scans on a schedule.
+         */
+        post: operations["create_monitor_api_v1_workspaces__workspace_id__ad_library_monitors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/monitors/{monitor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Monitor
+         * @description Delete a saved monitor.
+         */
+        delete: operations["delete_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Monitor
+         * @description Update a saved monitor's search / thresholds / schedule / active flag.
+         */
+        patch: operations["update_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/ad-library/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Search
+         * @description Launch an ad-library search.
+         *
+         *     Enqueues a discovery job the ad-library worker runs asynchronously; poll
+         *     ``GET /jobs/{id}`` for status.
+         */
+        post: operations["create_search_api_v1_workspaces__workspace_id__ad_library_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/agents": {
         parameters: {
             query?: never;
@@ -6409,6 +6580,517 @@ export interface components {
             tool_name: string;
         };
         /**
+         * AdAdvertiserDetail
+         * @description Detail response with creatives, signal breakdown, and traced contact.
+         */
+        AdAdvertiserDetail: {
+            /** Active Ad Count */
+            active_ad_count: number;
+            /** Active Creative Count */
+            active_creative_count: number;
+            /** Advertiser Key */
+            advertiser_key: string;
+            /** Advertiser Name */
+            advertiser_name: string | null;
+            /** Contact Traced */
+            contact_traced: boolean;
+            /** Continuity Score */
+            continuity_score: number;
+            /** Country Code */
+            country_code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creative Refresh Rate */
+            creative_refresh_rate: number;
+            /**
+             * Creatives
+             * @default []
+             */
+            creatives: components["schemas"]["AdCreativeResponse"][];
+            /** Discovery Job Id */
+            discovery_job_id: string | null;
+            /** Distinct Creative Count */
+            distinct_creative_count: number;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            }[];
+            /** Example Creative */
+            example_creative: {
+                [key: string]: unknown;
+            } | null;
+            /** First Seen At */
+            first_seen_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Scanned At */
+            last_scanned_at: string | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Longest Running Active Days */
+            longest_running_active_days: number;
+            /** Media Mix */
+            media_mix: {
+                [key: string]: number;
+            };
+            /** Opportunity Score */
+            opportunity_score: number;
+            /** Page Id */
+            page_id: string | null;
+            /** Page Url */
+            page_url: string | null;
+            platform: components["schemas"]["AdPlatform"];
+            /** Platform Spread */
+            platform_spread: string[];
+            /** Prospect Id */
+            prospect_id: string | null;
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Reasons */
+            reasons: string[];
+            signal_breakdown?: components["schemas"]["AdSignalBreakdown"] | null;
+            /** Signal Window Days */
+            signal_window_days: number;
+            /** Signals */
+            signals: {
+                [key: string]: unknown;
+            };
+            /** Total Ad Count */
+            total_ad_count: number;
+            /** Traced Contact */
+            traced_contact?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Website Host */
+            website_host: string | null;
+            /** Website Url */
+            website_url: string | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * AdAdvertiserResponse
+         * @description Ranked-list response for one tracked advertiser.
+         */
+        AdAdvertiserResponse: {
+            /** Active Ad Count */
+            active_ad_count: number;
+            /** Active Creative Count */
+            active_creative_count: number;
+            /** Advertiser Key */
+            advertiser_key: string;
+            /** Advertiser Name */
+            advertiser_name: string | null;
+            /** Contact Traced */
+            contact_traced: boolean;
+            /** Continuity Score */
+            continuity_score: number;
+            /** Country Code */
+            country_code: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creative Refresh Rate */
+            creative_refresh_rate: number;
+            /** Discovery Job Id */
+            discovery_job_id: string | null;
+            /** Distinct Creative Count */
+            distinct_creative_count: number;
+            /** Example Creative */
+            example_creative: {
+                [key: string]: unknown;
+            } | null;
+            /** First Seen At */
+            first_seen_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Scanned At */
+            last_scanned_at: string | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Longest Running Active Days */
+            longest_running_active_days: number;
+            /** Media Mix */
+            media_mix: {
+                [key: string]: number;
+            };
+            /** Opportunity Score */
+            opportunity_score: number;
+            /** Page Id */
+            page_id: string | null;
+            /** Page Url */
+            page_url: string | null;
+            platform: components["schemas"]["AdPlatform"];
+            /** Platform Spread */
+            platform_spread: string[];
+            /** Prospect Id */
+            prospect_id: string | null;
+            /** Reasons */
+            reasons: string[];
+            /** Signal Window Days */
+            signal_window_days: number;
+            /** Total Ad Count */
+            total_ad_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Website Host */
+            website_host: string | null;
+            /** Website Url */
+            website_url: string | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * AdCreativeResponse
+         * @description Response for one observed ad/creative.
+         */
+        AdCreativeResponse: {
+            /** Ad Delivery Start Time */
+            ad_delivery_start_time: string | null;
+            /** Ad Delivery Stop Time */
+            ad_delivery_stop_time: string | null;
+            /** Ad External Id */
+            ad_external_id: string;
+            /**
+             * Advertiser Id
+             * Format: uuid
+             */
+            advertiser_id: string;
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creative Hash */
+            creative_hash: string | null;
+            /** Cta Type */
+            cta_type: string | null;
+            /** First Seen At */
+            first_seen_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Link Caption */
+            link_caption: string | null;
+            /** Link Host */
+            link_host: string | null;
+            /** Link Url */
+            link_url: string | null;
+            media_type: components["schemas"]["AdMediaType"];
+            /** Platforms */
+            platforms: string[];
+            /** Snapshot Url */
+            snapshot_url: string | null;
+            /** Title */
+            title: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AdLibrarySearchRequest
+         * @description Launch an ad-library search.
+         *
+         *     Provide either ``search_terms`` (keyword) or a specific page
+         *     (``page_id`` / ``page_name``). The signal window is bounded by
+         *     ``ad_delivery_date_min``/``max`` (effectively required by the Meta API).
+         */
+        AdLibrarySearchRequest: {
+            /** Ad Delivery Date Max */
+            ad_delivery_date_max?: string | null;
+            /** Ad Delivery Date Min */
+            ad_delivery_date_min?: string | null;
+            /**
+             * Country
+             * @default US
+             */
+            country: string;
+            icp_thresholds?: components["schemas"]["IcpThresholdsUpdate"] | null;
+            /**
+             * Max Results
+             * @default 50
+             */
+            max_results: number;
+            /** Mission Id */
+            mission_id?: string | null;
+            /** Page Id */
+            page_id?: string | null;
+            /** Page Name */
+            page_name?: string | null;
+            /** @default meta */
+            platform: components["schemas"]["AdPlatform"];
+            /** Search Terms */
+            search_terms?: string | null;
+            /**
+             * Sort By
+             * @default longest_running
+             * @enum {string}
+             */
+            sort_by: "longest_running" | "most_recent" | "default";
+            /**
+             * Use Thirdparty Fallback
+             * @default false
+             */
+            use_thirdparty_fallback: boolean;
+        };
+        /**
+         * AdMediaType
+         * @description Coarse media classification of a creative.
+         * @enum {string}
+         */
+        AdMediaType: "image" | "video" | "carousel" | "text" | "unknown";
+        /**
+         * AdMonitorCreate
+         * @description Create a saved ICP search + recurring re-scan schedule.
+         */
+        AdMonitorCreate: {
+            icp_thresholds?: components["schemas"]["IcpThresholds"];
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Schedule Interval Hours
+             * @default 24
+             */
+            schedule_interval_hours: number;
+            search: components["schemas"]["AdLibrarySearchRequest"];
+        };
+        /**
+         * AdMonitorResponse
+         * @description Saved monitor response. Monitors persist inside an OutboundMission's
+         *     ``discovery_config`` so they reuse existing mission rails.
+         */
+        AdMonitorResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Icp Thresholds */
+            icp_thresholds: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /** Name */
+            name: string;
+            /** Next Run At */
+            next_run_at?: string | null;
+            /** Schedule Interval Hours */
+            schedule_interval_hours: number;
+            /** Search */
+            search: {
+                [key: string]: unknown;
+            };
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * AdMonitorUpdate
+         * @description Partial update for a saved monitor.
+         */
+        AdMonitorUpdate: {
+            icp_thresholds?: components["schemas"]["IcpThresholdsUpdate"] | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Schedule Interval Hours */
+            schedule_interval_hours?: number | null;
+            search?: components["schemas"]["AdLibrarySearchRequest"] | null;
+        };
+        /**
+         * AdPlatform
+         * @description Which public ad library an advertiser was discovered in.
+         * @enum {string}
+         */
+        AdPlatform: "meta" | "google";
+        /**
+         * AdSignalBreakdown
+         * @description Human-readable breakdown of why an advertiser scored as it did.
+         */
+        AdSignalBreakdown: {
+            /** Active Ad Count */
+            active_ad_count: number;
+            /** Active Creative Count */
+            active_creative_count: number;
+            /** Continuity Score */
+            continuity_score: number;
+            /** Creative Refresh Rate */
+            creative_refresh_rate: number;
+            /** Distinct Creative Count */
+            distinct_creative_count: number;
+            /** Example Creative */
+            example_creative?: {
+                [key: string]: unknown;
+            } | null;
+            /** Longest Running Active Days */
+            longest_running_active_days: number;
+            /** Media Mix */
+            media_mix: {
+                [key: string]: number;
+            };
+            /** Opportunity Score */
+            opportunity_score: number;
+            /** Platform Spread */
+            platform_spread: string[];
+            /** Reasons */
+            reasons: string[];
+            /** Signal Window Days */
+            signal_window_days: number;
+            /**
+             * Signals
+             * @default {}
+             */
+            signals: {
+                [key: string]: unknown;
+            };
+            /** Total Ad Count */
+            total_ad_count: number;
+        };
+        /**
+         * AdvertiserBulkPromoteRequest
+         * @description Promote many advertisers at once.
+         */
+        AdvertiserBulkPromoteRequest: {
+            /** Advertiser Ids */
+            advertiser_ids: string[];
+            /**
+             * Create Opportunity
+             * @default false
+             */
+            create_opportunity: boolean;
+            /**
+             * Enroll In Sequence
+             * @default false
+             */
+            enroll_in_sequence: boolean;
+            /** Extra Tags */
+            extra_tags?: string[];
+            /** Mission Id */
+            mission_id?: string | null;
+            /** Sequence Id */
+            sequence_id?: string | null;
+        };
+        /**
+         * AdvertiserBulkPromoteResult
+         * @description Aggregate outcome of a bulk promote.
+         */
+        AdvertiserBulkPromoteResult: {
+            /** Promoted Count */
+            promoted_count: number;
+            /** Results */
+            results: components["schemas"]["AdvertiserPromoteResult"][];
+            /** Skipped Count */
+            skipped_count: number;
+        };
+        /**
+         * AdvertiserPromoteRequest
+         * @description Promote a tracked advertiser into the CRM.
+         *
+         *     Runs advertiser -> prospect -> contact, carries the ad evidence + the
+         *     representative creative into the contact's ``business_intel`` for
+         *     personalized outreach, and optionally enrolls the new contact in a mission
+         *     sequence.
+         */
+        AdvertiserPromoteRequest: {
+            /**
+             * Create Opportunity
+             * @default false
+             */
+            create_opportunity: boolean;
+            /**
+             * Enroll In Sequence
+             * @default false
+             */
+            enroll_in_sequence: boolean;
+            /** Extra Tags */
+            extra_tags?: string[];
+            /** Mission Id */
+            mission_id?: string | null;
+            /** Sequence Id */
+            sequence_id?: string | null;
+        };
+        /**
+         * AdvertiserPromoteResult
+         * @description Outcome of promoting one advertiser.
+         */
+        AdvertiserPromoteResult: {
+            /**
+             * Advertiser Id
+             * Format: uuid
+             */
+            advertiser_id: string;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Promoted */
+            promoted: boolean;
+            /** Prospect Id */
+            prospect_id?: string | null;
+            /** Skipped Reason */
+            skipped_reason?: string | null;
+        };
+        /**
          * AgentAssign
          * @description Agent assignment request.
          */
@@ -8067,6 +8749,11 @@ export interface components {
             agent_name?: string | null;
             /** Booking Outcome */
             booking_outcome?: string | null;
+            /**
+             * Captured Messages
+             * @default []
+             */
+            captured_messages: components["schemas"]["CapturedMessageResponse"][];
             /** Channel */
             channel: string;
             /** Contact Avatar Url */
@@ -8515,6 +9202,36 @@ export interface components {
             sending_hours_start?: string | null;
             /** Timezone */
             timezone?: string | null;
+        };
+        /**
+         * CapturedMessageResponse
+         * @description A structured "take a message" capture from a voice call.
+         */
+        CapturedMessageResponse: {
+            /** Callback Number */
+            callback_number?: string | null;
+            /** Caller Name */
+            caller_name?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message Body */
+            message_body?: string | null;
+            /** Preferred Callback Time */
+            preferred_callback_time?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+            /** Urgency */
+            urgency: string;
         };
         /**
          * ChangePasswordRequest
@@ -9291,7 +10008,7 @@ export interface components {
          * @description Where a lead discovery job pulls candidate prospects from.
          * @enum {string}
          */
-        DiscoverySourceType: "google_places" | "web_scrape" | "csv_import" | "manual" | "api" | "linkedin" | "other";
+        DiscoverySourceType: "google_places" | "web_scrape" | "csv_import" | "manual" | "api" | "linkedin" | "meta_ad_library" | "google_ads_transparency" | "other";
         /**
          * DraftActionRequest
          * @description Optional operator overrides when queuing the drafted action.
@@ -9640,7 +10357,7 @@ export interface components {
          * @description Lead enrichment provider identifier.
          * @enum {string}
          */
-        EnrichmentProvider: "google_places" | "website_scraper" | "ai_content_analyzer" | "linkedin_lookup" | "email_lookup" | "phone_lookup" | "manual" | "other";
+        EnrichmentProvider: "google_places" | "website_scraper" | "ai_content_analyzer" | "linkedin_lookup" | "email_lookup" | "phone_lookup" | "ad_library_contact_trace" | "manual" | "other";
         /**
          * EnrichmentResultStatus
          * @description Outcome status of a single enrichment provider call.
@@ -10199,6 +10916,76 @@ export interface components {
             message: string;
         };
         /**
+         * IcpThresholds
+         * @description Workspace-configurable thresholds that define the ICP.
+         *
+         *     The ICP is advertisers who spend **consistently** but **do not iterate**
+         *     their creatives. Crucially this both requires the "stale long-runner"
+         *     signal *and* **excludes prolific testers** — advertisers already running
+         *     many distinct creatives / refreshing often (e.g. 20-100 UGC variations)
+         *     are disqualified, because they already test at scale and are not our buyer.
+         */
+        IcpThresholds: {
+            /**
+             * Max Active Creatives
+             * @description Hard ceiling on concurrently-active distinct creatives.
+             * @default 12
+             */
+            max_active_creatives: number;
+            /**
+             * Max Creative Refresh Rate
+             * @description Max new distinct creatives introduced per 30 days; above this the advertiser is iterating too actively to be a fit.
+             * @default 4
+             */
+            max_creative_refresh_rate: number;
+            /**
+             * Max Distinct Creatives
+             * @description Advertisers above this many distinct creatives are excluded (they already run lots of variations).
+             * @default 8
+             */
+            max_distinct_creatives: number;
+            /**
+             * Min Active Ads
+             * @default 1
+             */
+            min_active_ads: number;
+            /**
+             * Min Continuity Score
+             * @default 0.5
+             */
+            min_continuity_score: number;
+            /**
+             * Min Longest Running Days
+             * @default 60
+             */
+            min_longest_running_days: number;
+            /**
+             * Min Opportunity Score
+             * @default 50
+             */
+            min_opportunity_score: number;
+        };
+        /**
+         * IcpThresholdsUpdate
+         * @description Partial override of ICP thresholds.
+         */
+        IcpThresholdsUpdate: {
+            /** Max Active Creatives */
+            max_active_creatives?: number | null;
+            /** Max Creative Refresh Rate */
+            max_creative_refresh_rate?: number | null;
+            /** Max Distinct Creatives */
+            max_distinct_creatives?: number | null;
+            /** Min Active Ads */
+            min_active_ads?: number | null;
+            /** Min Continuity Score */
+            min_continuity_score?: number | null;
+            /** Min Longest Running Days */
+            min_longest_running_days?: number | null;
+            /** Min Opportunity Score */
+            min_opportunity_score?: number | null;
+        };
+        /**
          * ImportLeadsRequest
          * @description Request schema for importing leads as contacts.
          */
@@ -10347,7 +11134,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "calcom" | "telnyx" | "openai" | "resend";
+            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency";
             /**
              * Is Active
              * @default true
@@ -12702,6 +13489,22 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * PaginatedAdAdvertisers
+         * @description Paginated advertiser list.
+         */
+        PaginatedAdAdvertisers: {
+            /** Items */
+            items: components["schemas"]["AdAdvertiserResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
         };
         /**
          * PaginatedAgents
@@ -18041,6 +18844,346 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_get: {
+        parameters: {
+            query?: {
+                platform?: components["schemas"]["AdPlatform"] | null;
+                /** @description Apply ICP floors + exclude prolific testers. */
+                only_qualified?: boolean;
+                contact_traced?: boolean | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAdAdvertisers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_promote_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_bulk_promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdvertiserBulkPromoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdvertiserBulkPromoteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                advertiser_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdAdvertiserDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    promote_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__promote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                advertiser_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdvertiserPromoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdvertiserPromoteResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_v1_workspaces__workspace_id__ad_library_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadDiscoveryJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_monitors_api_v1_workspaces__workspace_id__ad_library_monitors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdMonitorResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_monitor_api_v1_workspaces__workspace_id__ad_library_monitors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdMonitorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdMonitorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                monitor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                monitor_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdMonitorUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdMonitorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_search_api_v1_workspaces__workspace_id__ad_library_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdLibrarySearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadDiscoveryJobResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

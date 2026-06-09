@@ -315,6 +315,1416 @@
         "title": "ActionSummary",
         "type": "object"
       },
+      "AdAdvertiserDetail": {
+        "description": "Detail response with creatives, signal breakdown, and traced contact.",
+        "properties": {
+          "active_ad_count": {
+            "title": "Active Ad Count",
+            "type": "integer"
+          },
+          "active_creative_count": {
+            "title": "Active Creative Count",
+            "type": "integer"
+          },
+          "advertiser_key": {
+            "title": "Advertiser Key",
+            "type": "string"
+          },
+          "advertiser_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advertiser Name"
+          },
+          "contact_traced": {
+            "title": "Contact Traced",
+            "type": "boolean"
+          },
+          "continuity_score": {
+            "title": "Continuity Score",
+            "type": "number"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "creative_refresh_rate": {
+            "title": "Creative Refresh Rate",
+            "type": "number"
+          },
+          "creatives": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AdCreativeResponse"
+            },
+            "title": "Creatives",
+            "type": "array"
+          },
+          "discovery_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Job Id"
+          },
+          "distinct_creative_count": {
+            "title": "Distinct Creative Count",
+            "type": "integer"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "example_creative": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Creative"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_scanned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scanned At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "longest_running_active_days": {
+            "title": "Longest Running Active Days",
+            "type": "integer"
+          },
+          "media_mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Media Mix",
+            "type": "object"
+          },
+          "opportunity_score": {
+            "title": "Opportunity Score",
+            "type": "integer"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/AdPlatform"
+          },
+          "platform_spread": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Platform Spread",
+            "type": "array"
+          },
+          "prospect_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prospect Id"
+          },
+          "provenance": {
+            "additionalProperties": true,
+            "title": "Provenance",
+            "type": "object"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "signal_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdSignalBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signal_window_days": {
+            "title": "Signal Window Days",
+            "type": "integer"
+          },
+          "signals": {
+            "additionalProperties": true,
+            "title": "Signals",
+            "type": "object"
+          },
+          "total_ad_count": {
+            "title": "Total Ad Count",
+            "type": "integer"
+          },
+          "traced_contact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traced Contact"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "website_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Host"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "discovery_job_id",
+          "prospect_id",
+          "platform",
+          "advertiser_key",
+          "page_id",
+          "advertiser_name",
+          "page_url",
+          "website_url",
+          "website_host",
+          "country_code",
+          "first_seen_at",
+          "last_seen_at",
+          "last_scanned_at",
+          "is_active",
+          "signal_window_days",
+          "total_ad_count",
+          "active_ad_count",
+          "distinct_creative_count",
+          "active_creative_count",
+          "longest_running_active_days",
+          "creative_refresh_rate",
+          "continuity_score",
+          "opportunity_score",
+          "platform_spread",
+          "media_mix",
+          "reasons",
+          "example_creative",
+          "contact_traced",
+          "created_at",
+          "updated_at",
+          "signals",
+          "provenance",
+          "evidence"
+        ],
+        "title": "AdAdvertiserDetail",
+        "type": "object"
+      },
+      "AdAdvertiserResponse": {
+        "description": "Ranked-list response for one tracked advertiser.",
+        "properties": {
+          "active_ad_count": {
+            "title": "Active Ad Count",
+            "type": "integer"
+          },
+          "active_creative_count": {
+            "title": "Active Creative Count",
+            "type": "integer"
+          },
+          "advertiser_key": {
+            "title": "Advertiser Key",
+            "type": "string"
+          },
+          "advertiser_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advertiser Name"
+          },
+          "contact_traced": {
+            "title": "Contact Traced",
+            "type": "boolean"
+          },
+          "continuity_score": {
+            "title": "Continuity Score",
+            "type": "number"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "creative_refresh_rate": {
+            "title": "Creative Refresh Rate",
+            "type": "number"
+          },
+          "discovery_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovery Job Id"
+          },
+          "distinct_creative_count": {
+            "title": "Distinct Creative Count",
+            "type": "integer"
+          },
+          "example_creative": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Creative"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_scanned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scanned At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "longest_running_active_days": {
+            "title": "Longest Running Active Days",
+            "type": "integer"
+          },
+          "media_mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Media Mix",
+            "type": "object"
+          },
+          "opportunity_score": {
+            "title": "Opportunity Score",
+            "type": "integer"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "page_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Url"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/AdPlatform"
+          },
+          "platform_spread": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Platform Spread",
+            "type": "array"
+          },
+          "prospect_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prospect Id"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "signal_window_days": {
+            "title": "Signal Window Days",
+            "type": "integer"
+          },
+          "total_ad_count": {
+            "title": "Total Ad Count",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "website_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Host"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "discovery_job_id",
+          "prospect_id",
+          "platform",
+          "advertiser_key",
+          "page_id",
+          "advertiser_name",
+          "page_url",
+          "website_url",
+          "website_host",
+          "country_code",
+          "first_seen_at",
+          "last_seen_at",
+          "last_scanned_at",
+          "is_active",
+          "signal_window_days",
+          "total_ad_count",
+          "active_ad_count",
+          "distinct_creative_count",
+          "active_creative_count",
+          "longest_running_active_days",
+          "creative_refresh_rate",
+          "continuity_score",
+          "opportunity_score",
+          "platform_spread",
+          "media_mix",
+          "reasons",
+          "example_creative",
+          "contact_traced",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdAdvertiserResponse",
+        "type": "object"
+      },
+      "AdCreativeResponse": {
+        "description": "Response for one observed ad/creative.",
+        "properties": {
+          "ad_delivery_start_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Delivery Start Time"
+          },
+          "ad_delivery_stop_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Delivery Stop Time"
+          },
+          "ad_external_id": {
+            "title": "Ad External Id",
+            "type": "string"
+          },
+          "advertiser_id": {
+            "format": "uuid",
+            "title": "Advertiser Id",
+            "type": "string"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "creative_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creative Hash"
+          },
+          "cta_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Type"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "link_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Caption"
+          },
+          "link_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Host"
+          },
+          "link_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Url"
+          },
+          "media_type": {
+            "$ref": "#/components/schemas/AdMediaType"
+          },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Platforms",
+            "type": "array"
+          },
+          "snapshot_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "advertiser_id",
+          "ad_external_id",
+          "creative_hash",
+          "body",
+          "title",
+          "link_caption",
+          "link_url",
+          "link_host",
+          "cta_type",
+          "snapshot_url",
+          "media_type",
+          "platforms",
+          "ad_delivery_start_time",
+          "ad_delivery_stop_time",
+          "is_active",
+          "first_seen_at",
+          "last_seen_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdCreativeResponse",
+        "type": "object"
+      },
+      "AdLibrarySearchRequest": {
+        "description": "Launch an ad-library search.\n\nProvide either ``search_terms`` (keyword) or a specific page\n(``page_id`` / ``page_name``). The signal window is bounded by\n``ad_delivery_date_min``/``max`` (effectively required by the Meta API).",
+        "properties": {
+          "ad_delivery_date_max": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Delivery Date Max"
+          },
+          "ad_delivery_date_min": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ad Delivery Date Min"
+          },
+          "country": {
+            "default": "US",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Country",
+            "type": "string"
+          },
+          "icp_thresholds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IcpThresholdsUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_results": {
+            "default": 50,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "mission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mission Id"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "page_name": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Name"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/AdPlatform",
+            "default": "meta"
+          },
+          "search_terms": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Terms"
+          },
+          "sort_by": {
+            "default": "longest_running",
+            "enum": [
+              "longest_running",
+              "most_recent",
+              "default"
+            ],
+            "title": "Sort By",
+            "type": "string"
+          },
+          "use_thirdparty_fallback": {
+            "default": false,
+            "title": "Use Thirdparty Fallback",
+            "type": "boolean"
+          }
+        },
+        "title": "AdLibrarySearchRequest",
+        "type": "object"
+      },
+      "AdMediaType": {
+        "description": "Coarse media classification of a creative.",
+        "enum": [
+          "image",
+          "video",
+          "carousel",
+          "text",
+          "unknown"
+        ],
+        "title": "AdMediaType",
+        "type": "string"
+      },
+      "AdMonitorCreate": {
+        "description": "Create a saved ICP search + recurring re-scan schedule.",
+        "properties": {
+          "icp_thresholds": {
+            "$ref": "#/components/schemas/IcpThresholds"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "schedule_interval_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Schedule Interval Hours",
+            "type": "integer"
+          },
+          "search": {
+            "$ref": "#/components/schemas/AdLibrarySearchRequest"
+          }
+        },
+        "required": [
+          "name",
+          "search"
+        ],
+        "title": "AdMonitorCreate",
+        "type": "object"
+      },
+      "AdMonitorResponse": {
+        "description": "Saved monitor response. Monitors persist inside an OutboundMission's\n``discovery_config`` so they reuse existing mission rails.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "icp_thresholds": {
+            "additionalProperties": true,
+            "title": "Icp Thresholds",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "schedule_interval_hours": {
+            "title": "Schedule Interval Hours",
+            "type": "integer"
+          },
+          "search": {
+            "additionalProperties": true,
+            "title": "Search",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "name",
+          "search",
+          "icp_thresholds",
+          "schedule_interval_hours",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdMonitorResponse",
+        "type": "object"
+      },
+      "AdMonitorUpdate": {
+        "description": "Partial update for a saved monitor.",
+        "properties": {
+          "icp_thresholds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IcpThresholdsUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "schedule_interval_hours": {
+            "anyOf": [
+              {
+                "maximum": 720.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Interval Hours"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdLibrarySearchRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AdMonitorUpdate",
+        "type": "object"
+      },
+      "AdPlatform": {
+        "description": "Which public ad library an advertiser was discovered in.",
+        "enum": [
+          "meta",
+          "google"
+        ],
+        "title": "AdPlatform",
+        "type": "string"
+      },
+      "AdSignalBreakdown": {
+        "description": "Human-readable breakdown of why an advertiser scored as it did.",
+        "properties": {
+          "active_ad_count": {
+            "title": "Active Ad Count",
+            "type": "integer"
+          },
+          "active_creative_count": {
+            "title": "Active Creative Count",
+            "type": "integer"
+          },
+          "continuity_score": {
+            "title": "Continuity Score",
+            "type": "number"
+          },
+          "creative_refresh_rate": {
+            "title": "Creative Refresh Rate",
+            "type": "number"
+          },
+          "distinct_creative_count": {
+            "title": "Distinct Creative Count",
+            "type": "integer"
+          },
+          "example_creative": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Creative"
+          },
+          "longest_running_active_days": {
+            "title": "Longest Running Active Days",
+            "type": "integer"
+          },
+          "media_mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Media Mix",
+            "type": "object"
+          },
+          "opportunity_score": {
+            "title": "Opportunity Score",
+            "type": "integer"
+          },
+          "platform_spread": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Platform Spread",
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "signal_window_days": {
+            "title": "Signal Window Days",
+            "type": "integer"
+          },
+          "signals": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Signals",
+            "type": "object"
+          },
+          "total_ad_count": {
+            "title": "Total Ad Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "opportunity_score",
+          "signal_window_days",
+          "total_ad_count",
+          "active_ad_count",
+          "distinct_creative_count",
+          "active_creative_count",
+          "longest_running_active_days",
+          "creative_refresh_rate",
+          "continuity_score",
+          "platform_spread",
+          "media_mix",
+          "reasons"
+        ],
+        "title": "AdSignalBreakdown",
+        "type": "object"
+      },
+      "AdvertiserBulkPromoteRequest": {
+        "description": "Promote many advertisers at once.",
+        "properties": {
+          "advertiser_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Advertiser Ids",
+            "type": "array"
+          },
+          "create_opportunity": {
+            "default": false,
+            "title": "Create Opportunity",
+            "type": "boolean"
+          },
+          "enroll_in_sequence": {
+            "default": false,
+            "title": "Enroll In Sequence",
+            "type": "boolean"
+          },
+          "extra_tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Extra Tags",
+            "type": "array"
+          },
+          "mission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mission Id"
+          },
+          "sequence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Id"
+          }
+        },
+        "required": [
+          "advertiser_ids"
+        ],
+        "title": "AdvertiserBulkPromoteRequest",
+        "type": "object"
+      },
+      "AdvertiserBulkPromoteResult": {
+        "description": "Aggregate outcome of a bulk promote.",
+        "properties": {
+          "promoted_count": {
+            "title": "Promoted Count",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/AdvertiserPromoteResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "promoted_count",
+          "skipped_count"
+        ],
+        "title": "AdvertiserBulkPromoteResult",
+        "type": "object"
+      },
+      "AdvertiserPromoteRequest": {
+        "description": "Promote a tracked advertiser into the CRM.\n\nRuns advertiser -> prospect -> contact, carries the ad evidence + the\nrepresentative creative into the contact's ``business_intel`` for\npersonalized outreach, and optionally enrolls the new contact in a mission\nsequence.",
+        "properties": {
+          "create_opportunity": {
+            "default": false,
+            "title": "Create Opportunity",
+            "type": "boolean"
+          },
+          "enroll_in_sequence": {
+            "default": false,
+            "title": "Enroll In Sequence",
+            "type": "boolean"
+          },
+          "extra_tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Extra Tags",
+            "type": "array"
+          },
+          "mission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mission Id"
+          },
+          "sequence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Id"
+          }
+        },
+        "title": "AdvertiserPromoteRequest",
+        "type": "object"
+      },
+      "AdvertiserPromoteResult": {
+        "description": "Outcome of promoting one advertiser.",
+        "properties": {
+          "advertiser_id": {
+            "format": "uuid",
+            "title": "Advertiser Id",
+            "type": "string"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "promoted": {
+            "title": "Promoted",
+            "type": "boolean"
+          },
+          "prospect_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prospect Id"
+          },
+          "skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Reason"
+          }
+        },
+        "required": [
+          "advertiser_id",
+          "promoted"
+        ],
+        "title": "AdvertiserPromoteResult",
+        "type": "object"
+      },
       "AgentAssign": {
         "description": "Agent assignment request.",
         "properties": {
@@ -4398,6 +5808,14 @@
             ],
             "title": "Booking Outcome"
           },
+          "captured_messages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CapturedMessageResponse"
+            },
+            "title": "Captured Messages",
+            "type": "array"
+          },
           "channel": {
             "title": "Channel",
             "type": "string"
@@ -5715,6 +7133,92 @@
           }
         },
         "title": "CampaignUpdate",
+        "type": "object"
+      },
+      "CapturedMessageResponse": {
+        "description": "A structured \"take a message\" capture from a voice call.",
+        "properties": {
+          "callback_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Number"
+          },
+          "caller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caller Name"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "message_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Body"
+          },
+          "preferred_callback_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Callback Time"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "urgency": {
+            "title": "Urgency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "urgency",
+          "status",
+          "created_at"
+        ],
+        "title": "CapturedMessageResponse",
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -7906,6 +9410,8 @@
           "manual",
           "api",
           "linkedin",
+          "meta_ad_library",
+          "google_ads_transparency",
           "other"
         ],
         "title": "DiscoverySourceType",
@@ -8791,6 +10297,7 @@
           "linkedin_lookup",
           "email_lookup",
           "phone_lookup",
+          "ad_library_contact_trace",
           "manual",
           "other"
         ],
@@ -10218,6 +11725,153 @@
         "title": "HumanTurnRequest",
         "type": "object"
       },
+      "IcpThresholds": {
+        "description": "Workspace-configurable thresholds that define the ICP.\n\nThe ICP is advertisers who spend **consistently** but **do not iterate**\ntheir creatives. Crucially this both requires the \"stale long-runner\"\nsignal *and* **excludes prolific testers** — advertisers already running\nmany distinct creatives / refreshing often (e.g. 20-100 UGC variations)\nare disqualified, because they already test at scale and are not our buyer.",
+        "properties": {
+          "max_active_creatives": {
+            "default": 12,
+            "description": "Hard ceiling on concurrently-active distinct creatives.",
+            "minimum": 1.0,
+            "title": "Max Active Creatives",
+            "type": "integer"
+          },
+          "max_creative_refresh_rate": {
+            "default": 4.0,
+            "description": "Max new distinct creatives introduced per 30 days; above this the advertiser is iterating too actively to be a fit.",
+            "minimum": 0.0,
+            "title": "Max Creative Refresh Rate",
+            "type": "number"
+          },
+          "max_distinct_creatives": {
+            "default": 8,
+            "description": "Advertisers above this many distinct creatives are excluded (they already run lots of variations).",
+            "minimum": 1.0,
+            "title": "Max Distinct Creatives",
+            "type": "integer"
+          },
+          "min_active_ads": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Min Active Ads",
+            "type": "integer"
+          },
+          "min_continuity_score": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Continuity Score",
+            "type": "number"
+          },
+          "min_longest_running_days": {
+            "default": 60,
+            "minimum": 0.0,
+            "title": "Min Longest Running Days",
+            "type": "integer"
+          },
+          "min_opportunity_score": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Opportunity Score",
+            "type": "integer"
+          }
+        },
+        "title": "IcpThresholds",
+        "type": "object"
+      },
+      "IcpThresholdsUpdate": {
+        "description": "Partial override of ICP thresholds.",
+        "properties": {
+          "max_active_creatives": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Active Creatives"
+          },
+          "max_creative_refresh_rate": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Creative Refresh Rate"
+          },
+          "max_distinct_creatives": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Distinct Creatives"
+          },
+          "min_active_ads": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Active Ads"
+          },
+          "min_continuity_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Continuity Score"
+          },
+          "min_longest_running_days": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Longest Running Days"
+          },
+          "min_opportunity_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Opportunity Score"
+          }
+        },
+        "title": "IcpThresholdsUpdate",
+        "type": "object"
+      },
       "ImportLeadsRequest": {
         "description": "Request schema for importing leads as contacts.",
         "properties": {
@@ -10518,7 +12172,9 @@
               "calcom",
               "telnyx",
               "openai",
-              "resend"
+              "resend",
+              "meta_ad_library",
+              "google_ads_transparency"
             ],
             "title": "Integration Type",
             "type": "string"
@@ -17320,6 +18976,43 @@
           "updated_at"
         ],
         "title": "OutboundSequenceEnrollmentResponse",
+        "type": "object"
+      },
+      "PaginatedAdAdvertisers": {
+        "description": "Paginated advertiser list.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdAdvertiserResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "PaginatedAdAdvertisers",
         "type": "object"
       },
       "PaginatedAgents": {
@@ -28926,6 +30619,656 @@
         "summary": "Update Workspace",
         "tags": [
           "Workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers": {
+      "get": {
+        "description": "List tracked advertisers ranked by opportunity score (ICP fit).",
+        "operationId": "list_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AdPlatform"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Platform"
+            }
+          },
+          {
+            "description": "Apply ICP floors + exclude prolific testers.",
+            "in": "query",
+            "name": "only_qualified",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Apply ICP floors + exclude prolific testers.",
+              "title": "Only Qualified",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "contact_traced",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contact Traced"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAdAdvertisers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Advertisers",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/bulk-promote": {
+      "post": {
+        "description": "Promote many advertisers into the CRM in one call.",
+        "operationId": "bulk_promote_advertisers_api_v1_workspaces__workspace_id__ad_library_advertisers_bulk_promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvertiserBulkPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvertiserBulkPromoteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Bulk Promote Advertisers",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/{advertiser_id}": {
+      "get": {
+        "description": "Return one advertiser with creatives, signal breakdown, and traced contact.",
+        "operationId": "get_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "advertiser_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advertiser Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdAdvertiserDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Advertiser",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/advertisers/{advertiser_id}/promote": {
+      "post": {
+        "description": "Promote one advertiser into the CRM (advertiser -> prospect -> contact).",
+        "operationId": "promote_advertiser_api_v1_workspaces__workspace_id__ad_library_advertisers__advertiser_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "advertiser_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advertiser Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvertiserPromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvertiserPromoteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Promote Advertiser",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/jobs/{job_id}": {
+      "get": {
+        "description": "Return the status of an ad-library discovery job.",
+        "operationId": "get_job_api_v1_workspaces__workspace_id__ad_library_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadDiscoveryJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Job",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/monitors": {
+      "get": {
+        "description": "List saved ad-library monitors (recurring ICP searches).",
+        "operationId": "list_monitors_api_v1_workspaces__workspace_id__ad_library_monitors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdMonitorResponse"
+                  },
+                  "title": "Response List Monitors Api V1 Workspaces  Workspace Id  Ad Library Monitors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Monitors",
+        "tags": [
+          "Ad Library"
+        ]
+      },
+      "post": {
+        "description": "Create a saved monitor that re-scans on a schedule.",
+        "operationId": "create_monitor_api_v1_workspaces__workspace_id__ad_library_monitors_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdMonitorCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdMonitorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Monitor",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/monitors/{monitor_id}": {
+      "delete": {
+        "description": "Delete a saved monitor.",
+        "operationId": "delete_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "monitor_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Monitor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Monitor",
+        "tags": [
+          "Ad Library"
+        ]
+      },
+      "patch": {
+        "description": "Update a saved monitor's search / thresholds / schedule / active flag.",
+        "operationId": "update_monitor_api_v1_workspaces__workspace_id__ad_library_monitors__monitor_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "monitor_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Monitor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdMonitorUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdMonitorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Monitor",
+        "tags": [
+          "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/ad-library/search": {
+      "post": {
+        "description": "Launch an ad-library search.\n\nEnqueues a discovery job the ad-library worker runs asynchronously; poll\n``GET /jobs/{id}`` for status.",
+        "operationId": "create_search_api_v1_workspaces__workspace_id__ad_library_search_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdLibrarySearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadDiscoveryJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Search",
+        "tags": [
+          "Ad Library"
         ]
       }
     },
