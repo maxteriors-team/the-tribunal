@@ -733,7 +733,11 @@ class VoiceToolExecutor(BaseToolExecutor):
             if not callback_number:
                 callback_number = _clip(conversation.contact_phone, 32)
             if not caller_name:
-                caller_name = _clip(self.get_contact_name(), 200)
+                # Only fall back to a genuinely resolved contact name — never the
+                # generic "Customer" placeholder, which would be misleading.
+                resolved_name = self.get_contact_name()
+                if resolved_name and resolved_name != "Customer":
+                    caller_name = _clip(resolved_name, 200)
 
             phone_message = PhoneMessage(
                 workspace_id=workspace_id,
