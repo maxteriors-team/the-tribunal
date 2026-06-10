@@ -80,9 +80,7 @@ def upgrade() -> None:
     # created_at indexes the models no longer declare.
     op.drop_index("ix_bandit_decisions_created_at", table_name="bandit_decisions")
     op.drop_index("ix_demo_requests_created_at", table_name="demo_requests")
-    op.drop_index(
-        "ix_improvement_suggestions_created_at", table_name="improvement_suggestions"
-    )
+    op.drop_index("ix_improvement_suggestions_created_at", table_name="improvement_suggestions")
 
     # email_events: drop composite (workspace_id, occurred_at) index.
     op.drop_index("ix_email_events_workspace_occurred", table_name="email_events")
@@ -91,9 +89,7 @@ def upgrade() -> None:
     # the duplicate unique-constraint + plain index into one unique index, and drop
     # the standalone created_at index.
     op.drop_index("ix_campaign_reports_created_at", table_name="campaign_reports")
-    op.drop_constraint(
-        "uq_campaign_reports_campaign_id", "campaign_reports", type_="unique"
-    )
+    op.drop_constraint("uq_campaign_reports_campaign_id", "campaign_reports", type_="unique")
     op.drop_index("ix_campaign_reports_campaign_id", table_name="campaign_reports")
     op.create_index(
         "ix_campaign_reports_campaign_id",
@@ -108,10 +104,21 @@ def upgrade() -> None:
 
     # opportunity_contacts: the ORM association table declares no primary key and
     # both columns are nullable with their own index. Drop the legacy composite
-    # PK first so the NOT NULL it implies can be lifted.
-    op.drop_constraint(
-        "pk_opportunity_contacts", "opportunity_contacts", type_="primary"
+    # PK first so the NOT NULL it implies can be lifted. The PK name varies by
+    # environment (databases created before the naming convention auto-named it
+    # ``opportunity_contacts_pkey``), so resolve the actual name from the catalog.
+    pk_name = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT conname FROM pg_constraint "
+                "WHERE conrelid = 'opportunity_contacts'::regclass AND contype = 'p'"
+            )
+        )
+        .scalar()
     )
+    if pk_name:
+        op.drop_constraint(pk_name, "opportunity_contacts", type_="primary")
     op.alter_column(
         "opportunity_contacts",
         "opportunity_id",
@@ -124,9 +131,7 @@ def upgrade() -> None:
         existing_type=sa.BigInteger(),
         nullable=True,
     )
-    op.create_index(
-        "ix_opportunity_contacts_contact_id", "opportunity_contacts", ["contact_id"]
-    )
+    op.create_index("ix_opportunity_contacts_contact_id", "opportunity_contacts", ["contact_id"])
     op.create_index(
         "ix_opportunity_contacts_opportunity_id",
         "opportunity_contacts",
@@ -135,12 +140,31 @@ def upgrade() -> None:
 
     # phone_numbers: drop indexes the ORM no longer declares.
     op.drop_index("ix_phone_numbers_mac_relay_sender_id", table_name="phone_numbers")
-    op.drop_index(
-        "ix_phone_numbers_workspace_imessage_enabled", table_name="phone_numbers"
-    )
+    op.drop_index("ix_phone_numbers_workspace_imessage_enabled", table_name="phone_numbers")
 
     # prompt_versions: drop composite (agent_id, is_active, arm_status) index.
     op.drop_index("ix_prompt_versions_agent_active_arms", table_name="prompt_versions")
+
+    # device_tokens: databases that predate the naming convention auto-named the
+    # unique constraint ``device_tokens_expo_push_token_key``. Rename it to the
+    # conventional name so autogenerate stops flagging drop/add drift. No-op on
+    # databases that already carry the conventional name.
+    legacy_uq = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT 1 FROM pg_constraint "
+                "WHERE conname = 'device_tokens_expo_push_token_key' "
+                "AND conrelid = 'device_tokens'::regclass"
+            )
+        )
+        .scalar()
+    )
+    if legacy_uq:
+        op.execute(
+            "ALTER TABLE device_tokens RENAME CONSTRAINT "
+            "device_tokens_expo_push_token_key TO uq_device_tokens_expo_push_token"
+        )
 
 
 def downgrade() -> None:
@@ -164,12 +188,8 @@ def downgrade() -> None:
     )
 
     # opportunity_contacts.
-    op.drop_index(
-        "ix_opportunity_contacts_opportunity_id", table_name="opportunity_contacts"
-    )
-    op.drop_index(
-        "ix_opportunity_contacts_contact_id", table_name="opportunity_contacts"
-    )
+    op.drop_index("ix_opportunity_contacts_opportunity_id", table_name="opportunity_contacts")
+    op.drop_index("ix_opportunity_contacts_contact_id", table_name="opportunity_contacts")
     op.alter_column(
         "opportunity_contacts",
         "contact_id",
@@ -194,15 +214,11 @@ def downgrade() -> None:
 
     # campaign_reports.
     op.drop_index("ix_campaign_reports_campaign_id", table_name="campaign_reports")
-    op.create_index(
-        "ix_campaign_reports_campaign_id", "campaign_reports", ["campaign_id"]
-    )
+    op.create_index("ix_campaign_reports_campaign_id", "campaign_reports", ["campaign_id"])
     op.create_unique_constraint(
         "uq_campaign_reports_campaign_id", "campaign_reports", ["campaign_id"]
     )
-    op.create_index(
-        "ix_campaign_reports_created_at", "campaign_reports", ["created_at"]
-    )
+    op.create_index("ix_campaign_reports_created_at", "campaign_reports", ["created_at"])
 
     # email_events.
     op.create_index(
@@ -218,14 +234,10 @@ def downgrade() -> None:
         ["created_at"],
     )
     op.create_index("ix_demo_requests_created_at", "demo_requests", ["created_at"])
-    op.create_index(
-        "ix_bandit_decisions_created_at", "bandit_decisions", ["created_at"]
-    )
+    op.create_index("ix_bandit_decisions_created_at", "bandit_decisions", ["created_at"])
 
     # conversations.
-    op.create_index(
-        "ix_conversations_next_followup_at", "conversations", ["next_followup_at"]
-    )
+    op.create_index("ix_conversations_next_followup_at", "conversations", ["next_followup_at"])
 
     # contacts indexes.
     op.drop_index("ix_contacts_sms_consent_status", table_name="contacts")
