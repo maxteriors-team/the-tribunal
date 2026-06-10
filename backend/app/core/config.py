@@ -90,6 +90,53 @@ class Settings(BaseSettings):
     # Google Places API
     google_places_api_key: str = ""
 
+    # Ad-library intelligence (Meta Ad Library + Google Ads Transparency).
+    # Pulls advertisers from public ad libraries to detect long-running, low-
+    # iteration advertisers as outbound prospects. The Meta Ad Library is public
+    # data; ``meta_ad_library_access_token`` is a Meta developer-app token with
+    # ``ads_read`` used as a single-tenant/dev fallback when a workspace has no
+    # ``meta_ad_library`` WorkspaceIntegration configured. Never log the token —
+    # the snapshot URL embeds it.
+    ad_library_enabled: bool = True
+    meta_ad_library_access_token: str = ""
+    # Bump roughly annually; v17 and earlier already error. See
+    # facebook.com/ads/library/api.
+    meta_ad_library_api_version: str = "v22.0"
+    meta_ad_library_base_url: str = "https://graph.facebook.com"
+    # Default tier is ~200 calls/hour/app; keep a safety margin under that so
+    # re-scans + multi-replica deploys never trip 429s.
+    meta_ad_library_rate_limit_per_hour: int = 180
+    meta_ad_library_request_timeout_seconds: float = 30.0
+    meta_ad_library_default_country: str = "US"
+    # Config-gated third-party fallback provider for fuller US-commercial
+    # coverage (Apify / ScrapeCreators / SerpApi). Off unless a key is present.
+    meta_thirdparty_enabled: bool = False
+    meta_thirdparty_provider: str = ""  # apify | scrapecreators | serpapi
+    meta_thirdparty_api_key: str = ""
+    meta_thirdparty_base_url: str = ""
+    # Google Ads Transparency Center has no official API; the SerpApi adapter is
+    # the lowest-risk path. Fully behind a flag and off by default.
+    google_ads_transparency_enabled: bool = False
+    serpapi_api_key: str = ""
+    serpapi_base_url: str = "https://serpapi.com"
+    # Hard wall around raw scraping of ad libraries (Meta ToS restricts it).
+    # Must be explicitly enabled; official + licensed APIs are always preferred.
+    ad_library_allow_raw_scrape: bool = False
+    # Optional headless snapshot rendering of creative media (Phase 2, heavy dep).
+    ad_library_snapshot_rendering_enabled: bool = False
+    # Worker enable flags + poll cadence for the ad-library pipeline.
+    ad_library_discovery_worker_enabled: bool = True
+    ad_library_discovery_poll_interval: int = 15
+    ad_monitor_worker_enabled: bool = True
+    ad_monitor_poll_interval: int = 300
+    prospect_enrichment_worker_enabled: bool = True
+    prospect_enrichment_poll_interval: int = 30
+    prospect_promotion_worker_enabled: bool = True
+    prospect_promotion_poll_interval: int = 30
+    # Optional config-gated email-finder for prospect enrichment.
+    email_finder_provider: str = ""  # hunter | apollo
+    email_finder_api_key: str = ""
+
     # gosom/google-maps-scraper — optional self-hosted Google Maps scraper.
     # Leave ``gosom_base_url`` empty to disable the provider entirely; the
     # lead miner then falls back to its other configured sources. Point
@@ -192,6 +239,24 @@ class Settings(BaseSettings):
     # limits don't catch a runaway session, this guarantees we close the socket
     # after N seconds.
     voice_max_call_duration_seconds: int = 30 * 60
+
+    # Live (during-call) sentiment scoring + escalation. When enabled, the voice
+    # bridge scores the caller's transcript incrementally and, when negative
+    # sentiment is *sustained*, emits an escalation event (operator push
+    # notification + optional automatic human transfer). These are lightweight,
+    # lexicon-based defaults; per-agent overrides are read from the agent config
+    # at call time when present.
+    voice_live_sentiment_enabled: bool = True
+    # Smoothed score (EWMA) at/below which sustained negativity escalates.
+    voice_sentiment_escalation_threshold: float = -0.4
+    # Consecutive negative utterances required before escalation fires.
+    voice_sentiment_sustained_turns: int = 3
+    # EWMA smoothing factor in (0, 1]; higher reacts faster to the latest turn.
+    voice_sentiment_smoothing: float = 0.5
+    # When True, a sustained-negativity escalation also attempts an automatic
+    # warm/cold human transfer (only if the agent has a transfer destination
+    # configured). When False, escalation only notifies operators.
+    voice_sentiment_auto_transfer: bool = False
 
 
 @lru_cache

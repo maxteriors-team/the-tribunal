@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess, WorkspaceAdminAccess
+from app.core.config import settings
 from app.core.encryption import encrypt_json
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.integration import (
@@ -368,13 +369,87 @@ async def _test_resend(client: httpx.AsyncClient, api_key: str) -> IntegrationTe
     )
 
 
-# Map integration types to their test functions
+async def _test_meta_ad_library(
+    client: httpx.AsyncClient,
+    credentials: dict[str, Any],
+) -> IntegrationTestResult:
+    """Validate a Meta Ad Library access token with a minimal ads_archive call.
+
+    The token is never logged or echoed back; only the connection outcome and
+    Graph API error message (when present) are surfaced.
+    """
+    access_token = str(credentials.get("access_token") or "")
+    if not access_token:
+        return IntegrationTestResult(
+            success=False,
+            message="Meta Ad Library access token is required",
+        )
+
+    api_version = settings.meta_ad_library_api_version
+    country = str(credentials.get("default_country") or settings.meta_ad_library_default_country)
+    response = await client.get(
+        f"{settings.meta_ad_library_base_url}/{api_version}/ads_archive",
+        params={
+            "access_token": access_token,
+            "ad_reached_countries": f"['{country}']",
+            "ad_type": "ALL",
+            "search_terms": "a",
+            "limit": 1,
+            "fields": "id",
+        },
+    )
+    if response.status_code == 200:
+        return IntegrationTestResult(
+            success=True,
+            message="Successfully connected to the Meta Ad Library",
+        )
+    error_message: str | None = None
+    try:
+        error_message = response.json().get("error", {}).get("message")
+    except (ValueError, TypeError, AttributeError):
+        error_message = None
+    return IntegrationTestResult(
+        success=False,
+        message=error_message or f"Meta Ad Library API returned status {response.status_code}",
+    )
+
+
+async def _test_google_ads_transparency(
+    client: httpx.AsyncClient, api_key: str
+) -> IntegrationTestResult:
+    """Validate a SerpApi key used for Google Ads Transparency lookups."""
+    if not api_key:
+        return IntegrationTestResult(
+            success=False,
+            message="SerpApi API key is required",
+        )
+    response = await client.get(
+        f"{settings.serpapi_base_url}/account",
+        params={"api_key": api_key},
+    )
+    if response.status_code == 200:
+        return IntegrationTestResult(
+            success=True,
+            message="Successfully connected to SerpApi",
+        )
+    return IntegrationTestResult(
+        success=False,
+        message=f"SerpApi returned status {response.status_code}",
+    )
+
+
+# Map integration types to their (uniform-signature) test functions.
 _INTEGRATION_TESTERS = {
     "calcom": _test_calcom,
     "telnyx": _test_telnyx,
     "openai": _test_openai,
     "resend": _test_resend,
+    "google_ads_transparency": _test_google_ads_transparency,
 }
+
+# Integration types handled by a bespoke branch in ``test_integration`` because
+# their test function takes the full credentials dict rather than an api key.
+_SPECIAL_TESTERS = {"openai", "meta_ad_library"}
 
 
 @router.post("/{integration_type}/test", response_model=IntegrationTestResult)
@@ -399,7 +474,7 @@ async def test_integration(
         )
 
     tester = _INTEGRATION_TESTERS.get(integration_type)
-    if tester is None:
+    if tester is None and integration_type not in _SPECIAL_TESTERS:
         return IntegrationTestResult(
             success=False,
             message=f"Test not implemented for integration type: {integration_type}",
@@ -411,7 +486,10 @@ async def test_integration(
         async with httpx.AsyncClient(timeout=10.0) as client:
             if integration_type == "openai":
                 return await _test_openai(client, "", credentials)
+            if integration_type == "meta_ad_library":
+                return await _test_meta_ad_library(client, credentials)
 
+            assert tester is not None  # guarded above for non-special types
             api_key = credentials.get("api_key", "")
             return await tester(client, api_key)
     except httpx.TimeoutException:

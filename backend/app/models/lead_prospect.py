@@ -85,6 +85,7 @@ class EnrichmentProvider(StrEnum):
     LINKEDIN_LOOKUP = "linkedin_lookup"
     EMAIL_LOOKUP = "email_lookup"
     PHONE_LOOKUP = "phone_lookup"
+    AD_LIBRARY_CONTACT_TRACE = "ad_library_contact_trace"
     MANUAL = "manual"
     OTHER = "other"
 
@@ -195,9 +196,7 @@ class LeadProspect(Base):
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     website_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     website_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    website_host_hash: Mapped[str | None] = mapped_column(
-        LookupHash(), nullable=True, index=True
-    )
+    website_host_hash: Mapped[str | None] = mapped_column(LookupHash(), nullable=True, index=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # blake2b(normalized owner name) — lets us find duplicate prospects across
     # discovery runs when only the owner's name is known.
@@ -246,12 +245,8 @@ class LeadProspect(Base):
     last_contacted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_replied_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_failed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reply_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     bounce_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 

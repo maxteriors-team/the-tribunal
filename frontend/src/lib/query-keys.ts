@@ -95,6 +95,7 @@ export function getResourceInvalidationKeys(
   );
 }
 
+const adAdvertisers = createResourceQueryKeys("ad-advertisers");
 const agents = createResourceQueryKeys("agents");
 const appointments = createResourceQueryKeys("appointments");
 const automations = createResourceQueryKeys("automations");
@@ -119,6 +120,17 @@ const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
 
 export const queryKeys = {
+  adLibrary: {
+    ...adAdvertisers,
+    advertisers: (workspaceId: string, params?: QueryKeyParams | null) =>
+      adAdvertisers.list(workspaceId, params),
+    advertiser: (workspaceId: string, advertiserId: string) =>
+      adAdvertisers.detail(workspaceId, advertiserId),
+    job: (workspaceId: string, jobId: string) =>
+      ["ad-library-job", workspaceId, jobId] as const,
+    monitors: (workspaceId: string) =>
+      ["ad-library-monitors", workspaceId] as const,
+  },
   agents: {
     ...agents,
     activeOnly: (workspaceId: string) =>
@@ -180,6 +192,8 @@ export const queryKeys = {
     ) => calls.list(workspaceId, { direction, search, status }),
     transcript: (workspaceId: string, callId: string) =>
       [...calls.detail(workspaceId, callId), "transcript"] as const,
+    live: (workspaceId: string) =>
+      [...calls.all(workspaceId), "live"] as const,
   },
   campaignReports: {
     ...campaignReports,
@@ -244,6 +258,8 @@ export const queryKeys = {
     revenue: (workspaceId: string) => ["dashboard", workspaceId, "revenue"] as const,
     outboundGrowth: (workspaceId: string) =>
       ["dashboard", workspaceId, "outbound-growth"] as const,
+    todayQueue: (workspaceId: string) =>
+      ["dashboard", workspaceId, "today-queue"] as const,
   },
   findLeadsAi: createResourceQueryKeys("find-leads-ai"),
   humanProfiles: createResourceQueryKeys("human-profiles"),

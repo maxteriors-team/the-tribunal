@@ -43,6 +43,8 @@ class DiscoverySourceType(StrEnum):
     MANUAL = "manual"
     API = "api"
     LINKEDIN = "linkedin"
+    META_AD_LIBRARY = "meta_ad_library"
+    GOOGLE_ADS_TRANSPARENCY = "google_ads_transparency"
     OTHER = "other"
 
 

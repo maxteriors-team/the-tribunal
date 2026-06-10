@@ -6,7 +6,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-IntegrationType = Literal["calcom", "telnyx", "openai", "resend"]
+IntegrationType = Literal[
+    "calcom",
+    "telnyx",
+    "openai",
+    "resend",
+    "meta_ad_library",
+    "google_ads_transparency",
+]
 
 
 class IntegrationCredentialsBase(BaseModel):
@@ -44,6 +51,33 @@ class ResendCredentials(IntegrationCredentialsBase):
 
     from_email: str | None = Field(None, description="Default sender email address")
     from_name: str | None = Field(None, description="Default sender name")
+
+
+class MetaAdLibraryCredentials(BaseModel):
+    """Meta Ad Library specific credentials.
+
+    ``access_token`` is a Meta developer-app token with ``ads_read``. The Ad
+    Library is public data. Optional ``thirdparty_*`` fields configure a
+    config-gated fallback provider (Apify / ScrapeCreators / SerpApi) for
+    fuller US-commercial coverage.
+    """
+
+    access_token: str = Field(..., min_length=1, description="Meta app access token (ads_read)")
+    default_country: str | None = Field(None, description="Default ad_reached_countries (e.g. US)")
+    thirdparty_provider: str | None = Field(
+        None, description="Fallback provider: apify | scrapecreators | serpapi"
+    )
+    thirdparty_api_key: str | None = Field(None, description="Fallback provider API key")
+
+
+class GoogleAdsTransparencyCredentials(BaseModel):
+    """Google Ads Transparency Center credentials.
+
+    No official API exists; the SerpApi adapter is the supported path. ``api_key``
+    is the SerpApi key.
+    """
+
+    api_key: str = Field(..., min_length=1, description="SerpApi API key")
 
 
 class IntegrationCreate(BaseModel):
