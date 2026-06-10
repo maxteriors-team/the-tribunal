@@ -12,6 +12,7 @@ from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
+from app.services.dashboard.today_queue_service import TodayQueueService
 
 
 class ContactAssistantTools:
@@ -25,6 +26,7 @@ class ContactAssistantTools:
             "search_contacts": self.search_contacts,
             "create_contact": self.create_contact,
             "get_dashboard_stats": self.get_dashboard_stats,
+            "get_today_queue": self.get_today_queue,
         }
 
     async def search_contacts(self, args: ToolArguments) -> dict[str, object]:
@@ -95,6 +97,18 @@ class ContactAssistantTools:
                 "last_name": contact.last_name,
                 "phone": contact.phone_number,
             },
+        }
+
+    async def get_today_queue(self, _args: ToolArguments) -> dict[str, object]:
+        """Ordered Today mission queue: approvals, nudges, batches, drafts, gaps."""
+        queue = await TodayQueueService(self.context.db).get_today_queue(self.context.workspace_id)
+        return {
+            "success": True,
+            "data": {
+                "generated_at": queue.generated_at.isoformat(),
+                "items": [item.model_dump() for item in queue.items],
+            },
+            "count": len(queue.items),
         }
 
     async def get_dashboard_stats(self, _args: ToolArguments) -> dict[str, object]:

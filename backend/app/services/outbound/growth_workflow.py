@@ -386,8 +386,12 @@ class OutboundGrowthWorkflowService:
         campaign: Campaign,
         preview_contacts: list[dict[str, Any]],
     ) -> int:
+        # Add rows directly instead of appending to the lazy
+        # ``campaign.campaign_contacts`` collection: touching an unloaded
+        # collection on a flushed instance emits a synchronous lazy load,
+        # which raises MissingGreenlet under the async engine.
         for contact in preview_contacts:
-            campaign.campaign_contacts.append(
+            self.db.add(
                 CampaignContact(
                     campaign_id=campaign.id,
                     contact_id=int(contact["id"]),

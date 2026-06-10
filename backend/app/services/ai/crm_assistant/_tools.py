@@ -31,6 +31,7 @@ def _apply_tool_policy_metadata(tools: list[dict[str, Any]]) -> list[dict[str, A
 
     return [_with_confirmation_property(deepcopy(tool)) for tool in tools]
 
+
 CRM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -342,6 +343,16 @@ CRM_TOOLS: list[dict[str, Any]] = [
             "name": "get_dashboard_stats",
             "description": "Current totals: contacts, campaigns, conversations, "
             "upcoming appointments.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_today_queue",
+            "description": "Today's ordered mission queue: pending approvals, nudges due "
+            "today, fresh ad-library prospect batches, draft campaigns awaiting launch, "
+            "and setup gaps. Use for morning briefings and 'what should I do today?'.",
             "parameters": {"type": "object", "properties": {}},
         },
     },

@@ -157,10 +157,39 @@ export interface DashboardResponse {
   knowledge_base_stats: KnowledgeBaseStats;
 }
 
+export type TodayQueueKind =
+  | "approvals"
+  | "hot_nudges"
+  | "prospect_batch"
+  | "draft_campaign"
+  | "setup_gap";
+
+export interface TodayQueueItem {
+  id: string;
+  kind: TodayQueueKind;
+  priority: number;
+  title: string;
+  body: string;
+  count: number;
+  cta_label: string;
+  href: string;
+  payload: Record<string, unknown>;
+}
+
+export interface TodayQueueResponse {
+  items: TodayQueueItem[];
+  generated_at: string;
+}
+
 export const dashboardApi = {
   getStats: async (workspaceId: string): Promise<DashboardResponse> => {
     return apiGet<DashboardResponse>(
       `/api/v1/workspaces/${workspaceId}/dashboard/stats`
+    );
+  },
+  getTodayQueue: async (workspaceId: string): Promise<TodayQueueResponse> => {
+    return apiGet<TodayQueueResponse>(
+      `/api/v1/workspaces/${workspaceId}/dashboard/today-queue`
     );
   },
 };

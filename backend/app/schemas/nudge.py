@@ -11,7 +11,8 @@ class NudgeResponse(BaseModel):
 
     id: uuid.UUID
     workspace_id: uuid.UUID
-    contact_id: int
+    # None for workspace-level operator nudges (not tied to a contact).
+    contact_id: int | None
     nudge_type: str
     title: str
     message: str
@@ -78,6 +79,9 @@ class NudgeSettingsResponse(BaseModel):
             "unresponsive",
             "hot_lead",
             "referral_ask",
+            "outbound_batch_ready",
+            "approvals_waiting",
+            "monitor_idle",
         ]
     )
     delivery_channels: list[str] = Field(default_factory=lambda: ["sms", "push"])

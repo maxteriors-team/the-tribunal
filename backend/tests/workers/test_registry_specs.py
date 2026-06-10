@@ -38,6 +38,11 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "drip_campaign_worker",
         "transcript_analysis_worker",
         "auth_rate_limit_cleanup",
+        "ad_library_discovery_worker",
+        "prospect_enrichment_worker",
+        "prospect_promotion_worker",
+        "ad_monitor_worker",
+        "outbound_auto_draft_worker",
     ]
     assert [spec.registry for spec in WORKER_SPECS] == ALL_REGISTRIES
 

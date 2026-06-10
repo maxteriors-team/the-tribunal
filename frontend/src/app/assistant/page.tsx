@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+
 import { AssistantChat } from "@/components/assistant/assistant-chat";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { PageLoadingState } from "@/components/ui/page-state";
 
 export default function AssistantPage() {
   return (
@@ -12,7 +15,10 @@ export default function AssistantPage() {
             conversations.
           </p>
         </div>
-        <AssistantChat className="min-h-0 flex-1" />
+        {/* Suspense: AssistantChat reads useSearchParams (?briefing=1). */}
+        <Suspense fallback={<PageLoadingState className="min-h-0 flex-1" />}>
+          <AssistantChat className="min-h-0 flex-1" />
+        </Suspense>
       </div>
     </AppSidebar>
   );

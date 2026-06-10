@@ -84,6 +84,52 @@ class DealCoachFollowUpActionHandler:
 
 
 @dataclass(slots=True, frozen=True)
+class LaunchCampaignHandler:
+    """Start an auto-drafted outbound campaign once a human approves it.
+
+    The auto-draft worker parks a draft campaign behind an
+    ``outbound.launch_campaign`` PendingAction; approval flips the draft to
+    running via the shared campaign lifecycle (same path as the campaigns
+    API), so every send still passes the human gate.
+    """
+
+    action_type: str = "outbound.launch_campaign"
+
+    async def execute(self, db: AsyncSession, action: PendingAction) -> dict[str, Any]:
+        from app.services.campaigns.campaign_lifecycle import (
+            CampaignLifecycleError,
+            get_campaign_for_workspace,
+            start_campaign,
+        )
+
+        raw_campaign_id = action.action_payload.get("campaign_id")
+        try:
+            campaign_id = uuid.UUID(str(raw_campaign_id))
+        except (TypeError, ValueError):
+            return {"error": "invalid_campaign_id", "campaign_id": raw_campaign_id}
+
+        campaign = await get_campaign_for_workspace(db, campaign_id, action.workspace_id)
+        if campaign is None:
+            return {"error": "campaign_not_found", "campaign_id": str(campaign_id)}
+
+        try:
+            result = await start_campaign(db, campaign)
+        except CampaignLifecycleError as exc:
+            return {
+                "error": "campaign_not_startable",
+                "campaign_id": str(campaign_id),
+                "detail": str(exc),
+            }
+
+        return {
+            "status": "started",
+            "campaign_id": str(campaign_id),
+            "campaign_status": result.status.value,
+            "contact_count": result.contact_count,
+        }
+
+
+@dataclass(slots=True, frozen=True)
 class BookAppointmentActionHandler:
     """Execute a book_appointment pending action via BookingService."""
 
@@ -162,7 +208,14 @@ class ApprovalGateService:
         send_sms_handler: ApprovedActionHandler = SendSmsActionHandler()
         outbound_handler: ApprovedActionHandler = OutboundFollowUpCampaignSuggestionHandler()
         deal_coach_handler: ApprovedActionHandler = DealCoachFollowUpActionHandler()
-        return (book_appointment_handler, send_sms_handler, outbound_handler, deal_coach_handler)
+        launch_campaign_handler: ApprovedActionHandler = LaunchCampaignHandler()
+        return (
+            book_appointment_handler,
+            send_sms_handler,
+            outbound_handler,
+            deal_coach_handler,
+            launch_campaign_handler,
+        )
 
     async def check_and_execute_or_queue(
         self,

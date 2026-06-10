@@ -3347,6 +3347,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/dashboard/today-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Today Queue
+         * @description Get the ordered Today mission queue for a workspace.
+         *
+         *     Composes pending approvals, nudges due today, fresh ad-library prospect
+         *     batches, draft campaigns awaiting launch, and cold-start setup gaps into
+         *     one prioritized list.
+         */
+        get: operations["get_today_queue_api_v1_workspaces__workspace_id__dashboard_today_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/drip-campaigns": {
         parameters: {
             query?: never;
@@ -12619,7 +12643,7 @@ export interface components {
             /** Contact Company */
             contact_company?: string | null;
             /** Contact Id */
-            contact_id: number;
+            contact_id: number | null;
             /** Contact Name */
             contact_name?: string | null;
             /** Contact Phone */
@@ -16276,6 +16300,48 @@ export interface components {
             failed: number;
             /** Pending */
             pending: number;
+        };
+        /**
+         * TodayQueueItem
+         * @description One ordered mission item on the Today queue.
+         */
+        TodayQueueItem: {
+            /** Body */
+            body: string;
+            /** Count */
+            count: number;
+            /** Cta Label */
+            cta_label: string;
+            /** Href */
+            href: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "approvals" | "hot_nudges" | "prospect_batch" | "draft_campaign" | "setup_gap";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Priority */
+            priority: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * TodayQueueResponse
+         * @description Ordered mission queue for a workspace.
+         */
+        TodayQueueResponse: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["TodayQueueItem"][];
         };
         /**
          * Token
@@ -23672,6 +23738,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_today_queue_api_v1_workspaces__workspace_id__dashboard_today_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayQueueResponse"];
                 };
             };
             /** @description Validation Error */

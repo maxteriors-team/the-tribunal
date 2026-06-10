@@ -39,6 +39,10 @@ const NUDGE_TYPE_EMOJI: Record<string, string> = {
   custom: "📅",
   follow_up: "📋",
   deal_milestone: "🎯",
+  // Workspace-level operator nudges
+  outbound_batch_ready: "📦",
+  approvals_waiting: "⏳",
+  monitor_idle: "🛰️",
 };
 
 const SUGGESTED_ACTION_LABELS: Record<SuggestedAction, string> = {
@@ -340,7 +344,7 @@ function NudgeCard({
 
           {/* Contact + Due date row */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {nudge.contact_name && (
+            {nudge.contact_name && nudge.contact_id !== null && (
               <Link
                 href={`/contacts/${nudge.contact_id}`}
                 className="font-medium text-foreground hover:underline"

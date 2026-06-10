@@ -1,7 +1,8 @@
 export interface HumanNudge {
   id: string;
   workspace_id: string;
-  contact_id: number;
+  /** null for workspace-level operator nudges (not tied to a contact) */
+  contact_id: number | null;
   nudge_type: NudgeType;
   title: string;
   message: string;
@@ -22,7 +23,21 @@ export interface HumanNudge {
   contact_company: string | null;
 }
 
-export type NudgeType = "birthday" | "anniversary" | "follow_up" | "cooling" | "deal_milestone" | "custom";
+export type NudgeType =
+  | "birthday"
+  | "anniversary"
+  | "follow_up"
+  | "cooling"
+  | "deal_milestone"
+  | "custom"
+  | "noshow_recovery"
+  | "unresponsive"
+  | "hot_lead"
+  | "referral_ask"
+  // Workspace-level operator nudges (contact_id is null)
+  | "outbound_batch_ready"
+  | "approvals_waiting"
+  | "monitor_idle";
 export type NudgeStatus = "pending" | "sent" | "acted" | "dismissed" | "snoozed";
 export type NudgePriority = "low" | "medium" | "high";
 export type SuggestedAction = "send_card" | "call" | "text" | "email";

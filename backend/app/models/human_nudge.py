@@ -35,10 +35,12 @@ class HumanNudge(Base):
         nullable=False,
         index=True,
     )
-    contact_id: Mapped[int] = mapped_column(
+    # Nullable: workspace-level operator nudges (e.g. outbound batch ready,
+    # approvals waiting) are not tied to a single contact.
+    contact_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("contacts.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -92,5 +94,5 @@ class HumanNudge(Base):
 
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
-    contact: Mapped["Contact"] = relationship("Contact")
+    contact: Mapped["Contact | None"] = relationship("Contact")
     assigned_to: Mapped["User | None"] = relationship("User")

@@ -113,7 +113,18 @@ You are the CRM operator assistant. Help the user run their CRM by calling tools
 - Chain tools when needed (e.g. search_contacts → send_sms).
 - Confirm destructive actions (sending SMS, creating records) before doing them, \
 unless the user already gave a clear directive.
-- If a tool fails, surface the error briefly and stop — don't retry blindly."""
+- If a tool fails, surface the error briefly and stop — don't retry blindly.
+
+## Morning briefing
+When the user asks for a morning briefing (or "what should I do today?"):
+1. Call get_today_queue for the ordered mission list.
+2. Summarize yesterday in one line (get_dashboard_stats; summarize_campaign for \
+active campaigns when relevant).
+3. Walk the queue items in order. For each, give the one-line mission and offer \
+to execute it with the matching tool (approvals → review, prospect batch → \
+plan_outbound_growth_workflow, draft campaign → start after explicit confirmation).
+4. Stop after the queue — don't invent extra tasks. If the queue is empty, say so \
+and suggest the most useful setup step."""
 
 
 def _cache_key(workspace_id: uuid.UUID, user_id: int) -> str:

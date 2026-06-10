@@ -16,6 +16,10 @@ import structlog
 from app.core.config import Settings, settings
 
 # Import all worker registries
+from app.workers.ad_library_discovery_worker import (
+    _registry as ad_library_discovery_registry,
+)
+from app.workers.ad_monitor_worker import _registry as ad_monitor_registry
 from app.workers.approval_worker import _registry as approval_registry
 from app.workers.auth_rate_limit_cleanup_worker import (
     _registry as auth_rate_limit_cleanup_registry,
@@ -31,11 +35,20 @@ from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
 from app.workers.nudge_worker import _registry as nudge_registry
+from app.workers.outbound_auto_draft_worker import (
+    _registry as outbound_auto_draft_registry,
+)
 from app.workers.outbound_improvement_suggestion_worker import (
     _registry as outbound_improvement_suggestion_registry,
 )
 from app.workers.prompt_improvement_worker import _registry as prompt_improvement_registry
 from app.workers.prompt_stats_worker import _registry as prompt_stats_registry
+from app.workers.prospect_enrichment_worker import (
+    _registry as prospect_enrichment_registry,
+)
+from app.workers.prospect_promotion_worker import (
+    _registry as prospect_promotion_registry,
+)
 from app.workers.reminder_worker import _registry as reminder_registry
 from app.workers.reputation_worker import _registry as reputation_registry
 from app.workers.review_request_worker import _registry as review_request_registry
@@ -204,6 +217,41 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
     WorkerSpec(
         name="auth_rate_limit_cleanup",
         registry=auth_rate_limit_cleanup_registry,
+        dependencies=("postgres",),
+    ),
+    WorkerSpec(
+        name="ad_library_discovery_worker",
+        registry=ad_library_discovery_registry,
+        dependencies=("postgres", "redis", "meta_ad_library"),
+        enabled=lambda s: s.ad_library_discovery_worker_enabled,
+        enabled_setting="ad_library_discovery_worker_enabled",
+    ),
+    WorkerSpec(
+        name="prospect_enrichment_worker",
+        registry=prospect_enrichment_registry,
+        dependencies=("postgres", "website_http", "openai"),
+        enabled=lambda s: s.prospect_enrichment_worker_enabled,
+        enabled_setting="prospect_enrichment_worker_enabled",
+    ),
+    WorkerSpec(
+        name="prospect_promotion_worker",
+        registry=prospect_promotion_registry,
+        dependencies=("postgres",),
+        enabled=lambda s: s.prospect_promotion_worker_enabled,
+        enabled_setting="prospect_promotion_worker_enabled",
+    ),
+    WorkerSpec(
+        name="ad_monitor_worker",
+        registry=ad_monitor_registry,
+        dependencies=("postgres",),
+        enabled=lambda s: s.ad_monitor_worker_enabled,
+        enabled_setting="ad_monitor_worker_enabled",
+    ),
+    # Per-workspace opt-in lives in workspace settings (outbound_autopilot.enabled,
+    # default off); the worker itself is always started and cheap when idle.
+    WorkerSpec(
+        name="outbound_auto_draft_worker",
+        registry=outbound_auto_draft_registry,
         dependencies=("postgres",),
     ),
 )

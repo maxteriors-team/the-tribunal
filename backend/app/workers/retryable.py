@@ -44,7 +44,12 @@ def _safe_jsonable(value: Any) -> Any:
         return [_safe_jsonable(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _safe_jsonable(v) for k, v in value.items()}
-    text = repr(value)
+    try:
+        text = repr(value)
+    except Exception:
+        # e.g. an expired ORM instance whose __repr__ triggers a lazy load
+        # (MissingGreenlet under the async engine). Never let logging raise.
+        text = f"<unrepresentable {type(value).__name__}>"
     if len(text) > _MAX_PAYLOAD_REPR:
         text = text[:_MAX_PAYLOAD_REPR] + "…(truncated)"
     return text

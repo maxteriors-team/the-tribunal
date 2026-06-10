@@ -590,8 +590,9 @@ async def test_outbound_growth_workflow_creates_draft_campaign(
     assert result["draft"]["created"] is True
     assert result["responder_agent"]["action"] == "recommended_existing"
     assert result["previews"][0]["message"].startswith("Hi Ava")
-    created_campaign = db.add.call_args_list[-1].args[0]
-    assert isinstance(created_campaign, Campaign)
+    # Preview CampaignContact rows are added after the Campaign itself.
+    added_objects = [call.args[0] for call in db.add.call_args_list]
+    created_campaign = next(obj for obj in added_objects if isinstance(obj, Campaign))
     assert created_campaign.workspace_id == workspace_id
     assert created_campaign.offer_id == offer.id
     assert created_campaign.agent_id == agent.id

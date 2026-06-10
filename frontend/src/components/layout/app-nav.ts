@@ -1,15 +1,20 @@
 import {
   Bell,
+  BookOpen,
+  CalendarCheck,
   Bot,
+  Boxes,
   Calendar,
   ClipboardCheck,
   CreditCard,
   ClipboardList,
+  Drama,
   FlaskConical,
   Gauge,
   Gift,
   KanbanSquare,
   LayoutDashboard,
+  Layers,
   Lightbulb,
   LucideIcon,
   Magnet,
@@ -45,6 +50,13 @@ export interface AppNavSection {
 }
 
 export const workspaceNavItems: AppNavItem[] = [
+  {
+    title: "Today",
+    url: "/today",
+    icon: CalendarCheck,
+    sidebar: true,
+    commandPalette: true,
+  },
   {
     title: "Dashboard",
     url: "/dashboard",
@@ -97,6 +109,13 @@ export const workspaceNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    title: "Segments",
+    url: "/segments",
+    icon: Boxes,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
     title: "Campaigns",
     url: "/campaigns",
     icon: Megaphone,
@@ -134,6 +153,13 @@ export const leadDiscoveryNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
   },
+  {
+    title: "Ad Library",
+    url: "/find-leads/ad-library",
+    icon: Layers,
+    sidebar: true,
+    commandPalette: true,
+  },
 ];
 
 export const toolsNavItems: AppNavItem[] = [
@@ -141,6 +167,20 @@ export const toolsNavItems: AppNavItem[] = [
     title: "AI Agents",
     url: "/agents",
     icon: Bot,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
+    title: "Practice / Roleplay",
+    url: "/agents/practice",
+    icon: Drama,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
+    title: "Knowledge Base",
+    url: "/knowledge",
+    icon: BookOpen,
     sidebar: true,
     commandPalette: true,
   },
@@ -257,6 +297,9 @@ export const breadcrumbLabels: Record<string, string> = {
   dashboard: "Dashboard",
   assistant: "Assistant",
   agents: "AI Agents",
+  practice: "Practice / Roleplay",
+  knowledge: "Knowledge Base",
+  segments: "Segments",
   suggestions: "AI Suggestions",
   offers: "Offers",
   reviews: "Reviews",
@@ -269,6 +312,7 @@ export const breadcrumbLabels: Record<string, string> = {
   settings: "Settings",
   "find-leads": "Find Leads",
   "find-leads-ai": "Find Leads AI",
+  "ad-library": "Ad Library",
   "pending-actions": "Pending Actions",
   opportunities: "Opportunities",
   new: "New",

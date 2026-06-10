@@ -16005,8 +16005,15 @@
             "title": "Contact Company"
           },
           "contact_id": {
-            "title": "Contact Id",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
           },
           "contact_name": {
             "anyOf": [
@@ -25922,6 +25929,90 @@
           "failed"
         ],
         "title": "TodayOverview",
+        "type": "object"
+      },
+      "TodayQueueItem": {
+        "description": "One ordered mission item on the Today queue.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "cta_label": {
+            "title": "Cta Label",
+            "type": "string"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "approvals",
+              "hot_nudges",
+              "prospect_batch",
+              "draft_campaign",
+              "setup_gap"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "priority",
+          "title",
+          "body",
+          "count",
+          "cta_label",
+          "href"
+        ],
+        "title": "TodayQueueItem",
+        "type": "object"
+      },
+      "TodayQueueResponse": {
+        "description": "Ordered mission queue for a workspace.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TodayQueueItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "generated_at"
+        ],
+        "title": "TodayQueueResponse",
         "type": "object"
       },
       "Token": {
@@ -40342,6 +40433,55 @@
           }
         ],
         "summary": "Get Dashboard Stats",
+        "tags": [
+          "Dashboard"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/dashboard/today-queue": {
+      "get": {
+        "description": "Get the ordered Today mission queue for a workspace.\n\nComposes pending approvals, nudges due today, fresh ad-library prospect\nbatches, draft campaigns awaiting launch, and cold-start setup gaps into\none prioritized list.",
+        "operationId": "get_today_queue_api_v1_workspaces__workspace_id__dashboard_today_queue_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TodayQueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Today Queue",
         "tags": [
           "Dashboard"
         ]

@@ -9,15 +9,18 @@ from app.models.contact import Contact
 from app.models.workspace import Workspace
 from app.services.nudges.strategies import (
     AnniversaryNudgeStrategy,
+    ApprovalsWaitingNudgeStrategy,
     BirthdayNudgeStrategy,
     CoolingNudgeStrategy,
     CustomDateNudgeStrategy,
     DealStallNudgeStrategy,
     FollowUpNudgeStrategy,
     HotLeadNudgeStrategy,
+    MonitorIdleNudgeStrategy,
     NoShowRecoveryNudgeStrategy,
     NudgeContext,
     NudgeStrategy,
+    OutboundBatchReadyNudgeStrategy,
     ReferralAskNudgeStrategy,
     UnresponsiveNudgeStrategy,
 )
@@ -38,6 +41,10 @@ ALL_NUDGE_TYPES = [
     "unresponsive",
     "hot_lead",
     "referral_ask",
+    # Workspace-level operator nudges (contact_id is NULL).
+    "outbound_batch_ready",
+    "approvals_waiting",
+    "monitor_idle",
 ]
 
 # Order matters: the orchestrator preserves legacy query ordering for tests
@@ -53,6 +60,9 @@ _STRATEGY_REGISTRY: list[tuple[str, type[NudgeStrategy]]] = [
     ("noshow_recovery", NoShowRecoveryNudgeStrategy),
     ("hot_lead", HotLeadNudgeStrategy),
     ("referral_ask", ReferralAskNudgeStrategy),
+    ("outbound_batch_ready", OutboundBatchReadyNudgeStrategy),
+    ("approvals_waiting", ApprovalsWaitingNudgeStrategy),
+    ("monitor_idle", MonitorIdleNudgeStrategy),
 ]
 
 _DATE_NUDGE_TYPES = frozenset({"birthday", "anniversary", "custom"})
