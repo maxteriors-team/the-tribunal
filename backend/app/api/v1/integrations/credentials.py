@@ -17,6 +17,7 @@ from app.schemas.integration import (
     IntegrationUpdate,
     IntegrationWithMaskedCredentials,
 )
+from app.services.followupboss import FollowUpBossClient
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -414,6 +415,35 @@ async def _test_meta_ad_library(
     )
 
 
+async def _test_followupboss(api_key: str) -> IntegrationTestResult:
+    """Test a stored Follow Up Boss API key via its /me endpoint.
+
+    Reuses the same ``FollowUpBossClient.verify()`` call the onboarding wizard
+    and ``/realtor/verify-fub`` use so connect/test/reconnect behave identically
+    everywhere FUB credentials are managed.
+    """
+    if not api_key:
+        return IntegrationTestResult(
+            success=False,
+            message="Follow Up Boss API key is required",
+        )
+    client = FollowUpBossClient(api_key)
+    try:
+        data = await client.verify()
+        return IntegrationTestResult(
+            success=True,
+            message="Successfully connected to Follow Up Boss",
+            details={"name": data.get("name")},
+        )
+    except httpx.HTTPStatusError as exc:
+        return IntegrationTestResult(
+            success=False,
+            message=f"Follow Up Boss API returned status {exc.response.status_code}",
+        )
+    finally:
+        await client.close()
+
+
 async def _test_google_ads_transparency(
     client: httpx.AsyncClient, api_key: str
 ) -> IntegrationTestResult:
@@ -448,8 +478,8 @@ _INTEGRATION_TESTERS = {
 }
 
 # Integration types handled by a bespoke branch in ``test_integration`` because
-# their test function takes the full credentials dict rather than an api key.
-_SPECIAL_TESTERS = {"openai", "meta_ad_library"}
+# their test function does not share the ``(client, api_key)`` signature.
+_SPECIAL_TESTERS = {"openai", "meta_ad_library", "followupboss"}
 
 
 @router.post("/{integration_type}/test", response_model=IntegrationTestResult)
@@ -482,16 +512,20 @@ async def test_integration(
 
     credentials = integration.credentials
 
+    api_key = credentials.get("api_key", "")
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if integration_type == "openai":
-                return await _test_openai(client, "", credentials)
-            if integration_type == "meta_ad_library":
-                return await _test_meta_ad_library(client, credentials)
-
-            assert tester is not None  # guarded above for non-special types
-            api_key = credentials.get("api_key", "")
-            return await tester(client, api_key)
+                result_value = await _test_openai(client, "", credentials)
+            elif integration_type == "meta_ad_library":
+                result_value = await _test_meta_ad_library(client, credentials)
+            elif integration_type == "followupboss":
+                result_value = await _test_followupboss(api_key)
+            else:
+                assert tester is not None  # guarded above for non-special types
+                result_value = await tester(client, api_key)
+        return result_value
     except httpx.TimeoutException:
         return IntegrationTestResult(
             success=False,

@@ -11385,7 +11385,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency";
+            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "followupboss" | "meta_ad_library" | "google_ads_transparency";
             /**
              * Is Active
              * @default true

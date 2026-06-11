@@ -5,7 +5,14 @@ import { createApiClient } from "./create-api-client";
 export interface IntegrationWithMaskedCredentials {
   id: string;
   workspace_id: string;
-  integration_type: "calcom" | "telnyx" | "openai" | "sendgrid" | "resend" | "lob";
+  integration_type:
+    | "calcom"
+    | "telnyx"
+    | "openai"
+    | "sendgrid"
+    | "resend"
+    | "lob"
+    | "followupboss";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -13,7 +20,14 @@ export interface IntegrationWithMaskedCredentials {
 }
 
 export interface CreateIntegrationRequest {
-  integration_type: "calcom" | "telnyx" | "openai" | "sendgrid" | "resend" | "lob";
+  integration_type:
+    | "calcom"
+    | "telnyx"
+    | "openai"
+    | "sendgrid"
+    | "resend"
+    | "lob"
+    | "followupboss";
   credentials: Record<string, string>;
   is_active?: boolean;
 }
