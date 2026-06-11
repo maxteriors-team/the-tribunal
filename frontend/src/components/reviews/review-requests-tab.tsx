@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
-import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -41,7 +41,7 @@ function formatDate(value: string | null): string {
 export function ReviewRequestsTab() {
   const workspaceId = useWorkspaceId();
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: queryKeys.reviews.requests(workspaceId ?? ""),
     queryFn: () => reviewsApi.listRequests(workspaceId!),
     enabled: !!workspaceId,
@@ -50,6 +50,15 @@ export function ReviewRequestsTab() {
 
   if (isPending) {
     return <PageLoadingState message="Loading review requests…" />;
+  }
+
+  if (isError) {
+    return (
+      <PageErrorState
+        message="We couldn't load review requests. Please try again."
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   const requests = data?.items ?? [];

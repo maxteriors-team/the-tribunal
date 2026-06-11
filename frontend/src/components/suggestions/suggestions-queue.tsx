@@ -36,7 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -68,7 +68,7 @@ export function SuggestionsQueue({
   const [showRejectDialog, setShowRejectDialog] =
     useState<ImprovementSuggestionResponse | null>(null);
 
-  const { data: suggestions, isPending } = useQuery({
+  const { data: suggestions, isPending, isError, refetch } = useQuery({
     queryKey: queryKeys.improvementSuggestions.list(workspaceId ?? "", {
       agent_id: agentId ?? null,
       status: statusFilter,
@@ -160,6 +160,19 @@ export function SuggestionsQueue({
 
   if (isPending) {
     return <PageLoadingState className="min-h-0 py-8" />;
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="py-4">
+          <PageErrorState
+            message="We couldn't load suggestions. Please try again."
+            onRetry={() => refetch()}
+          />
+        </CardContent>
+      </Card>
+    );
   }
 
   if (!suggestions?.items.length) {

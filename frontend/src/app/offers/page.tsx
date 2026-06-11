@@ -38,7 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PageEmptyState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { offersApi } from "@/lib/api/offers";
@@ -72,7 +72,7 @@ export default function OffersPage() {
 
   const [deleteOfferId, setDeleteOfferId] = useState<string | null>(null);
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: queryKeys.offers.all(workspaceId ?? ""),
     queryFn: () => offersApi.list(workspaceId!),
     enabled: !!workspaceId,
@@ -187,6 +187,15 @@ export default function OffersPage() {
               <Skeleton key={i} className="h-32 w-full" />
             ))}
           </div>
+        ) : isError ? (
+          <Card>
+            <CardContent className="py-4">
+              <PageErrorState
+                message="We couldn't load your offers. Please try again."
+                onRetry={() => refetch()}
+              />
+            </CardContent>
+          </Card>
         ) : offers.length === 0 ? (
           <Card>
             <CardContent className="py-4">

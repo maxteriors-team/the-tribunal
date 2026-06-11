@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar-lazy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageEmptyState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -83,7 +83,12 @@ export function NudgesPage() {
     enabled: !!workspaceId,
   });
 
-  const { data: nudgeList, isPending: listLoading } = useQuery({
+  const {
+    data: nudgeList,
+    isPending: listLoading,
+    isError: listError,
+    refetch: refetchList,
+  } = useQuery({
     queryKey: queryKeys.nudges.list(workspaceId ?? "", { status: statusFilter, page }),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
@@ -236,6 +241,11 @@ export function NudgesPage() {
             <TabsContent key={tab.value} value={tab.value} className="mt-4">
               {listLoading ? (
                 <NudgeListSkeleton />
+              ) : listError ? (
+                <PageErrorState
+                  message="We couldn't load your nudges. Please try again."
+                  onRetry={() => refetchList()}
+                />
               ) : !nudgeList?.items.length ? (
                 <NudgeEmptyState status={tab.value} />
               ) : (

@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -62,7 +62,12 @@ export function PendingActionsPage() {
     enabled: !!workspaceId,
   });
 
-  const { data: actionList, isPending: listLoading } = useQuery({
+  const {
+    data: actionList,
+    isPending: listLoading,
+    isError: listError,
+    refetch: refetchList,
+  } = useQuery({
     queryKey: queryKeys.pendingActions.list(workspaceId ?? "", { status: statusFilter, page }),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
@@ -219,6 +224,15 @@ export function PendingActionsPage() {
             <TabsContent key={tab.value} value={tab.value} className="mt-4">
               {listLoading ? (
                 <ActionListSkeleton />
+              ) : listError ? (
+                <Card>
+                  <CardContent className="py-4">
+                    <PageErrorState
+                      message="We couldn't load pending actions. Please try again."
+                      onRetry={() => refetchList()}
+                    />
+                  </CardContent>
+                </Card>
               ) : !actionList?.items.length ? (
                 <ActionEmptyState status={tab.value} />
               ) : (

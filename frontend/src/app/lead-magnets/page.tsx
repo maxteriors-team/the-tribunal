@@ -56,7 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PageEmptyState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -128,7 +128,7 @@ export default function LeadMagnetsPage() {
     is_active: true,
   });
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: queryKeys.leadMagnets.all(workspaceId ?? ""),
     queryFn: () => leadMagnetsApi.list(workspaceId!),
     enabled: !!workspaceId,
@@ -259,6 +259,15 @@ export default function LeadMagnetsPage() {
               <Skeleton key={i} className="h-40 w-full" />
             ))}
           </div>
+        ) : isError ? (
+          <Card>
+            <CardContent className="py-4">
+              <PageErrorState
+                message="We couldn't load your lead magnets. Please try again."
+                onRetry={() => refetch()}
+              />
+            </CardContent>
+          </Card>
         ) : leadMagnets.length === 0 ? (
           <Card>
             <CardContent className="py-4">

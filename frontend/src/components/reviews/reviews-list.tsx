@@ -7,7 +7,7 @@ import { useState } from "react";
 import { StarRating } from "@/components/reviews/star-rating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reviewsApi, type UpdateReviewPayload } from "@/lib/api/reviews";
@@ -157,7 +157,7 @@ export function ReviewsList({ isPublic }: { isPublic?: boolean }) {
 
   const params = isPublic === undefined ? {} : { is_public: isPublic };
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: queryKeys.reviews.list(workspaceId ?? "", params),
     queryFn: () => reviewsApi.list(workspaceId!, params),
     enabled: !!workspaceId,
@@ -165,6 +165,15 @@ export function ReviewsList({ isPublic }: { isPublic?: boolean }) {
 
   if (isPending) {
     return <PageLoadingState message="Loading reviews…" />;
+  }
+
+  if (isError) {
+    return (
+      <PageErrorState
+        message="We couldn't load reviews. Please try again."
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   const reviews = data?.items ?? [];

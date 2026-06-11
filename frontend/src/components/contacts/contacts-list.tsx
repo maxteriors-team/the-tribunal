@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PageEmptyState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useContactsPaginated } from "@/hooks/useContacts";
@@ -132,7 +132,7 @@ export function ContactsList({ className }: ContactsListProps) {
   const workspaceId = useWorkspaceId();
 
   // Fetch contacts with server-side search filtering
-  const { data, isPending } = useContactsPaginated(workspaceId ?? "", {
+  const { data, isPending, isError, refetch } = useContactsPaginated(workspaceId ?? "", {
     page: 1,
     page_size: 50,
     ...(searchQuery.trim() && { search: searchQuery.trim() }),
@@ -176,6 +176,12 @@ export function ContactsList({ className }: ContactsListProps) {
                 <ContactItemSkeleton key={i} />
               ))}
             </div>
+          ) : isError ? (
+            <PageErrorState
+              className="py-12"
+              message="We couldn't load your contacts. Please try again."
+              onRetry={() => refetch()}
+            />
           ) : contacts.length === 0 ? (
             <PageEmptyState
               className="py-12"

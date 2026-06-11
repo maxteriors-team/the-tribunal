@@ -6,7 +6,7 @@ import { AnimatePresence } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { PageEmptyState } from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAgents } from "@/hooks/useAgents";
@@ -63,7 +63,12 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const queryClient = useQueryClient();
 
   // Fetch timeline via React Query (polls every 3s)
-  const { data: timelineData, isPending: isLoadingTimeline } = useContactTimeline(
+  const {
+    data: timelineData,
+    isPending: isLoadingTimeline,
+    isError: isTimelineError,
+    refetch: refetchTimeline,
+  } = useContactTimeline(
     workspaceId ?? "",
     selectedContact?.id ?? 0,
   );
@@ -304,6 +309,12 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
         {isLoadingTimeline ? (
           <LoadingSkeleton />
+        ) : isTimelineError ? (
+          <PageErrorState
+            className="h-full"
+            message="We couldn't load this conversation. Please try again."
+            onRetry={() => refetchTimeline()}
+          />
         ) : timeline.length === 0 ? (
           <PageEmptyState
             className="h-full"

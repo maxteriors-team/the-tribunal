@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageErrorState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBulkDeleteContacts, useBulkUpdateStatus, useContactIds, useContactsPaginated } from "@/hooks/useContacts";
 import { useRowSelection } from "@/hooks/useRowSelection";
@@ -97,7 +98,12 @@ export function ContactsPage() {
   }), [contactsPage, contactsPageSize, sortBy, searchQuery, statusFilter, filters]);
 
   // Fetch contacts via React Query
-  const { data: contactsData, isPending: isLoadingContacts } = useContactsPaginated(
+  const {
+    data: contactsData,
+    isPending: isLoadingContacts,
+    isError: isContactsError,
+    refetch: refetchContacts,
+  } = useContactsPaginated(
     workspaceId ?? "",
     contactsListParams,
   );
@@ -310,6 +316,11 @@ export function ContactsPage() {
                 <ContactCardSkeleton key={i} />
               ))}
             </div>
+          ) : isContactsError ? (
+            <PageErrorState
+              message="We couldn't load your contacts. Please try again."
+              onRetry={() => refetchContacts()}
+            />
           ) : contacts.length === 0 ? (
             <ContactsEmptyState
               hasFilters={hasActiveFilters}
