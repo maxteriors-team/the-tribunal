@@ -16320,7 +16320,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "approvals" | "hot_nudges" | "prospect_batch" | "draft_campaign" | "setup_gap";
+            kind: "replies_waiting" | "appointments_today" | "approvals" | "hot_nudges" | "prospect_batch" | "draft_campaign" | "setup_gap";
             /** Payload */
             payload?: {
                 [key: string]: unknown;

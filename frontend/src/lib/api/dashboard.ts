@@ -158,6 +158,8 @@ export interface DashboardResponse {
 }
 
 export type TodayQueueKind =
+  | "replies_waiting"
+  | "appointments_today"
   | "approvals"
   | "hot_nudges"
   | "prospect_batch"

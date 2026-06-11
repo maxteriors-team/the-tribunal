@@ -3,8 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
+  CalendarClock,
   ClipboardCheck,
   Megaphone,
+  MessageCircleReply,
   Radar,
   Sparkles,
   Wrench,
@@ -26,6 +28,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 
 const KIND_ICONS: Record<TodayQueueKind, LucideIcon> = {
+  replies_waiting: MessageCircleReply,
+  appointments_today: CalendarClock,
   approvals: ClipboardCheck,
   hot_nudges: Bell,
   prospect_batch: Radar,
@@ -34,6 +38,8 @@ const KIND_ICONS: Record<TodayQueueKind, LucideIcon> = {
 };
 
 const KIND_LABELS: Record<TodayQueueKind, string> = {
+  replies_waiting: "Reply needed",
+  appointments_today: "Appointments",
   approvals: "Approvals",
   hot_nudges: "Nudges",
   prospect_batch: "Fresh batch",

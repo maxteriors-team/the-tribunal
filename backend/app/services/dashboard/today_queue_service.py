@@ -14,20 +14,26 @@ import structlog
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.appointment import Appointment, AppointmentStatus
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
+from app.models.conversation import Conversation, ConversationStatus
 from app.models.human_nudge import HumanNudge
 from app.models.offer import Offer
 from app.models.outbound_mission import OutboundMission
 from app.models.pending_action import PendingAction
 from app.models.phone_number import PhoneNumber
 from app.models.tag import ContactTag, Tag
+from app.models.workspace import Workspace
 from app.schemas.today_queue import TodayQueueItem, TodayQueueResponse
 from app.services.ad_intelligence.monitors import AD_MONITOR_KEY, is_active_monitor
+from app.workers.outbound_auto_draft_worker import AUTOPILOT_SETTINGS_KEY
 
 logger = structlog.get_logger()
 
 # Mission ordering: higher priority sorts first.
+PRIORITY_REPLIES_WAITING = 110
+PRIORITY_APPOINTMENTS_TODAY = 105
 PRIORITY_APPROVALS = 100
 PRIORITY_HOT_NUDGES = 90
 PRIORITY_PROSPECT_BATCH = 80
@@ -60,6 +66,14 @@ class TodayQueueService:
         now = datetime.now(UTC)
         items: list[TodayQueueItem] = []
 
+        replies = await self._replies_waiting_item(workspace_id)
+        if replies is not None:
+            items.append(replies)
+
+        appointments = await self._appointments_today_item(workspace_id, now)
+        if appointments is not None:
+            items.append(appointments)
+
         approvals = await self._approvals_item(workspace_id)
         if approvals is not None:
             items.append(approvals)
@@ -77,6 +91,113 @@ class TodayQueueService:
 
         items.sort(key=lambda item: item.priority, reverse=True)
         return TodayQueueResponse(items=items, generated_at=now)
+
+    # ── replies waiting on a human ────────────────────────────────────
+
+    async def _replies_waiting_item(self, workspace_id: uuid.UUID) -> TodayQueueItem | None:
+        """Active conversations where the AI will not answer and the lead spoke last.
+
+        Mirrors the responder gate (``not ai_enabled or ai_paused`` => the AI
+        stays silent), so each row here is literal dead air until a human
+        replies.
+        """
+        base_filter = (
+            Conversation.workspace_id == workspace_id,
+            Conversation.status == ConversationStatus.ACTIVE,
+            Conversation.last_message_direction == "inbound",
+            (Conversation.ai_paused.is_(True)) | (Conversation.ai_enabled.is_(False)),
+        )
+
+        count_result = await self.db.execute(
+            select(func.count()).select_from(Conversation).where(*base_filter)
+        )
+        count = count_result.scalar() or 0
+        if count == 0:
+            return None
+
+        top_result = await self.db.execute(
+            select(
+                Conversation.contact_id,
+                Contact.first_name,
+                Contact.last_name,
+                Conversation.last_message_preview,
+            )
+            .join(Contact, Contact.id == Conversation.contact_id, isouter=True)
+            .where(*base_filter)
+            .order_by(Conversation.last_message_at.asc())
+            .limit(_TOP_DESCRIPTIONS)
+        )
+        rows = top_result.all()
+        names = [
+            " ".join(part for part in (first, last) if part) or "Unknown contact"
+            for _, first, last, _ in rows
+        ]
+        previews = [p for *_, p in rows if p]
+        contact_ids = [cid for cid, *_ in rows if cid is not None]
+
+        body_parts: list[str] = []
+        if names:
+            body_parts.append("Waiting on you: " + ", ".join(names))
+        if previews:
+            body_parts.append(_truncate(previews[0]))
+
+        href = f"/contacts/{contact_ids[0]}" if count == 1 and contact_ids else "/contacts"
+        return TodayQueueItem(
+            id=f"replies_waiting:{workspace_id}",
+            kind="replies_waiting",
+            priority=PRIORITY_REPLIES_WAITING,
+            title=f"{count} conversation{'s' if count != 1 else ''} waiting on a human reply",
+            body=" • ".join(body_parts) or "The AI is paused and the lead spoke last.",
+            count=count,
+            cta_label="Reply now",
+            href=href,
+            payload={"contact_ids": contact_ids, "names": names},
+        )
+
+    # ── appointments today ────────────────────────────────────────────
+
+    async def _appointments_today_item(
+        self, workspace_id: uuid.UUID, now: datetime
+    ) -> TodayQueueItem | None:
+        end_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        base_filter = (
+            Appointment.workspace_id == workspace_id,
+            Appointment.status == AppointmentStatus.SCHEDULED,
+            Appointment.scheduled_at >= now,
+            Appointment.scheduled_at < end_of_today,
+        )
+
+        count_result = await self.db.execute(
+            select(func.count()).select_from(Appointment).where(*base_filter)
+        )
+        count = count_result.scalar() or 0
+        if count == 0:
+            return None
+
+        top_result = await self.db.execute(
+            select(Appointment.scheduled_at, Contact.first_name, Contact.last_name)
+            .join(Contact, Contact.id == Appointment.contact_id)
+            .where(*base_filter)
+            .order_by(Appointment.scheduled_at.asc())
+            .limit(_TOP_DESCRIPTIONS)
+        )
+        slots = [
+            f"{scheduled_at.strftime('%H:%M')} — "
+            + (" ".join(part for part in (first, last) if part) or "Unknown contact")
+            for scheduled_at, first, last in top_result.all()
+        ]
+
+        return TodayQueueItem(
+            id=f"appointments_today:{workspace_id}",
+            kind="appointments_today",
+            priority=PRIORITY_APPOINTMENTS_TODAY,
+            title=f"{count} appointment{'s' if count != 1 else ''} on the calendar today",
+            body=" • ".join(slots) or "Booked calls still ahead today.",
+            count=count,
+            cta_label="See calendar",
+            href="/calendar",
+            payload={"slots": slots},
+        )
 
     # ── approvals ─────────────────────────────────────────────────────
 
@@ -281,6 +402,21 @@ class TodayQueueService:
                 )
             )
 
+        if not await self._autopilot_enabled(workspace_id):
+            items.append(
+                _setup_gap(
+                    workspace_id,
+                    gap="autopilot",
+                    title="Outbound autopilot is off",
+                    body=(
+                        "Fresh ad-library contacts won't become a drafted campaign "
+                        "overnight. Turn on autopilot and pick a default offer."
+                    ),
+                    cta_label="Turn on autopilot",
+                    href="/settings?tab=lead-sources",
+                )
+            )
+
         sms_number = await self.db.execute(
             select(PhoneNumber.id)
             .where(
@@ -303,6 +439,14 @@ class TodayQueueService:
             )
 
         return items
+
+    async def _autopilot_enabled(self, workspace_id: uuid.UUID) -> bool:
+        result = await self.db.execute(
+            select(Workspace.settings).where(Workspace.id == workspace_id)
+        )
+        settings = result.scalar_one_or_none() or {}
+        autopilot = settings.get(AUTOPILOT_SETTINGS_KEY, {})
+        return isinstance(autopilot, dict) and bool(autopilot.get("enabled", False))
 
     async def _has_active_monitor(self, workspace_id: uuid.UUID) -> bool:
         result = await self.db.execute(

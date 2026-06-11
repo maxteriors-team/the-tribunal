@@ -6,6 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 TodayQueueKind = Literal[
+    "replies_waiting",
+    "appointments_today",
     "approvals",
     "hot_nudges",
     "prospect_batch",

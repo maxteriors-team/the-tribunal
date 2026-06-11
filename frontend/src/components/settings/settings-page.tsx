@@ -1,6 +1,7 @@
 "use client";
 
 import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
@@ -28,7 +29,14 @@ const settingsTabs = [
   { value: "lead-sources", label: "Lead Sources", icon: FileInput },
 ];
 
+const TAB_VALUES = new Set(settingsTabs.map((tab) => tab.value));
+
 export function SettingsPage() {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const defaultTab =
+    requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "profile";
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -39,7 +47,7 @@ export function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-6">
+      <Tabs defaultValue={defaultTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-10 lg:w-auto lg:inline-grid">
           {settingsTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value} className="gap-2">

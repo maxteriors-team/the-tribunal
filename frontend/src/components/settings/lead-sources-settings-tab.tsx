@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { OutboundAutopilotCard } from "@/components/settings/outbound-autopilot-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -474,6 +475,8 @@ export function LeadSourcesSettingsTab() {
 
   return (
     <div className="space-y-6">
+      {workspaceId && <OutboundAutopilotCard workspaceId={workspaceId} />}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
