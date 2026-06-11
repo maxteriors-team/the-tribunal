@@ -144,7 +144,10 @@ function OnboardingFlow() {
     const values = form.getValues();
     setIsSubmitting(true);
     try {
-      const { event_type_id } = await parseCalcomUrl(values.calcom_booking_url);
+      const { event_type_id } = await parseCalcomUrl(
+        values.calcom_booking_url,
+        values.calcom_api_key
+      );
 
       await onboard({
         calcom_api_key: values.calcom_api_key,

@@ -98,8 +98,14 @@ export function verifyCalcom(apiKey: string): Promise<VerifyCalcomResponse> {
   });
 }
 
-export function parseCalcomUrl(url: string): Promise<ParseCalcomUrlResponse> {
-  return apiPost<ParseCalcomUrlResponse>("/api/v1/realtor/parse-calcom-url", { url });
+export function parseCalcomUrl(
+  url: string,
+  apiKey?: string
+): Promise<ParseCalcomUrlResponse> {
+  return apiPost<ParseCalcomUrlResponse>("/api/v1/realtor/parse-calcom-url", {
+    url,
+    api_key: apiKey,
+  });
 }
 
 export function onboard(data: RealtorOnboardRequest): Promise<RealtorOnboardResponse> {
