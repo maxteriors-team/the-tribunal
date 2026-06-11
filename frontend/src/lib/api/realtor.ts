@@ -17,8 +17,13 @@ export interface RealtorOnboardResponse {
 export interface RealtorCampaignResponse {
   campaign_id: string;
   campaign_name: string;
+  campaign_status: string;
   contacts_imported: number;
-  message: string;
+  contacts_skipped: number;
+  contacts_failed: number;
+  phone_number_used: string;
+  agent_id: string;
+  started_at: string | null;
 }
 
 export interface VerifyCalcomResponse {

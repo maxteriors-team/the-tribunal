@@ -30,6 +30,10 @@ import {
 } from "./_state";
 import { CalcomStep } from "./_steps/calcom-step";
 import { FubStep } from "./_steps/fub-step";
+import {
+  LaunchResultView,
+  type OnboardingLaunchSummary,
+} from "./_steps/launch-result";
 import { LeadsStep } from "./_steps/leads-step";
 import {
   OnboardingExtrasProvider,
@@ -59,6 +63,8 @@ function OnboardingFlow() {
   const [currentStepId, setCurrentStepId] =
     useState<OnboardingStepId>("fub");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [launchSummary, setLaunchSummary] =
+    useState<OnboardingLaunchSummary | null>(null);
 
   // Landing here (whether auto-redirected for a fresh workspace or arriving by
   // choice) counts as the one-time first-run nudge, so the app shell never
@@ -154,11 +160,31 @@ function OnboardingFlow() {
         calcom_event_type_id: event_type_id,
       });
 
+      let summary: OnboardingLaunchSummary;
       if (extras.csvFile) {
-        await createCampaignFromCsv(currentWorkspaceId, extras.csvFile, {
-          skipDuplicates: true,
-          areaCode: values.area_code || undefined,
-        });
+        const result = await createCampaignFromCsv(
+          currentWorkspaceId,
+          extras.csvFile,
+          {
+            skipDuplicates: true,
+            areaCode: values.area_code || undefined,
+          }
+        );
+        summary = {
+          source: "csv",
+          imported: result.contacts_imported,
+          skipped: result.contacts_skipped,
+          failed: result.contacts_failed,
+          estimated: extras.csvRowCount,
+        };
+      } else {
+        summary = {
+          source: "fub",
+          imported: extras.fubImportCount ?? 0,
+          skipped: 0,
+          failed: 0,
+          estimated: extras.fubImportCount,
+        };
       }
 
       // The onboard call created the workspace's first agent, so refresh the
@@ -168,8 +194,21 @@ function OnboardingFlow() {
         queryKey: queryKeys.agents.all(currentWorkspaceId),
       });
 
-      toast.success("Campaign launched! Your leads are being contacted.");
-      router.push("/dashboard");
+      // Show the real import result instead of a blind "all good" toast +
+      // redirect, so silent data loss (e.g. failed rows) is visible (RF-007).
+      const toastDetail = [
+        `${summary.imported} imported`,
+        summary.skipped > 0 ? `${summary.skipped} skipped` : null,
+        summary.failed > 0 ? `${summary.failed} failed` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      if (summary.failed > 0 || summary.imported === 0) {
+        toast.warning(`Campaign launched — ${toastDetail}`);
+      } else {
+        toast.success(`Campaign launched — ${toastDetail}`);
+      }
+      setLaunchSummary(summary);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Launch failed. Please try again."));
     } finally {
@@ -178,11 +217,28 @@ function OnboardingFlow() {
   }, [
     currentWorkspaceId,
     extras.csvFile,
+    extras.csvRowCount,
     extras.fubImportCount,
     form,
     queryClient,
-    router,
   ]);
+
+  const goToDashboard = useCallback(() => {
+    router.push("/dashboard");
+  }, [router]);
+
+  if (launchSummary) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
+        <div className="w-full max-w-2xl border rounded-xl overflow-hidden shadow-xl bg-card flex flex-col">
+          <LaunchResultView
+            summary={launchSummary}
+            onGoToDashboard={goToDashboard}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <FormProvider {...form}>
