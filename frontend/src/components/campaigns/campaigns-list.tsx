@@ -259,6 +259,11 @@ export function CampaignsList() {
           icon={<MessageSquare className="size-12" />}
           title="No campaigns yet"
           description="Create your first campaign to start reaching your contacts"
+          action={
+            <Button asChild>
+              <Link href="/campaigns/new">Create campaign</Link>
+            </Button>
+          }
         />
       }
       pagination={
