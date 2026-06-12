@@ -335,7 +335,8 @@ export function IntegrationConfigDialog({
   });
 
   const testMutation = useMutation({
-    mutationFn: () => integrationsApi.test(workspaceId!, integrationType),
+    mutationFn: (credentials?: Record<string, string>) =>
+      integrationsApi.test(workspaceId!, integrationType, credentials),
     onSuccess: (result) => {
       setTestResult(result);
     },
@@ -376,10 +377,33 @@ export function IntegrationConfigDialog({
   };
 
   const handleTest = () => {
-    if (!existingIntegration || isTesting) return;
+    if (isTesting) return;
+
+    if (!workspaceId) {
+      toast.error("No workspace selected. Please select a workspace first.");
+      return;
+    }
+
+    // Build candidate credentials from the current form values so a freshly
+    // pasted key can be validated before it is ever persisted.
+    const candidate: Record<string, string> = {};
+    for (const [key, value] of Object.entries(form.getValues())) {
+      if (value) candidate[key] = value as string;
+    }
+    const hasCandidate = Boolean(candidate.api_key || candidate.access_token);
+
+    // Need either freshly entered values or a saved row to test against.
+    if (!hasCandidate && !existingIntegration) {
+      setTestResult({
+        success: false,
+        message: "Enter an API key to test the connection",
+      });
+      return;
+    }
+
     setIsTesting(true);
     setTestResult(null);
-    testMutation.mutate();
+    testMutation.mutate(hasCandidate ? candidate : undefined);
   };
 
   return (
@@ -425,10 +449,11 @@ export function IntegrationConfigDialog({
               />
             ))}
 
-            {existingIntegration && (
-              <div className="rounded-lg border p-3 bg-muted/50">
+            <div className="rounded-lg border p-3 bg-muted/50">
                 <p className="text-sm text-muted-foreground mb-2">
-                  Current credentials are stored. Enter new values to update.
+                  {existingIntegration
+                    ? "Current credentials are stored. Enter new values to update."
+                    : "Validate your key before saving."}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -458,7 +483,6 @@ export function IntegrationConfigDialog({
                   )}
                 </div>
               </div>
-            )}
 
             <DialogFooter>
               <Button

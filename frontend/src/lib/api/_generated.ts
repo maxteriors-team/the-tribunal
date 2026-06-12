@@ -3707,7 +3707,12 @@ export interface paths {
         put?: never;
         /**
          * Test Integration
-         * @description Test an integration's connection using stored credentials.
+         * @description Test an integration's connection.
+         *
+         *     When candidate ``credentials`` are supplied in the request body the test runs
+         *     against those values without requiring a stored row, letting the Settings
+         *     "Connect" dialog validate a freshly pasted key before persisting it. With no
+         *     body the test falls back to the workspace's stored credentials.
          */
         post: operations["test_integration_api_v1_workspaces__workspace_id__integrations__integration_type__test_post"];
         delete?: never;
@@ -11405,6 +11410,23 @@ export interface components {
             integration_type: string;
             /** Is Connected */
             is_connected: boolean;
+        };
+        /**
+         * IntegrationTestRequest
+         * @description Optional request body for testing an integration.
+         *
+         *     When ``credentials`` are supplied the test runs against those candidate
+         *     values (e.g. a key pasted in the Settings "Connect" dialog before saving).
+         *     When omitted, the endpoint falls back to the workspace's stored credentials.
+         */
+        IntegrationTestRequest: {
+            /**
+             * Credentials
+             * @description Candidate credentials to validate before persisting
+             */
+            credentials?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * IntegrationTestResult
@@ -24418,7 +24440,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IntegrationTestRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

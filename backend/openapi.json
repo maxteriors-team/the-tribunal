@@ -12617,6 +12617,26 @@
         "title": "IntegrationStatus",
         "type": "object"
       },
+      "IntegrationTestRequest": {
+        "description": "Optional request body for testing an integration.\n\nWhen ``credentials`` are supplied the test runs against those candidate\nvalues (e.g. a key pasted in the Settings \"Connect\" dialog before saving).\nWhen omitted, the endpoint falls back to the workspace's stored credentials.",
+        "properties": {
+          "credentials": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Candidate credentials to validate before persisting",
+            "title": "Credentials"
+          }
+        },
+        "title": "IntegrationTestRequest",
+        "type": "object"
+      },
       "IntegrationTestResult": {
         "description": "Schema for integration test result.",
         "properties": {
@@ -41581,7 +41601,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/integrations/{integration_type}/test": {
       "post": {
-        "description": "Test an integration's connection using stored credentials.",
+        "description": "Test an integration's connection.\n\nWhen candidate ``credentials`` are supplied in the request body the test runs\nagainst those values without requiring a stored row, letting the Settings\n\"Connect\" dialog validate a freshly pasted key before persisting it. With no\nbody the test falls back to the workspace's stored credentials.",
         "operationId": "test_integration_api_v1_workspaces__workspace_id__integrations__integration_type__test_post",
         "parameters": [
           {
@@ -41604,6 +41624,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/IntegrationTestRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

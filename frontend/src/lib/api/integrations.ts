@@ -103,13 +103,17 @@ export const integrationsApi = {
   update: baseIntegrationsApi.update!,
   delete: baseIntegrationsApi.delete!,
 
-  // Custom method for testing integrations
+  // Custom method for testing integrations.
+  // Pass `credentials` to validate candidate values from the form before they
+  // are persisted; omit them to test the workspace's stored credentials.
   test: async (
     workspaceId: string,
-    integrationType: string
+    integrationType: string,
+    credentials?: Record<string, string>
   ): Promise<IntegrationTestResult> => {
     return apiPost<IntegrationTestResult>(
-      `/api/v1/workspaces/${workspaceId}/integrations/${integrationType}/test`
+      `/api/v1/workspaces/${workspaceId}/integrations/${integrationType}/test`,
+      credentials ? { credentials } : undefined
     );
   },
 

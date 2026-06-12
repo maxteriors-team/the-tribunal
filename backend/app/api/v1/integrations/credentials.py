@@ -13,6 +13,7 @@ from app.core.encryption import encrypt_json
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.integration import (
     IntegrationCreate,
+    IntegrationTestRequest,
     IntegrationTestResult,
     IntegrationUpdate,
     IntegrationWithMaskedCredentials,
@@ -482,27 +483,15 @@ _INTEGRATION_TESTERS = {
 _SPECIAL_TESTERS = {"openai", "meta_ad_library", "followupboss"}
 
 
-@router.post("/{integration_type}/test", response_model=IntegrationTestResult)
-async def test_integration(
+async def _run_integration_test(
     integration_type: str,
-    workspace: WorkspaceAccess,
-    db: DB,
+    credentials: dict[str, Any],
 ) -> IntegrationTestResult:
-    """Test an integration's connection using stored credentials."""
-    result = await db.execute(
-        select(WorkspaceIntegration).where(
-            WorkspaceIntegration.workspace_id == workspace.id,
-            WorkspaceIntegration.integration_type == integration_type,
-        )
-    )
-    integration = result.scalar_one_or_none()
+    """Run a provider connection test against the given credentials dict.
 
-    if integration is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Integration '{integration_type}' not found",
-        )
-
+    Shared by the stored-credential and candidate-credential code paths so a key
+    validates identically whether it is freshly pasted or already persisted.
+    """
     tester = _INTEGRATION_TESTERS.get(integration_type)
     if tester is None and integration_type not in _SPECIAL_TESTERS:
         return IntegrationTestResult(
@@ -510,9 +499,7 @@ async def test_integration(
             message=f"Test not implemented for integration type: {integration_type}",
         )
 
-    credentials = integration.credentials
-
-    api_key = credentials.get("api_key", "")
+    api_key = credentials.get("api_key", "") if isinstance(credentials, dict) else ""
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -536,3 +523,38 @@ async def test_integration(
             success=False,
             message=f"Connection error: {e!s}",
         )
+
+
+@router.post("/{integration_type}/test", response_model=IntegrationTestResult)
+async def test_integration(
+    integration_type: str,
+    workspace: WorkspaceAccess,
+    db: DB,
+    body: IntegrationTestRequest | None = None,
+) -> IntegrationTestResult:
+    """Test an integration's connection.
+
+    When candidate ``credentials`` are supplied in the request body the test runs
+    against those values without requiring a stored row, letting the Settings
+    "Connect" dialog validate a freshly pasted key before persisting it. With no
+    body the test falls back to the workspace's stored credentials.
+    """
+    candidate = body.credentials if body and body.credentials else None
+    if candidate is not None:
+        return await _run_integration_test(integration_type, candidate)
+
+    result = await db.execute(
+        select(WorkspaceIntegration).where(
+            WorkspaceIntegration.workspace_id == workspace.id,
+            WorkspaceIntegration.integration_type == integration_type,
+        )
+    )
+    integration = result.scalar_one_or_none()
+
+    if integration is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Integration '{integration_type}' not found",
+        )
+
+    return await _run_integration_test(integration_type, integration.credentials)

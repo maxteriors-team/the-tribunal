@@ -119,6 +119,20 @@ class IntegrationWithMaskedCredentials(IntegrationResponse):
     )
 
 
+class IntegrationTestRequest(BaseModel):
+    """Optional request body for testing an integration.
+
+    When ``credentials`` are supplied the test runs against those candidate
+    values (e.g. a key pasted in the Settings "Connect" dialog before saving).
+    When omitted, the endpoint falls back to the workspace's stored credentials.
+    """
+
+    credentials: dict[str, Any] | None = Field(
+        default=None,
+        description="Candidate credentials to validate before persisting",
+    )
+
+
 class IntegrationTestResult(BaseModel):
     """Schema for integration test result."""
 
