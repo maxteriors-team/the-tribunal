@@ -14,6 +14,7 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect, Fragment } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -32,7 +33,7 @@ import {
   getVoiceProviderForTier,
   resolveVoiceForProvider,
 } from "@/lib/agents/agent-voice";
-import { agentsApi, type CreateAgentRequest } from "@/lib/api/agents";
+import { agentsApi, type Agent, type CreateAgentRequest } from "@/lib/api/agents";
 import { getLanguagesForTier, getFallbackLanguage } from "@/lib/languages";
 import { PRICING_TIERS } from "@/lib/pricing-tiers";
 import { queryKeys } from "@/lib/query-keys";
@@ -61,18 +62,19 @@ export function CreateAgentForm() {
   const workspaceId = useWorkspaceId();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdAgent, setCreatedAgent] = useState<Agent | null>(null);
 
   const createAgentMutation = useMutation({
     mutationFn: (data: CreateAgentRequest) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return agentsApi.create(workspaceId, data);
     },
-    onSuccess: () => {
+    onSuccess: (agent) => {
       if (workspaceId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.all(workspaceId) });
       }
       toast.success("Agent created successfully!");
-      router.push("/agents");
+      setCreatedAgent(agent);
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error, "Failed to create agent. Please try again."));
@@ -162,6 +164,36 @@ export function CreateAgentForm() {
     const apiRequest: CreateAgentRequest = buildCreateAgentRequest(data);
     createAgentMutation.mutate(apiRequest);
   };
+
+  if (createdAgent) {
+    return (
+      <div className="min-h-screen">
+        <div className="mx-auto max-w-xl p-6 pt-16 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+            <Check className="h-7 w-7 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {createdAgent.name} is ready
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Rehearse it against built-in prospect personas in the Practice Arena
+            before it talks to real leads — no live sends, just a scored report.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Button asChild>
+              <Link href={`/agents/practice?agentId=${createdAgent.id}`}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Test in Practice Arena
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/agents">Go to Agents</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

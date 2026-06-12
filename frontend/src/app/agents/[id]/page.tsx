@@ -7,6 +7,7 @@ import {
   Code2,
   Trash2,
   Headphones,
+  Sparkles,
   UserCircle,
   BookOpen,
 } from "lucide-react";
@@ -242,6 +243,12 @@ export default function EditAgentPage({ params }: EditAgentPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-8" asChild>
+            <Link href={`/agents/practice?agentId=${agentId}`}>
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              Practice Arena
+            </Link>
+          </Button>
           <Button
             variant="outline"
             size="sm"

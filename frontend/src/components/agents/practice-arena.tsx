@@ -43,11 +43,15 @@ const difficultyVariant: Record<string, "secondary" | "default" | "destructive">
     hard: "destructive",
   };
 
-export function PracticeArena() {
+export function PracticeArena({
+  initialAgentId = "",
+}: {
+  initialAgentId?: string;
+} = {}) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
-  const [agentId, setAgentId] = useState<string>("");
+  const [agentId, setAgentId] = useState<string>(initialAgentId);
   const [personaId, setPersonaId] = useState<string>("");
   const [mode, setMode] = useState<RehearseeType>("ai");
   const [maxTurns, setMaxTurns] = useState<number>(6);
