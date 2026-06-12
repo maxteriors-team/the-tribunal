@@ -92,6 +92,29 @@ describe("ScorecardPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the setup empty state when there are no receptionist calls", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(
+      sampleScorecard({
+        calls_total: 0,
+        calls_answered: 0,
+        answer_rate: null,
+        top_call_reasons: [],
+      }),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText("No receptionist calls yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Connect a phone number" }),
+    ).toHaveAttribute("href", "/phone-numbers");
+    // The metric grid is hidden until calls exist.
+    expect(screen.queryByText("Calls answered")).not.toBeInTheDocument();
+  });
+
   it("requests data for the selected workspace", async () => {
     useWorkspaceIdMock.mockReturnValue("ws-42");
     getScorecardMock.mockResolvedValue(sampleScorecard());

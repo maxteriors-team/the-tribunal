@@ -11,8 +11,10 @@ import {
   MessageSquareReply,
   ListChecks,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PageEmptyState,
@@ -112,6 +114,21 @@ export function ScorecardPage() {
 }
 
 function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
+  if (data.calls_total === 0) {
+    return (
+      <PageEmptyState
+        icon={<PhoneCall className="size-8" />}
+        title="No receptionist calls yet"
+        description="Connect a phone number and turn on the AI receptionist to start scoring calls, recoveries, and booked revenue."
+        action={
+          <Button asChild>
+            <Link href="/phone-numbers">Connect a phone number</Link>
+          </Button>
+        }
+      />
+    );
+  }
+
   const metrics = [
     {
       key: "answered",
