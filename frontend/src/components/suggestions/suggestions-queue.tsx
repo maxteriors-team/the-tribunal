@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -184,8 +185,18 @@ export function SuggestionsQueue({
             title="No Suggestions"
             description={
               statusFilter === "pending"
-                ? "No pending improvement suggestions. Generate suggestions from an agent's A/B testing tab."
+                ? "Suggestions appear automatically once an agent has enough conversation data and auto-suggest is enabled. You can also review prompt improvements from an agent's A/B Testing tab."
                 : "No suggestions found with this filter."
+            }
+            action={
+              statusFilter === "pending" ? (
+                <Button asChild variant="outline">
+                  <Link href="/agents">
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Go to agents
+                  </Link>
+                </Button>
+              ) : undefined
             }
           />
         </CardContent>
