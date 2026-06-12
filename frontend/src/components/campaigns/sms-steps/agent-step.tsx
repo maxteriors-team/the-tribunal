@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { Agent } from "@/types";
 
+import { validateAgent } from "../_shared/validators";
 import { AgentSelector } from "../agent-selector";
 import type { WizardStep } from "../wizard-types";
 
@@ -32,7 +33,8 @@ export function makeAgentStep<
     id: opts.id,
     label: "AI Agent",
     icon: Bot,
-    render: ({ formData, updateField }) => {
+    validate: (data) => validateAgent(data),
+    render: ({ formData, errors, updateField }) => {
       const setField = <K extends keyof AgentStepFields>(
         key: K,
         value: AgentStepFields[K],
@@ -63,12 +65,17 @@ export function makeAgentStep<
               animate={{ opacity: 1 }}
               className="space-y-6"
             >
-              <AgentSelector
-                agents={opts.agents}
-                selectedId={formData.agent_id}
-                onSelect={(id) => setField("agent_id", id)}
-                showTextAgentsOnly={true}
-              />
+              <div className="space-y-2">
+                <AgentSelector
+                  agents={opts.agents}
+                  selectedId={formData.agent_id}
+                  onSelect={(id) => setField("agent_id", id)}
+                  showTextAgentsOnly={true}
+                />
+                {errors.agent_id && (
+                  <p className="text-sm text-destructive">{errors.agent_id}</p>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="qualification-criteria">

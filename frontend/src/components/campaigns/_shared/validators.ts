@@ -21,3 +21,16 @@ export function validateContacts(selectedCount: number): WizardErrors {
     ? { contacts: "Select at least one contact" }
     : {};
 }
+
+export function validateAgent(data: {
+  ai_enabled: boolean;
+  agent_id?: string;
+}): WizardErrors {
+  if (data.ai_enabled && !data.agent_id) {
+    return {
+      agent_id:
+        "Select an AI agent to handle responses, or turn off AI responses",
+    };
+  }
+  return {};
+}

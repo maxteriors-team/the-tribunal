@@ -246,8 +246,10 @@ export function SMSCampaignWizard({
                           </span>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">
-                          AI enabled but no agent selected
+                        <p className="text-sm text-destructive">
+                          AI is enabled but no agent is selected. Choose an
+                          agent in the AI Agent step or turn off AI responses
+                          before launching.
                         </p>
                       )}
                       {formData.qualification_criteria && (

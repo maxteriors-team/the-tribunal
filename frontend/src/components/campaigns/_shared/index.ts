@@ -7,6 +7,7 @@ export {
   mapScheduleToRequest,
 } from "./form-types";
 export {
+  validateAgent,
   validateBasics,
   validateContacts,
   validateSchedule,

@@ -1,9 +1,11 @@
 "use client";
 
-import { Bot, MessageSquare, Phone, Sparkles, Check } from "lucide-react";
+import { Bot, MessageSquare, Phone, Sparkles, Check, ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Agent } from "@/types";
 
@@ -171,6 +173,12 @@ export function AgentSelector({
                   ? "Create an agent with text channel support"
                   : "Create an agent to get started"}
               </p>
+              <Button variant="link" asChild className="mt-2 h-auto p-0">
+                <Link href="/agents/create">
+                  Create an agent
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
             </div>
           )}
         </div>

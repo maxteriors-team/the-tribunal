@@ -1,7 +1,9 @@
 "use client";
 
-import { MessageCircle, Phone } from "lucide-react";
+import { ArrowRight, MessageCircle, Phone } from "lucide-react";
+import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +27,8 @@ interface BasicsStepProps {
   onPhoneChange: (value: string) => void;
   namePlaceholder?: string;
   emptyPhoneLabel?: string;
+  emptyPhoneActionHref?: string;
+  emptyPhoneActionLabel?: string;
 }
 
 export function BasicsStep({
@@ -38,6 +42,8 @@ export function BasicsStep({
   onPhoneChange,
   namePlaceholder = "e.g., Campaign Name",
   emptyPhoneLabel = "No phone numbers available",
+  emptyPhoneActionHref = "/phone-numbers",
+  emptyPhoneActionLabel = "Get a phone number",
 }: BasicsStepProps) {
   return (
     <div className="space-y-6">
@@ -104,7 +110,15 @@ export function BasicsStep({
           </p>
         )}
         {phoneNumbers.length === 0 && (
-          <p className="text-sm text-muted-foreground">{emptyPhoneLabel}</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-sm text-muted-foreground">{emptyPhoneLabel}</p>
+            <Button variant="link" asChild className="h-auto p-0">
+              <Link href={emptyPhoneActionHref}>
+                {emptyPhoneActionLabel}
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
     </div>
