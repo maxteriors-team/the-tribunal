@@ -21,6 +21,7 @@ from app.schemas.workspace import (
     WorkspaceUpdate,
     WorkspaceWithMembership,
 )
+from app.services.agents import ensure_default_agent
 from app.services.opportunities import ensure_default_pipeline
 
 router = APIRouter()
@@ -88,6 +89,10 @@ async def create_workspace(
     # Provision a default pipeline so opportunities (e.g. ad-library promotions)
     # land in a real pipeline and the opportunities board has columns to render.
     await ensure_default_pipeline(db, workspace.id)
+
+    # Seed a working AI follow-up agent from an existing template so a brand-new
+    # workspace's /agents experience "just works" without authoring a prompt.
+    await ensure_default_agent(db, workspace.id)
 
     await db.commit()
     await db.refresh(workspace)
