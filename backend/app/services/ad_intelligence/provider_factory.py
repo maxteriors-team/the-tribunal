@@ -8,7 +8,11 @@ workspace".
 Selection:
     * ``meta`` -> :class:`MetaAdLibraryProvider` (official API, default). When
       ``use_thirdparty`` is requested *and* a third-party key is configured,
-      :class:`MetaThirdPartyProvider` is returned instead.
+      :class:`MetaThirdPartyProvider` is returned instead. When the operator
+      opts into self-scraping (``meta_self_scrape_enabled`` **and** the
+      ``ad_library_allow_raw_scrape`` master switch), :class:`MetaScraperProvider`
+      is preferred over the official token, which stays as an automatic
+      fallback so a scrape break degrades instead of hard-failing.
     * ``google`` -> :class:`GoogleAdsTransparencyProvider` (SerpApi), only when
       the ``google_ads_transparency_enabled`` flag is on.
 """
@@ -30,6 +34,7 @@ from app.services.ad_intelligence.providers.google_ads_transparency import (
     GoogleAdsTransparencyProvider,
 )
 from app.services.ad_intelligence.providers.meta_ad_library import MetaAdLibraryProvider
+from app.services.ad_intelligence.providers.meta_scraper import MetaScraperProvider
 from app.services.ad_intelligence.providers.meta_thirdparty import MetaThirdPartyProvider
 from app.services.lead_discovery.errors import LeadDiscoveryAuthError
 
@@ -97,6 +102,17 @@ async def _build_meta(
         if provider.is_configured:
             return provider
         logger.warning("meta_thirdparty_requested_but_unconfigured", workspace_id=str(workspace_id))
+
+    # In-house self-scrape path: preferred over the official token when the
+    # operator opts in (per-workspace integration or settings) AND the raw-scrape
+    # master switch is on. The official token below stays as automatic fallback.
+    self_scrape_opt_in = bool(creds.get("self_scrape_enabled")) or settings.meta_self_scrape_enabled
+    if self_scrape_opt_in and settings.ad_library_allow_raw_scrape:
+        logger.info("meta_self_scrape_selected", workspace_id=str(workspace_id))
+        return MetaScraperProvider(
+            strategy=creds.get("scrape_strategy") or settings.meta_scrape_strategy,
+            proxy_url=creds.get("scrape_proxy_url") or settings.meta_scrape_proxy_url,
+        )
 
     access_token = creds.get("access_token") or settings.meta_ad_library_access_token
     if not access_token:

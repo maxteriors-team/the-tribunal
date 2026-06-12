@@ -6,13 +6,17 @@ their contact info, and ingests qualified advertisers into the CRM as prospects
 → contacts → outreach. It plugs into the existing outbound-mission rails.
 
 See also: [ad-library-compliance.md](./ad-library-compliance.md) for the
-ToS/PII/credential policy.
+ToS/PII/credential policy, and
+[ad-library-self-scrape.md](./ad-library-self-scrape.md) for the in-house
+(no-paid-third-party) Meta scraper — off by default, double-gated, residential
+proxy required on Railway.
 
 ## Architecture (one pass)
 
 ```
 Ad library (Meta / Google)
-        │  providers (official API default; third-party + SerpApi config-gated)
+        │  providers (official API default; third-party, in-house self-scrape,
+        │             and SerpApi all config-gated + off by default)
         ▼
 [AdAdvertiser + AdCreative]  ← idempotent upsert (ad_store), tracked over time
         │  signal engine (signals.py): longest-run, distinct creatives,

@@ -185,6 +185,7 @@ module = [
     "scipy",
     "scipy.*",
     "pgvector.*",
+    "playwright.*",
 ]
 ignore_missing_imports = true
 

@@ -48,6 +48,18 @@ def ensure_raw_scrape_allowed(context: str) -> None:
     )
 
 
+def ensure_self_scrape_allowed() -> None:
+    """Raise unless in-house self-scraping is allowed by configuration.
+
+    A clearer audit label around :func:`ensure_raw_scrape_allowed` for the
+    self-scrape provider, which targets the public Ad Library website's internal
+    endpoint rather than a licensed third-party API. Honors the same
+    ``ad_library_allow_raw_scrape`` master switch (default off, operator-enabled,
+    auditable) cited in *Meta v. Bright Data*.
+    """
+    ensure_raw_scrape_allowed("meta_self_scrape")
+
+
 def is_snapshot_rendering_enabled() -> bool:
     """Whether headless creative-media rendering is enabled (opt-in)."""
     return bool(settings.ad_library_snapshot_rendering_enabled)

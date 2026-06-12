@@ -1,0 +1,55 @@
+{
+  "payload": {
+    "results": [
+      [
+        {
+          "ad_archive_id": "1616561949512060",
+          "page_id": "20409006880",
+          "page_name": "Shopify",
+          "snapshot": {
+            "page_id": "20409006880",
+            "page_name": "Shopify",
+            "body": { "text": "Build your store" },
+            "caption": "shopify.com",
+            "cta_type": "LEARN_MORE",
+            "display_format": "DCO",
+            "cards": [
+              {
+                "title": "Convierte tu web en una tienda",
+                "link_url": "https://www.shopify.com/free-trial"
+              }
+            ]
+          },
+          "is_active": true,
+          "start_date": 1765180800,
+          "end_date": 1771574400,
+          "publisher_platform": ["FACEBOOK", "INSTAGRAM", "MESSENGER"]
+        }
+      ],
+      [
+        {
+          "ad_archive_id": "2233445566778899",
+          "page_id": "20409006880",
+          "page_name": "Shopify",
+          "snapshot": {
+            "page_id": "20409006880",
+            "page_name": "Shopify",
+            "body": { "text": "Start selling today" },
+            "caption": "shopify.com",
+            "cta_type": "SHOP_NOW",
+            "display_format": "IMAGE",
+            "link_url": "https://www.shopify.com/start"
+          },
+          "is_active": true,
+          "start_date": 1762588800,
+          "end_date": 0,
+          "publisher_platform": ["FACEBOOK"]
+        }
+      ]
+    ],
+    "forwardCursor": "AQHSLCvINjglGZ21w8YWrk17vcI7lEBCi1Ctbe",
+    "backwardCursor": "",
+    "collationToken": "5f3c2a10-1111-2222-3333-444455556666",
+    "isResultComplete": false
+  }
+}

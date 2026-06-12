@@ -114,6 +114,21 @@ class Settings(BaseSettings):
     meta_thirdparty_provider: str = ""  # apify | scrapecreators | serpapi
     meta_thirdparty_api_key: str = ""
     meta_thirdparty_base_url: str = ""
+    # In-house self-scrape of the public Ad Library website's internal
+    # ``async/search_ads/`` endpoint (no paid third party). Master-gated by
+    # ``ad_library_allow_raw_scrape`` below — both must be true to activate.
+    # ``token_http`` bootstraps an LSD CSRF token + cookies over plain HTTP;
+    # ``headless`` drives Playwright Chromium (heavier, survives token churn).
+    # A residential/ISP proxy is effectively required from datacenter IPs
+    # (Railway) — datacenter egress draws 403/login challenges. Scrape pacing is
+    # deliberately gentle (jittered delay + a low hourly cap) to avoid WAF bans.
+    meta_self_scrape_enabled: bool = False
+    meta_scrape_strategy: str = "token_http"  # token_http | headless
+    meta_scrape_proxy_url: str = ""
+    meta_scrape_min_delay_seconds: float = 2.0
+    meta_scrape_max_delay_seconds: float = 5.0
+    meta_scrape_session_ttl_seconds: int = 1800
+    meta_scrape_rate_limit_per_hour: int = 40
     # Google Ads Transparency Center has no official API; the SerpApi adapter is
     # the lowest-risk path. Fully behind a flag and off by default.
     google_ads_transparency_enabled: bool = False

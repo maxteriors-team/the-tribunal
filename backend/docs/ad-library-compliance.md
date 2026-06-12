@@ -11,14 +11,18 @@ into the CRM as prospects → contacts → outreach.
 |---|---|---|
 | Meta Ad Library | Official Graph API (`/ads_archive`) | Default. Public data; requires a Meta developer-app token with `ads_read`. No spend/impressions for commercial ads — we don't need them. |
 | Meta (fuller US coverage) | Licensed third-party API (Apify / ScrapeCreators / SerpApi) | **Config-gated, off by default.** Used only when a key is configured. |
+| Meta (in-house self-scrape) | Public Ad Library website's internal `async/search_ads/` endpoint | **Double-gated, off by default.** Requires `ad_library_allow_raw_scrape` **and** `meta_self_scrape_enabled`. See [ad-library-self-scrape.md](./ad-library-self-scrape.md). |
 | Google Ads Transparency | SerpApi adapter | **Feature-flagged, off by default.** No official API exists. |
-| Raw scraping | — | **Hard-disabled.** Behind `ad_library_allow_raw_scrape`; no crawler ships. |
+| Raw scraping | — | **Hard-disabled by default.** Behind `ad_library_allow_raw_scrape`; the in-house self-scrape provider is the only crawler and it ships **off**. |
 
 We prefer the official API and licensed third-party APIs over raw scraping.
 Meta's ToS restricts scraping (cf. *Meta v. Bright Data*), so any raw-scrape
-path is walled behind `ad_library_allow_raw_scrape` and ships disabled. The
-Google provider's raw fallback is a documented no-op stub — it returns an empty
-result with a warning rather than performing an unsanctioned crawl.
+path is walled behind `ad_library_allow_raw_scrape` and ships disabled. An
+operator who consciously enables it can run the in-house self-scrape provider
+(owning the data source instead of paying a third party); that is an explicit,
+auditable opt-in, not a default. The Google provider's raw fallback is a
+documented no-op stub — it returns an empty result with a warning rather than
+performing an unsanctioned crawl.
 
 ## Snapshot / creative media
 
@@ -67,7 +71,11 @@ rendering is never required.
 | `meta_ad_library_access_token` | `""` | Global fallback Meta token (per-workspace `WorkspaceIntegration` preferred). |
 | `meta_ad_library_rate_limit_per_hour` | `180` | Global hourly provider-call cap. |
 | `meta_thirdparty_enabled` / `meta_thirdparty_api_key` | `false` / `""` | Config-gated third-party Meta fallback. |
+| `meta_self_scrape_enabled` | `false` | In-house self-scrape of the public Ad Library (needs the raw-scrape wall too). |
+| `meta_scrape_strategy` | `token_http` | `token_http` (no browser) or `headless` (Playwright). |
+| `meta_scrape_proxy_url` | `""` | Residential/ISP proxy (effectively required on Railway). |
+| `meta_scrape_rate_limit_per_hour` | `40` | Gentle hourly cap for the scrape path (well under the official tier). |
 | `google_ads_transparency_enabled` / `serpapi_api_key` | `false` / `""` | Google Ads Transparency via SerpApi. |
-| `ad_library_allow_raw_scrape` | `false` | Hard wall around raw scraping. |
+| `ad_library_allow_raw_scrape` | `false` | Hard wall around raw scraping (master switch for self-scrape). |
 | `ad_library_snapshot_rendering_enabled` | `false` | Opt-in headless creative rendering. |
 | `email_finder_provider` / `email_finder_api_key` | `""` | Optional Hunter/Apollo email finder. |

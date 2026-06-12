@@ -32,6 +32,12 @@ logger = structlog.get_logger()
 # Default cache TTL for identical ad-library searches (seconds).
 RESPONSE_CACHE_TTL_SECONDS = 900
 
+# Distinct rate bucket for the self-scrape path. Scraping the public website's
+# internal endpoint must be far gentler than the ~200/hr official API tier to
+# avoid WAF bans, so it gets its own much-lower hourly cap and its own counter
+# (so a busy official-API workspace can't starve scrape budget and vice versa).
+SCRAPE_PLATFORM = "meta_scrape"
+
 # Atomic check-and-increment with a per-key TTL (mirrors rate_limiter.py).
 _INCREMENT_WITH_LIMIT = """
 local key = KEYS[1]
@@ -56,6 +62,9 @@ def _hour_bucket(now: datetime | None = None) -> str:
 
 def _provider_cap(platform: str) -> int:
     """Resolve the hourly call cap for a platform."""
+    if platform == SCRAPE_PLATFORM:
+        # Self-scrape: deliberately a fraction of the official tier.
+        return settings.meta_scrape_rate_limit_per_hour
     if platform == "google":
         # SerpApi/Google path; reuse the same conservative cap by default.
         return settings.meta_ad_library_rate_limit_per_hour
@@ -98,6 +107,19 @@ async def acquire_provider_call_slot(
     except Exception as exc:  # noqa: BLE001 - fail open, never wedge discovery
         logger.warning("ad_library_rate_limit_unavailable", error=type(exc).__name__)
         return True, 0
+
+
+async def acquire_scrape_call_slot(*, cost: int = 1) -> tuple[bool, int]:
+    """Reserve a self-scrape call under its own gentle hourly cap.
+
+    A thin wrapper over :func:`acquire_provider_call_slot` pinned to the
+    :data:`SCRAPE_PLATFORM` bucket and ``meta_scrape_rate_limit_per_hour`` cap,
+    so the self-scrape provider stays under the WAF radar independently of the
+    official-API budget. Fails open on Redis errors, like the base limiter.
+    """
+    return await acquire_provider_call_slot(
+        SCRAPE_PLATFORM, cost=cost, cap=settings.meta_scrape_rate_limit_per_hour
+    )
 
 
 async def current_usage(platform: str) -> int:
