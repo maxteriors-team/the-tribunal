@@ -215,6 +215,8 @@ export const queryKeys = {
       [...contacts.all(workspaceId), "ids", normalizeQueryKeyParams(params)] as const,
     infinite: (workspaceId: string | null, filters: QueryKeyParams) =>
       ["contacts", workspaceId, "infinite", normalizeQueryKeyParams(filters)] as const,
+    search: (workspaceId: string, term: string) =>
+      [...contacts.all(workspaceId), "search", term] as const,
     aiState: (workspaceId: string, contactId: number | string) =>
       [...contacts.detail(workspaceId, contactId), "ai-state"] as const,
     timeline: (

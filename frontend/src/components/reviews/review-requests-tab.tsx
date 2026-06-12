@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { SendReviewRequestDialog } from "@/components/reviews/send-review-request-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
@@ -67,13 +68,18 @@ export function ReviewRequestsTab() {
     return (
       <PageEmptyState
         title="No review requests yet"
-        description="Requests are sent automatically after completed appointments when the engine is enabled in Settings."
+        description="Send one now to any contact, or let the engine request reviews automatically after completed appointments once it's enabled in Settings."
+        action={<SendReviewRequestDialog />}
       />
     );
   }
 
   return (
-    <Table>
+    <div className="space-y-4 p-4">
+      <div className="flex items-center justify-end">
+        <SendReviewRequestDialog />
+      </div>
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Contact</TableHead>
@@ -112,6 +118,7 @@ export function ReviewRequestsTab() {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   );
 }
