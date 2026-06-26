@@ -292,7 +292,15 @@ export const queryKeys = {
   },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
-  leadSources,
+  leadSources: {
+    ...leadSources,
+    campaigns: (workspaceId: string, leadSourceId: string) =>
+      [...leadSources.detail(workspaceId, leadSourceId), "campaigns"] as const,
+    spend: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [...leadSources.all(workspaceId), "spend", normalizeQueryKeyParams(params)] as const,
+    unattributed: (workspaceId: string) =>
+      [...leadSources.all(workspaceId), "unattributed"] as const,
+  },
   messageTemplates,
   messageTests: {
     ...messageTests,

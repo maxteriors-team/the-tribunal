@@ -8,6 +8,7 @@ import { AppointmentPerformanceCard } from "@/components/dashboard/appointment-p
 import { DashboardStatsGrid } from "@/components/dashboard/dashboard-stats";
 import { DealCoachCard } from "@/components/dashboard/deal-coach-card";
 import { KnowledgeBaseCard } from "@/components/dashboard/knowledge-base-card";
+import { LeadSourceRoiCard } from "@/components/dashboard/lead-source-roi-card";
 import {
   ActiveCampaignsCard,
   AgentsCard,
@@ -80,6 +81,17 @@ export function DashboardPage() {
       >
         <RevenueRoiCard
           revenueStats={data?.revenue_stats}
+          isPending={isPending}
+        />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.13 }}
+      >
+        <LeadSourceRoiCard
+          stats={data?.lead_source_roi_stats}
           isPending={isPending}
         />
       </motion.div>

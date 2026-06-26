@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import {
+  SourceTypePicker,
+  sourceTypeLabel,
+} from "@/components/lead-sources/source-pickers";
 import { OutboundAutopilotCard } from "@/components/settings/outbound-autopilot-card";
 import {
   AlertDialog,
@@ -58,6 +62,7 @@ import {
   leadSourcesApi,
   type LeadSource,
   type LeadSourceCreateRequest,
+  type LeadSourceType,
   type LeadSourceUpdateRequest,
 } from "@/lib/api/lead-sources";
 import { queryKeys } from "@/lib/query-keys";
@@ -100,6 +105,7 @@ function CopyButton({ text }: { text: string }) {
 interface LeadSourceFormData {
   name: string;
   allowed_domains: string[];
+  source_type: LeadSourceType;
   action: "collect" | "auto_text" | "auto_call" | "enroll_campaign";
   action_config: Record<string, string>;
   enabled: boolean;
@@ -124,6 +130,7 @@ function LeadSourceDialog({
       ? {
           name: source.name,
           allowed_domains: source.allowed_domains,
+          source_type: source.source_type,
           action: source.action,
           action_config: source.action_config,
           enabled: source.enabled,
@@ -131,6 +138,7 @@ function LeadSourceDialog({
       : {
           name: "",
           allowed_domains: [],
+          source_type: "other",
           action: "collect",
           action_config: {},
           enabled: true,
@@ -195,6 +203,7 @@ function LeadSourceDialog({
       updateMutation.mutate({
         name: form.name,
         allowed_domains: form.allowed_domains,
+        source_type: form.source_type,
         action: form.action,
         action_config: form.action_config,
         enabled: form.enabled,
@@ -203,6 +212,7 @@ function LeadSourceDialog({
       createMutation.mutate({
         name: form.name,
         allowed_domains: form.allowed_domains,
+        source_type: form.source_type,
         action: form.action,
         action_config: form.action_config,
       });
@@ -233,6 +243,19 @@ function LeadSourceDialog({
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
+          </div>
+
+          {/* Channel (source_type) */}
+          <div className="space-y-2">
+            <Label htmlFor="source-channel">Channel</Label>
+            <SourceTypePicker
+              id="source-channel"
+              value={form.source_type}
+              onChange={(v) => setForm((f) => ({ ...f, source_type: v }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Used to rank lead-source ROI by acquisition channel.
+            </p>
           </div>
 
           {/* Allowed Domains */}
@@ -523,6 +546,9 @@ export function LeadSourcesSettingsTab() {
                         className="text-xs"
                       >
                         {source.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {sourceTypeLabel(source.source_type)}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
                         {ACTION_LABELS[source.action] ?? source.action}

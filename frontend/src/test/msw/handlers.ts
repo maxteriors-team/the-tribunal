@@ -141,6 +141,35 @@ export const stubDashboard: DashboardResponse = {
     total_tokens: 0,
     agents_with_knowledge: 0,
   },
+  lead_source_roi_stats: {
+    currency: "USD",
+    rows: [],
+    winner: {
+      has_winner: false,
+      source_type: null,
+      source_name: null,
+      lead_source_id: null,
+      rank_by: "none",
+      spend: 0,
+      closed_won_jobs: 0,
+      closed_won_revenue: 0,
+      roi_multiple: null,
+      net_revenue: 0,
+      currency: "USD",
+      reason: "No closed-won jobs with attributed lead-source data yet.",
+      attribution_confidence: {
+        average_score: null,
+        level: "unknown",
+        attributed_closed_won_jobs: 0,
+        total_closed_won_jobs: 0,
+        notes: [],
+      },
+    },
+    total_spend: 0,
+    total_closed_won_jobs: 0,
+    total_closed_won_revenue: 0,
+    source_types_ranked: ["facebook_ads", "google_ads", "organic", "phone_radio"],
+  },
 };
 
 // ---------------------------------------------------------------------------

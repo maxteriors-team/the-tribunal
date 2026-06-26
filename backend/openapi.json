@@ -3568,6 +3568,43 @@
         "title": "ArmStatusUpdate",
         "type": "object"
       },
+      "AssignLeadSourceRequest": {
+        "description": "Operator action assigning a lead source to an unattributed contact.",
+        "properties": {
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "format": "uuid",
+            "title": "Lead Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadSourceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "lead_source_id"
+        ],
+        "title": "AssignLeadSourceRequest",
+        "type": "object"
+      },
       "AssistantChatRequest": {
         "description": "Request to send a message to the CRM assistant.",
         "properties": {
@@ -3910,6 +3947,61 @@
           "total"
         ],
         "title": "AtRiskDealsResponse",
+        "type": "object"
+      },
+      "AttributionConfidenceLevel": {
+        "description": "Human-readable confidence bucket for lead-source attribution.",
+        "enum": [
+          "exact",
+          "high",
+          "medium",
+          "low",
+          "unknown"
+        ],
+        "title": "AttributionConfidenceLevel",
+        "type": "string"
+      },
+      "AttributionConfidenceSummary": {
+        "description": "Rollup of how reliable the attribution is for a source ROI row.",
+        "properties": {
+          "attributed_closed_won_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Attributed Closed Won Jobs",
+            "type": "integer"
+          },
+          "average_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Score"
+          },
+          "level": {
+            "$ref": "#/components/schemas/AttributionConfidenceLevel",
+            "default": "unknown"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "total_closed_won_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Closed Won Jobs",
+            "type": "integer"
+          }
+        },
+        "title": "AttributionConfidenceSummary",
         "type": "object"
       },
       "AutomationActionSchema": {
@@ -7787,6 +7879,19 @@
             ],
             "title": "Address Zip"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -7823,11 +7928,71 @@
             ],
             "title": "Email"
           },
+          "fbclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fbclid"
+          },
           "first_name": {
             "maxLength": 100,
             "minLength": 1,
             "title": "First Name",
             "type": "string"
+          },
+          "first_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch At"
+          },
+          "first_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Campaign Id"
+          },
+          "first_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Id"
+          },
+          "gclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gclid"
           },
           "important_dates": {
             "anyOf": [
@@ -7841,6 +8006,18 @@
             ],
             "title": "Important Dates"
           },
+          "landing_page": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Page"
+          },
           "last_name": {
             "anyOf": [
               {
@@ -7852,6 +8029,42 @@
               }
             ],
             "title": "Last Name"
+          },
+          "latest_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch At"
+          },
+          "latest_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Campaign Id"
+          },
+          "latest_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Id"
           },
           "notes": {
             "anyOf": [
@@ -7869,6 +8082,18 @@
             "minLength": 10,
             "title": "Phone Number",
             "type": "string"
+          },
+          "referrer": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
           },
           "source": {
             "anyOf": [
@@ -7899,6 +8124,66 @@
               }
             ],
             "title": "Tags"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "utm_content": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Content"
+          },
+          "utm_medium": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Medium"
+          },
+          "utm_source": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Source"
+          },
+          "utm_term": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Term"
           }
         },
         "required": [
@@ -8090,6 +8375,19 @@
             ],
             "title": "Address Zip"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -8168,9 +8466,69 @@
             ],
             "title": "Enrichment Status"
           },
+          "fbclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fbclid"
+          },
           "first_name": {
             "title": "First Name",
             "type": "string"
+          },
+          "first_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch At"
+          },
+          "first_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Campaign Id"
+          },
+          "first_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Id"
+          },
+          "gclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gclid"
           },
           "id": {
             "title": "Id",
@@ -8191,6 +8549,18 @@
           "is_qualified": {
             "title": "Is Qualified",
             "type": "boolean"
+          },
+          "landing_page": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Page"
           },
           "last_appointment_status": {
             "anyOf": [
@@ -8225,6 +8595,42 @@
               }
             ],
             "title": "Last Name"
+          },
+          "latest_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch At"
+          },
+          "latest_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Campaign Id"
+          },
+          "latest_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Id"
           },
           "lead_score": {
             "title": "Lead Score",
@@ -8283,6 +8689,18 @@
             ],
             "title": "Qualified At"
           },
+          "referrer": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
           "source": {
             "anyOf": [
               {
@@ -8335,6 +8753,66 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "utm_content": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Content"
+          },
+          "utm_medium": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Medium"
+          },
+          "utm_source": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Source"
+          },
+          "utm_term": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Term"
           },
           "website_url": {
             "anyOf": [
@@ -8487,6 +8965,19 @@
             ],
             "title": "Address Zip"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "avatar_url": {
             "anyOf": [
               {
@@ -8523,6 +9014,18 @@
             ],
             "title": "Email"
           },
+          "fbclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fbclid"
+          },
           "first_name": {
             "anyOf": [
               {
@@ -8536,6 +9039,54 @@
             ],
             "title": "First Name"
           },
+          "first_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch At"
+          },
+          "first_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Campaign Id"
+          },
+          "first_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Id"
+          },
+          "gclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gclid"
+          },
           "important_dates": {
             "anyOf": [
               {
@@ -8548,6 +9099,18 @@
             ],
             "title": "Important Dates"
           },
+          "landing_page": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Page"
+          },
           "last_name": {
             "anyOf": [
               {
@@ -8559,6 +9122,42 @@
               }
             ],
             "title": "Last Name"
+          },
+          "latest_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch At"
+          },
+          "latest_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Campaign Id"
+          },
+          "latest_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Id"
           },
           "lead_score": {
             "anyOf": [
@@ -8595,6 +9194,18 @@
             ],
             "title": "Phone Number"
           },
+          "referrer": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
           "status": {
             "anyOf": [
               {
@@ -8619,6 +9230,66 @@
               }
             ],
             "title": "Tags"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "utm_content": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Content"
+          },
+          "utm_medium": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Medium"
+          },
+          "utm_source": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Source"
+          },
+          "utm_term": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Term"
           }
         },
         "title": "ContactUpdate",
@@ -8681,6 +9352,19 @@
               }
             ],
             "title": "Address Zip"
+          },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
           },
           "avatar_url": {
             "anyOf": [
@@ -8760,9 +9444,69 @@
             ],
             "title": "Enrichment Status"
           },
+          "fbclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fbclid"
+          },
           "first_name": {
             "title": "First Name",
             "type": "string"
+          },
+          "first_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch At"
+          },
+          "first_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Campaign Id"
+          },
+          "first_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Touch Lead Source Id"
+          },
+          "gclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gclid"
           },
           "id": {
             "title": "Id",
@@ -8783,6 +9527,18 @@
           "is_qualified": {
             "title": "Is Qualified",
             "type": "boolean"
+          },
+          "landing_page": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Page"
           },
           "last_appointment_status": {
             "anyOf": [
@@ -8841,6 +9597,42 @@
             ],
             "title": "Last Name"
           },
+          "latest_touch_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch At"
+          },
+          "latest_touch_lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Campaign Id"
+          },
+          "latest_touch_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Touch Lead Source Id"
+          },
           "lead_score": {
             "title": "Lead Score",
             "type": "integer"
@@ -8897,6 +9689,18 @@
               }
             ],
             "title": "Qualified At"
+          },
+          "referrer": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
           },
           "source": {
             "anyOf": [
@@ -8955,6 +9759,66 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "utm_content": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Content"
+          },
+          "utm_medium": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Medium"
+          },
+          "utm_source": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Source"
+          },
+          "utm_term": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Term"
           },
           "website_url": {
             "anyOf": [
@@ -9321,6 +10185,9 @@
           },
           "knowledge_base_stats": {
             "$ref": "#/components/schemas/KnowledgeBaseStats"
+          },
+          "lead_source_roi_stats": {
+            "$ref": "#/components/schemas/LeadSourceROIStats"
           },
           "recent_activity": {
             "items": {
@@ -14404,6 +15271,236 @@
         "title": "LeadProspectResponse",
         "type": "object"
       },
+      "LeadSourceCampaignCreate": {
+        "description": "Schema for creating an attribution campaign under a lead source.",
+        "properties": {
+          "campaign_metadata": {
+            "additionalProperties": true,
+            "title": "Campaign Metadata",
+            "type": "object"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ended_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended On"
+          },
+          "lead_source_id": {
+            "format": "uuid",
+            "title": "Lead Source Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "platform_campaign_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Campaign Id"
+          },
+          "platform_campaign_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Campaign Name"
+          },
+          "started_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started On"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          }
+        },
+        "required": [
+          "name",
+          "lead_source_id"
+        ],
+        "title": "LeadSourceCampaignCreate",
+        "type": "object"
+      },
+      "LeadSourceCampaignResponse": {
+        "description": "Schema for returning a lead-source campaign.",
+        "properties": {
+          "campaign_metadata": {
+            "additionalProperties": true,
+            "title": "Campaign Metadata",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ended_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended On"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_source_id": {
+            "format": "uuid",
+            "title": "Lead Source Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "platform_campaign_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Campaign Id"
+          },
+          "platform_campaign_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Campaign Name"
+          },
+          "started_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started On"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "workspace_id",
+          "lead_source_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LeadSourceCampaignResponse",
+        "type": "object"
+      },
       "LeadSourceCreate": {
         "description": "Schema for creating a lead source.",
         "properties": {
@@ -14435,12 +15532,65 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/LeadSourceType",
+            "default": "other"
           }
         },
         "required": [
           "name"
         ],
         "title": "LeadSourceCreate",
+        "type": "object"
+      },
+      "LeadSourceROIStats": {
+        "description": "Dashboard payload for ranking lead sources by spend and closed-won jobs.",
+        "properties": {
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SourceROIRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source_types_ranked": {
+            "items": {
+              "$ref": "#/components/schemas/LeadSourceType"
+            },
+            "title": "Source Types Ranked",
+            "type": "array"
+          },
+          "total_closed_won_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Closed Won Jobs",
+            "type": "integer"
+          },
+          "total_closed_won_revenue": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Total Closed Won Revenue",
+            "type": "number"
+          },
+          "total_spend": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Total Spend",
+            "type": "number"
+          },
+          "winner": {
+            "$ref": "#/components/schemas/LeadSourceWinnerSummary"
+          }
+        },
+        "title": "LeadSourceROIStats",
         "type": "object"
       },
       "LeadSourceResponse": {
@@ -14489,6 +15639,10 @@
             "title": "Public Key",
             "type": "string"
           },
+          "source_type": {
+            "$ref": "#/components/schemas/LeadSourceType",
+            "default": "other"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -14514,6 +15668,168 @@
         ],
         "title": "LeadSourceResponse",
         "type": "object"
+      },
+      "LeadSourceSpendEntryCreate": {
+        "description": "Schema for creating a manual ad/source spend entry.",
+        "properties": {
+          "amount": {
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "format": "uuid",
+            "title": "Lead Source Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "spend_ends_on": {
+            "format": "date",
+            "title": "Spend Ends On",
+            "type": "string"
+          },
+          "spend_starts_on": {
+            "format": "date",
+            "title": "Spend Starts On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spend_starts_on",
+          "spend_ends_on",
+          "amount",
+          "lead_source_id"
+        ],
+        "title": "LeadSourceSpendEntryCreate",
+        "type": "object"
+      },
+      "LeadSourceSpendEntryResponse": {
+        "description": "Schema for returning a manual ad/source spend entry.",
+        "properties": {
+          "amount": {
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "format": "uuid",
+            "title": "Lead Source Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "spend_ends_on": {
+            "format": "date",
+            "title": "Spend Ends On",
+            "type": "string"
+          },
+          "spend_starts_on": {
+            "format": "date",
+            "title": "Spend Starts On",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spend_starts_on",
+          "spend_ends_on",
+          "amount",
+          "id",
+          "workspace_id",
+          "lead_source_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LeadSourceSpendEntryResponse",
+        "type": "object"
+      },
+      "LeadSourceType": {
+        "description": "Top-level channel used for lead attribution ROI reporting.",
+        "enum": [
+          "facebook_ads",
+          "google_ads",
+          "organic",
+          "phone_radio",
+          "other"
+        ],
+        "title": "LeadSourceType",
+        "type": "string"
       },
       "LeadSourceUpdate": {
         "description": "Schema for updating a lead source.",
@@ -14584,9 +15900,125 @@
               }
             ],
             "title": "Name"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadSourceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "LeadSourceUpdate",
+        "type": "object"
+      },
+      "LeadSourceWinnerSummary": {
+        "description": "Summary card for the current winning lead source.",
+        "properties": {
+          "attribution_confidence": {
+            "$ref": "#/components/schemas/AttributionConfidenceSummary"
+          },
+          "closed_won_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Closed Won Jobs",
+            "type": "integer"
+          },
+          "closed_won_revenue": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Closed Won Revenue",
+            "type": "number"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "has_winner": {
+            "default": false,
+            "title": "Has Winner",
+            "type": "boolean"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
+          },
+          "net_revenue": {
+            "default": 0.0,
+            "title": "Net Revenue",
+            "type": "number"
+          },
+          "rank_by": {
+            "default": "none",
+            "enum": [
+              "roi",
+              "closed_won_revenue",
+              "closed_won_jobs",
+              "none"
+            ],
+            "title": "Rank By",
+            "type": "string"
+          },
+          "reason": {
+            "default": "No closed-won jobs with attributed lead-source data yet.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "roi_multiple": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Multiple"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadSourceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spend": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Spend",
+            "type": "number"
+          }
+        },
+        "title": "LeadSourceWinnerSummary",
         "type": "object"
       },
       "LiveCallResponse": {
@@ -17910,6 +19342,19 @@
             ],
             "title": "Amount"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "currency": {
             "default": "USD",
             "title": "Currency",
@@ -17937,6 +19382,30 @@
               }
             ],
             "title": "Expected Close Date"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
           },
           "lost_reason": {
             "anyOf": [
@@ -18044,6 +19513,19 @@
             ],
             "title": "Assigned User Id"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "closed_by_id": {
             "anyOf": [
               {
@@ -18108,6 +19590,30 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
           },
           "line_items": {
             "default": [],
@@ -18418,6 +19924,19 @@
             ],
             "title": "Assigned User Id"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "closed_by_id": {
             "anyOf": [
               {
@@ -18482,6 +20001,30 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
           },
           "line_items": {
             "default": [],
@@ -18621,6 +20164,19 @@
             ],
             "title": "Assigned User Id"
           },
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "currency": {
             "anyOf": [
               {
@@ -18665,6 +20221,30 @@
               }
             ],
             "title": "Is Active"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
           },
           "lost_reason": {
             "anyOf": [
@@ -25895,6 +27475,116 @@
         "title": "SequenceEnrollmentStatus",
         "type": "string"
       },
+      "SourceROIRow": {
+        "description": "One ranked lead-source ROI row for dashboard reporting.",
+        "properties": {
+          "attribution_confidence": {
+            "$ref": "#/components/schemas/AttributionConfidenceSummary"
+          },
+          "closed_won_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Closed Won Jobs",
+            "type": "integer"
+          },
+          "closed_won_revenue": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Closed Won Revenue",
+            "type": "number"
+          },
+          "cost_per_closed_won_job": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Closed Won Job"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "is_winner": {
+            "default": false,
+            "title": "Is Winner",
+            "type": "boolean"
+          },
+          "lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Id"
+          },
+          "net_revenue": {
+            "default": 0.0,
+            "title": "Net Revenue",
+            "type": "number"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "revenue_per_closed_won_job": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Per Closed Won Job"
+          },
+          "roi_multiple": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Multiple"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/LeadSourceType"
+          },
+          "spend": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Spend",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rank",
+          "source_type",
+          "source_name"
+        ],
+        "title": "SourceROIRow",
+        "type": "object"
+      },
       "SpeedToLeadMetrics": {
         "description": "First-response SLA rollup over the recent window (operator-facing).",
         "properties": {
@@ -27091,6 +28781,97 @@
           "status"
         ],
         "title": "TranscriptResponse",
+        "type": "object"
+      },
+      "UnattributedLeadResponse": {
+        "description": "A captured lead that has no known first-touch lead source yet.",
+        "properties": {
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "first_name": {
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "suggested_lead_source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Lead Source Id"
+          },
+          "suggested_source_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadSourceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "contact_id",
+          "first_name",
+          "created_at"
+        ],
+        "title": "UnattributedLeadResponse",
         "type": "object"
       },
       "UpdateMemberRoleRequest": {
@@ -29168,6 +30949,19 @@
       "app__schemas__lead_source__LeadSubmitRequest": {
         "description": "Public-facing lead submission request.",
         "properties": {
+          "attribution_confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Confidence"
+          },
           "company_name": {
             "anyOf": [
               {
@@ -29192,11 +30986,47 @@
             ],
             "title": "Email"
           },
+          "fbclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fbclid"
+          },
           "first_name": {
             "maxLength": 100,
             "minLength": 1,
             "title": "First Name",
             "type": "string"
+          },
+          "gclid": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gclid"
+          },
+          "landing_page": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Page"
           },
           "last_name": {
             "anyOf": [
@@ -29209,6 +31039,18 @@
               }
             ],
             "title": "Last Name"
+          },
+          "lead_source_campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source Campaign Id"
           },
           "notes": {
             "anyOf": [
@@ -29227,6 +31069,18 @@
             "title": "Phone Number",
             "type": "string"
           },
+          "referrer": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referrer"
+          },
           "source_detail": {
             "anyOf": [
               {
@@ -29238,6 +31092,66 @@
               }
             ],
             "title": "Source Detail"
+          },
+          "utm_campaign": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Campaign"
+          },
+          "utm_content": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Content"
+          },
+          "utm_medium": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Medium"
+          },
+          "utm_source": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Source"
+          },
+          "utm_term": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utm Term"
           }
         },
         "required": [
@@ -40119,6 +42033,67 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/lead-source": {
+      "post": {
+        "description": "Manually attribute a lead source to a contact from the cleanup queue.\n\nBackfills the contact's touch fields and any still-unattributed\nopportunities so the correction flows through to closed-won ROI.",
+        "operationId": "assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignLeadSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Assign Contact Lead Source",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/messages": {
       "post": {
         "description": "Send an SMS message to a contact.\n\nThis endpoint finds or creates a conversation for the contact and sends the message.",
@@ -43222,6 +45197,296 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns": {
+      "post": {
+        "description": "Create an attribution campaign under a lead source.",
+        "operationId": "create_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadSourceCampaignCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadSourceCampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Lead Source Campaign",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns/{campaign_id}": {
+      "delete": {
+        "description": "Delete an attribution campaign.",
+        "operationId": "delete_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns__campaign_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Lead Source Campaign",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lead-source-spend": {
+      "get": {
+        "description": "List manual spend entries, optionally filtered to one lead source.",
+        "operationId": "list_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lead_source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lead Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LeadSourceSpendEntryResponse"
+                  },
+                  "title": "Response List Lead Source Spend Api V1 Workspaces  Workspace Id  Lead Source Spend Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Lead Source Spend",
+        "tags": [
+          "Lead Sources"
+        ]
+      },
+      "post": {
+        "description": "Record a manual ad/source spend entry.",
+        "operationId": "create_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadSourceSpendEntryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadSourceSpendEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Lead Source Spend",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lead-source-spend/{spend_id}": {
+      "delete": {
+        "description": "Delete a manual spend entry.",
+        "operationId": "delete_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend__spend_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "spend_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Spend Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Lead Source Spend",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/lead-sources": {
       "get": {
         "description": "List all lead sources for a workspace.",
@@ -43327,6 +45592,71 @@
           }
         ],
         "summary": "Create Lead Source",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lead-sources/unattributed": {
+      "get": {
+        "description": "List captured leads that have no known first-touch lead source.",
+        "operationId": "list_unattributed_leads_api_v1_workspaces__workspace_id__lead_sources_unattributed_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnattributedLeadResponse"
+                  },
+                  "title": "Response List Unattributed Leads Api V1 Workspaces  Workspace Id  Lead Sources Unattributed Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Unattributed Leads",
         "tags": [
           "Lead Sources"
         ]
@@ -43503,6 +45833,69 @@
           }
         ],
         "summary": "Update Lead Source",
+        "tags": [
+          "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lead-sources/{lead_source_id}/campaigns": {
+      "get": {
+        "description": "List attribution campaigns nested under a lead source.",
+        "operationId": "list_lead_source_campaigns_api_v1_workspaces__workspace_id__lead_sources__lead_source_id__campaigns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "lead_source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lead Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LeadSourceCampaignResponse"
+                  },
+                  "title": "Response List Lead Source Campaigns Api V1 Workspaces  Workspace Id  Lead Sources  Lead Source Id  Campaigns Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Lead Source Campaigns",
         "tags": [
           "Lead Sources"
         ]

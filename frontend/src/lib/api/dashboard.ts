@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api";
+import type { LeadSourceType } from "@/lib/api/lead-sources";
 
 export interface DashboardStats {
   total_contacts: number;
@@ -142,6 +143,68 @@ export interface KnowledgeBaseStats {
   agents_with_knowledge: number;
 }
 
+// ---------------------------------------------------------------------------
+// Lead-source ROI: ranks winning channels by ad spend + closed-won jobs.
+// ---------------------------------------------------------------------------
+
+export type AttributionConfidenceLevel =
+  | "exact"
+  | "high"
+  | "medium"
+  | "low"
+  | "unknown";
+
+export interface AttributionConfidenceSummary {
+  average_score: number | null;
+  level: AttributionConfidenceLevel;
+  attributed_closed_won_jobs: number;
+  total_closed_won_jobs: number;
+  notes: string[];
+}
+
+export interface SourceRoiRow {
+  rank: number;
+  source_type: LeadSourceType;
+  source_name: string;
+  lead_source_id: string | null;
+  spend: number;
+  closed_won_jobs: number;
+  closed_won_revenue: number;
+  cost_per_closed_won_job: number | null;
+  revenue_per_closed_won_job: number | null;
+  roi_multiple: number | null;
+  net_revenue: number;
+  currency: string;
+  attribution_confidence: AttributionConfidenceSummary;
+  is_winner: boolean;
+}
+
+export interface LeadSourceWinnerSummary {
+  has_winner: boolean;
+  source_type: LeadSourceType | null;
+  source_name: string | null;
+  lead_source_id: string | null;
+  rank_by: "roi" | "closed_won_revenue" | "closed_won_jobs" | "none";
+  spend: number;
+  closed_won_jobs: number;
+  closed_won_revenue: number;
+  roi_multiple: number | null;
+  net_revenue: number;
+  currency: string;
+  reason: string;
+  attribution_confidence: AttributionConfidenceSummary;
+}
+
+export interface LeadSourceRoiStats {
+  currency: string;
+  rows: SourceRoiRow[];
+  winner: LeadSourceWinnerSummary;
+  total_spend: number;
+  total_closed_won_jobs: number;
+  total_closed_won_revenue: number;
+  source_types_ranked: LeadSourceType[];
+}
+
 export interface DashboardResponse {
   stats: DashboardStats;
   recent_activity: RecentActivity[];
@@ -155,6 +218,7 @@ export interface DashboardResponse {
   deal_coach_stats: DealCoachStats;
   roleplay_stats: RoleplayStats;
   knowledge_base_stats: KnowledgeBaseStats;
+  lead_source_roi_stats: LeadSourceRoiStats;
 }
 
 export type TodayQueueKind =

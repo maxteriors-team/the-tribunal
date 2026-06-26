@@ -84,6 +84,21 @@ export interface CreateContactRequest {
   address_city?: string;
   address_state?: string;
   address_zip?: string;
+  // Structured lead-source attribution (see backend LeadAttributionFields).
+  first_touch_lead_source_id?: string;
+  first_touch_lead_source_campaign_id?: string;
+  latest_touch_lead_source_id?: string;
+  latest_touch_lead_source_campaign_id?: string;
+  attribution_confidence?: number;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  gclid?: string;
+  fbclid?: string;
+  landing_page?: string;
+  referrer?: string;
 }
 
 export interface UpdateContactRequest {
