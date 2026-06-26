@@ -20,11 +20,15 @@ from app.models.campaign import CampaignContact
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.demo_request import DemoRequest
-from app.models.lead_source import LeadSource
+from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
 from app.schemas.speed_to_lead import SpeedToLeadProofResponse
 from app.services.idempotency import derive_outbound_key
+from app.services.lead_sources.attribution_service import (
+    WebAttributionInput,
+    apply_web_attribution,
+)
 from app.services.push_notifications import push_notification_service
 from app.services.sla.speed_to_lead import (
     MIN_LEADS_FOR_PUBLIC_BADGE,
@@ -387,6 +391,22 @@ async def get_lead_form_proof(
     )
 
 
+async def _resolve_owned_campaign_id(
+    db: DB, lead_source: LeadSource, campaign_id: uuid.UUID | None
+) -> uuid.UUID | None:
+    """Return the campaign id only if it belongs to this lead source, else None."""
+    if campaign_id is None:
+        return None
+    result = await db.execute(
+        select(LeadSourceCampaign.id).where(
+            LeadSourceCampaign.id == campaign_id,
+            LeadSourceCampaign.lead_source_id == lead_source.id,
+            LeadSourceCampaign.workspace_id == lead_source.workspace_id,
+        )
+    )
+    return campaign_id if result.scalar_one_or_none() is not None else None
+
+
 @router.post("/{public_key}", response_model=LeadSubmitResponse)
 async def submit_lead(
     public_key: str,
@@ -411,6 +431,13 @@ async def submit_lead(
     # Validate origin
     if not validate_origin(request, lead_source.allowed_domains):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
+
+    # A public submitter could pass any campaign UUID; only honor one that
+    # actually belongs to this lead source so attribution can't be poisoned
+    # with a cross-workspace campaign id.
+    attributed_campaign_id = await _resolve_owned_campaign_id(
+        db, lead_source, body.lead_source_campaign_id
+    )
 
     # Rate limit
     client_ip = get_client_ip(request, settings.trusted_proxies)
@@ -468,6 +495,26 @@ async def submit_lead(
             status="new",
         )
         db.add(contact)
+
+    # Persist first/latest-touch attribution + tracking signals so web leads
+    # feed the lead-source ROI ranking instead of landing in the unknown queue.
+    apply_web_attribution(
+        contact,
+        lead_source,
+        WebAttributionInput(
+            lead_source_campaign_id=attributed_campaign_id,
+            attribution_confidence=body.attribution_confidence,
+            utm_source=body.utm_source,
+            utm_medium=body.utm_medium,
+            utm_campaign=body.utm_campaign,
+            utm_content=body.utm_content,
+            utm_term=body.utm_term,
+            gclid=body.gclid,
+            fbclid=body.fbclid,
+            landing_page=body.landing_page,
+            referrer=body.referrer,
+        ),
+    )
 
     await db.flush()
 
