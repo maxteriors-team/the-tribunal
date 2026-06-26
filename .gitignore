@@ -93,6 +93,9 @@ htmlcov/
 
 # Local secret material (never commit)
 meta_ads.rtf
+Telynx API.rtf
+# Catch-all for credential/notes dumps pasted into the repo root
+*.rtf
 
 # IDE
 .idea/
@@ -128,6 +131,9 @@ generic-component-*.html
 .ezcoder/eyes/remote.json
 .ezcoder/eyes/_lib.sh
 .ezcoder/eyes/_redact.sh
+
+# Agent upload scratch (pasted screenshots/files); never part of the project.
+.ezcoder/uploads/
 
 # Legacy agent toolchains — consolidated into .ezcoder/ (see CLAUDE.md).
 # Ignore the whole legacy trees so stray IDE/agent configs don't reintroduce them.
