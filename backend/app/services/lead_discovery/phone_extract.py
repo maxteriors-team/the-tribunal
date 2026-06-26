@@ -82,9 +82,7 @@ def extract_phone_candidates(
     # Medium-confidence: numbers in the page's visible text.
     text = soup.get_text(" ")
     for match in phonenumbers.PhoneNumberMatcher(text, default_country):
-        e164 = phonenumbers.format_number(
-            match.number, phonenumbers.PhoneNumberFormat.E164
-        )
+        e164 = phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164)
         _add(e164, "page_text", _TEXT_MATCH_CONFIDENCE)
 
     return sorted(best.values(), key=lambda c: c.confidence, reverse=True)

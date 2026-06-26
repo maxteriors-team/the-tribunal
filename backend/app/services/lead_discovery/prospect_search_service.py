@@ -383,9 +383,7 @@ class ProspectSearchService:
                 mission_id=prospect.mission_id,
                 provider=EnrichmentProvider.PHONE_LOOKUP,
                 status=(
-                    EnrichmentResultStatus.SUCCESS
-                    if found
-                    else EnrichmentResultStatus.SKIPPED
+                    EnrichmentResultStatus.SUCCESS if found else EnrichmentResultStatus.SKIPPED
                 ),
                 extracted={
                     "phone": found,
