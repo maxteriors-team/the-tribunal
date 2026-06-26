@@ -498,12 +498,14 @@ async def submit_lead(
 
     # Persist first/latest-touch attribution + tracking signals so web leads
     # feed the lead-source ROI ranking instead of landing in the unknown queue.
+    # Confidence is intentionally NOT taken from the request: this is a public
+    # endpoint, so a caller-supplied value would let anyone inflate the ROI
+    # confidence rollup. A known lead-source form gets the server default.
     apply_web_attribution(
         contact,
         lead_source,
         WebAttributionInput(
             lead_source_campaign_id=attributed_campaign_id,
-            attribution_confidence=body.attribution_confidence,
             utm_source=body.utm_source,
             utm_medium=body.utm_medium,
             utm_campaign=body.utm_campaign,
