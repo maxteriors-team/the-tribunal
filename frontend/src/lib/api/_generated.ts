@@ -3340,6 +3340,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/crews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Crews
+         * @description List crews with active-technician counts.
+         */
+        get: operations["list_crews_api_v1_workspaces__workspace_id__crews_get"];
+        put?: never;
+        /**
+         * Create Crew
+         * @description Create a crew.
+         */
+        post: operations["create_crew_api_v1_workspaces__workspace_id__crews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/crews/{crew_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Crew
+         * @description Get a single crew.
+         */
+        get: operations["get_crew_api_v1_workspaces__workspace_id__crews__crew_id__get"];
+        /**
+         * Update Crew
+         * @description Update a crew.
+         */
+        put: operations["update_crew_api_v1_workspaces__workspace_id__crews__crew_id__put"];
+        post?: never;
+        /**
+         * Delete Crew
+         * @description Delete a crew. Assigned technicians are unassigned (crew set to null).
+         */
+        delete: operations["delete_crew_api_v1_workspaces__workspace_id__crews__crew_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/dashboard/stats": {
         parameters: {
             query?: never;
@@ -6108,6 +6160,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/service-locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Service Locations
+         * @description List service locations, optionally filtered by customer or active state.
+         */
+        get: operations["list_service_locations_api_v1_workspaces__workspace_id__service_locations_get"];
+        put?: never;
+        /**
+         * Create Service Location
+         * @description Create a service location for a customer.
+         */
+        post: operations["create_service_location_api_v1_workspaces__workspace_id__service_locations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/service-locations/{location_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Service Location
+         * @description Get a single service location.
+         */
+        get: operations["get_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__get"];
+        /**
+         * Update Service Location
+         * @description Update a service location.
+         */
+        put: operations["update_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__put"];
+        post?: never;
+        /**
+         * Delete Service Location
+         * @description Delete a service location.
+         */
+        delete: operations["delete_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/set-default": {
         parameters: {
             query?: never;
@@ -6343,6 +6447,58 @@ export interface paths {
          * @description Delete a tag.
          */
         delete: operations["delete_tag_api_v1_workspaces__workspace_id__tags__tag_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/technicians": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Technicians
+         * @description List technicians, optionally filtered by crew or active state.
+         */
+        get: operations["list_technicians_api_v1_workspaces__workspace_id__technicians_get"];
+        put?: never;
+        /**
+         * Create Technician
+         * @description Create a technician.
+         */
+        post: operations["create_technician_api_v1_workspaces__workspace_id__technicians_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/technicians/{technician_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Technician
+         * @description Get a single technician.
+         */
+        get: operations["get_technician_api_v1_workspaces__workspace_id__technicians__technician_id__get"];
+        /**
+         * Update Technician
+         * @description Update a technician.
+         */
+        put: operations["update_technician_api_v1_workspaces__workspace_id__technicians__technician_id__put"];
+        post?: never;
+        /**
+         * Delete Technician
+         * @description Delete a technician.
+         */
+        delete: operations["delete_technician_api_v1_workspaces__workspace_id__technicians__technician_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10467,6 +10623,89 @@ export interface components {
              * @default ai
              */
             rehearsee: string;
+        };
+        /**
+         * CrewCreate
+         * @description Create a field crew.
+         */
+        CrewCreate: {
+            /**
+             * Color
+             * @default #6366f1
+             */
+            color: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CrewListResponse
+         * @description List of crews.
+         */
+        CrewListResponse: {
+            /** Items */
+            items: components["schemas"]["CrewResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * CrewResponse
+         * @description Crew response.
+         */
+        CrewResponse: {
+            /** Color */
+            color: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Technician Count
+             * @default 0
+             */
+            technician_count: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * CrewUpdate
+         * @description Partial update for a crew.
+         */
+        CrewUpdate: {
+            /** Color */
+            color?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
         };
         /**
          * DashboardResponse
@@ -16993,6 +17232,133 @@ export interface components {
          */
         SequenceEnrollmentStatus: "active" | "paused" | "completed" | "replied" | "opted_out" | "converted" | "failed" | "cancelled";
         /**
+         * ServiceLocationCreate
+         * @description Create a service location (job site) for a customer.
+         */
+        ServiceLocationCreate: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** City */
+            city?: string | null;
+            /**
+             * Contact Id
+             * @description Owning customer contact id
+             */
+            contact_id: number;
+            /**
+             * Country
+             * @default US
+             */
+            country: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** State */
+            state?: string | null;
+        };
+        /**
+         * ServiceLocationListResponse
+         * @description List of service locations.
+         */
+        ServiceLocationListResponse: {
+            /** Items */
+            items: components["schemas"]["ServiceLocationResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * ServiceLocationResponse
+         * @description Service location response.
+         */
+        ServiceLocationResponse: {
+            /** Access Notes */
+            access_notes: string | null;
+            /** Address Line1 */
+            address_line1: string | null;
+            /** Address Line2 */
+            address_line2: string | null;
+            /** City */
+            city: string | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Country */
+            country: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Name */
+            name: string | null;
+            /** Postal Code */
+            postal_code: string | null;
+            /** State */
+            state: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * ServiceLocationUpdate
+         * @description Partial update for a service location.
+         */
+        ServiceLocationUpdate: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** State */
+            state?: string | null;
+        };
+        /**
          * SourceROIRow
          * @description One ranked lead-source ROI row for dashboard reporting.
          */
@@ -17241,6 +17607,108 @@ export interface components {
             id: number;
             /** Role */
             role: string;
+        };
+        /**
+         * TechnicianCreate
+         * @description Create a technician.
+         */
+        TechnicianCreate: {
+            /**
+             * Color
+             * @default #0ea5e9
+             */
+            color: string;
+            /** Crew Id */
+            crew_id?: string | null;
+            /** Email */
+            email?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone?: string | null;
+            /** Skills */
+            skills?: string[];
+            /** User Id */
+            user_id?: number | null;
+        };
+        /**
+         * TechnicianListResponse
+         * @description List of technicians.
+         */
+        TechnicianListResponse: {
+            /** Items */
+            items: components["schemas"]["TechnicianResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * TechnicianResponse
+         * @description Technician response.
+         */
+        TechnicianResponse: {
+            /** Color */
+            color: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Crew Id */
+            crew_id: string | null;
+            /** Email */
+            email: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone: string | null;
+            /** Skills */
+            skills: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Id */
+            user_id: number | null;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * TechnicianUpdate
+         * @description Partial update for a technician.
+         */
+        TechnicianUpdate: {
+            /** Color */
+            color?: string | null;
+            /** Crew Id */
+            crew_id?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Skills */
+            skills?: string[] | null;
+            /** User Id */
+            user_id?: number | null;
         };
         /**
          * TestContactAdd
@@ -24932,6 +25400,172 @@ export interface operations {
             };
         };
     };
+    list_crews_api_v1_workspaces__workspace_id__crews_get: {
+        parameters: {
+            query?: {
+                is_active?: boolean | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_crew_api_v1_workspaces__workspace_id__crews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_crew_api_v1_workspaces__workspace_id__crews__crew_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crew_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_crew_api_v1_workspaces__workspace_id__crews__crew_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crew_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CrewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_crew_api_v1_workspaces__workspace_id__crews__crew_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                crew_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dashboard_stats_api_v1_workspaces__workspace_id__dashboard_stats_get: {
         parameters: {
             query?: never;
@@ -30872,6 +31506,173 @@ export interface operations {
             };
         };
     };
+    list_service_locations_api_v1_workspaces__workspace_id__service_locations_get: {
+        parameters: {
+            query?: {
+                contact_id?: number | null;
+                is_active?: boolean | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceLocationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_service_location_api_v1_workspaces__workspace_id__service_locations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceLocationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceLocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                location_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceLocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                location_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServiceLocationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceLocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                location_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_default_workspace_api_v1_workspaces__workspace_id__set_default_post: {
         parameters: {
             query?: never;
@@ -31319,6 +32120,173 @@ export interface operations {
             path: {
                 workspace_id: string;
                 tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_technicians_api_v1_workspaces__workspace_id__technicians_get: {
+        parameters: {
+            query?: {
+                crew_id?: string | null;
+                is_active?: boolean | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_technician_api_v1_workspaces__workspace_id__technicians_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnicianCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_technician_api_v1_workspaces__workspace_id__technicians__technician_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                technician_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_technician_api_v1_workspaces__workspace_id__technicians__technician_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                technician_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnicianUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_technician_api_v1_workspaces__workspace_id__technicians__technician_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                technician_id: string;
+                workspace_id: string;
             };
             cookie?: never;
         };

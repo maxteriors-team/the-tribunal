@@ -24,6 +24,7 @@ from app.api.v1 import (
     device_tokens,
     drip_campaigns,
     embed,
+    field_service,
     find_leads_ai,
     human_profiles,
     improvement_suggestions,
@@ -280,6 +281,22 @@ api_router.include_router(
     lead_sources.spend_router,
     prefix="/workspaces/{workspace_id}/lead-source-spend",
     tags=["Lead Sources"],
+)
+# Field service: locations, crews, technicians (ServiceTitan/Jobber-style)
+api_router.include_router(
+    field_service.locations_router,
+    prefix="/workspaces/{workspace_id}/service-locations",
+    tags=["Field Service"],
+)
+api_router.include_router(
+    field_service.crews_router,
+    prefix="/workspaces/{workspace_id}/crews",
+    tags=["Field Service"],
+)
+api_router.include_router(
+    field_service.technicians_router,
+    prefix="/workspaces/{workspace_id}/technicians",
+    tags=["Field Service"],
 )
 api_router.include_router(
     nudges.router,
