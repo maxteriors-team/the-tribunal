@@ -48,6 +48,7 @@ from app.services.contacts.engagement_summary import get_engagement_summary
 from app.services.contacts.exceptions import (
     ContactNotFoundError,
 )
+from app.services.dashboard.dashboard_service import invalidate_dashboard_cache
 from app.services.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
 from app.services.lead_sources.attribution_service import (
     AttributionCleanupError,
@@ -379,6 +380,9 @@ async def assign_contact_lead_source(
         )
     except AttributionCleanupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    # Backfilled opportunities change closed-won attribution — refresh ROI now.
+    await invalidate_dashboard_cache(workspace.id)
 
 
 @router.get("/{contact_id}/timeline", response_model=list[TimelineItem])

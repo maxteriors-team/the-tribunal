@@ -19,6 +19,7 @@ from app.schemas.lead_source import (
     LeadSourceUpdate,
     UnattributedLeadResponse,
 )
+from app.services.dashboard.dashboard_service import invalidate_dashboard_cache
 from app.services.lead_sources.attribution_service import (
     AttributionCleanupService,
     suggest_source_type_for_contact,
@@ -206,6 +207,11 @@ async def update_lead_source(
     await db.refresh(lead_source)
     await db.commit()
 
+    # source_type changes re-bucket this source's spend/jobs across channels,
+    # which changes the ROI ranking — refresh the cached dashboard.
+    if "source_type" in update_data:
+        await invalidate_dashboard_cache(workspace_id)
+
     return _to_response(lead_source)
 
 
@@ -232,6 +238,10 @@ async def delete_lead_source(
 
     await db.delete(lead_source)
     await db.commit()
+
+    # Deleting a lead source cascade-deletes its spend entries, changing ROI —
+    # refresh the cached dashboard.
+    await invalidate_dashboard_cache(workspace_id)
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +378,9 @@ async def create_lead_source_spend(
     await db.refresh(entry)
     await db.commit()
 
+    # Spend feeds ROI ranking — drop the cached dashboard so it reflects now.
+    await invalidate_dashboard_cache(workspace_id)
+
     return LeadSourceSpendEntryResponse.model_validate(entry)
 
 
@@ -394,3 +407,6 @@ async def delete_lead_source_spend(
 
     await db.delete(entry)
     await db.commit()
+
+    # Removing spend changes ROI — refresh the dashboard cache.
+    await invalidate_dashboard_cache(workspace_id)

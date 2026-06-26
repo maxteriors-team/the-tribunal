@@ -56,6 +56,27 @@ CACHE_TTL = 300  # 5 minutes
 REVENUE_BREAKDOWN_LIMIT = 8
 
 
+def _dashboard_cache_key(workspace_id: uuid.UUID) -> str:
+    """Redis key holding a workspace's cached full-dashboard response."""
+    return f"dashboard:stats:{workspace_id}"
+
+
+async def invalidate_dashboard_cache(workspace_id: uuid.UUID) -> None:
+    """Drop the cached dashboard so the next read recomputes immediately.
+
+    Call this after mutations that change dashboard figures (e.g. recording
+    ad spend or assigning a lead source) so ROI updates without waiting for
+    the 5-minute TTL. Cache failures are swallowed: a stale cache is a far
+    smaller problem than a failed write, and the TTL is the backstop.
+    """
+    try:
+        redis = await get_redis()
+        await redis.delete(_dashboard_cache_key(workspace_id))
+        logger.debug("dashboard_cache_invalidated", workspace_id=workspace_id)
+    except Exception as e:  # pragma: no cover - cache is best-effort
+        logger.warning("dashboard_cache_invalidate_failed", workspace_id=workspace_id, error=e)
+
+
 def _format_time_ago(dt: datetime) -> str:
     """Format a datetime as a relative time string."""
     now = datetime.now(UTC)
@@ -910,7 +931,7 @@ class DashboardService:
 
     async def get_full_dashboard(self, workspace: Workspace) -> DashboardResponse:
         """Get full dashboard data with Redis caching (5-minute TTL)."""
-        cache_key = f"dashboard:stats:{workspace.id}"
+        cache_key = _dashboard_cache_key(workspace.id)
 
         try:
             redis = await get_redis()
