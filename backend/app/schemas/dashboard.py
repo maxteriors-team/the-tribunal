@@ -1,6 +1,8 @@
 """Dashboard statistics schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.lead_source import LeadSourceROIStats
 
 
 class DashboardStats(BaseModel):
@@ -192,3 +194,4 @@ class DashboardResponse(BaseModel):
     deal_coach_stats: DealCoachStats
     roleplay_stats: RoleplayStats
     knowledge_base_stats: KnowledgeBaseStats
+    lead_source_roi_stats: LeadSourceROIStats = Field(default_factory=LeadSourceROIStats)

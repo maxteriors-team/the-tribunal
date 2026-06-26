@@ -272,6 +272,16 @@ api_router.include_router(
     tags=["Lead Sources"],
 )
 api_router.include_router(
+    lead_sources.campaigns_router,
+    prefix="/workspaces/{workspace_id}/lead-source-campaigns",
+    tags=["Lead Sources"],
+)
+api_router.include_router(
+    lead_sources.spend_router,
+    prefix="/workspaces/{workspace_id}/lead-source-spend",
+    tags=["Lead Sources"],
+)
+api_router.include_router(
     nudges.router,
     prefix="/workspaces/{workspace_id}/nudges",
     tags=["Human Nudges"],

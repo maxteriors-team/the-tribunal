@@ -35,6 +35,7 @@ from app.schemas.contact import (
     SendMessageToContactRequest,
     TimelineItem,
 )
+from app.schemas.lead_source import AssignLeadSourceRequest, LeadAttributionFields
 from app.services.contacts import (
     ContactAIStateService,
     ContactBulkService,
@@ -48,6 +49,10 @@ from app.services.contacts.exceptions import (
     ContactNotFoundError,
 )
 from app.services.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.services.lead_sources.attribution_service import (
+    AttributionCleanupError,
+    AttributionCleanupService,
+)
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -162,6 +167,9 @@ async def create_contact(
 ) -> Contact:
     """Create a new contact."""
     service = ContactService(db)
+    attribution_fields = contact_in.model_dump(
+        include=set(LeadAttributionFields.model_fields), exclude_none=True
+    )
     return await service.create_contact(
         workspace_id=workspace.id,
         first_name=contact_in.first_name,
@@ -174,6 +182,7 @@ async def create_contact(
         notes=contact_in.notes,
         source=contact_in.source,
         important_dates=contact_in.important_dates,
+        attribution_fields=attribution_fields,
     )
 
 
@@ -343,6 +352,33 @@ async def assign_contact_agent(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     return ContactAgentAssignResponse(**result)
+
+
+@router.post("/{contact_id}/lead-source", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_contact_lead_source(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    assign_in: AssignLeadSourceRequest,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+) -> None:
+    """Manually attribute a lead source to a contact from the cleanup queue.
+
+    Backfills the contact's touch fields and any still-unattributed
+    opportunities so the correction flows through to closed-won ROI.
+    """
+    service = AttributionCleanupService(db)
+    try:
+        await service.assign(
+            workspace_id=workspace.id,
+            contact_id=contact_id,
+            lead_source_id=assign_in.lead_source_id,
+            lead_source_campaign_id=assign_in.lead_source_campaign_id,
+            source_type=assign_in.source_type,
+        )
+    except AttributionCleanupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.get("/{contact_id}/timeline", response_model=list[TimelineItem])

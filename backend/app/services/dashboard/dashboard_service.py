@@ -39,6 +39,8 @@ from app.schemas.dashboard import (
     SpeedToLeadStats,
     TodayOverview,
 )
+from app.schemas.lead_source import LeadSourceROIStats
+from app.services.dashboard.lead_source_roi_service import compute_lead_source_roi
 from app.services.opportunities.deal_coach_service import _days_since, assess_risk
 from app.services.reviews.review_service import ReviewService
 from app.services.sla.speed_to_lead import (
@@ -902,6 +904,10 @@ class DashboardService:
             agents_with_knowledge=int(agents_with_knowledge or 0),
         )
 
+    async def get_lead_source_roi_stats(self, workspace: Workspace) -> LeadSourceROIStats:
+        """Rank acquisition channels by ad spend and closed-won jobs."""
+        return await compute_lead_source_roi(self.db, workspace.id)
+
     async def get_full_dashboard(self, workspace: Workspace) -> DashboardResponse:
         """Get full dashboard data with Redis caching (5-minute TTL)."""
         cache_key = f"dashboard:stats:{workspace.id}"
@@ -929,6 +935,7 @@ class DashboardService:
         deal_coach_stats = await self.get_deal_coach_stats(workspace)
         roleplay_stats = await self.get_roleplay_stats(workspace)
         knowledge_base_stats = await self.get_knowledge_base_stats(workspace)
+        lead_source_roi_stats = await self.get_lead_source_roi_stats(workspace)
 
         response = DashboardResponse(
             stats=stats,
@@ -943,6 +950,7 @@ class DashboardService:
             deal_coach_stats=deal_coach_stats,
             roleplay_stats=roleplay_stats,
             knowledge_base_stats=knowledge_base_stats,
+            lead_source_roi_stats=lead_source_roi_stats,
         )
 
         try:
