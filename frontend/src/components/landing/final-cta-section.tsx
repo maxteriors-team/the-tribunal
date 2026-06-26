@@ -87,7 +87,7 @@ export function FinalCtaSection() {
       />
 
       {/* Subtle gradient accent */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-purple-900/30 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-yellow-400/20 rounded-full blur-3xl pointer-events-none" />
 
       <motion.div
         className="max-w-3xl mx-auto text-center relative z-10"

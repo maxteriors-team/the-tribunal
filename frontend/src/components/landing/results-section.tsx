@@ -81,7 +81,7 @@ export function ResultsSection() {
               key={metric.label}
               variants={itemVariants}
               role="listitem"
-              className="text-center p-8 bg-white rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-[#f8f6fa]"
+              className="text-center p-8 bg-white rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-black/5 hover:-translate-y-1 hover:bg-[#f5f5f4]"
             >
               <metric.icon
                 className="size-8 text-brand-mute mx-auto mb-5"

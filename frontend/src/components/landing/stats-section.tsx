@@ -62,7 +62,7 @@ export function StatsSection() {
           {stats.map((stat) => (
             <motion.div
               key={stat.value}
-              className="text-center p-8 bg-brand-bg rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-brand-bg-2"
+              className="text-center p-8 bg-brand-bg rounded-3xl transition-all duration-300 hover:shadow-xl hover:shadow-black/5 hover:-translate-y-1 hover:bg-brand-bg-2"
               variants={itemVariants}
               role="listitem"
             >

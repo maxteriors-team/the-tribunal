@@ -97,9 +97,9 @@ export function HeroSection() {
         {/* Right side - Form */}
         <motion.div variants={itemVariants} className="relative">
           {/* Decorative abstract shape behind form */}
-          <div className="absolute -top-6 -right-6 w-32 h-32 bg-gradient-to-br from-purple-300/30 to-pink-200/20 rounded-full blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-gradient-to-tr from-indigo-200/30 to-purple-200/20 rounded-full blur-xl pointer-events-none" />
-          <div className="bg-brand-bg p-8 rounded-2xl relative border border-purple-200/30">
+          <div className="absolute -top-6 -right-6 w-32 h-32 bg-gradient-to-br from-yellow-300/40 to-amber-200/25 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-gradient-to-tr from-amber-200/30 to-yellow-200/20 rounded-full blur-xl pointer-events-none" />
+          <div className="bg-brand-bg p-8 rounded-2xl relative border border-yellow-300/40">
             <div className="space-y-3 mb-8">
               <h2 className="text-3xl md:text-4xl font-bold text-brand-ink font-[family-name:var(--font-serif)]">
                 Don&apos;t believe us?

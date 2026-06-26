@@ -91,7 +91,7 @@ export function UseCasesSection() {
               key={industry.title}
               variants={itemVariants}
               role="listitem"
-              className="bg-brand-bg rounded-3xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-brand-bg-2"
+              className="bg-brand-bg rounded-3xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-black/5 hover:-translate-y-1 hover:bg-brand-bg-2"
             >
               <div className="flex items-start gap-5">
                 <div

@@ -24,7 +24,7 @@ export function NoWorkspaceGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-6 px-6 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm">
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-500 text-black shadow-sm">
         <Building2 className="size-7" />
       </div>
       <div className="max-w-md space-y-2">

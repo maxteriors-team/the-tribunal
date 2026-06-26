@@ -79,7 +79,7 @@ export function HowItWorksSection() {
               className="text-center relative"
               variants={itemVariants}
             >
-              <div className="bg-brand-bg rounded-3xl p-10 h-full transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/5 hover:-translate-y-1 hover:bg-brand-bg-2">
+              <div className="bg-brand-bg rounded-3xl p-10 h-full transition-all duration-300 hover:shadow-xl hover:shadow-black/5 hover:-translate-y-1 hover:bg-brand-bg-2">
                 <div
                   className="absolute -top-5 left-1/2 -translate-x-1/2 size-10 bg-brand-ink text-white rounded-full flex items-center justify-center font-bold text-sm"
                   aria-hidden="true"

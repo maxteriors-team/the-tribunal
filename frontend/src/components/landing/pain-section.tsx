@@ -26,14 +26,14 @@ const itemVariants = {
 
 export function PainSection() {
   return (
-    <section className="py-32 md:py-40 px-4 bg-[#0f0d15] relative overflow-hidden">
+    <section className="py-32 md:py-40 px-4 bg-[#0a0a0a] relative overflow-hidden">
       {/* Subtle gradient accents */}
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-900/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Subtle animated gradient orbs */}
       <motion.div
-        className="absolute top-1/4 left-1/4 w-[300px] h-[300px] bg-purple-500/5 rounded-full blur-3xl pointer-events-none"
+        className="absolute top-1/4 left-1/4 w-[300px] h-[300px] bg-yellow-400/5 rounded-full blur-3xl pointer-events-none"
         animate={{
           scale: [1, 1.2, 1],
           opacity: [0.05, 0.08, 0.05],
@@ -45,7 +45,7 @@ export function PainSection() {
         }}
       />
       <motion.div
-        className="absolute bottom-1/3 right-1/4 w-[250px] h-[250px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"
+        className="absolute bottom-1/3 right-1/4 w-[250px] h-[250px] bg-amber-400/5 rounded-full blur-3xl pointer-events-none"
         animate={{
           scale: [1, 1.15, 1],
           opacity: [0.05, 0.1, 0.05],
@@ -58,7 +58,7 @@ export function PainSection() {
         }}
       />
       <motion.div
-        className="absolute top-1/2 right-1/3 w-[200px] h-[200px] bg-pink-500/5 rounded-full blur-3xl pointer-events-none"
+        className="absolute top-1/2 right-1/3 w-[200px] h-[200px] bg-yellow-500/5 rounded-full blur-3xl pointer-events-none"
         animate={{
           scale: [1, 1.1, 1],
           opacity: [0.03, 0.06, 0.03],

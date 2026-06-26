@@ -24,11 +24,11 @@ export default function LandingLayout({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-[#faf8fc] relative">
+      <div className="min-h-screen bg-[#fafaf9] relative">
         {/* Global decorative blur blobs */}
-        <div className="fixed top-20 right-10 w-[500px] h-[500px] bg-purple-200/30 rounded-full blur-3xl pointer-events-none" />
-        <div className="fixed bottom-20 left-10 w-[400px] h-[400px] bg-pink-200/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="fixed top-1/2 left-1/3 w-[600px] h-[600px] bg-purple-200/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed top-20 right-10 w-[500px] h-[500px] bg-yellow-200/40 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed bottom-20 left-10 w-[400px] h-[400px] bg-amber-200/25 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed top-1/2 left-1/3 w-[600px] h-[600px] bg-yellow-100/30 rounded-full blur-3xl pointer-events-none" />
 
         {/* Global subtle grid pattern overlay */}
         <div

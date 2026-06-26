@@ -63,9 +63,9 @@ export function SetupGate() {
   };
 
   return (
-    <div className="border-b bg-gradient-to-r from-violet-500/10 to-purple-600/10 px-6 py-4">
+    <div className="border-b bg-gradient-to-r from-yellow-400/10 to-amber-500/10 px-6 py-4">
       <div className="mx-auto flex max-w-5xl items-center gap-4">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 text-black shadow-sm">
           <Rocket className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
