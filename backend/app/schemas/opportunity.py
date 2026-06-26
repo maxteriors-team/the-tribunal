@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.lead_source import OpportunityLeadAttributionFields
+
 OpportunityStatus = Literal["open", "won", "lost", "abandoned"]
 
 
@@ -134,7 +136,7 @@ class OpportunityActivityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class OpportunityBase(BaseModel):
+class OpportunityBase(OpportunityLeadAttributionFields):
     """Base opportunity schema."""
 
     name: str
@@ -155,7 +157,7 @@ class OpportunityCreate(OpportunityBase):
     primary_contact_id: int | None = None
 
 
-class OpportunityUpdate(BaseModel):
+class OpportunityUpdate(OpportunityLeadAttributionFields):
     """Update opportunity schema."""
 
     name: str | None = None

@@ -121,6 +121,7 @@ class ContactService:
         notes: str | None = None,
         source: str | None = None,
         important_dates: dict[str, Any] | None = None,
+        attribution_fields: dict[str, Any] | None = None,
     ) -> Contact:
         """Create a new contact.
 
@@ -136,6 +137,7 @@ class ContactService:
             notes: Additional notes
             source: Source of contact
             important_dates: Important dates (birthday, anniversary, custom)
+            attribution_fields: Structured lead-source attribution values
 
         Returns:
             Created contact
@@ -153,6 +155,7 @@ class ContactService:
             notes=notes,
             source=source,
             important_dates=important_dates,
+            attribution_fields=attribution_fields,
         )
 
     async def update_contact(

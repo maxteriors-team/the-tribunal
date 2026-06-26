@@ -6,12 +6,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.schemas.lead_source import LeadAttributionFields
 from app.schemas.tag import TagResponse
 
 _NOT_LOADED = object()
 
 
-class ContactCreate(BaseModel):
+class ContactCreate(LeadAttributionFields):
     """Schema for creating a contact."""
 
     first_name: str = Field(..., min_length=1, max_length=100)
@@ -32,7 +33,7 @@ class ContactCreate(BaseModel):
     important_dates: dict[str, Any] | None = None
 
 
-class ContactUpdate(BaseModel):
+class ContactUpdate(LeadAttributionFields):
     """Schema for updating a contact."""
 
     first_name: str | None = Field(None, min_length=1, max_length=100)
@@ -76,7 +77,7 @@ class QualificationSignals(BaseModel):
     conversation_count: int = 0
 
 
-class ContactResponse(BaseModel):
+class ContactResponse(LeadAttributionFields):
     """Schema for contact response."""
 
     id: int

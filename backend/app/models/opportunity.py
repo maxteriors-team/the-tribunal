@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     Numeric,
@@ -24,6 +25,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
+    from app.models.lead_source import LeadSource, LeadSourceCampaign
     from app.models.pipeline import Pipeline, PipelineStage
     from app.models.user import User
     from app.models.workspace import Workspace
@@ -112,6 +114,24 @@ class Opportunity(Base):
     source: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )  # campaign, manual, api, etc.
+
+    # Attribution snapshot used by ROI reporting for closed-won jobs. It can be
+    # copied from the primary contact when the opportunity is created/won so
+    # later contact touches do not rewrite historical job attribution.
+    lead_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    lead_source_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_source_campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    attribution_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     status: Mapped[str] = mapped_column(
         Enum("open", "won", "lost", "abandoned", name="opportunity_status"),
         default="open",
@@ -139,6 +159,12 @@ class Opportunity(Base):
         "PipelineStage", back_populates="opportunities"
     )
     primary_contact: Mapped["Contact | None"] = relationship("Contact")
+    lead_source: Mapped["LeadSource | None"] = relationship(
+        "LeadSource", foreign_keys=[lead_source_id]
+    )
+    lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
+        "LeadSourceCampaign", foreign_keys=[lead_source_campaign_id]
+    )
     assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     closed_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[closed_by_id])
 

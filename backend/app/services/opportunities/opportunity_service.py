@@ -369,6 +369,9 @@ class OpportunityService:
             "expected_close_date",
             "assigned_user_id",
             "source",
+            "lead_source_id",
+            "lead_source_campaign_id",
+            "attribution_confidence",
             "lost_reason",
             "is_active",
         ]:

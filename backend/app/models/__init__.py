@@ -51,7 +51,12 @@ from app.models.lead_prospect import (
     ProspectIdentityKind,
     ProspectStatus,
 )
-from app.models.lead_source import LeadSource
+from app.models.lead_source import (
+    LeadSource,
+    LeadSourceCampaign,
+    LeadSourceSpendEntry,
+    LeadSourceType,
+)
 from app.models.link_click import LinkClick
 from app.models.message_template import MessageTemplate
 from app.models.message_test import (
@@ -168,6 +173,9 @@ __all__ = [
     "Offer",
     "LeadMagnet",
     "LeadSource",
+    "LeadSourceCampaign",
+    "LeadSourceSpendEntry",
+    "LeadSourceType",
     "OfferLeadMagnet",
     "Automation",
     "AutomationEvent",

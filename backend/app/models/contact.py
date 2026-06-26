@@ -4,7 +4,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, event
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    event,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.appointment import Appointment
     from app.models.campaign import CampaignContact
     from app.models.conversation import Conversation
+    from app.models.lead_source import LeadSource, LeadSourceCampaign
     from app.models.message_test import TestContact
     from app.models.tag import ContactTag
     from app.models.workspace import Workspace
@@ -115,6 +126,46 @@ class Contact(Base):
         index=True,
     )
 
+    # Structured lead attribution. These fields preserve the first-known touch
+    # while allowing the latest touch to change as a lead returns through ads,
+    # organic visits, or phone/radio tracking numbers.
+    first_touch_lead_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    first_touch_lead_source_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_source_campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    first_touch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latest_touch_lead_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    latest_touch_lead_source_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_source_campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    latest_touch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attribution_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    utm_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_medium: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_content: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    utm_term: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    landing_page: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+
     # SMS consent tracking
     sms_consent_status: Mapped[str] = mapped_column(
         String(50), default="unknown", server_default="unknown", nullable=False, index=True
@@ -160,6 +211,18 @@ class Contact(Base):
     )
     contact_tags: Mapped[list["ContactTag"]] = relationship(
         "ContactTag", back_populates="contact", cascade="all, delete-orphan"
+    )
+    first_touch_lead_source: Mapped["LeadSource | None"] = relationship(
+        "LeadSource", foreign_keys=[first_touch_lead_source_id]
+    )
+    first_touch_lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
+        "LeadSourceCampaign", foreign_keys=[first_touch_lead_source_campaign_id]
+    )
+    latest_touch_lead_source: Mapped["LeadSource | None"] = relationship(
+        "LeadSource", foreign_keys=[latest_touch_lead_source_id]
+    )
+    latest_touch_lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
+        "LeadSourceCampaign", foreign_keys=[latest_touch_lead_source_campaign_id]
     )
 
     @property

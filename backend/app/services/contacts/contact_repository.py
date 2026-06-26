@@ -173,6 +173,7 @@ async def create_contact(
     notes: str | None = None,
     source: str | None = None,
     important_dates: dict[str, Any] | None = None,
+    attribution_fields: dict[str, Any] | None = None,
 ) -> Contact:
     """Create a new contact.
 
@@ -188,6 +189,7 @@ async def create_contact(
         tags: List of tags
         notes: Additional notes
         source: Source of the contact
+        attribution_fields: Structured lead-source attribution values
 
     Returns:
         Created contact
@@ -205,6 +207,7 @@ async def create_contact(
         notes=notes,
         source=source,
         important_dates=important_dates,
+        **(attribution_fields or {}),
     )
     db.add(contact)
     await db.flush()
