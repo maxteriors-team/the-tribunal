@@ -152,6 +152,8 @@ dependencies = [
 export-openapi = "scripts.dev.export_openapi:main"
 # Run all in-process polling workers without mounting the FastAPI API server.
 backend-workers = "app.workers.runner:main"
+# Sync Jobber team members into a workspace's technicians (field-service).
+jobber-sync = "app.services.jobber.cli:main"
 
 [build-system]
 requires = ["hatchling"]

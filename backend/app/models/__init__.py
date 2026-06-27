@@ -32,7 +32,14 @@ from app.models.failed_job import (
     FAILED_JOB_STATUSES,
     FailedJob,
 )
-from app.models.field_service import Crew, ServiceLocation, Technician
+from app.models.field_service import (
+    Crew,
+    Job,
+    JobAssignment,
+    JobStatus,
+    ServiceLocation,
+    Technician,
+)
 from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
 from app.models.invitation import WorkspaceInvitation
@@ -225,6 +232,9 @@ __all__ = [
     "ServiceLocation",
     "Crew",
     "Technician",
+    "Job",
+    "JobAssignment",
+    "JobStatus",
     "FAILED_JOB_STATUS_ABANDONED",
     "FAILED_JOB_STATUS_PENDING",
     "FAILED_JOB_STATUS_RETRIED",

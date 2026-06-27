@@ -30,6 +30,7 @@ from app.api.v1 import (
     improvement_suggestions,
     integrations,
     invitations,
+    jobs,
     knowledge_documents,
     lead_form,
     lead_magnets,
@@ -296,6 +297,11 @@ api_router.include_router(
 api_router.include_router(
     field_service.technicians_router,
     prefix="/workspaces/{workspace_id}/technicians",
+    tags=["Field Service"],
+)
+api_router.include_router(
+    jobs.router,
+    prefix="/workspaces/{workspace_id}/jobs",
     tags=["Field Service"],
 )
 api_router.include_router(

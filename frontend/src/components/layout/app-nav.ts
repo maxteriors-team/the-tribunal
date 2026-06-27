@@ -28,6 +28,7 @@ import {
   Star,
   UserSearch,
   Users,
+  Wrench,
   Zap,
 } from "lucide-react";
 
@@ -263,6 +264,13 @@ export const toolsNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    title: "Jobs",
+    url: "/jobs",
+    icon: Wrench,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
     title: "Billing",
     url: "/billing",
     icon: CreditCard,
@@ -330,6 +338,7 @@ export const breadcrumbLabels: Record<string, string> = {
   automations: "Automations",
   experiments: "Experiments",
   calendar: "Calendar",
+  jobs: "Jobs",
   billing: "Billing",
   settings: "Settings",
   "find-leads": "Find Leads",

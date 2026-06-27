@@ -3840,6 +3840,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Jobs
+         * @description List jobs for the dispatch board / calendar, with optional filters.
+         */
+        get: operations["list_jobs_api_v1_workspaces__workspace_id__jobs_get"];
+        put?: never;
+        /**
+         * Create Job
+         * @description Create a job, optionally pre-scheduled and/or pre-assigned to workers.
+         */
+        post: operations["create_job_api_v1_workspaces__workspace_id__jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/calendar/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Calendar
+         * @description Jobs assigned to the current user, shown on *their* calendar.
+         *
+         *     Resolves the signed-in user to their technician record(s) in this workspace.
+         *     Returns an empty list (not an error) when the user is not a field worker.
+         */
+        get: operations["list_my_calendar_api_v1_workspaces__workspace_id__jobs_calendar_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job
+         * @description Get a single job with its assigned technicians.
+         */
+        get: operations["get_job_api_v1_workspaces__workspace_id__jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Job
+         * @description Delete a job. Its technician assignments are removed (cascade).
+         */
+        delete: operations["delete_job_api_v1_workspaces__workspace_id__jobs__job_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Job
+         * @description Partially update a job. Status is recomputed when the window changes.
+         */
+        patch: operations["update_job_api_v1_workspaces__workspace_id__jobs__job_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Technicians
+         * @description Tag technicians onto a job (idempotent).
+         */
+        post: operations["assign_technicians_api_v1_workspaces__workspace_id__jobs__job_id__assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments/{technician_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unassign Technician
+         * @description Untag a technician from a job (no-op if not tagged).
+         */
+        delete: operations["unassign_technician_api_v1_workspaces__workspace_id__jobs__job_id__assignments__technician_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Schedule Job
+         * @description Set a job's time window (flips unscheduled -> scheduled).
+         */
+        post: operations["schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/lead-magnets": {
         parameters: {
             query?: never;
@@ -12404,6 +12539,153 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * JobAssignRequest
+         * @description Tag one or more technicians onto a job.
+         */
+        JobAssignRequest: {
+            /** Technician Ids */
+            technician_ids: string[];
+        };
+        /**
+         * JobCreate
+         * @description Create a job. Optionally pre-scheduled and/or pre-assigned to workers.
+         */
+        JobCreate: {
+            /**
+             * Contact Id
+             * @description Owning customer contact id
+             */
+            contact_id: number;
+            /**
+             * Crew Id
+             * @description Optional dispatch lane/crew
+             */
+            crew_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Scheduled End */
+            scheduled_end?: string | null;
+            /** Scheduled Start */
+            scheduled_start?: string | null;
+            /**
+             * Service Location Id
+             * @description Job site
+             */
+            service_location_id?: string | null;
+            /**
+             * Technician Ids
+             * @description Technicians to tag onto this job
+             */
+            technician_ids?: string[];
+            /** Title */
+            title: string;
+        };
+        /**
+         * JobListResponse
+         * @description List of jobs.
+         */
+        JobListResponse: {
+            /** Items */
+            items: components["schemas"]["JobResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * JobResponse
+         * @description Job response, including its assigned technicians.
+         */
+        JobResponse: {
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Crew Id */
+            crew_id: string | null;
+            /** Description */
+            description: string | null;
+            /** External Id */
+            external_id: string | null;
+            /** External Source */
+            external_source: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Scheduled End */
+            scheduled_end: string | null;
+            /** Scheduled Start */
+            scheduled_start: string | null;
+            /** Service Location Id */
+            service_location_id: string | null;
+            status: components["schemas"]["JobStatus"];
+            /** Technicians */
+            technicians?: components["schemas"]["TechnicianSummary"][];
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * JobScheduleRequest
+         * @description Set a job's time window (flips unscheduled -> scheduled).
+         */
+        JobScheduleRequest: {
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+        };
+        /**
+         * JobStatus
+         * @description Lifecycle of a field-service job (work order).
+         *
+         *     ``unscheduled`` — created but has no time window yet (sits in the queue).
+         *     ``scheduled``   — has a ``scheduled_start``/``scheduled_end`` window.
+         *     ``in_progress`` — a technician is actively working it.
+         *     ``completed``   — work is finished.
+         *     ``cancelled``   — called off; kept for history.
+         * @enum {string}
+         */
+        JobStatus: "unscheduled" | "scheduled" | "in_progress" | "completed" | "cancelled";
+        /**
+         * JobUpdate
+         * @description Partial update for a job. Status is recomputed from the time window.
+         */
+        JobUpdate: {
+            /** Crew Id */
+            crew_id?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Scheduled End */
+            scheduled_end?: string | null;
+            /** Scheduled Start */
+            scheduled_start?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /** @description Advance lifecycle (e.g. in_progress/completed/cancelled) */
+            status?: components["schemas"]["JobStatus"] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
          * KnowledgeBaseStats
          * @description Knowledge-base (CAG) usage metrics for the dashboard.
          */
@@ -17781,6 +18063,21 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * TechnicianSummary
+         * @description Compact technician view for rendering avatars/chips on the calendar.
+         */
+        TechnicianSummary: {
+            /** Color */
+            color: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * TechnicianUpdate
@@ -26473,6 +26770,319 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_jobs_api_v1_workspaces__workspace_id__jobs_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["JobStatus"] | null;
+                crew_id?: string | null;
+                technician_id?: string | null;
+                /** @description Jobs scheduled on or after this time */
+                date_from?: string | null;
+                /** @description Jobs scheduled on or before this time */
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_job_api_v1_workspaces__workspace_id__jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_calendar_api_v1_workspaces__workspace_id__jobs_calendar_mine_get: {
+        parameters: {
+            query?: {
+                /** @description Jobs scheduled on or after this time */
+                date_from?: string | null;
+                /** @description Jobs scheduled on or before this time */
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_v1_workspaces__workspace_id__jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_api_v1_workspaces__workspace_id__jobs__job_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_job_api_v1_workspaces__workspace_id__jobs__job_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_technicians_api_v1_workspaces__workspace_id__jobs__job_id__assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobAssignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unassign_technician_api_v1_workspaces__workspace_id__jobs__job_id__assignments__technician_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                technician_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

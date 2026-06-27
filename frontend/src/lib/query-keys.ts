@@ -107,6 +107,7 @@ const conversations = createResourceQueryKeys("conversations");
 const improvementSuggestions = createResourceQueryKeys("suggestions");
 const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
+const jobs = createResourceQueryKeys("jobs");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
 const messageTemplates = createResourceQueryKeys("message-templates");
@@ -118,6 +119,7 @@ const pendingActions = createResourceQueryKeys("pending-actions");
 const phoneNumbers = createResourceQueryKeys("phone-numbers");
 const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
+const technicians = createResourceQueryKeys("technicians");
 
 export const queryKeys = {
   adLibrary: {
@@ -290,6 +292,11 @@ export const queryKeys = {
     ...invitations,
     byToken: (token: string) => ["invitation", token] as const,
   },
+  jobs: {
+    ...jobs,
+    mine: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [...jobs.all(workspaceId), "mine", normalizeQueryKeyParams(params)] as const,
+  },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
   leadSources: {
@@ -408,6 +415,10 @@ export const queryKeys = {
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),
+  technicians: {
+    ...technicians,
+    active: (workspaceId: string) => technicians.list(workspaceId, { is_active: true }),
+  },
   voiceCampaigns: createResourceQueryKeys("voice-campaigns"),
   workspaces: {
     all: () => ["workspaces"] as const,

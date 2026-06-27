@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     calcom_api_key: str = ""
     calcom_webhook_secret: str = ""
 
+    # Jobber (field-service sync). The access token is a short-lived OAuth2
+    # token; the CLI also accepts it via --token / JOBBER_ACCESS_TOKEN so the
+    # value need not be persisted in app config. Pin the GraphQL schema version
+    # so a Jobber-side breaking change can't silently alter responses.
+    jobber_access_token: str = ""
+    jobber_api_version: str = "2023-11-15"
+
     # ElevenLabs
     elevenlabs_api_key: str = ""
 
