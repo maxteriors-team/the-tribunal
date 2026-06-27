@@ -21,6 +21,8 @@
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
+    "visual": "playwright test --config playwright.visual.config.ts",
+    "visual:gallery": "node scripts/build-visual-gallery.mjs",
     "codegen": "openapi-typescript ../backend/openapi.json -o src/lib/api/_generated.ts",
     "prepare": "cd .. && husky frontend/.husky"
   },
