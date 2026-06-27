@@ -233,13 +233,17 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
         self.logger.info("connecting_to_hybrid_voice_agent")
 
         try:
-            # Connect to Grok Realtime API
+            # Connect to Grok Realtime API, retrying transient drops with
+            # exponential backoff so a single dropped handshake doesn't fail
+            # the whole call.
             self.logger.info("connecting_to_grok_stt_llm")
-            self.grok_ws = await connect(
-                self.GROK_BASE_URL,
-                additional_headers={
-                    "Authorization": f"Bearer {self.xai_api_key}",
-                },
+            self.grok_ws = await self._connect_with_backoff(
+                lambda: connect(
+                    self.GROK_BASE_URL,
+                    additional_headers={
+                        "Authorization": f"Bearer {self.xai_api_key}",
+                    },
+                ),
             )
             self.logger.info("connected_to_grok")
 

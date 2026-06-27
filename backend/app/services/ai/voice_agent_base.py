@@ -18,6 +18,7 @@ By inheriting from this class, voice agents automatically get:
 import asyncio
 import base64
 import json
+import random
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -480,6 +481,64 @@ class VoiceAgentBase(ABC):
         except Exception as e:
             self.logger.exception("send_event_error", error=str(e))
             raise
+
+    async def _connect_with_backoff(
+        self,
+        factory: Callable[[], Awaitable[ClientConnection]],
+        *,
+        max_attempts: int = 3,
+        base_delay: float = 0.5,
+        non_retryable: tuple[type[BaseException], ...] = (),
+    ) -> ClientConnection:
+        """Open a provider WebSocket, retrying transient drops with backoff.
+
+        Calls ``factory`` to establish the connection. If it fails with a
+        transient error (network blip, handshake drop, provider 5xx), the
+        connection is retried with exponential backoff and jitter so a single
+        dropped attempt does not kill the call. The delay before retry ``N``
+        (0-indexed) is ``base_delay * 2**N`` plus uniform jitter in
+        ``[0, base_delay)`` — matching ``RetryableWorker``'s backoff curve.
+
+        Args:
+            factory: Zero-arg callable returning the awaitable that opens the
+                WebSocket (e.g. ``lambda: connect(url, ...)``).
+            max_attempts: Total attempts, including the first (default 3).
+            base_delay: Base backoff delay in seconds (default 0.5). Kept short
+                because a live caller is waiting on the line during connect.
+            non_retryable: Exception types that should fail fast without retry
+                (e.g. auth rejections — retrying a bad credential is pointless).
+
+        Returns:
+            The established :class:`ClientConnection`.
+
+        Raises:
+            The last exception if every attempt fails, or immediately for any
+            exception in ``non_retryable``.
+        """
+        last_exc: BaseException | None = None
+        for attempt in range(max_attempts):
+            try:
+                return await factory()
+            except non_retryable:
+                # Terminal (e.g. invalid credentials): surface immediately so
+                # the caller can stop instead of hammering a doomed handshake.
+                raise
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= max_attempts - 1:
+                    break
+                delay = base_delay * (2**attempt) + random.uniform(0, base_delay)
+                self.logger.warning(
+                    "voice_ws_connect_retry",
+                    attempt=attempt + 1,
+                    max_attempts=max_attempts,
+                    delay_seconds=round(delay, 3),
+                    error=str(exc),
+                )
+                await asyncio.sleep(delay)
+
+        assert last_exc is not None  # loop only exits here after a failure
+        raise last_exc
 
     async def _send_audio_base64(
         self, audio_data: bytes, event_type: str = "input_audio_buffer.append"

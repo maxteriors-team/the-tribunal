@@ -125,12 +125,18 @@ class VoiceAgentSession(VoiceAgentBase):
                 # The WebSocket should authenticate with the short-lived key only.
                 connect_headers = {}
 
-            self.ws = await connect(
-                url,
-                additional_headers={
-                    "Authorization": f"Bearer {bearer_token}",
-                    **connect_headers,
-                },
+            # Retry transient connect drops with exponential backoff; an
+            # InvalidStatus (rejected credential/handshake) fails fast since
+            # retrying a bad credential cannot succeed.
+            self.ws = await self._connect_with_backoff(
+                lambda: connect(
+                    url,
+                    additional_headers={
+                        "Authorization": f"Bearer {bearer_token}",
+                        **connect_headers,
+                    },
+                ),
+                non_retryable=(InvalidStatus,),
             )
 
             self.logger.info(
