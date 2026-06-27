@@ -167,3 +167,4 @@ visual-snapshots/
 # Local pg_dump output from `make db.backup.local`
 backend/backups/
 *.dump
+.local-bundles/
