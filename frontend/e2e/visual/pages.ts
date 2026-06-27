@@ -61,11 +61,7 @@ export const APP_PAGES: VisualPage[] = [
  * copy. A page that renders an error state still gets captured — surfacing a
  * regression visually is the whole point.
  */
-export async function capture(
-  page: Page,
-  def: VisualPage,
-  testInfo: TestInfo,
-): Promise<void> {
+export async function capture(page: Page, def: VisualPage, testInfo: TestInfo): Promise<void> {
   await page.goto(def.path, { waitUntil: "networkidle", timeout: 45_000 });
 
   // Wait out the app's route-level loading spinner (the auth/workspace
@@ -97,9 +93,7 @@ export async function authenticate(page: Page, authFile: string): Promise<void> 
   const email = process.env.E2E_USER_EMAIL;
   const password = process.env.E2E_USER_PASSWORD;
   if (!email || !password) {
-    throw new Error(
-      "authenticate() requires E2E_USER_EMAIL / E2E_USER_PASSWORD to be set",
-    );
+    throw new Error("authenticate() requires E2E_USER_EMAIL / E2E_USER_PASSWORD to be set");
   }
 
   await page.goto("/login");
@@ -130,9 +124,7 @@ async function settleOnboardingGate(page: Page): Promise<void> {
   await page
     .waitForFunction(
       () =>
-        Object.keys(window.localStorage).some((k) =>
-          k.startsWith("onboarding_autoredirected:"),
-        ),
+        Object.keys(window.localStorage).some((k) => k.startsWith("onboarding_autoredirected:")),
       undefined,
       { timeout: 20_000 },
     )

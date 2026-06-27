@@ -163,8 +163,8 @@ writeFileSync(join(ROOT, "index.html"), buildHtml(pages, projects));
 writeFileSync(join(ROOT, "summary.md"), buildSummary(pages, projects));
 
 const total = [...pages.values()].reduce((n, m) => n + m.size, 0);
-console.log(
-  `visual-gallery: ${total} screenshot(s), ${pages.size} page(s), ${projects.length} project(s) → ${ROOT}/index.html`,
+process.stdout.write(
+  `visual-gallery: ${total} screenshot(s), ${pages.size} page(s), ${projects.length} project(s) → ${ROOT}/index.html\n`,
 );
 if (pages.size === 0) {
   console.error("visual-gallery: no screenshots found under " + ROOT);

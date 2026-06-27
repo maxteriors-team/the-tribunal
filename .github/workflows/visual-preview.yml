@@ -1,0 +1,252 @@
+name: Visual preview
+
+# Boots the real stack (Postgres + Redis + backend + a production frontend
+# build), logs in with a freshly seeded user, and captures full-page
+# screenshots of the core CRM screens at desktop + mobile widths. The result is
+# surfaced visually: a browsable HTML gallery + the Playwright report as
+# downloadable artifacts, a screenshot matrix in the run's job summary, and a
+# sticky comment on pull requests.
+#
+# This is a PREVIEW, not a gate — a flaky capture never blocks a merge (the
+# capture step is allowed to fail; the gallery/summary are still published).
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/visual-preview.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/visual-preview.yml"
+
+concurrency:
+  group: visual-preview-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  capture:
+    name: Capture visual preview
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # pgvector image (not plain postgres) — a migration runs
+        # `CREATE EXTENSION vector`, which needs the pgvector binaries.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: aicrm
+          POSTGRES_PASSWORD: aicrm_dev_password
+          POSTGRES_DB: aicrm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aicrm -d aicrm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Backend runtime config. Workers are off — the visual capture only needs
+      # the API, and skipping them keeps boot fast and /readyz simple.
+      DATABASE_URL: postgresql+asyncpg://aicrm:aicrm_dev_password@localhost:5432/aicrm
+      REDIS_URL: redis://localhost:6379/0
+      ENVIRONMENT: development
+      RUN_BACKGROUND_WORKERS: "false"
+      # Seeded operator used to log in for the authenticated captures.
+      SEED_ADMIN_EMAIL: visual@ci.local
+      SEED_ADMIN_PASSWORD: Visual-CI-Pass123!
+      E2E_USER_EMAIL: visual@ci.local
+      E2E_USER_PASSWORD: Visual-CI-Pass123!
+      # Baked into the frontend build so the browser calls the local backend.
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Generate runtime secrets
+        # Strong random keys so the backend's startup validation (>=32 bytes,
+        # >=128 bits entropy) passes. Ephemeral — scoped to this run only.
+        run: |
+          set -euo pipefail
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U aicrm -d aicrm; then
+              echo "Postgres is ready"; exit 0
+            fi
+            echo "Waiting for Postgres... ($i/30)"; sleep 2
+          done
+          echo "::error::Postgres did not become ready in time"; exit 1
+
+      - name: Apply migrations
+        working-directory: backend
+        run: uv run alembic upgrade head
+
+      - name: Seed demo workspace + operator
+        working-directory: backend
+        run: uv run python -m app.db.seed
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/logs"
+          nohup uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            > "$RUNNER_TEMP/logs/backend.log" 2>&1 &
+          echo "Waiting for backend /readyz..."
+          for i in {1..60}; do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/readyz || true)" = "200" ]; then
+              echo "Backend is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Backend did not become ready"; tail -n 100 "$RUNNER_TEMP/logs/backend.log"; exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (production)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Resolve Playwright version
+        id: playwright_version
+        working-directory: frontend
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: cache_playwright_browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-chromium
+
+      - name: Install Playwright browsers
+        if: steps.cache_playwright_browsers.outputs.cache-hit != 'true'
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright OS dependencies
+        if: steps.cache_playwright_browsers.outputs.cache-hit == 'true'
+        working-directory: frontend
+        run: npx playwright install-deps chromium
+
+      - name: Capture screenshots
+        id: capture
+        # A flaky page must not block the preview; the gallery/summary still
+        # publish whatever was captured.
+        continue-on-error: true
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: npm run visual
+
+      - name: Build gallery
+        if: always()
+        working-directory: frontend
+        run: npm run visual:gallery
+
+      - name: Write job summary
+        if: always()
+        run: |
+          if [ -f frontend/visual-snapshots/summary.md ]; then
+            cat frontend/visual-snapshots/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No visual summary was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload gallery artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-gallery
+          path: |
+            frontend/visual-snapshots
+            !frontend/visual-snapshots/.pw-output
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-playwright-report
+          path: frontend/playwright-report
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Comment on pull request
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- visual-preview -->';
+            let body = `${marker}\n`;
+            try {
+              body += fs.readFileSync('frontend/visual-snapshots/summary.md', 'utf8');
+            } catch {
+              body += '## 📸 Visual preview\n\nNo screenshots were captured for this run.';
+            }
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            body += `\n\n[View the run & download the \`visual-gallery\` artifact](${runUrl}) to see the rendered pages.`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Upload backend log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-backend-log
+          path: ${{ runner.temp }}/logs/backend.log
+          if-no-files-found: ignore

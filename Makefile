@@ -202,6 +202,12 @@ smoke.frontend: ## Smoke-test a live frontend. Usage: make smoke.frontend PLAYWR
 smoke.watch: ## Continuously verify a live deployment step-by-step (default: local dev). Override BACKEND_URL/FRONTEND_URL/INTERVAL.
 	scripts/smoke-watch.sh
 
+# ─── Visual preview ──────────────────────────────────────────────────────────────
+
+.PHONY: visual
+visual: ## Capture the screenshot gallery + build it. Needs a running app (set PLAYWRIGHT_BASE_URL, or it boots `next start`). Set E2E_USER_EMAIL/PASSWORD for authed pages.
+	cd $(FRONTEND_DIR) && npm run visual && npm run visual:gallery
+
 # ─── Quality ───────────────────────────────────────────────────────────────────
 
 .PHONY: lint
