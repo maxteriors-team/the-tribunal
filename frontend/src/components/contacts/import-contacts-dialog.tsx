@@ -54,6 +54,30 @@ type ImportStep = "upload" | "mapping" | "options" | "importing" | "results";
 
 const SKIP_VALUE = "__skip__";
 
+// Canonical exporter column → contact field presets, mirrored from the backend
+// JOBBER_CSV_PRESET in app/services/contacts/contact_import.py (guarded there by
+// test_contact_import against alias drift). Applied case-insensitively against
+// the uploaded file's headers so a raw Jobber "Export Client Information" CSV
+// maps in one click — including the split Street/City/State/Zip address columns.
+const IMPORT_PRESETS: Record<string, { label: string; mapping: Record<string, string> }> = {
+  jobber: {
+    label: "Jobber",
+    mapping: {
+      "First Name": "first_name",
+      "Last Name": "last_name",
+      "Company Name": "company_name",
+      Email: "email",
+      "Phone Number": "phone_number",
+      Street1: "address_line1",
+      Street2: "address_line2",
+      City: "address_city",
+      State: "address_state",
+      "Zip Code": "address_zip",
+      Tags: "tags",
+    },
+  },
+};
+
 export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialogProps) {
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
@@ -141,7 +165,10 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = "first_name,last_name,phone_number,email,company_name,status,tags,notes\nJohn,Doe,+15551234567,john@example.com,Acme Inc,new,\"vip,priority\",Follow up next week\nJane,Smith,5559876543,jane@example.com,Tech Corp,contacted,lead,Interested in product";
+    const csvContent =
+      "first_name,last_name,phone_number,email,company_name,status,tags,notes,address_line1,address_city,address_state,address_zip\n" +
+      'John,Doe,+15551234567,john@example.com,Acme Inc,new,"vip,priority",Follow up next week,123 Main St,Austin,TX,78701\n' +
+      "Jane,Smith,5559876543,jane@example.com,Tech Corp,contacted,lead,Interested in product,456 Oak Ave,Dallas,TX,75201";
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -162,6 +189,28 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
       }
     }
     return mapped;
+  };
+
+  // Apply a named exporter preset (e.g. Jobber) to the current CSV's columns.
+  // Matches preset headers case-insensitively against the actual headers and
+  // preserves the one-header-per-field invariant the mapping UI enforces.
+  const applyPreset = (mapping: Record<string, string>) => {
+    if (!preview) return;
+    const headerByLower = new Map(preview.headers.map((h) => [h.toLowerCase().trim(), h]));
+    const validFields = new Set(preview.contact_fields.map((f) => f.name));
+    setColumnMapping((prev) => {
+      const next: Record<string, string | null> = { ...prev };
+      for (const [presetHeader, field] of Object.entries(mapping)) {
+        const actualHeader = headerByLower.get(presetHeader.toLowerCase().trim());
+        if (!actualHeader || !validFields.has(field)) continue;
+        // Clear any other column already mapped to this field before assigning.
+        for (const [header, mappedField] of Object.entries(next)) {
+          if (mappedField === field && header !== actualHeader) next[header] = null;
+        }
+        next[actualHeader] = field;
+      }
+      return next;
+    });
   };
 
   // Get sample data for a header from preview rows
@@ -244,6 +293,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
               <ul className="list-disc list-inside text-muted-foreground space-y-1">
                 <li><code className="text-xs bg-muted px-1 rounded">last_name</code>, <code className="text-xs bg-muted px-1 rounded">email</code>, <code className="text-xs bg-muted px-1 rounded">company_name</code></li>
                 <li><code className="text-xs bg-muted px-1 rounded">status</code>, <code className="text-xs bg-muted px-1 rounded">tags</code>, <code className="text-xs bg-muted px-1 rounded">notes</code></li>
+                <li><code className="text-xs bg-muted px-1 rounded">address_line1</code>, <code className="text-xs bg-muted px-1 rounded">address_city</code>, <code className="text-xs bg-muted px-1 rounded">address_state</code>, <code className="text-xs bg-muted px-1 rounded">address_zip</code></li>
               </ul>
             </div>
           </div>
@@ -266,6 +316,22 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
                   <span className="text-muted-foreground shrink-0">
                     {preview.headers.length} columns, {preview.sample_rows.length}+ rows
                   </span>
+                </div>
+
+                {/* One-click preset for known exporters (Jobber, etc.) */}
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Importing from another tool?</span>
+                  {Object.entries(IMPORT_PRESETS).map(([key, preset]) => (
+                    <Button
+                      key={key}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyPreset(preset.mapping)}
+                    >
+                      Use {preset.label} mapping
+                    </Button>
+                  ))}
                 </div>
 
                 {/* Required fields warning */}
