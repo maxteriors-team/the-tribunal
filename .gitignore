@@ -134,6 +134,7 @@ generic-component-*.html
 
 # Agent upload scratch (pasted screenshots/files); never part of the project.
 .ezcoder/uploads/
+.ezcoder/screenshots/
 
 # Legacy agent toolchains — consolidated into .ezcoder/ (see CLAUDE.md).
 # Ignore the whole legacy trees so stray IDE/agent configs don't reintroduce them.
@@ -150,6 +151,10 @@ storybook-static/
 playwright-report/
 test-results/
 *.lcov
+
+# Visual-preview suite output (generated PNGs, gallery, saved auth state)
+visual-snapshots/
+.auth/
 
 # Local env overrides
 .env.production.local
