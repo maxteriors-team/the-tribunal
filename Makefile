@@ -202,6 +202,10 @@ smoke.frontend: ## Smoke-test a live frontend. Usage: make smoke.frontend PLAYWR
 smoke.watch: ## Continuously verify a live deployment step-by-step (default: local dev). Override BACKEND_URL/FRONTEND_URL/INTERVAL.
 	scripts/smoke-watch.sh
 
+.PHONY: smoke.jobs
+smoke.jobs: ## Seed a worker+technician and smoke the authed job-calendar flow. Usage: make smoke.jobs SEED_ADMIN_PASSWORD=<pw> [SMOKE_BASE_URL=http://localhost:8000]
+	cd $(BACKEND_DIR) && uv run python -m scripts.smoke_jobs_calendar
+
 # ─── Visual preview ──────────────────────────────────────────────────────────────
 
 .PHONY: visual
