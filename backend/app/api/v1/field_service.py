@@ -24,6 +24,7 @@ from app.api.deps import (
     WorkspaceDispatcher,
     WorkspaceManager,
 )
+from app.api.service_errors import ServiceErrorRoute
 from app.schemas.field_service import (
     CrewCreate,
     CrewListResponse,
@@ -44,9 +45,12 @@ from app.services.field_service import (
     TechnicianService,
 )
 
-locations_router = APIRouter()
-crews_router = APIRouter()
-technicians_router = APIRouter()
+# ServiceErrorRoute maps the field-service domain errors (NotFound/Conflict/
+# Validation) raised by the service layer onto HTTP responses at the boundary,
+# so the services stay free of web-framework coupling.
+locations_router = APIRouter(route_class=ServiceErrorRoute)
+crews_router = APIRouter(route_class=ServiceErrorRoute)
+technicians_router = APIRouter(route_class=ServiceErrorRoute)
 
 
 # --------------------------------------------------------------------------- #
