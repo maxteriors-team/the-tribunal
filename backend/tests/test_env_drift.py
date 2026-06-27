@@ -8,7 +8,7 @@ from pathlib import Path
 from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CHECK_ENV_DRIFT_PATH = REPO_ROOT / "scripts" / "check_env_drift.py"
+CHECK_ENV_DRIFT_PATH = REPO_ROOT / "scripts" / "dev" / "check_env_drift.py"
 
 
 def load_check_env_drift() -> ModuleType:

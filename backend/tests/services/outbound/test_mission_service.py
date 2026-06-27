@@ -15,6 +15,7 @@ from app.models.lead_prospect import ProspectStatus
 from app.models.outbound_mission import MissionStatus
 from app.models.outbound_sequence import SequenceEnrollmentStatus
 from app.schemas.outbound_mission import OutboundMissionCreate, OutboundMissionUpdate
+from app.services.exceptions import ValidationError
 from app.services.outbound.mission_service import OutboundMissionService
 
 WS_ID = uuid.uuid4()
@@ -163,11 +164,10 @@ class TestMissionLifecycle:
         db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         service = OutboundMissionService(db)
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(ValidationError) as exc:
             await service.archive_mission(WS_ID, MISSION_ID)
 
-        assert exc.value.status_code == 400
-        assert exc.value.detail == "Cannot archive mission in status 'archived'"
+        assert "Cannot archive mission in status 'archived'" in str(exc.value)
         db.commit.assert_not_awaited()
 
     async def test_update_active_mission_raises_400(self) -> None:
@@ -176,15 +176,14 @@ class TestMissionLifecycle:
         db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         service = OutboundMissionService(db)
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(ValidationError) as exc:
             await service.update_mission(
                 WS_ID,
                 MISSION_ID,
                 OutboundMissionUpdate(name="Renamed"),
             )
 
-        assert exc.value.status_code == 400
-        assert "Cannot edit" in str(exc.value.detail)
+        assert "Cannot edit" in str(exc.value)
         db.commit.assert_not_awaited()
 
     async def test_delete_active_mission_raises_400(self) -> None:
@@ -193,10 +192,9 @@ class TestMissionLifecycle:
         db.execute = AsyncMock(return_value=_scalar_one_result(mission))
         service = OutboundMissionService(db)
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(ValidationError):
             await service.delete_mission(WS_ID, MISSION_ID)
 
-        assert exc.value.status_code == 400
         db.delete.assert_not_awaited()
         db.commit.assert_not_awaited()
 
@@ -293,11 +291,10 @@ class TestStatsAndProspectSelection:
         )
         service = OutboundMissionService(db)
 
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(ValidationError) as exc:
             await service.select_mission_prospect(WS_ID, MISSION_ID, PROSPECT_ID)
 
-        assert exc.value.status_code == 400
-        assert exc.value.detail == "Cannot select prospect in status 'suppressed'"
+        assert "Cannot select prospect in status 'suppressed'" in str(exc.value)
         db.commit.assert_not_awaited()
 
     async def test_suppress_records_reason(self) -> None:

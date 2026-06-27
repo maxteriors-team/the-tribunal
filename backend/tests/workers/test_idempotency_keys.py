@@ -27,6 +27,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryStatus,
+)
 from app.services.telephony import idempotency
 from app.services.telephony.idempotency import derive
 
@@ -399,22 +403,24 @@ class TestApprovalWorkerKey:
                 AsyncMock(return_value=phone),
             ),
             patch(
-                "app.services.approval.approval_delivery_service.get_text_message_provider"
-            ) as provider_factory,
-            patch(
-                "app.services.approval.approval_delivery_service.push_notification_service"
-            ) as push_service,
+                "app.services.approval.approval_delivery_service.outbound_delivery_service"
+            ) as mock_outbound,
         ):
-            sms_instance = provider_factory.return_value
-            sms_instance.send_message = AsyncMock(return_value=SimpleNamespace(id=uuid4()))
-            sms_instance.close = AsyncMock()
-            push_service.send_to_workspace_members = AsyncMock(return_value=None)
+            mock_outbound.deliver = AsyncMock(return_value=SimpleNamespace(delivered=True))
 
             ok = await service.notify_pending_action(db, action)  # type: ignore[arg-type]
 
         assert ok is True
-        call_kwargs = sms_instance.send_message.call_args.kwargs
-        assert call_kwargs["idempotency_key"] == derive("approval_notification_sms", action_id)
+        # SMS + push route through the outbound delivery seam, which derives the
+        # idempotency key from the forwarded scope + parts.
+        sms_requests = [
+            call.args[1]
+            for call in mock_outbound.deliver.await_args_list
+            if call.args[1].channel is OutboundDeliveryChannel.SMS
+        ]
+        assert len(sms_requests) == 1
+        assert sms_requests[0].idempotency_scope == "approval_notification_sms"
+        assert sms_requests[0].idempotency_parts == (action_id,)
 
 
 # ---------------------------------------------------------------------------
@@ -490,12 +496,17 @@ class TestAdditionalRetrySendKeys:
         db = MagicMock()
         db.commit = AsyncMock()
 
-        with patch("app.services.campaigns.sms_fallback.TelnyxSMSService") as sms_cls:
-            sms_instance = sms_cls.return_value
-            sms_instance.send_message = AsyncMock(
-                return_value=SimpleNamespace(id=uuid4(), conversation_id=uuid4())
+        with patch(
+            "app.services.campaigns.sms_fallback.outbound_delivery_service"
+        ) as mock_outbound:
+            mock_outbound.deliver = AsyncMock(
+                return_value=SimpleNamespace(
+                    status=OutboundDeliveryStatus.SENT,
+                    delivered=True,
+                    reason=None,
+                    message=SimpleNamespace(id=uuid4(), conversation_id=uuid4()),
+                )
             )
-            sms_instance.close = AsyncMock()
 
             ok = await send_sms_fallback(
                 db,
@@ -507,7 +518,7 @@ class TestAdditionalRetrySendKeys:
             )
 
         assert ok is True
-        call_kwargs = sms_instance.send_message.call_args.kwargs
-        assert call_kwargs["idempotency_key"] == derive(
-            "voice_campaign_sms_fallback", campaign_contact_id, "no_answer"
-        )
+        # The fallback forwards its idempotency scope + parts to the outbound seam.
+        request = mock_outbound.deliver.await_args.args[1]
+        assert request.idempotency_scope == "voice_campaign_sms_fallback"
+        assert request.idempotency_parts == (campaign_contact_id, "no_answer")

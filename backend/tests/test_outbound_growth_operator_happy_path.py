@@ -140,6 +140,9 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
         side_effect=[
             _ExecuteResult([offer]),
             _ExecuteResult([segment]),
+            # _resolve_phone_number always queries for the sending number, even
+            # when one is supplied, so it must be accounted for here.
+            _ExecuteResult([MagicMock(phone_number="+15550009999")]),
             _ExecuteResult(contacts),
             _ExecuteResult([responder]),
             _ExecuteResult([len(contacts)]),
@@ -190,7 +193,13 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     assert campaign.name == "Batch Video Ads → Dormant ecommerce leads"
     assert campaign.agent_id == responder.id
     assert campaign.status == CampaignStatus.DRAFT
-    assert [link.contact_id for link in campaign.campaign_contacts] == [101, 102]
+    # Enrollment adds CampaignContact rows directly via db.add (appending to the
+    # lazy campaign.campaign_contacts collection would emit a sync lazy-load and
+    # raise MissingGreenlet under the async engine).
+    enrolled = [
+        call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], CampaignContact)
+    ]
+    assert [link.contact_id for link in enrolled] == [101, 102]
 
     db.execute = AsyncMock(
         side_effect=[_ExecuteResult([campaign]), _ExecuteResult([len(contacts)])]
@@ -230,6 +239,9 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     from_phone = MagicMock()
     from_phone.id = uuid.uuid4()
     from_phone.phone_number = "+15550009999"
+    # Plain SMS sender (not an iMessage relay) so the provider-facing address is
+    # the phone number rather than a mac_relay_sender_id.
+    from_phone.imessage_enabled = False
     sms_service = AsyncMock()
     sms_service.send_message = AsyncMock(return_value=outbound_message)
     worker = CampaignWorker()
@@ -243,7 +255,11 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     worker.reputation_tracker.increment_sent = AsyncMock()
     db.execute = AsyncMock(return_value=_ExecuteResult([campaign_contact]))
 
-    await worker._process_initial_messages(campaign, sms_service, db, MagicMock())
+    # The worker resolves the per-sender transport through a TextProviderCache
+    # via ``_get_text_provider``; point it at the stub so the send path is
+    # exercised against our mock provider.
+    with patch.object(worker, "_get_text_provider", return_value=sms_service):
+        await worker._process_initial_messages(campaign, sms_service, db, MagicMock())
 
     sms_service.send_message.assert_awaited_once()
     send_kwargs = sms_service.send_message.await_args.kwargs

@@ -177,40 +177,26 @@ async def noauth_client() -> AsyncIterator[AsyncClient]:
 class TestListCampaigns:
     """GET /campaigns validation + auth."""
 
-    async def test_list_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_list_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """GET /campaigns without auth returns 401."""
-        response = await noauth_client.get(
-            f"/api/v1/workspaces/{WS_ID}/campaigns"
-        )
+        response = await noauth_client.get(f"/api/v1/workspaces/{WS_ID}/campaigns")
         assert response.status_code == 401
 
-    async def test_list_invalid_page_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_invalid_page_returns_422(self, client: AsyncClient) -> None:
         """GET /campaigns with page=0 returns 422."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/campaigns?page=0"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/campaigns?page=0")
         assert response.status_code == 422
 
-    async def test_list_page_size_over_limit_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_page_size_over_limit_returns_422(self, client: AsyncClient) -> None:
         """GET /campaigns with page_size=200 (violates le=100) returns 422."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/campaigns?page_size=200"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/campaigns?page_size=200")
         assert response.status_code == 422
 
 
 class TestCreateCampaignValidation:
     """POST /campaigns validation."""
 
-    async def test_create_missing_name_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_missing_name_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns without name returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -221,9 +207,7 @@ class TestCreateCampaignValidation:
         )
         assert response.status_code == 422
 
-    async def test_create_missing_phone_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_missing_phone_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns without from_phone_number returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -231,9 +215,7 @@ class TestCreateCampaignValidation:
         )
         assert response.status_code == 422
 
-    async def test_create_missing_initial_message_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_missing_initial_message_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns without initial_message returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -241,9 +223,7 @@ class TestCreateCampaignValidation:
         )
         assert response.status_code == 422
 
-    async def test_create_invalid_agent_uuid_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_invalid_agent_uuid_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns with malformed agent_id returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -256,9 +236,7 @@ class TestCreateCampaignValidation:
         )
         assert response.status_code == 422
 
-    async def test_create_empty_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_create_empty_body_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns with empty body returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -266,9 +244,7 @@ class TestCreateCampaignValidation:
         )
         assert response.status_code == 422
 
-    async def test_create_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_create_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns",
@@ -306,48 +282,32 @@ class TestCreateCampaignValidation:
 class TestGetCampaign:
     """GET /campaigns/{id}."""
 
-    async def test_get_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_get_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """GET /campaigns/{id} without auth returns 401."""
-        response = await noauth_client.get(
-            f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}"
-        )
+        response = await noauth_client.get(f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}")
         assert response.status_code == 401
 
-    async def test_get_invalid_uuid_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_get_invalid_uuid_returns_422(self, client: AsyncClient) -> None:
         """GET /campaigns/{id} with non-UUID returns 422."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/campaigns/not-a-uuid"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/campaigns/not-a-uuid")
         assert response.status_code == 422
 
-    async def test_get_nonexistent_returns_404(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_get_nonexistent_returns_404(self, client: AsyncClient) -> None:
         """GET /campaigns/{id} with unknown id returns 404."""
         with patch(
             "app.api.v1.campaigns.get_or_404",
             new=AsyncMock(
-                side_effect=__import__(
-                    "fastapi"
-                ).HTTPException(status_code=404, detail="Not found")
+                side_effect=__import__("fastapi").HTTPException(status_code=404, detail="Not found")
             ),
         ):
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/campaigns/{uuid.uuid4()}"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/campaigns/{uuid.uuid4()}")
         assert response.status_code == 404
 
 
 class TestUpdateCampaign:
     """PUT /campaigns/{id}."""
 
-    async def test_update_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_update_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """PUT /campaigns/{id} without auth returns 401."""
         response = await noauth_client.put(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}",
@@ -355,9 +315,7 @@ class TestUpdateCampaign:
         )
         assert response.status_code == 401
 
-    async def test_update_running_campaign_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_update_running_campaign_returns_400(self, client: AsyncClient) -> None:
         """PUT /campaigns/{id} on a running campaign returns 400."""
         running_campaign = _make_mock_campaign(status="running")
 
@@ -376,24 +334,25 @@ class TestUpdateCampaign:
 class TestStartCampaign:
     """POST /campaigns/{id}/start state transitions."""
 
-    async def test_start_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_start_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns/{id}/start without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
         )
         assert response.status_code == 401
 
-    async def test_start_wrong_status_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_start_wrong_status_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/start when already running returns 400."""
         running = _make_mock_campaign(status="running")
 
-        with patch(
-            "app.api.v1.campaigns.get_or_404",
-            new=AsyncMock(return_value=running),
+        with (
+            patch(
+                "app.api.v1.campaigns.get_or_404",
+                new=AsyncMock(return_value=running),
+            ),
+            # Sender channel validation is a separate concern with its own tests;
+            # stub it so this test isolates the status guard.
+            patch("app.api.v1.campaigns._validate_campaign_sender", new=AsyncMock()),
         ):
             response = await client.post(
                 f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
@@ -412,9 +371,14 @@ class TestStartCampaign:
         count_result.scalar.return_value = 0
         mock_db.execute = AsyncMock(return_value=count_result)
 
-        with patch(
-            "app.api.v1.campaigns.get_or_404",
-            new=AsyncMock(return_value=draft),
+        with (
+            patch(
+                "app.api.v1.campaigns.get_or_404",
+                new=AsyncMock(return_value=draft),
+            ),
+            # Sender channel validation is a separate concern with its own tests;
+            # stub it so this test isolates the empty-contacts guard.
+            patch("app.api.v1.campaigns._validate_campaign_sender", new=AsyncMock()),
         ):
             response = await client.post(
                 f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
@@ -427,18 +391,14 @@ class TestStartCampaign:
 class TestPauseCampaign:
     """POST /campaigns/{id}/pause."""
 
-    async def test_pause_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_pause_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns/{id}/pause without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/pause"
         )
         assert response.status_code == 401
 
-    async def test_pause_non_running_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_pause_non_running_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/pause on a draft campaign returns 400."""
         draft = _make_mock_campaign(status="draft")
 
@@ -456,18 +416,14 @@ class TestPauseCampaign:
 class TestResumeCampaign:
     """POST /campaigns/{id}/resume."""
 
-    async def test_resume_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_resume_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns/{id}/resume without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/resume"
         )
         assert response.status_code == 401
 
-    async def test_resume_non_paused_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_resume_non_paused_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/resume on a draft campaign returns 400."""
         draft = _make_mock_campaign(status="draft")
 
@@ -485,18 +441,14 @@ class TestResumeCampaign:
 class TestCancelCampaign:
     """POST /campaigns/{id}/cancel."""
 
-    async def test_cancel_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_cancel_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns/{id}/cancel without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/cancel"
         )
         assert response.status_code == 401
 
-    async def test_cancel_running_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_cancel_running_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/cancel on a running campaign returns 400."""
         running = _make_mock_campaign(status="running")
 
@@ -514,9 +466,7 @@ class TestCancelCampaign:
 class TestAddContactsValidation:
     """POST /campaigns/{id}/contacts."""
 
-    async def test_add_contacts_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_add_contacts_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /campaigns/{id}/contacts without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/contacts",
@@ -524,9 +474,7 @@ class TestAddContactsValidation:
         )
         assert response.status_code == 401
 
-    async def test_add_contacts_missing_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_contacts_missing_body_returns_422(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/contacts without body returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/contacts",
@@ -534,9 +482,7 @@ class TestAddContactsValidation:
         )
         assert response.status_code == 422
 
-    async def test_add_contacts_to_running_campaign_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_contacts_to_running_campaign_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/contacts on a running campaign returns 400."""
         running = _make_mock_campaign(status="running")
 
@@ -555,18 +501,14 @@ class TestAddContactsValidation:
 class TestListCampaignContacts:
     """GET /campaigns/{id}/contacts."""
 
-    async def test_list_contacts_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_list_contacts_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """GET /campaigns/{id}/contacts without auth returns 401."""
         response = await noauth_client.get(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/contacts"
         )
         assert response.status_code == 401
 
-    async def test_list_contacts_limit_too_large_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_contacts_limit_too_large_returns_422(self, client: AsyncClient) -> None:
         """GET /campaigns/{id}/contacts with limit=1000 (violates le=500) returns 422."""
         response = await client.get(
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/contacts?limit=1000"
@@ -577,18 +519,12 @@ class TestListCampaignContacts:
 class TestDeleteCampaign:
     """DELETE /campaigns/{id}."""
 
-    async def test_delete_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_delete_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """DELETE /campaigns/{id} without auth returns 401."""
-        response = await noauth_client.delete(
-            f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}"
-        )
+        response = await noauth_client.delete(f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}")
         assert response.status_code == 401
 
-    async def test_delete_running_returns_400(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_delete_running_returns_400(self, client: AsyncClient) -> None:
         """DELETE /campaigns/{id} on a running campaign returns 400."""
         running = _make_mock_campaign(status="running")
 
@@ -596,8 +532,6 @@ class TestDeleteCampaign:
             "app.api.v1.campaigns.get_or_404",
             new=AsyncMock(return_value=running),
         ):
-            response = await client.delete(
-                f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}"
-            )
+            response = await client.delete(f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}")
 
         assert response.status_code == 400

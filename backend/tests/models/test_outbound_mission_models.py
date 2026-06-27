@@ -64,10 +64,13 @@ class TestEnums:
         assert {m.value for m in DiscoverySourceType} == {
             "google_places",
             "web_scrape",
+            "web_people",
             "csv_import",
             "manual",
             "api",
             "linkedin",
+            "meta_ad_library",
+            "google_ads_transparency",
             "other",
         }
 

@@ -124,6 +124,12 @@ async def test_nudge_delivery_uses_outbound_for_push_and_sms(
     phone = SimpleNamespace(id=uuid.uuid4(), phone_number="+12025550199")
     monkeypatch.setattr(nudge_module, "get_workspace_sms_number", AsyncMock(return_value=phone))
     monkeypatch.setattr(nudge_module.settings, "telnyx_api_key", "telnyx-key")
+    # Pin quiet-hours off so SMS delivery is exercised regardless of wall-clock
+    # time (default quiet hours are 22:00-08:00 UTC and would otherwise make
+    # this assertion time-dependent / flaky).
+    monkeypatch.setattr(
+        nudge_module.NudgeDeliveryService, "_is_quiet_hours", lambda self, ws: False
+    )
     workspace_id = uuid.uuid4()
     user = SimpleNamespace(id=7, is_active=True, notification_sms=True, phone_number="+12025550123")
     workspace = SimpleNamespace(

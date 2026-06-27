@@ -101,37 +101,10 @@ class TestDemoCheckRateLimits:
         db.execute.assert_not_called()
 
 
-class TestEmbedCheckRateLimits:
-    async def test_ip_429_carries_retry_after(self) -> None:
-        now = datetime.now(UTC)
-        oldest = now - timedelta(minutes=5)
-        db = _make_db(_exec_result(settings.demo_ip_rate_limit, oldest))
-
-        with pytest.raises(HTTPException) as exc_info:
-            await embed_api._check_embed_rate_limits(db, "9.9.9.9", "+15551112222")
-
-        assert exc_info.value.status_code == 429
-        assert exc_info.value.headers is not None
-        retry_after = int(exc_info.value.headers["Retry-After"])
-        # ~3300s remaining of a 3600s window.
-        assert 3290 <= retry_after <= 3310
-
-    async def test_phone_429_carries_retry_after(self) -> None:
-        now = datetime.now(UTC)
-        oldest = now - timedelta(hours=1)
-        db = _make_db(
-            _exec_result(0, None),
-            _exec_result(settings.demo_phone_rate_limit, oldest),
-        )
-
-        with pytest.raises(HTTPException) as exc_info:
-            await embed_api._check_embed_rate_limits(db, "9.9.9.9", "+15551112222")
-
-        assert exc_info.value.status_code == 429
-        assert exc_info.value.headers is not None
-        retry_after = int(exc_info.value.headers["Retry-After"])
-        # 24h - 1h = ~82800s.
-        assert 82790 <= retry_after <= 82810
+# NOTE: Embed rate limiting moved from the old DB-backed
+# ``embed._check_embed_rate_limits`` to the Redis-based
+# ``app.services.rate_limiting.embed_limiter``. Its Retry-After contract is
+# covered by tests/services/test_embed_limiter.py and tests/api/test_embed_rate_limit.py.
 
 
 class TestLeadFormCheckRateLimit:
