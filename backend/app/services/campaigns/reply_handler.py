@@ -17,7 +17,10 @@ from app.models.opportunity import Opportunity, OpportunityActivity
 from app.models.opt_out import GlobalOptOut
 from app.models.pending_action import PendingAction
 from app.models.pipeline import Pipeline, PipelineStage
-from app.services.ai.openai_credentials import get_openai_bearer_token
+from app.services.ai.openai_credentials import (
+    OpenAICredentialError,
+    get_workspace_openai_bearer_token,
+)
 from app.services.push_notifications import push_notification_service
 from app.services.reactivation.response_classifier import classify_response
 
@@ -97,10 +100,17 @@ async def handle_campaign_reply(
 
     conversation = await db.get(Conversation, message.conversation_id)
     context = await _load_conversation_context(db, message.conversation_id)
+    # Use the campaign workspace's own OpenAI credential so reply classification
+    # is billed to and configured by the tenant. Fall back to keyword-only
+    # classification (openai_api_key=None) when no credential resolves.
+    try:
+        openai_key: str | None = await get_workspace_openai_bearer_token(db, campaign.workspace_id)
+    except OpenAICredentialError:
+        openai_key = None
     category = await classify_response(
         message.body,
         conversation_context=context,
-        openai_api_key=get_openai_bearer_token() or None,
+        openai_api_key=openai_key,
     )
 
     now = datetime.now(UTC)

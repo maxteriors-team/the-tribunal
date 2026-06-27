@@ -311,6 +311,10 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
 
     with (
         patch(
+            "app.services.campaigns.reply_handler.get_workspace_openai_bearer_token",
+            AsyncMock(return_value="sk-test-workspace-token"),
+        ),
+        patch(
             "app.services.campaigns.reply_handler.classify_response",
             AsyncMock(return_value=ResponseCategory.INTERESTED),
         ),
