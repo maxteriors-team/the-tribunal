@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_value
 from app.core.security import get_password_hash
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
@@ -35,7 +36,10 @@ async def create_admin_user(
     """Create admin user if not exists."""
     email = email or DEFAULT_ADMIN_EMAIL
     password = password or DEFAULT_ADMIN_PASSWORD
-    result = await db.execute(select(User).where(User.email == email))
+    # ``User.email`` is Fernet-encrypted with a random IV, so equality on it
+    # never matches an existing row. Look up by the deterministic ``email_hash``
+    # (the same indexed column login uses) so re-seeding stays idempotent.
+    result = await db.execute(select(User).where(User.email_hash == hash_value(email)))
     existing = result.scalar_one_or_none()
 
     if existing:
