@@ -1,5 +1,6 @@
 import {
   Bell,
+  BookMarked,
   BookOpen,
   CalendarCheck,
   Bot,
@@ -287,6 +288,13 @@ export const toolsNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    title: "Price Book",
+    url: "/catalog",
+    icon: BookMarked,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
     title: "Billing",
     url: "/billing",
     icon: CreditCard,
@@ -355,6 +363,7 @@ export const breadcrumbLabels: Record<string, string> = {
   experiments: "Experiments",
   calendar: "Calendar",
   jobs: "Jobs",
+  catalog: "Price Book",
   billing: "Billing",
   settings: "Settings",
   "find-leads": "Find Leads",

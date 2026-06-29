@@ -102,6 +102,7 @@ const automations = createResourceQueryKeys("automations");
 const calls = createResourceQueryKeys("calls");
 const campaignReports = createResourceQueryKeys("campaign-reports");
 const campaigns = createResourceQueryKeys("campaigns");
+const catalogItems = createResourceQueryKeys("catalog-items");
 const contacts = createResourceQueryKeys("contacts");
 const conversations = createResourceQueryKeys("conversations");
 const improvementSuggestions = createResourceQueryKeys("suggestions");
@@ -214,6 +215,11 @@ export const queryKeys = {
       [...campaignReports.all(workspaceId), "full", reportIds] as const,
     count: (workspaceId: string) =>
       [...campaignReports.all(workspaceId), "count"] as const,
+  },
+  catalogItems: {
+    ...catalogItems,
+    active: (workspaceId: string, params?: QueryKeyParams | null) =>
+      catalogItems.list(workspaceId, params),
   },
   campaigns: {
     ...campaigns,

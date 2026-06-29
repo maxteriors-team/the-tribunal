@@ -8,6 +8,7 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
+import { CatalogPicker } from "@/components/catalog/catalog-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -63,6 +64,12 @@ const createQuoteSchema = z.object({
 type CreateQuoteFormValues = z.infer<typeof createQuoteSchema>;
 
 const EMPTY_LINE = { name: "", quantity: "1", unit_price: "" } as const;
+
+// True when the only line is the untouched starter row, so picking from the
+// price book replaces it instead of leaving an empty line above the selection.
+function isBlankLine(line: { name?: string; unit_price?: string }): boolean {
+  return !line?.name?.trim() && !line?.unit_price?.trim();
+}
 
 const DEFAULT_VALUES: CreateQuoteFormValues = {
   title: "",
@@ -202,15 +209,36 @@ export function QuoteCreateDialog({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Line items</FormLabel>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => append({ ...EMPTY_LINE })}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  Add line
-                </Button>
+                <div className="flex items-center gap-2">
+                  <CatalogPicker
+                    disabled={createMutation.isPending}
+                    onPick={(item) => {
+                      const line = {
+                        name: item.name,
+                        quantity: "1",
+                        unit_price: String(item.unit_price),
+                      };
+                      const current = form.getValues("line_items");
+                      if (current.length === 1 && isBlankLine(current[0])) {
+                        // Replace the untouched starter row.
+                        form.setValue("line_items.0", line, {
+                          shouldValidate: true,
+                        });
+                      } else {
+                        append(line);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => append({ ...EMPTY_LINE })}
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add line
+                  </Button>
+                </div>
               </div>
 
               {fields.map((field, index) => (

@@ -10,6 +10,7 @@ export * from "./automation";
 export * from "./opportunity";
 export * from "./invoice";
 export * from "./quote";
+export * from "./catalog";
 export * from "./phone";
 export * from "./experiment";
 export * from "./call";
