@@ -501,6 +501,98 @@ async def send_payment_received_notification(
     return True
 
 
+async def send_invoice_email(
+    to_email: str,
+    workspace_name: str,
+    invoice_number: str,
+    amount_str: str,
+    due_date: str | None = None,
+    pay_url: str | None = None,
+    notes: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email a customer their invoice with an optional Stripe "Pay now" button.
+
+    ``amount_str`` is the pre-formatted balance due (e.g. ``"250.00 USD"``).
+    ``pay_url`` is the hosted Stripe Checkout URL; the button is omitted when it
+    is ``None`` (e.g. Stripe not configured). ``notes`` is operator-authored free
+    text and is HTML-escaped. Returns True only when the provider accepted the send.
+    """
+    subject = f"Invoice {invoice_number} from {workspace_name}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
+    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
+
+    due_row = ""
+    if due_date:
+        due_row = (
+            f'<p style="{label_style}">Due</p><p style="{value_style}">{html_escape(due_date)}</p>'
+        )
+
+    notes_block = ""
+    if notes:
+        notes_block = f'<p style="color: #555; margin: 24px 0;">{html_escape(notes)}</p>'
+
+    pay_button = ""
+    if pay_url:
+        # pay_url is a Stripe-generated Checkout URL, not user input.
+        pay_button = (
+            '<div style="text-align: center; margin: 32px 0;">'
+            f'<a href="{html_escape(pay_url)}" '
+            'style="background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; '
+            "border-radius: 8px; text-decoration: none; font-weight: 600; "
+            'display: inline-block;">Pay now</a></div>'
+        )
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1a1a1a; margin-bottom: 5px;">Invoice {html_escape(invoice_number)}</h1>
+    </div>
+    <p>You have a new invoice from <strong>{html_escape(workspace_name)}</strong>.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
+        <p style="{label_style}">Amount due</p>
+        <p style="{value_style}">{html_escape(amount_str)}</p>
+        {due_row}
+    </div>
+    {pay_button}
+    {notes_block}
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="color: #999; font-size: 12px; text-align: center;">
+        Sent by {html_escape(workspace_name)} via The Tribunal
+    </p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "invoice_email_sent",
+        to_email=to_email,
+        invoice_number=invoice_number,
+        email_id=response.get("id"),
+    )
+    return True
+
+
 async def send_appointment_booked_notification(
     to_email: str,
     realtor_name: str,

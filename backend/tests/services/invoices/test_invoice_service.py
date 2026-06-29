@@ -16,7 +16,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.encryption import hash_phone
+from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.invoice import Invoice
@@ -54,13 +54,17 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
     return ws
 
 
-async def _make_contact(db: AsyncSession, workspace_id: uuid.UUID) -> Contact:
+async def _make_contact(
+    db: AsyncSession, workspace_id: uuid.UUID, *, email: str | None = None
+) -> Contact:
     phone = f"+1555{uuid.uuid4().int % 10_000_000:07d}"
     contact = Contact(
         workspace_id=workspace_id,
         first_name="Pat",
         phone_number=phone,
         phone_hash=hash_phone(phone),
+        email=email,
+        email_hash=hash_value(email) if email else None,
     )
     db.add(contact)
     await db.flush()
@@ -399,3 +403,94 @@ async def test_webhook_no_match_is_noop() -> None:
             "metadata": {"invoice_id": str(uuid.uuid4())},
         }
         await handle_invoice_checkout_session_completed(session, db)
+
+
+async def test_mark_sent_emails_contact(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.services.email as email_mod
+
+    sent_calls: list[dict[str, object]] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        sent_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=200.0)],
+            ),
+        )
+        sent = await svc.mark_sent(ws.id, inv.id)
+
+        assert sent.status == "sent"
+        assert len(sent_calls) == 1
+        call = sent_calls[0]
+        assert call["to_email"] == "customer@example.com"
+        assert call["invoice_number"] == "INV-000001"
+        assert call["amount_str"] == "200.00 USD"
+        # Stripe is unconfigured in tests, so no pay link is attached.
+        assert call["pay_url"] is None
+
+
+async def test_mark_sent_without_contact_email_skips_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.email as email_mod
+
+    sent_calls: list[dict[str, object]] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        sent_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email=None)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=50.0)],
+            ),
+        )
+        sent = await svc.mark_sent(ws.id, inv.id)
+
+        # Transition still succeeds; no email attempted without a recipient.
+        assert sent.status == "sent"
+        assert sent_calls == []
+
+
+async def test_mark_sent_email_failure_does_not_break_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.email as email_mod
+
+    async def _boom(**kwargs: object) -> bool:
+        raise RuntimeError("resend down")
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _boom)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=10.0)],
+            ),
+        )
+        # A delivery failure must not undo the sent transition.
+        sent = await svc.mark_sent(ws.id, inv.id)
+        assert sent.status == "sent"

@@ -113,3 +113,68 @@ async def test_invitation_email_passes_resend_idempotency_key(fake_resend: _Fake
     assert sent is True
     fake_resend.Emails.send_async.assert_awaited_once()
     assert fake_resend.Emails.send_async.await_args.args[1] == {"idempotency_key": str(key)}
+
+
+@pytest.mark.asyncio
+async def test_invoice_email_renders_summary_and_pay_button(fake_resend: _FakeResend) -> None:
+    key = uuid.uuid4()
+
+    sent = await email.send_invoice_email(
+        to_email="customer@example.com",
+        workspace_name="Acme Plumbing",
+        invoice_number="INV-000007",
+        amount_str="250.00 USD",
+        due_date="2026-07-15",
+        pay_url="https://checkout.stripe.com/c/pay/cs_test_abc",
+        notes="Thanks for your business",
+        idempotency_key=key,
+    )
+
+    assert sent is True
+    call = fake_resend.Emails.send_async.await_args
+    assert call is not None
+    params = call.args[0]
+    assert params["to"] == ["customer@example.com"]
+    assert params["subject"] == "Invoice INV-000007 from Acme Plumbing"
+    html = params["html"]
+    assert "250.00 USD" in html
+    assert "2026-07-15" in html
+    assert "https://checkout.stripe.com/c/pay/cs_test_abc" in html
+    assert "Pay now" in html
+    assert "Thanks for your business" in html
+    # Idempotency key forwarded so a re-send of the same invoice is deduped.
+    assert call.args[1] == {"idempotency_key": str(key)}
+
+
+@pytest.mark.asyncio
+async def test_invoice_email_omits_pay_button_without_url(fake_resend: _FakeResend) -> None:
+    sent = await email.send_invoice_email(
+        to_email="customer@example.com",
+        workspace_name="Acme Plumbing",
+        invoice_number="INV-000008",
+        amount_str="99.00 USD",
+        pay_url=None,
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    html = params["html"]
+    assert "99.00 USD" in html
+    assert "Pay now" not in html
+
+
+@pytest.mark.asyncio
+async def test_invoice_email_escapes_notes(fake_resend: _FakeResend) -> None:
+    # Operator-authored notes must not be able to inject markup.
+    sent = await email.send_invoice_email(
+        to_email="customer@example.com",
+        workspace_name="Acme",
+        invoice_number="INV-1",
+        amount_str="10.00 USD",
+        notes="<script>alert(1)</script>",
+    )
+
+    assert sent is True
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
