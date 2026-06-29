@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import func
 
+from app.core.encryption import hash_phone
 from app.db.scope import select_workspace_owned
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
@@ -13,6 +14,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 from app.services.dashboard.today_queue_service import TodayQueueService
+from app.utils.phone import phone_lookup_variants
 
 
 class ContactAssistantTools:
@@ -68,14 +70,17 @@ class ContactAssistantTools:
 
     async def create_contact(self, args: ToolArguments) -> dict[str, object]:
         phone = args["phone"]
+        # ``phone_number`` is encrypted at rest; dedupe on the deterministic
+        # ``phone_hash`` across the common stored formats.
+        phone_hashes = [hash_phone(variant) for variant in phone_lookup_variants(phone)]
         existing = await self.context.db.execute(
             select_workspace_owned(
                 Contact,
                 self.context.workspace_id,
-                Contact.phone_number == phone,
-            )
+                Contact.phone_hash.in_(phone_hashes),
+            ).limit(1)
         )
-        if existing.scalar_one_or_none():
+        if existing.scalars().first():
             return {"success": False, "error": "Contact with this phone already exists"}
 
         contact = Contact(

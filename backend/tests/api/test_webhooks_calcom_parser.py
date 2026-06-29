@@ -1,7 +1,8 @@
 """Tests for ``app.api.webhooks.calcom_parser``.
 
 The parser module exposes :func:`find_contact_by_attendee`, a SQLAlchemy lookup
-that prefers an exact-email match and falls back to a phone-suffix LIKE query.
+that prefers an ``email_hash`` match and falls back to a ``phone_hash`` lookup
+across the common stored phone formats.
 
 It is exercised here with mocked async sessions and ORM stand-ins, plus
 real-shape Cal.com attendee payloads loaded from ``tests/fixtures/webhooks/calcom/``.
@@ -25,6 +26,11 @@ from tests.fixtures.webhooks import load_fixture
 def _result_with(value: Any) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none = MagicMock(return_value=value)
+    # The lookup uses ``result.scalars().first()`` (``.limit(1)`` query), so the
+    # stand-in must expose that chain too.
+    scalars = MagicMock()
+    scalars.first = MagicMock(return_value=value)
+    result.scalars = MagicMock(return_value=scalars)
     return result
 
 
@@ -51,14 +57,12 @@ async def test_find_contact_matches_on_email_first() -> None:
 
 
 async def test_find_contact_falls_back_to_phone_when_email_misses() -> None:
-    """No email hit → match by last-10-digits suffix."""
+    """No email hit → match by phone_hash across stored formats."""
     contact = MagicMock()
     contact.id = 11
 
     db = MagicMock()
-    db.execute = AsyncMock(
-        side_effect=[_result_with(None), _result_with(contact)]
-    )
+    db.execute = AsyncMock(side_effect=[_result_with(None), _result_with(contact)])
     log = MagicMock()
 
     found = await find_contact_by_attendee(
@@ -176,7 +180,10 @@ async def test_find_contact_with_real_calcom_attendee_payload(
     log = MagicMock()
 
     found = await find_contact_by_attendee(
-        email=email, phone=phone, db=db, log=log,
+        email=email,
+        phone=phone,
+        db=db,
+        log=log,
     )
 
     assert found is contact

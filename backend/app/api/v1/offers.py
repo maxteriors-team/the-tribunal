@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_or_404
 from app.api.deps import DB, CurrentUser, get_workspace
+from app.core.encryption import hash_phone, hash_value
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope, select_workspace_owned
 from app.models.contact import Contact
@@ -454,19 +455,21 @@ async def submit_offer_optin(
     contact: Contact | None = None
     if optin.email:
         contact_result = await db.execute(
-            apply_workspace_scope(select(Contact), Contact, offer.workspace_id).where(
-                Contact.email == optin.email
-            )
+            apply_workspace_scope(select(Contact), Contact, offer.workspace_id)
+            .where(Contact.email_hash == hash_value(optin.email))
+            .limit(1)
         )
-        contact = contact_result.scalar_one_or_none()
+        # first() (not scalar_one_or_none): earlier opt-ins under the broken
+        # lookup may have created duplicate contacts sharing this email_hash.
+        contact = contact_result.scalars().first()
 
     if not contact and optin.phone_number:
         contact_result = await db.execute(
-            apply_workspace_scope(select(Contact), Contact, offer.workspace_id).where(
-                Contact.phone_number == optin.phone_number
-            )
+            apply_workspace_scope(select(Contact), Contact, offer.workspace_id)
+            .where(Contact.phone_hash == hash_phone(optin.phone_number))
+            .limit(1)
         )
-        contact = contact_result.scalar_one_or_none()
+        contact = contact_result.scalars().first()
 
     if not contact:
         # Create new contact

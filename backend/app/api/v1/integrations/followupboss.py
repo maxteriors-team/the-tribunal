@@ -14,6 +14,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DB, CurrentUser
+from app.core.encryption import hash_phone, hash_value
 from app.models.contact import Contact
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.followupboss import (
@@ -99,17 +100,21 @@ async def _import_single_fub_contact(
 
     conditions = []
     if phone:
-        conditions.append(Contact.phone_number == phone)
+        conditions.append(Contact.phone_hash == hash_phone(phone))
     if email:
-        conditions.append(Contact.email == email)
+        conditions.append(Contact.email_hash == hash_value(email))
 
     existing = await db.execute(
-        select(Contact).where(
+        select(Contact)
+        .where(
             Contact.workspace_id == workspace_id,
             or_(*conditions),
         )
+        .limit(1)
     )
-    if existing.scalar_one_or_none():
+    # first() (not scalar_one_or_none): an or_ across phone/email can match two
+    # different contacts, and prior buggy imports may have left duplicates.
+    if existing.scalars().first():
         return "skipped", None
 
     contact = Contact(

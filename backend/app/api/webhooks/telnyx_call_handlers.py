@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.webhooks.telnyx_parser import extract_phone_numbers
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.core.metrics import (
     observe_voice_call_completed,
     observe_voice_call_started,
@@ -19,6 +20,7 @@ from app.services.telephony.call_outcome_classifier import CallOutcomeClassifier
 from app.services.telephony.inbound_routing import classify_inbound_reason
 from app.services.telephony.inbound_screening import InboundCallScreener
 from app.services.telephony.voice_agent_resolver import VoiceAgentResolver
+from app.utils.phone import phone_lookup_variants
 
 _call_classifier = CallOutcomeClassifier()
 _voice_agent_resolver = VoiceAgentResolver()
@@ -90,14 +92,19 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
         if not conversation:
             from app.models.contact import Contact
 
-            # Try to find contact
+            # Try to find contact by the inbound caller's number. ``phone_number``
+            # is encrypted at rest, so match on the deterministic ``phone_hash``
+            # across the common stored formats.
+            phone_hashes = [hash_phone(variant) for variant in phone_lookup_variants(from_number)]
             contact_result = await db.execute(
-                select(Contact).where(
+                select(Contact)
+                .where(
                     Contact.workspace_id == workspace_id,
-                    Contact.phone_number == from_number,
+                    Contact.phone_hash.in_(phone_hashes),
                 )
+                .limit(1)
             )
-            contact = contact_result.scalar_one_or_none()
+            contact = contact_result.scalars().first()
 
             conversation = Conversation(
                 workspace_id=workspace_id,

@@ -42,6 +42,12 @@ class _Result:
     def scalar_one_or_none(self) -> Any:
         return self._scalar
 
+    def scalars(self) -> Any:
+        # Mirror ``result.scalars().first()`` used by hash-based contact lookups.
+        chain = MagicMock()
+        chain.first = MagicMock(return_value=self._scalar)
+        return chain
+
 
 def _make_db(execute_returns: list[Any]) -> MagicMock:
     db = MagicMock()

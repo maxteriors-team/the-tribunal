@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.api.crud import get_nested_or_404
 from app.api.deps import DB, CurrentUser, OptionalCurrentUser
 from app.core.config import settings
+from app.core.encryption import hash_value
 from app.db.scope import apply_workspace_scope
 from app.models.invitation import WorkspaceInvitation
 from app.models.user import User
@@ -113,8 +114,11 @@ async def create_invitation(
             detail="Workspace not found",
         )
 
-    # Check if user is already a member
-    result = await db.execute(select(User).where(User.email == invitation_data.email))
+    # Check if user is already a member. ``User.email`` is encrypted at rest
+    # with a random IV, so match on the deterministic ``email_hash``.
+    result = await db.execute(
+        select(User).where(User.email_hash == hash_value(invitation_data.email))
+    )
     existing_user = result.scalar_one_or_none()
 
     if existing_user:

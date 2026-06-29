@@ -15,7 +15,9 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.core.encryption import hash_phone, hash_value
 from app.models.contact import Contact
+from app.utils.phone import phone_lookup_variants
 
 
 async def find_contact_by_attendee(
@@ -38,18 +40,25 @@ async def find_contact_by_attendee(
     contact: Contact | None = None
 
     if email:
-        result = await db.execute(select(Contact).where(Contact.email == email))
-        contact = result.scalar_one_or_none()
+        # ``email`` is encrypted at rest with a random IV, so look up by the
+        # deterministic ``email_hash``. No workspace scope here by design: the
+        # matched contact determines the workspace for the rest of the handler.
+        result = await db.execute(
+            select(Contact).where(Contact.email_hash == hash_value(email)).limit(1)
+        )
+        contact = result.scalars().first()
 
     if not contact and phone:
-        # Normalise: keep digits only, then match the last 10 digits
+        # The encrypted ``phone_number`` column can't be matched by suffix/LIKE,
+        # so match on the deterministic ``phone_hash`` across the common stored
+        # formats. Skip obviously-incomplete numbers that can't identify anyone.
         digits = re.sub(r"\D", "", phone)
         if len(digits) >= 10:
-            suffix = digits[-10:]
+            phone_hashes = [hash_phone(variant) for variant in phone_lookup_variants(phone)]
             result = await db.execute(
-                select(Contact).where(Contact.phone_number.like(f"%{suffix}"))
+                select(Contact).where(Contact.phone_hash.in_(phone_hashes)).limit(1)
             )
-            contact = result.scalar_one_or_none()
+            contact = result.scalars().first()
             if contact:
                 log.info("contact_matched_by_phone_fallback", contact_id=contact.id)
 

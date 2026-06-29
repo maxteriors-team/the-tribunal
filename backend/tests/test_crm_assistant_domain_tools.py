@@ -26,6 +26,9 @@ class _ScalarResult:
     def all(self) -> list[Any]:
         return self._rows
 
+    def first(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
 
 class _ExecuteResult:
     def __init__(self, rows: list[Any]) -> None:
