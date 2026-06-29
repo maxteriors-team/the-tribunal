@@ -29,6 +29,7 @@ from app.api.v1 import (
     improvement_suggestions,
     integrations,
     invitations,
+    invoices,
     knowledge_documents,
     lead_form,
     lead_magnets,
@@ -185,6 +186,11 @@ api_router.include_router(
     opportunities.router,
     prefix="/workspaces/{workspace_id}/opportunities",
     tags=["Opportunities"],
+)
+api_router.include_router(
+    invoices.router,
+    prefix="/workspaces/{workspace_id}/invoices",
+    tags=["Invoices"],
 )
 api_router.include_router(
     dashboard.router,
