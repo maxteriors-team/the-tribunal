@@ -386,6 +386,16 @@ class Job(Base):
         nullable=True,
         index=True,
     )
+    # Optional billing link: the invoice this job is billed through. Set when a
+    # quote converts into both a job and an invoice, or linked manually. Feeds
+    # the job's profitability (revenue side). SET NULL keeps the job if the
+    # invoice is removed.
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("invoices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

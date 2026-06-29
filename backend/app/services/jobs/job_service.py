@@ -35,6 +35,7 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
+from app.models.invoice import Invoice
 from app.schemas.job import JobResponse, TechnicianSummary
 
 
@@ -64,6 +65,11 @@ class JobService:
     async def _assert_crew(self, crew_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
         await assert_workspace_owned(self.db, Crew, crew_id, workspace_id, detail="Crew not found")
 
+    async def _assert_invoice(self, invoice_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
+        await assert_workspace_owned(
+            self.db, Invoice, invoice_id, workspace_id, detail="Invoice not found"
+        )
+
     async def _assert_technicians(
         self, technician_ids: Sequence[uuid.UUID], workspace_id: uuid.UUID
     ) -> None:
@@ -86,6 +92,9 @@ class JobService:
         crew_id = data.get("crew_id")
         if crew_id is not None:
             await self._assert_crew(crew_id, workspace_id)
+        invoice_id = data.get("invoice_id")
+        if invoice_id is not None:
+            await self._assert_invoice(invoice_id, workspace_id)
 
     # ------------------------------------------------------------------ #
     # Response building

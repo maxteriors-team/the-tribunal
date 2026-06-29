@@ -31,7 +31,15 @@ from app.schemas.job import (
     JobScheduleRequest,
     JobUpdate,
 )
-from app.services.jobs import JobService
+from app.schemas.job_costing import (
+    ClockInRequest,
+    JobExpenseCreate,
+    JobExpenseResponse,
+    JobProfitability,
+    TimeEntryCreate,
+    TimeEntryResponse,
+)
+from app.services.jobs import JobCostingService, JobService
 
 router = APIRouter()
 
@@ -170,3 +178,114 @@ async def unassign_technician(
     """Untag a technician from a job (no-op if not tagged)."""
     service = JobService(db)
     return await service.unassign_technician(job_id, membership.workspace_id, technician_id)
+
+
+# --------------------------------------------------------------------------- #
+# Field execution: time tracking, expenses, profitability.
+#
+# Reads are open to any workspace member; costing writes are too, so a field
+# technician (not necessarily a dispatcher) can clock in and log expenses on a
+# job. Every call is workspace-scoped in the service.
+# --------------------------------------------------------------------------- #
+@router.get("/{job_id}/time-entries", response_model=list[TimeEntryResponse])
+async def list_time_entries(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> list[TimeEntryResponse]:
+    """List a job's time entries, newest first."""
+    return await JobCostingService(db).list_time_entries(job_id, workspace.id)
+
+
+@router.post("/{job_id}/time-entries/clock-in", response_model=TimeEntryResponse, status_code=201)
+async def clock_in(
+    job_id: uuid.UUID,
+    payload: ClockInRequest,
+    workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> TimeEntryResponse:
+    """Start the clock on a job (rejected if a timer is already running)."""
+    return await JobCostingService(db).clock_in(
+        job_id, workspace.id, payload, created_by_id=current_user.id
+    )
+
+
+@router.post("/{job_id}/time-entries/clock-out", response_model=TimeEntryResponse)
+async def clock_out(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: TransactionalDB,
+) -> TimeEntryResponse:
+    """Stop the job's running timer."""
+    return await JobCostingService(db).clock_out(job_id, workspace.id)
+
+
+@router.post("/{job_id}/time-entries", response_model=TimeEntryResponse, status_code=201)
+async def add_time_entry(
+    job_id: uuid.UUID,
+    payload: TimeEntryCreate,
+    workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> TimeEntryResponse:
+    """Log a completed time entry with an explicit start and end."""
+    return await JobCostingService(db).add_time_entry(
+        job_id, workspace.id, payload, created_by_id=current_user.id
+    )
+
+
+@router.delete("/{job_id}/time-entries/{entry_id}", status_code=204)
+async def delete_time_entry(
+    job_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: TransactionalDB,
+) -> None:
+    """Delete a time entry."""
+    await JobCostingService(db).delete_time_entry(job_id, workspace.id, entry_id)
+
+
+@router.get("/{job_id}/expenses", response_model=list[JobExpenseResponse])
+async def list_expenses(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> list[JobExpenseResponse]:
+    """List a job's expenses, newest first."""
+    return await JobCostingService(db).list_expenses(job_id, workspace.id)
+
+
+@router.post("/{job_id}/expenses", response_model=JobExpenseResponse, status_code=201)
+async def add_expense(
+    job_id: uuid.UUID,
+    payload: JobExpenseCreate,
+    workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> JobExpenseResponse:
+    """Record a cost incurred on a job."""
+    return await JobCostingService(db).add_expense(
+        job_id, workspace.id, payload, created_by_id=current_user.id
+    )
+
+
+@router.delete("/{job_id}/expenses/{expense_id}", status_code=204)
+async def delete_expense(
+    job_id: uuid.UUID,
+    expense_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: TransactionalDB,
+) -> None:
+    """Delete an expense."""
+    await JobCostingService(db).delete_expense(job_id, workspace.id, expense_id)
+
+
+@router.get("/{job_id}/profitability", response_model=JobProfitability)
+async def job_profitability(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> JobProfitability:
+    """Compute the job's P&L (revenue from the linked invoice minus costs)."""
+    return await JobCostingService(db).get_profitability(job_id, workspace.id)

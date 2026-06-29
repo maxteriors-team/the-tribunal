@@ -47,6 +47,7 @@ class JobUpdate(BaseModel):
 
     service_location_id: uuid.UUID | None = None
     crew_id: uuid.UUID | None = None
+    invoice_id: uuid.UUID | None = Field(None, description="Link this job to a billing invoice")
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=5000)
     scheduled_start: datetime | None = None
@@ -94,6 +95,7 @@ class JobResponse(BaseModel):
     contact_id: int
     service_location_id: uuid.UUID | None
     crew_id: uuid.UUID | None
+    invoice_id: uuid.UUID | None = None
     title: str
     description: str | None
     status: JobStatus

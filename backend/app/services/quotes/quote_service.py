@@ -400,22 +400,8 @@ class QuoteService:
         job_id = quote.converted_job_id
         invoice_id = quote.converted_invoice_id
 
-        if create_job and job_id is None:
-            if quote.contact_id is None:
-                raise ConflictError("Cannot create a job from a quote with no contact")
-            job = await JobService(self.db).create(
-                workspace_id,
-                {
-                    "contact_id": quote.contact_id,
-                    "service_location_id": quote.service_location_id,
-                    "title": quote.title or f"Quote {quote.number}",
-                    "description": quote.notes,
-                    "technician_ids": [],
-                },
-            )
-            job_id = job.id
-            quote.converted_job_id = job_id
-
+        # Create the invoice first so the job can be linked to it for costing
+        # (its profitability reads revenue from the linked invoice).
         if create_invoice and invoice_id is None:
             invoice = await InvoiceService(self.db).create_invoice(
                 workspace_id,
@@ -442,6 +428,25 @@ class QuoteService:
             )
             invoice_id = invoice.id
             quote.converted_invoice_id = invoice_id
+
+        if create_job and job_id is None:
+            if quote.contact_id is None:
+                raise ConflictError("Cannot create a job from a quote with no contact")
+            job = await JobService(self.db).create(
+                workspace_id,
+                {
+                    "contact_id": quote.contact_id,
+                    "service_location_id": quote.service_location_id,
+                    "title": quote.title or f"Quote {quote.number}",
+                    "description": quote.notes,
+                    # Link the job to the just-created invoice (or a previously
+                    # converted one) so its P&L has a revenue side.
+                    "invoice_id": invoice_id,
+                    "technician_ids": [],
+                },
+            )
+            job_id = job.id
+            quote.converted_job_id = job_id
 
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
