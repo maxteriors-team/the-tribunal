@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.core.encryption import hash_phone
+from app.core.encryption import hash_phone, hash_value
 from app.db.scope import select_workspace_owned
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
@@ -36,15 +38,25 @@ class ContactAssistantTools:
         limit = min(args.get("limit", 10), 50)
         pattern = f"%{query}%"
 
+        # ``email`` and ``phone_number`` are encrypted at rest, so ILIKE/substring
+        # can never match them. Substring-search the plaintext columns, and add
+        # exact lookups on the deterministic hash columns when the query looks
+        # like an email or a phone number.
+        conditions: list[ColumnElement[bool]] = [
+            Contact.first_name.ilike(pattern),
+            Contact.last_name.ilike(pattern),
+            Contact.company_name.ilike(pattern),
+        ]
+        if "@" in query:
+            conditions.append(Contact.email_hash == hash_value(query))
+        if len(re.sub(r"\D", "", query)) >= 10:
+            phone_hashes = [hash_phone(variant) for variant in phone_lookup_variants(query)]
+            if phone_hashes:
+                conditions.append(Contact.phone_hash.in_(phone_hashes))
+
         stmt = (
             select_workspace_owned(Contact, self.context.workspace_id)
-            .where(
-                (Contact.first_name.ilike(pattern))
-                | (Contact.last_name.ilike(pattern))
-                | (Contact.email.ilike(pattern))
-                | (Contact.phone_number.ilike(pattern))
-                | (Contact.company_name.ilike(pattern))
-            )
+            .where(or_(*conditions))
             .order_by(Contact.created_at.desc())
             .limit(limit)
         )
