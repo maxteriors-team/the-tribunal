@@ -6,14 +6,6 @@ import type {
 
 import { createApiClient } from "./create-api-client";
 
-export interface CatalogListParams {
-  page?: number;
-  page_size?: number;
-  kind?: string;
-  search?: string;
-  include_inactive?: boolean;
-}
-
 // Workspace-scoped CRUD from the factory (list/get/create/update/delete). The
 // factory's typed overload marks the optional methods nullable; re-expose them
 // as required, matching `quotesApi`.

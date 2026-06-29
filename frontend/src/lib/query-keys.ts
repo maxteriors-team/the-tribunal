@@ -216,11 +216,7 @@ export const queryKeys = {
     count: (workspaceId: string) =>
       [...campaignReports.all(workspaceId), "count"] as const,
   },
-  catalogItems: {
-    ...catalogItems,
-    active: (workspaceId: string, params?: QueryKeyParams | null) =>
-      catalogItems.list(workspaceId, params),
-  },
+  catalogItems,
   campaigns: {
     ...campaigns,
     analytics: (workspaceId: string, campaignId: string) =>
