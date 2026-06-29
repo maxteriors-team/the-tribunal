@@ -341,7 +341,12 @@ async def stripe_webhook(request: Request, db: DB) -> dict[str, str]:
         ) from exc
 
     event_type: str = event["type"]
-    event_data: dict[str, Any] = event["data"]["object"]
+    # ``event.data.object`` is a Stripe ``StripeObject``, not a plain dict, and in
+    # stripe>=15 it has no ``.get`` — the downstream handlers index it with
+    # ``.get(...)``, so flatten it before dispatching. ``to_dict`` returns a plain
+    # dict whose nested ``metadata`` (the only nested field handlers read) is also
+    # dict-typed, so ``metadata.get(...)`` keeps working.
+    event_data: dict[str, Any] = event["data"]["object"].to_dict()
 
     logger.info("stripe_webhook_received", event_type=event_type)
 
