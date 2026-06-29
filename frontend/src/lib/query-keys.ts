@@ -107,6 +107,7 @@ const conversations = createResourceQueryKeys("conversations");
 const improvementSuggestions = createResourceQueryKeys("suggestions");
 const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
+const invoices = createResourceQueryKeys("invoices");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
 const messageTemplates = createResourceQueryKeys("message-templates");
@@ -290,6 +291,7 @@ export const queryKeys = {
     ...invitations,
     byToken: (token: string) => ["invitation", token] as const,
   },
+  invoices,
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
   leadSources,
