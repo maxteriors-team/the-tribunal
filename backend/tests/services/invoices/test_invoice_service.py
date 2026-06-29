@@ -9,10 +9,12 @@ default. Run with ``pytest -m integration``.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
@@ -25,14 +27,15 @@ from app.schemas.invoice import (
     InvoiceLineItemUpdate,
     InvoiceUpdate,
 )
-from app.services.exceptions import ConflictError
+from app.services.exceptions import ConflictError, ServiceUnavailableError
 from app.services.invoices import InvoiceService
+from app.services.invoices.invoice_service import handle_invoice_checkout_session_completed
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 @pytest.fixture(autouse=True)
-async def _fresh_engine_pool():
+async def _fresh_engine_pool() -> AsyncIterator[None]:
     """Dispose the shared asyncpg pool around each test.
 
     pytest-asyncio gives each test a fresh event loop; without disposing, the
@@ -44,14 +47,14 @@ async def _fresh_engine_pool():
     await engine.dispose()
 
 
-async def _make_workspace(db) -> Workspace:
+async def _make_workspace(db: AsyncSession) -> Workspace:
     ws = Workspace(id=uuid.uuid4(), name="Invoices Co", slug=f"inv-{uuid.uuid4().hex[:8]}")
     db.add(ws)
     await db.flush()
     return ws
 
 
-async def _make_contact(db, workspace_id: uuid.UUID) -> Contact:
+async def _make_contact(db: AsyncSession, workspace_id: uuid.UUID) -> Contact:
     phone = f"+1555{uuid.uuid4().int % 10_000_000:07d}"
     contact = Contact(
         workspace_id=workspace_id,
@@ -312,3 +315,87 @@ async def test_updated_tax_rederives_paid_state() -> None:
         assert updated.total == 120.0
         assert updated.amount_paid == 100.0
         assert updated.status == "partial"
+
+
+async def test_payment_link_requires_stripe_configured() -> None:
+    # Stripe is not configured in the test env, so the guard must fire (503 path)
+    # rather than attempting a live Checkout Session call.
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)])
+        )
+        with pytest.raises(ServiceUnavailableError):
+            await svc.create_payment_link(ws.id, inv.id)
+
+
+async def test_webhook_records_payment_and_is_idempotent() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=300.0)])
+        )
+        await svc.mark_sent(ws.id, inv.id)
+
+        # Stripe sends amount in minor units; 30000 -> $300.00.
+        session = {
+            "id": "cs_test_inv",
+            "mode": "payment",
+            "payment_intent": "pi_inv_1",
+            "amount_total": 30000,
+            "metadata": {"invoice_id": str(inv.id), "workspace_id": str(ws.id)},
+        }
+        await handle_invoice_checkout_session_completed(session, db)
+
+        paid = await svc.get_invoice(ws.id, inv.id)
+        assert paid.status == "paid"
+        assert paid.amount_paid == 300.0
+        assert paid.paid_at is not None
+
+        # A Stripe retry of the same event must not double-count.
+        await handle_invoice_checkout_session_completed(session, db)
+        replayed = await svc.get_invoice(ws.id, inv.id)
+        assert replayed.amount_paid == 300.0
+
+
+async def test_webhook_matches_by_session_id_when_metadata_absent() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=80.0)])
+        )
+        # Simulate the link having been created: only the session id is stored.
+        invoice_row = await db.get(Invoice, inv.id)
+        assert invoice_row is not None
+        invoice_row.stripe_checkout_session_id = "cs_fallback"
+        await db.commit()
+
+        session = {
+            "id": "cs_fallback",
+            "mode": "payment",
+            "payment_intent": "pi_fallback",
+            "amount_total": 8000,
+            "metadata": {},  # no invoice_id -> must resolve via session id
+        }
+        await handle_invoice_checkout_session_completed(session, db)
+
+        paid = await svc.get_invoice(ws.id, inv.id)
+        assert paid.status == "paid"
+        assert paid.amount_paid == 80.0
+
+
+async def test_webhook_no_match_is_noop() -> None:
+    async with AsyncSessionLocal() as db:
+        # Unknown invoice id and unknown session id: handler must log + return,
+        # never raise (Stripe would otherwise retry forever).
+        session = {
+            "id": "cs_unknown",
+            "mode": "payment",
+            "payment_intent": "pi_unknown",
+            "amount_total": 1000,
+            "metadata": {"invoice_id": str(uuid.uuid4())},
+        }
+        await handle_invoice_checkout_session_completed(session, db)

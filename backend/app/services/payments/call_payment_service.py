@@ -88,6 +88,13 @@ def to_minor_units(amount: float, currency: str) -> int:
     return int(round(amount * 100))
 
 
+def from_minor_units(amount: int, currency: str) -> float:
+    """Convert a Stripe minor-unit amount back to major units (e.g. dollars)."""
+    if currency.lower() in _ZERO_DECIMAL_CURRENCIES:
+        return float(amount)
+    return round(amount / 100, 2)
+
+
 def _stripe_client() -> stripe.StripeClient:
     return stripe.StripeClient(settings.stripe_secret_key)
 

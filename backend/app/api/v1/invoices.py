@@ -20,6 +20,7 @@ from app.schemas.invoice import (
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
+    InvoicePaymentLinkResponse,
     InvoiceUpdate,
     PaginatedInvoices,
 )
@@ -128,6 +129,20 @@ async def void_invoice(
     """Void an invoice. Fully paid invoices cannot be voided."""
     service = InvoiceService(db)
     return await service.void_invoice(workspace_id, invoice_id)
+
+
+@router.post("/{invoice_id}/payment-link", response_model=InvoicePaymentLinkResponse)
+async def create_payment_link(
+    workspace_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+) -> InvoicePaymentLinkResponse:
+    """Create a Stripe Checkout link for the invoice's outstanding balance."""
+    service = InvoiceService(db)
+    session_id, url = await service.create_payment_link(workspace_id, invoice_id)
+    return InvoicePaymentLinkResponse(session_id=session_id, url=url)
 
 
 # Line-item sub-resource. Mutations return the full invoice because totals change.

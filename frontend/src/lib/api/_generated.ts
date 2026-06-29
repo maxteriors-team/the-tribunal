@@ -3765,6 +3765,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invoices
+         * @description List invoices in a workspace, newest first, with optional filters.
+         */
+        get: operations["list_invoices_api_v1_workspaces__workspace_id__invoices_get"];
+        put?: never;
+        /**
+         * Create Invoice
+         * @description Create a draft invoice with its initial line items.
+         */
+        post: operations["create_invoice_api_v1_workspaces__workspace_id__invoices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Invoice
+         * @description Get a specific invoice with its line items.
+         */
+        get: operations["get_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__get"];
+        /**
+         * Update Invoice
+         * @description Update an invoice's header fields (totals/status are re-derived).
+         */
+        put: operations["update_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__put"];
+        post?: never;
+        /**
+         * Delete Invoice
+         * @description Delete a draft invoice. Issued invoices must be voided instead.
+         */
+        delete: operations["delete_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Line Item
+         * @description Add a line item and recompute invoice totals.
+         */
+        post: operations["add_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Line Item
+         * @description Update a line item and recompute invoice totals.
+         */
+        put: operations["update_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__put"];
+        post?: never;
+        /**
+         * Remove Line Item
+         * @description Remove a line item and recompute invoice totals.
+         */
+        delete: operations["remove_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/payment-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Payment Link
+         * @description Create a Stripe Checkout link for the invoice's outstanding balance.
+         */
+        post: operations["create_payment_link_api_v1_workspaces__workspace_id__invoices__invoice_id__payment_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Invoice
+         * @description Mark an invoice as sent (email delivery is wired in a later phase).
+         */
+        post: operations["send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Invoice
+         * @description Void an invoice. Fully paid invoices cannot be voided.
+         */
+        post: operations["void_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/lead-magnets": {
         parameters: {
             query?: never;
@@ -11753,6 +11909,282 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * InvoiceCreate
+         * @description Create an invoice with its initial line items.
+         */
+        InvoiceCreate: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemCreate"][];
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /**
+             * Tax Amount
+             * @default 0
+             */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+        };
+        /**
+         * InvoiceDetailResponse
+         * @description Invoice with its line items.
+         */
+        InvoiceDetailResponse: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * InvoiceLineItemCreate
+         * @description Create a line item.
+         */
+        InvoiceLineItemCreate: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * InvoiceLineItemResponse
+         * @description Line item as returned by the API.
+         */
+        InvoiceLineItemResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Id
+             * Format: uuid
+             */
+            invoice_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Total */
+            total: number;
+            /** Unit Price */
+            unit_price: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InvoiceLineItemUpdate
+         * @description Update a line item (all fields optional).
+         */
+        InvoiceLineItemUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Discount */
+            discount?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Quantity */
+            quantity?: number | null;
+            /** Unit Price */
+            unit_price?: number | null;
+        };
+        /**
+         * InvoicePaymentLinkResponse
+         * @description Stripe Checkout link for collecting an invoice's outstanding balance.
+         */
+        InvoicePaymentLinkResponse: {
+            /** Session Id */
+            session_id: string;
+            /** Url */
+            url: string | null;
+        };
+        /**
+         * InvoiceResponse
+         * @description Invoice header as returned by list endpoints.
+         */
+        InvoiceResponse: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * InvoiceUpdate
+         * @description Update invoice header fields (all optional). Line items have their own
+         *     sub-resource endpoints; ``status``/``number``/totals are server-derived.
+         */
+        InvoiceUpdate: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /** Discount Amount */
+            discount_amount?: number | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Tax Amount */
+            tax_amount?: number | null;
+            /** Terms */
+            terms?: string | null;
+        };
+        /**
          * KnowledgeBaseStats
          * @description Knowledge-base (CAG) usage metrics for the dashboard.
          */
@@ -14094,6 +14526,22 @@ export interface components {
         PaginatedConversations: {
             /** Items */
             items: components["schemas"]["ConversationResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PaginatedInvoices
+         * @description Paginated list of invoices.
+         */
+        PaginatedInvoices: {
+            /** Items */
+            items: components["schemas"]["InvoiceResponse"][];
             /** Page */
             page: number;
             /** Page Size */
@@ -24995,6 +25443,377 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invoices_api_v1_workspaces__workspace_id__invoices_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                contact_id?: number | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedInvoices"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invoice_api_v1_workspaces__workspace_id__invoices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceLineItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceLineItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_payment_link_api_v1_workspaces__workspace_id__invoices__invoice_id__payment_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoicePaymentLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
