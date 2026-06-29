@@ -10,10 +10,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     event,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -35,6 +37,20 @@ class Contact(Base):
     """CRM contact."""
 
     __tablename__ = "contacts"
+    __table_args__ = (
+        # One external record (e.g. a Jobber client) maps to at most one contact
+        # per workspace, so the one-time import can upsert idempotently. Natively
+        # created contacts leave both columns null and are excluded by the
+        # ``external_id IS NOT NULL`` predicate.
+        Index(
+            "uq_contacts_workspace_external",
+            "workspace_id",
+            "external_source",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
@@ -119,6 +135,13 @@ class Contact(Base):
     source: Mapped[str | None] = mapped_column(
         String(100), nullable=True
     )  # campaign, inbound_call, manual, api
+
+    # Provenance for contacts imported from an external system (e.g. Jobber).
+    # ``external_source`` names the system ("jobber"); ``external_id`` is that
+    # system's stable record id. Together they form the idempotency key for the
+    # one-time import (see the partial-unique index in ``__table_args__``).
+    external_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("campaigns.id", ondelete="SET NULL"),

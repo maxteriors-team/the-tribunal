@@ -16,11 +16,13 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,6 +47,17 @@ class Invoice(Base):
     __table_args__ = (
         # Human invoice number is unique within a workspace, not globally.
         UniqueConstraint("workspace_id", "number", name="uq_invoices_workspace_number"),
+        # One external record (e.g. a Jobber invoice) maps to at most one invoice
+        # per workspace, so the historical/AR import upserts idempotently.
+        # Natively issued invoices leave both columns null.
+        Index(
+            "uq_invoices_workspace_external",
+            "workspace_id",
+            "external_source",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -102,6 +115,12 @@ class Invoice(Base):
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )
+
+    # Provenance for invoices imported from an external system (e.g. Jobber).
+    # Imported as historical/AR records only — never re-billed. Together they form
+    # the idempotency key for the one-time import (see the partial-unique index).
+    external_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(
         Integer,

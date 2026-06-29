@@ -74,6 +74,17 @@ class ServiceLocation(Base):
             "workspace_id",
             "is_active",
         ),
+        # One external record (e.g. a Jobber property) maps to at most one
+        # service location per workspace, so the one-time import upserts
+        # idempotently. Natively created sites leave both columns null.
+        Index(
+            "uq_service_locations_workspace_external",
+            "workspace_id",
+            "external_source",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -109,6 +120,12 @@ class ServiceLocation(Base):
 
     # Site access details (gate codes, pets, parking). Sensitive — encrypted.
     access_notes: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+
+    # Provenance for sites imported from an external system (e.g. a Jobber
+    # property). Together they form the idempotency key for the one-time import
+    # (see the partial-unique index in ``__table_args__``).
+    external_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False

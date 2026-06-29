@@ -2,11 +2,13 @@
 
 Jobber is GraphQL-only: every request is a ``POST`` of ``{query, variables}`` to
 a single endpoint with a bearer access token and a pinned schema-version header.
-This client exposes just what the technician sync needs — a paginated
-``iter_users()`` over the ``users`` connection — plus a low-level ``execute()``
-for ad-hoc queries. It deliberately does **not** implement the OAuth2 dance:
-callers supply an already-obtained access token (the CLI reads it from
-``--token`` / ``JOBBER_ACCESS_TOKEN``), keeping token lifecycle out of band.
+This client exposes paginated iterators over the connections the CRM imports —
+``iter_users()`` (team members), ``iter_clients()`` (customers + their
+properties), ``iter_jobs()`` (work orders), and ``iter_invoices()`` (billing) —
+plus a low-level ``execute()`` for ad-hoc queries. It deliberately does **not**
+implement the OAuth2 dance: callers supply an already-obtained access token (the
+CLI reads it from ``--token`` / ``JOBBER_ACCESS_TOKEN``), keeping token lifecycle
+out of band.
 """
 
 from __future__ import annotations
@@ -26,6 +28,12 @@ JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql"
 # per-account point budget. 50 mirrors Jobber's own app-template default.
 USERS_PAGE_SIZE = 50
 
+# Page size shared by the import connections (clients/jobs/invoices). Jobber
+# rate-limits by query *cost*, and these nodes are heavier than ``users`` (they
+# embed nested connections), so a modest page keeps each request well under the
+# per-account point budget.
+IMPORT_PAGE_SIZE = 25
+
 # Conservative field selection. ``id`` is Jobber's stable ``EncodedId`` (our
 # idempotency key); name/email/phone are nested objects in Jobber's schema.
 # Kept in one constant so a schema change is a one-line edit, not a hunt.
@@ -37,6 +45,80 @@ query SyncUsers($first: Int!, $after: String) {
       name { full first last }
       email { raw }
       phone { friendly }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
+# Clients are Jobber's customers. ``clientProperties`` embeds each client's job
+# sites so contacts + their service-locations import in one pass. Email/phone are
+# connections in Jobber's schema; the primary entry is flagged with ``primary``.
+CLIENTS_QUERY = """
+query SyncClients($first: Int!, $after: String, $propertyFirst: Int!) {
+  clients(first: $first, after: $after) {
+    nodes {
+      id
+      name
+      firstName
+      lastName
+      companyName
+      isCompany
+      emails { primary address description }
+      phones { primary number description }
+      billingAddress { street1 street2 city province postalCode country }
+      clientProperties(first: $propertyFirst) {
+        nodes {
+          id
+          address {
+            street1 street2 city province postalCode country latitude longitude
+          }
+        }
+      }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
+# Jobs are work orders. ``client``/``property`` carry the Jobber ids we resolve
+# to already-imported contacts/service-locations; ``assignedUsers`` carry the
+# technician ids (matched to previously-synced ``Technician.external_id``).
+JOBS_QUERY = """
+query SyncJobs($first: Int!, $after: String, $assignedFirst: Int!) {
+  jobs(first: $first, after: $after) {
+    nodes {
+      id
+      jobNumber
+      title
+      instructions
+      jobStatus
+      startAt
+      endAt
+      client { id }
+      property { id }
+      assignedUsers(first: $assignedFirst) { nodes { id } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
+# Invoices are imported as historical/AR records only (never re-billed).
+# ``amounts`` holds the money; ``invoiceStatus`` maps to our status set.
+INVOICES_QUERY = """
+query SyncInvoices($first: Int!, $after: String) {
+  invoices(first: $first, after: $after) {
+    nodes {
+      id
+      invoiceNumber
+      invoiceStatus
+      issuedDate
+      dueDate
+      subject
+      message
+      client { id }
+      amounts { total subtotal taxAmount discountAmount paymentsTotal invoiceBalance }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -101,16 +183,34 @@ class JobberClient:
             raise JobberApiError(f"Jobber GraphQL errors: {messages}")
         return payload.get("data") or {}
 
-    async def iter_users(self) -> AsyncIterator[dict[str, Any]]:
-        """Yield every Jobber team-member ``user`` node, following cursors."""
+    async def _iter_connection(
+        self,
+        query: str,
+        connection_key: str,
+        *,
+        extra_variables: dict[str, Any] | None = None,
+        page_size: int,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield every node of a top-level Jobber connection, following cursors.
+
+        ``connection_key`` is the response field that holds the connection (e.g.
+        ``"users"``, ``"clients"``). ``extra_variables`` are merged into every
+        page request (e.g. nested-connection page sizes). Shared by all the
+        ``iter_*`` methods so cursor handling lives in exactly one place.
+        """
         after: str | None = None
         page = 0
         while True:
-            data = await self.execute(USERS_QUERY, {"first": USERS_PAGE_SIZE, "after": after})
-            connection = data.get("users") or {}
+            variables: dict[str, Any] = {"first": page_size, "after": after}
+            if extra_variables:
+                variables.update(extra_variables)
+            data = await self.execute(query, variables)
+            connection = data.get(connection_key) or {}
             nodes = connection.get("nodes") or []
             page += 1
-            logger.info("jobber_users_page", page=page, count=len(nodes))
+            logger.info(
+                "jobber_connection_page", connection=connection_key, page=page, count=len(nodes)
+            )
             for node in nodes:
                 yield node
 
@@ -121,8 +221,36 @@ class JobberClient:
             if not after:
                 # Defensive: ``hasNextPage`` true with no cursor would loop
                 # forever. Stop rather than hammer the API.
-                logger.warning("jobber_users_missing_cursor", page=page)
+                logger.warning(
+                    "jobber_connection_missing_cursor", connection=connection_key, page=page
+                )
                 break
+
+    def iter_users(self) -> AsyncIterator[dict[str, Any]]:
+        """Yield every Jobber team-member ``user`` node, following cursors."""
+        return self._iter_connection(USERS_QUERY, "users", page_size=USERS_PAGE_SIZE)
+
+    def iter_clients(self) -> AsyncIterator[dict[str, Any]]:
+        """Yield every Jobber ``client`` node (with nested ``clientProperties``)."""
+        return self._iter_connection(
+            CLIENTS_QUERY,
+            "clients",
+            extra_variables={"propertyFirst": IMPORT_PAGE_SIZE},
+            page_size=IMPORT_PAGE_SIZE,
+        )
+
+    def iter_jobs(self) -> AsyncIterator[dict[str, Any]]:
+        """Yield every Jobber ``job`` node (with client/property/assignees)."""
+        return self._iter_connection(
+            JOBS_QUERY,
+            "jobs",
+            extra_variables={"assignedFirst": IMPORT_PAGE_SIZE},
+            page_size=IMPORT_PAGE_SIZE,
+        )
+
+    def iter_invoices(self) -> AsyncIterator[dict[str, Any]]:
+        """Yield every Jobber ``invoice`` node (historical/AR import)."""
+        return self._iter_connection(INVOICES_QUERY, "invoices", page_size=IMPORT_PAGE_SIZE)
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client if this instance owns it."""
