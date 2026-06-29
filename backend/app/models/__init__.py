@@ -35,6 +35,7 @@ from app.models.failed_job import (
 from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
 from app.models.invitation import WorkspaceInvitation
+from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
 from app.models.lead_discovery_job import (
@@ -177,6 +178,8 @@ __all__ = [
     "Opportunity",
     "OpportunityLineItem",
     "OpportunityActivity",
+    "Invoice",
+    "InvoiceLineItem",
     "MessageTemplate",
     "MessageTest",
     "MessageTestStatus",
