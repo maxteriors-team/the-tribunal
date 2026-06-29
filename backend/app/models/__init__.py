@@ -106,6 +106,7 @@ from app.models.prospect_signal import (
     ProspectSignalStatus,
     ProspectSignalType,
 )
+from app.models.quote import Quote, QuoteLineItem
 from app.models.refresh_token import RefreshToken
 from app.models.review import (
     Review,
@@ -196,6 +197,8 @@ __all__ = [
     "OpportunityActivity",
     "Invoice",
     "InvoiceLineItem",
+    "Quote",
+    "QuoteLineItem",
     "MessageTemplate",
     "MessageTest",
     "MessageTestStatus",

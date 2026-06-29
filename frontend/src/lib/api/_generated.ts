@@ -5991,6 +5991,182 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Quotes
+         * @description List quotes in a workspace, newest first, with optional filters.
+         */
+        get: operations["list_quotes_api_v1_workspaces__workspace_id__quotes_get"];
+        put?: never;
+        /**
+         * Create Quote
+         * @description Create a draft quote with its initial line items.
+         */
+        post: operations["create_quote_api_v1_workspaces__workspace_id__quotes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quote
+         * @description Get a specific quote with its line items.
+         */
+        get: operations["get_quote_api_v1_workspaces__workspace_id__quotes__quote_id__get"];
+        /**
+         * Update Quote
+         * @description Update a quote's header fields (totals are re-derived).
+         */
+        put: operations["update_quote_api_v1_workspaces__workspace_id__quotes__quote_id__put"];
+        post?: never;
+        /**
+         * Delete Quote
+         * @description Delete a draft/sent quote. Decided or expired quotes are kept.
+         */
+        delete: operations["delete_quote_api_v1_workspaces__workspace_id__quotes__quote_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Quote
+         * @description Operator approves a quote on the customer's behalf.
+         */
+        post: operations["approve_quote_api_v1_workspaces__workspace_id__quotes__quote_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Quote
+         * @description Convert an approved quote into a scheduled job and/or an invoice.
+         */
+        post: operations["convert_quote_api_v1_workspaces__workspace_id__quotes__quote_id__convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Quote
+         * @description Operator declines a quote on the customer's behalf.
+         */
+        post: operations["decline_quote_api_v1_workspaces__workspace_id__quotes__quote_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/line-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Line Item
+         * @description Add a line item and recompute quote totals.
+         */
+        post: operations["add_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/line-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Line Item
+         * @description Update a line item and recompute quote totals.
+         */
+        put: operations["update_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__put"];
+        post?: never;
+        /**
+         * Remove Line Item
+         * @description Remove a line item and recompute quote totals.
+         */
+        delete: operations["remove_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Quote
+         * @description Mark a quote as sent and email it to the quote-to contact.
+         */
+        post: operations["send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/realtor/stats": {
         parameters: {
             query?: never;
@@ -15922,6 +16098,22 @@ export interface components {
             total: number;
         };
         /**
+         * PaginatedQuotes
+         * @description Paginated list of quotes.
+         */
+        PaginatedQuotes: {
+            /** Items */
+            items: components["schemas"]["QuoteResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * PaginatedReviewRequests
          * @description Paginated review-request list.
          */
@@ -17080,6 +17272,335 @@ export interface components {
             min_score: number;
             /** Title */
             title: string;
+        };
+        /**
+         * QuoteConvertRequest
+         * @description Choose what an approved quote converts into. Defaults to both.
+         */
+        QuoteConvertRequest: {
+            /**
+             * Create Invoice
+             * @default true
+             */
+            create_invoice: boolean;
+            /**
+             * Create Job
+             * @default true
+             */
+            create_job: boolean;
+        };
+        /**
+         * QuoteConvertResponse
+         * @description Result of converting an approved quote into a job and/or an invoice.
+         */
+        QuoteConvertResponse: {
+            /** Invoice Id */
+            invoice_id?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            quote: components["schemas"]["QuoteDetailResponse"];
+        };
+        /**
+         * QuoteCreate
+         * @description Create a quote with its initial line items.
+         */
+        QuoteCreate: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /** Expiry Date */
+            expiry_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["QuoteLineItemCreate"][];
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /**
+             * Tax Amount
+             * @default 0
+             */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * QuoteDeclineRequest
+         * @description Operator decline with an optional reason.
+         */
+        QuoteDeclineRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * QuoteDetailResponse
+         * @description Quote with its line items.
+         */
+        QuoteDetailResponse: {
+            /** Approved At */
+            approved_at?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Converted Invoice Id */
+            converted_invoice_id?: string | null;
+            /** Converted Job Id */
+            converted_job_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Decline Reason */
+            decline_reason?: string | null;
+            /** Declined At */
+            declined_at?: string | null;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Expiry Date */
+            expiry_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["QuoteLineItemResponse"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "approved" | "declined" | "expired";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * QuoteLineItemCreate
+         * @description Create a line item.
+         */
+        QuoteLineItemCreate: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * QuoteLineItemResponse
+         * @description Line item as returned by the API.
+         */
+        QuoteLineItemResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Quote Id
+             * Format: uuid
+             */
+            quote_id: string;
+            /** Total */
+            total: number;
+            /** Unit Price */
+            unit_price: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * QuoteLineItemUpdate
+         * @description Update a line item (all fields optional).
+         */
+        QuoteLineItemUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Discount */
+            discount?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Quantity */
+            quantity?: number | null;
+            /** Unit Price */
+            unit_price?: number | null;
+        };
+        /**
+         * QuoteResponse
+         * @description Quote header as returned by list endpoints.
+         */
+        QuoteResponse: {
+            /** Approved At */
+            approved_at?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Converted Invoice Id */
+            converted_invoice_id?: string | null;
+            /** Converted Job Id */
+            converted_job_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Decline Reason */
+            decline_reason?: string | null;
+            /** Declined At */
+            declined_at?: string | null;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Expiry Date */
+            expiry_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "approved" | "declined" | "expired";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * QuoteUpdate
+         * @description Update quote header fields (all optional). Line items have their own
+         *     sub-resource endpoints; ``status``/``number``/totals are server-derived.
+         */
+        QuoteUpdate: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /** Discount Amount */
+            discount_amount?: number | null;
+            /** Expiry Date */
+            expiry_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /** Tax Amount */
+            tax_amount?: number | null;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * RatingBucket
@@ -31952,6 +32473,417 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevealPhoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_quotes_api_v1_workspaces__workspace_id__quotes_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                contact_id?: number | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedQuotes"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_quote_api_v1_workspaces__workspace_id__quotes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quote_api_v1_workspaces__workspace_id__quotes__quote_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_quote_api_v1_workspaces__workspace_id__quotes__quote_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_quote_api_v1_workspaces__workspace_id__quotes__quote_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_quote_api_v1_workspaces__workspace_id__quotes__quote_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    convert_quote_api_v1_workspaces__workspace_id__quotes__quote_id__convert_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteConvertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteConvertResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_quote_api_v1_workspaces__workspace_id__quotes__quote_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteDeclineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteLineItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteLineItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
                 };
             };
             /** @description Validation Error */

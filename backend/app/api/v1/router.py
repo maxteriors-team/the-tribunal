@@ -46,6 +46,7 @@ from app.api.v1 import (
     phone_numbers,
     prompt_versions,
     prospects,
+    quotes,
     realtime,
     reviews,
     roleplay,
@@ -193,6 +194,11 @@ api_router.include_router(
     invoices.router,
     prefix="/workspaces/{workspace_id}/invoices",
     tags=["Invoices"],
+)
+api_router.include_router(
+    quotes.router,
+    prefix="/workspaces/{workspace_id}/quotes",
+    tags=["Quotes"],
 )
 api_router.include_router(
     dashboard.router,
