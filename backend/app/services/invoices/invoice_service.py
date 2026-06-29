@@ -263,13 +263,18 @@ class InvoiceService:
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
     ) -> InvoiceDetailResponse:
-        """Mark an invoice as sent (sets ``sent_at`` once) and re-derive status."""
+        """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
+        email the invoice to the bill-to contact (best-effort)."""
         invoice = await get_or_404(
             self.db,
             Invoice,
             invoice_id,
             workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items)],
+            options=[
+                selectinload(Invoice.line_items),
+                selectinload(Invoice.contact),
+                selectinload(Invoice.workspace),
+            ],
         )
         if invoice.status == "void":
             raise ConflictError("Cannot send a voided invoice")
@@ -278,7 +283,52 @@ class InvoiceService:
         invoice.status = self.derive_status(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
+
+        await self._email_invoice(workspace_id, invoice)
         return InvoiceDetailResponse.model_validate(invoice)
+
+    async def _email_invoice(self, workspace_id: uuid.UUID, invoice: Invoice) -> None:
+        """Email the invoice to its bill-to contact (best-effort).
+
+        Never raises: a delivery failure must not undo the ``sent`` transition,
+        mirroring ``notify_payment_operators``. Includes a Stripe "Pay now" link
+        when Stripe is configured; otherwise the summary email still goes out.
+        """
+        from app.services.email import send_invoice_email
+        from app.services.idempotency import derive_outbound_key
+
+        contact_email = invoice.contact.email if invoice.contact else None
+        if not contact_email:
+            self.log.info("invoice_email_skipped_no_contact", invoice_id=str(invoice.id))
+            return
+
+        workspace_name = invoice.workspace.name if invoice.workspace else ""
+        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        amount_str = f"{balance:.2f} {invoice.currency.upper()}"
+        due_date = invoice.due_date.isoformat() if invoice.due_date else None
+
+        pay_url: str | None = None
+        if call_payment_service.is_payment_configured() and balance > 0:
+            try:
+                _, pay_url = await self.create_payment_link(workspace_id, invoice.id)
+            except Exception as exc:  # pragma: no cover - best-effort pay link
+                self.log.warning(
+                    "invoice_pay_link_failed", invoice_id=str(invoice.id), error=str(exc)
+                )
+
+        try:
+            await send_invoice_email(
+                to_email=contact_email,
+                workspace_name=workspace_name,
+                invoice_number=invoice.number,
+                amount_str=amount_str,
+                due_date=due_date,
+                pay_url=pay_url,
+                notes=invoice.notes,
+                idempotency_key=derive_outbound_key("invoice_send", invoice.id),
+            )
+        except Exception as exc:  # pragma: no cover - best-effort email
+            self.log.warning("invoice_email_failed", invoice_id=str(invoice.id), error=str(exc))
 
     async def void_invoice(
         self,
