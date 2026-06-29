@@ -109,6 +109,7 @@ const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
 const invoices = createResourceQueryKeys("invoices");
 const jobs = createResourceQueryKeys("jobs");
+const quotes = createResourceQueryKeys("quotes");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
 const messageTemplates = createResourceQueryKeys("message-templates");
@@ -348,6 +349,7 @@ export const queryKeys = {
       phoneNumbers.list(workspaceId, { active_only: false }),
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
+  quotes,
   reviews: {
     ...reviews,
     summary: (workspaceId: string) =>
