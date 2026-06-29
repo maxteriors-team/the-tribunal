@@ -308,13 +308,15 @@ class InvoiceService:
         """Apply a payment to an invoice (idempotent on ``payment_intent_id``).
 
         Returns ``True`` when this call recorded the payment, ``False`` on a replay
-        of an already-applied Stripe payment intent (so the webhook can avoid
-        duplicate side effects). ``invoice.line_items`` need not be loaded.
+        of the most-recently-applied Stripe payment intent (so the webhook can
+        avoid duplicate side effects on retries). Idempotency is keyed on the
+        intent id alone, not on paid state, so replays of a *partial* payment are
+        no-ops too. Distinguishing an older interleaved intent would need a full
+        per-payment ledger (deferred); Stripe retries the same event, which this
+        covers. ``invoice.line_items`` need not be loaded.
         """
         already_applied = (
-            payment_intent_id is not None
-            and invoice.stripe_payment_intent_id == payment_intent_id
-            and invoice.paid_at is not None
+            payment_intent_id is not None and invoice.stripe_payment_intent_id == payment_intent_id
         )
         if already_applied:
             return False
