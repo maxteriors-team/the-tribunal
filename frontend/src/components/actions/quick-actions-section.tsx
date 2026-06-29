@@ -12,9 +12,10 @@ import {
   MousePointerClick,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
+import { InvoiceCreateDialog } from "@/components/invoices/invoice-create-dialog";
 import { Button } from "@/components/ui/button";
 import { useContactStore } from "@/lib/contact-store";
 import { cn } from "@/lib/utils";
@@ -30,16 +31,14 @@ interface QuickAction {
 
 const quickActions: QuickAction[] = [
   {
+    // Handled specially in QuickActionsSection: opens the real invoice dialog
+    // (not a toast) pre-filled with the selected contact.
     id: "send_invoice",
     label: "Send Invoice",
     description: "Create and send an invoice",
     icon: <Receipt className="h-4 w-4" />,
     variant: "default",
-    action: (contactId) => {
-      toast.success("Invoice dialog opened", {
-        description: `Creating invoice for contact #${contactId}`,
-      });
-    },
+    action: () => {},
   },
   {
     id: "create_deal",
@@ -158,9 +157,14 @@ function QuickActionButton({ action, onClick, disabled }: QuickActionButtonProps
 
 export function QuickActionsSection() {
   const { selectedContact } = useContactStore();
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
   const handleAction = (action: QuickAction) => {
     if (!selectedContact) return;
+    if (action.id === "send_invoice") {
+      setInvoiceDialogOpen(true);
+      return;
+    }
     action.action(selectedContact.id);
   };
 
@@ -185,6 +189,14 @@ export function QuickActionsSection() {
           />
         ))}
       </div>
+
+      {selectedContact && (
+        <InvoiceCreateDialog
+          open={invoiceDialogOpen}
+          onOpenChange={setInvoiceDialogOpen}
+          contactId={selectedContact.id}
+        />
+      )}
     </div>
   );
 }

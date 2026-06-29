@@ -8,6 +8,7 @@ export * from "./voice";
 export * from "./workspace";
 export * from "./automation";
 export * from "./opportunity";
+export * from "./invoice";
 export * from "./phone";
 export * from "./experiment";
 export * from "./call";
