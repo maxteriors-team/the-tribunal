@@ -2709,6 +2709,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/catalog-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Catalog Items
+         * @description List a workspace's catalog items (active only unless include_inactive).
+         */
+        get: operations["list_catalog_items_api_v1_workspaces__workspace_id__catalog_items_get"];
+        put?: never;
+        /**
+         * Create Catalog Item
+         * @description Create a catalog item.
+         */
+        post: operations["create_catalog_item_api_v1_workspaces__workspace_id__catalog_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/catalog-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Catalog Item
+         * @description Get a specific catalog item.
+         */
+        get: operations["get_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__get"];
+        /**
+         * Update Catalog Item
+         * @description Update a catalog item's fields.
+         */
+        put: operations["update_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__put"];
+        post?: never;
+        /**
+         * Delete Catalog Item
+         * @description Delete a catalog item (templates are safe to delete; documents snapshot).
+         */
+        delete: operations["delete_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts": {
         parameters: {
             query?: never;
@@ -4111,6 +4163,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Expenses
+         * @description List a job's expenses, newest first.
+         */
+        get: operations["list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get"];
+        put?: never;
+        /**
+         * Add Expense
+         * @description Record a cost incurred on a job.
+         */
+        post: operations["add_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses/{expense_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Expense
+         * @description Delete an expense.
+         */
+        delete: operations["delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Profitability
+         * @description Compute the job's P&L (revenue from the linked invoice minus costs).
+         */
+        get: operations["job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/schedule": {
         parameters: {
             query?: never;
@@ -4126,6 +4242,90 @@ export interface paths {
          */
         post: operations["schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Time Entries
+         * @description List a job's time entries, newest first.
+         */
+        get: operations["list_time_entries_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_get"];
+        put?: never;
+        /**
+         * Add Time Entry
+         * @description Log a completed time entry with an explicit start and end.
+         */
+        post: operations["add_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clock In
+         * @description Start the clock on a job (rejected if a timer is already running).
+         */
+        post: operations["clock_in_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clock Out
+         * @description Stop the job's running timer.
+         */
+        post: operations["clock_out_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Time Entry
+         * @description Delete a time entry.
+         */
+        delete: operations["delete_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries__entry_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10500,6 +10700,112 @@ export interface components {
             urgency: string;
         };
         /**
+         * CatalogItemCreate
+         * @description Create a catalog item.
+         */
+        CatalogItemCreate: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Kind
+             * @default service
+             * @enum {string}
+             */
+            kind: "service" | "product";
+            /** Name */
+            name: string;
+            /** Sku */
+            sku?: string | null;
+            /**
+             * Taxable
+             * @default true
+             */
+            taxable: boolean;
+            /**
+             * Unit Price
+             * @default 0
+             */
+            unit_price: number;
+        };
+        /**
+         * CatalogItemResponse
+         * @description Catalog item as returned by the API.
+         */
+        CatalogItemResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Kind
+             * @default service
+             * @enum {string}
+             */
+            kind: "service" | "product";
+            /** Name */
+            name: string;
+            /** Sku */
+            sku?: string | null;
+            /**
+             * Taxable
+             * @default true
+             */
+            taxable: boolean;
+            /**
+             * Unit Price
+             * @default 0
+             */
+            unit_price: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * CatalogItemUpdate
+         * @description Update a catalog item (all fields optional).
+         */
+        CatalogItemUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Kind */
+            kind?: ("service" | "product") | null;
+            /** Name */
+            name?: string | null;
+            /** Sku */
+            sku?: string | null;
+            /** Taxable */
+            taxable?: boolean | null;
+            /** Unit Price */
+            unit_price?: number | null;
+        };
+        /**
          * ChangePasswordRequest
          * @description Schema for changing password.
          */
@@ -10553,6 +10859,22 @@ export interface components {
         CheckoutResponse: {
             /** Checkout Url */
             checkout_url: string;
+        };
+        /**
+         * ClockInRequest
+         * @description Start the clock on a job (open-ended time entry).
+         */
+        ClockInRequest: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Rate
+             * @description Hourly cost rate
+             * @default 0
+             */
+            rate: number;
+            /** Technician Id */
+            technician_id?: string | null;
         };
         /**
          * ContactAgentAssignRequest
@@ -13189,6 +13511,58 @@ export interface components {
             title: string;
         };
         /**
+         * JobExpenseCreate
+         * @description Record a cost incurred on a job.
+         */
+        JobExpenseCreate: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category?: string | null;
+            /** Description */
+            description: string;
+            /** Incurred On */
+            incurred_on?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * JobExpenseResponse
+         * @description A job expense as returned by the API.
+         */
+        JobExpenseResponse: {
+            /** Amount */
+            amount: number;
+            /** Category */
+            category?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incurred On */
+            incurred_on?: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * JobListResponse
          * @description List of jobs.
          */
@@ -13197,6 +13571,39 @@ export interface components {
             items: components["schemas"]["JobResponse"][];
             /** Total */
             total: number;
+        };
+        /**
+         * JobProfitability
+         * @description Computed P&L for a single job.
+         *
+         *     ``revenue`` comes from the linked invoice's total (0 when unlinked).
+         *     ``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``
+         *     sums expenses. ``margin`` is ``profit / revenue`` (null when revenue is 0).
+         */
+        JobProfitability: {
+            /** Currency */
+            currency: string;
+            /** Expense Cost */
+            expense_cost: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Margin */
+            margin?: number | null;
+            /** Open Timer */
+            open_timer: boolean;
+            /** Profit */
+            profit: number;
+            /** Revenue */
+            revenue: number;
+            /** Total Cost */
+            total_cost: number;
+            /** Total Hours */
+            total_hours: number;
         };
         /**
          * JobResponse
@@ -13223,6 +13630,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Invoice Id */
+            invoice_id?: string | null;
             /** Scheduled End */
             scheduled_end: string | null;
             /** Scheduled Start */
@@ -13282,6 +13691,11 @@ export interface components {
             crew_id?: string | null;
             /** Description */
             description?: string | null;
+            /**
+             * Invoice Id
+             * @description Link this job to a billing invoice
+             */
+            invoice_id?: string | null;
             /** Scheduled End */
             scheduled_end?: string | null;
             /** Scheduled Start */
@@ -15912,6 +16326,22 @@ export interface components {
         PaginatedCampaigns: {
             /** Items */
             items: components["schemas"]["CampaignResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PaginatedCatalogItems
+         * @description Paginated list of catalog items.
+         */
+        PaginatedCatalogItems: {
+            /** Items */
+            items: components["schemas"]["CatalogItemResponse"][];
             /** Page */
             page: number;
             /** Page Size */
@@ -19196,6 +19626,74 @@ export interface components {
             name?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /**
+         * TimeEntryCreate
+         * @description Log a completed time entry with an explicit start and end.
+         */
+        TimeEntryCreate: {
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Rate
+             * @default 0
+             */
+            rate: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Technician Id */
+            technician_id?: string | null;
+        };
+        /**
+         * TimeEntryResponse
+         * @description A time entry as returned by the API.
+         */
+        TimeEntryResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Duration Hours */
+            duration_hours: number;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Labor Cost */
+            labor_cost: number;
+            /** Note */
+            note?: string | null;
+            /** Rate */
+            rate: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Technician Id */
+            technician_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * TimelineItem
@@ -25599,6 +26097,176 @@ export interface operations {
             };
         };
     };
+    list_catalog_items_api_v1_workspaces__workspace_id__catalog_items_get: {
+        parameters: {
+            query?: {
+                kind?: string | null;
+                search?: string | null;
+                include_inactive?: boolean;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedCatalogItems"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_catalog_item_api_v1_workspaces__workspace_id__catalog_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_catalog_item_api_v1_workspaces__workspace_id__catalog_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_contacts_api_v1_workspaces__workspace_id__contacts_get: {
         parameters: {
             query?: {
@@ -28399,6 +29067,137 @@ export interface operations {
             };
         };
     };
+    list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobExpenseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobExpenseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobExpenseResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                expense_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobProfitability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post: {
         parameters: {
             query?: never;
@@ -28423,6 +29222,173 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_time_entries_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clock_in_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClockInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clock_out_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_out_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                entry_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

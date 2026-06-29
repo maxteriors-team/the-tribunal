@@ -301,6 +301,12 @@ export const queryKeys = {
     ...jobs,
     mine: (workspaceId: string, params?: QueryKeyParams | null) =>
       [...jobs.all(workspaceId), "mine", normalizeQueryKeyParams(params)] as const,
+    timeEntries: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "time-entries"] as const,
+    expenses: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "expenses"] as const,
+    profitability: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "profitability"] as const,
   },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,

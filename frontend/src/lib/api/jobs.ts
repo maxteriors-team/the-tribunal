@@ -16,6 +16,14 @@ export type JobScheduleRequest = Schemas["JobScheduleRequest"];
 export type JobAssignRequest = Schemas["JobAssignRequest"];
 export type JobTechnician = Schemas["TechnicianSummary"];
 
+// Field execution: time tracking, expenses, profitability.
+export type TimeEntry = Schemas["TimeEntryResponse"];
+export type ClockInRequest = Schemas["ClockInRequest"];
+export type TimeEntryCreate = Schemas["TimeEntryCreate"];
+export type JobExpense = Schemas["JobExpenseResponse"];
+export type JobExpenseCreate = Schemas["JobExpenseCreate"];
+export type JobProfitability = Schemas["JobProfitability"];
+
 export interface JobListParams {
   status?: JobStatus;
   crew_id?: string;
@@ -80,4 +88,53 @@ export const jobsApi = {
         path: { workspace_id: workspaceId, job_id: jobId, technician_id: technicianId },
       },
     ),
+
+  // ----- Field execution: time tracking, expenses, profitability ----- //
+  listTimeEntries: (workspaceId: string, jobId: string): Promise<TimeEntry[]> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  clockIn: (workspaceId: string, jobId: string, body: ClockInRequest = { rate: 0 }): Promise<TimeEntry> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-in", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  clockOut: (workspaceId: string, jobId: string): Promise<TimeEntry> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-out", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  addTimeEntry: (workspaceId: string, jobId: string, body: TimeEntryCreate): Promise<TimeEntry> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  deleteTimeEntry: (workspaceId: string, jobId: string, entryId: string): Promise<void> =>
+    apiClient.del("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/{entry_id}", {
+      path: { workspace_id: workspaceId, job_id: jobId, entry_id: entryId },
+    }),
+
+  listExpenses: (workspaceId: string, jobId: string): Promise<JobExpense[]> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  addExpense: (workspaceId: string, jobId: string, body: JobExpenseCreate): Promise<JobExpense> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  deleteExpense: (workspaceId: string, jobId: string, expenseId: string): Promise<void> =>
+    apiClient.del("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses/{expense_id}", {
+      path: { workspace_id: workspaceId, job_id: jobId, expense_id: expenseId },
+    }),
+
+  profitability: (workspaceId: string, jobId: string): Promise<JobProfitability> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
 };

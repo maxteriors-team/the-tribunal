@@ -160,7 +160,7 @@ export function JobsCalendar() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Jobs</h1>
           <p className="text-muted-foreground">
@@ -220,7 +220,87 @@ export function JobsCalendar() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-4">
+      {/* Mobile agenda (single column) — the field/worker experience. The
+          7-column week grid below is desktop-only. */}
+      <div className="space-y-5 lg:hidden">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold">
+            {formatDate(weekStart, { pattern: "MMMM yyyy" })}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => goToWeek(addDays(currentDate, -7))}
+              aria-label="Previous week"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => goToWeek(new Date())}>
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => goToWeek(addDays(currentDate, 7))}
+              aria-label="Next week"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+
+        {weekDays.map((day) => {
+          const dayJobs = jobsForDay(jobs, day);
+          if (dayJobs.length === 0) return null;
+          return (
+            <div key={day.toISOString()} className="space-y-2">
+              <div
+                className={`text-sm font-semibold ${
+                  isSameDay(day, new Date()) ? "text-primary" : ""
+                }`}
+              >
+                {formatDate(day, { pattern: "EEEE, MMM d" })}
+              </div>
+              <div className="space-y-1.5">
+                {dayJobs.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    onSelect={(selected) => setSelectedJobId(selected.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        {queue.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Inbox className="size-4" />
+              Unscheduled
+            </div>
+            <div className="space-y-1.5">
+              {queue.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onSelect={(selected) => setSelectedJobId(selected.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {jobs.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No jobs this week.
+          </p>
+        )}
+      </div>
+
+      <div className="hidden gap-6 lg:grid lg:grid-cols-4">
         {/* Week grid */}
         <div className="lg:col-span-3 space-y-4">
           <Card>

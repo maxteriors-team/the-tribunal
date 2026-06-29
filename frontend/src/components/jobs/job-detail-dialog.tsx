@@ -4,6 +4,7 @@ import { CalendarClock, Loader2, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import {
   AlertDialog,
@@ -34,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useAssignTechnicians,
   useDeleteJob,
@@ -172,7 +174,7 @@ export function JobDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {job.title}
@@ -187,7 +189,12 @@ export function JobDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
+            <TabsTrigger value="field-work">Field work</TabsTrigger>
+          </TabsList>
+          <TabsContent value="details" className="space-y-5 pt-2">
           {job.description && (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{job.description}</p>
           )}
@@ -311,7 +318,11 @@ export function JobDetailDialog({
               </div>
             </>
           )}
-        </div>
+          </TabsContent>
+          <TabsContent value="field-work" className="pt-2">
+            <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
