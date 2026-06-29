@@ -1106,7 +1106,7 @@ export interface paths {
         };
         /**
          * Get Workspace
-         * @description Get a specific workspace, including the caller's role.
+         * @description Get a specific workspace.
          */
         get: operations["get_workspace_api_v1_workspaces__workspace_id__get"];
         /**
@@ -2983,29 +2983,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/lead-source": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Assign Contact Lead Source
-         * @description Manually attribute a lead source to a contact from the cleanup queue.
-         *
-         *     Backfills the contact's touch fields and any still-unattributed
-         *     opportunities so the correction flows through to closed-won ROI.
-         */
-        post: operations["assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/messages": {
         parameters: {
             query?: never;
@@ -3335,58 +3312,6 @@ export interface paths {
          * @description Clear all messages in a conversation.
          */
         delete: operations["clear_conversation_history_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/crews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Crews
-         * @description List crews with active-technician counts.
-         */
-        get: operations["list_crews_api_v1_workspaces__workspace_id__crews_get"];
-        put?: never;
-        /**
-         * Create Crew
-         * @description Create a crew.
-         */
-        post: operations["create_crew_api_v1_workspaces__workspace_id__crews_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/crews/{crew_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Crew
-         * @description Get a single crew.
-         */
-        get: operations["get_crew_api_v1_workspaces__workspace_id__crews__crew_id__get"];
-        /**
-         * Update Crew
-         * @description Update a crew.
-         */
-        put: operations["update_crew_api_v1_workspaces__workspace_id__crews__crew_id__put"];
-        post?: never;
-        /**
-         * Delete Crew
-         * @description Delete a crew. Assigned technicians are unassigned (crew set to null).
-         */
-        delete: operations["delete_crew_api_v1_workspaces__workspace_id__crews__crew_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3840,7 +3765,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/jobs": {
+    "/api/v1/workspaces/{workspace_id}/invoices": {
         parameters: {
             query?: never;
             header?: never;
@@ -3848,23 +3773,23 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Jobs
-         * @description List jobs for the dispatch board / calendar, with optional filters.
+         * List Invoices
+         * @description List invoices in a workspace, newest first, with optional filters.
          */
-        get: operations["list_jobs_api_v1_workspaces__workspace_id__jobs_get"];
+        get: operations["list_invoices_api_v1_workspaces__workspace_id__invoices_get"];
         put?: never;
         /**
-         * Create Job
-         * @description Create a job, optionally pre-scheduled and/or pre-assigned to workers.
+         * Create Invoice
+         * @description Create a draft invoice with its initial line items.
          */
-        post: operations["create_job_api_v1_workspaces__workspace_id__jobs_post"];
+        post: operations["create_invoice_api_v1_workspaces__workspace_id__invoices_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/jobs/calendar/mine": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3872,50 +3797,27 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List My Calendar
-         * @description Jobs assigned to the current user, shown on *their* calendar.
-         *
-         *     Resolves the signed-in user to their technician record(s) in this workspace.
-         *     Returns an empty list (not an error) when the user is not a field worker.
+         * Get Invoice
+         * @description Get a specific invoice with its line items.
          */
-        get: operations["list_my_calendar_api_v1_workspaces__workspace_id__jobs_calendar_mine_get"];
-        put?: never;
+        get: operations["get_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__get"];
+        /**
+         * Update Invoice
+         * @description Update an invoice's header fields (totals/status are re-derived).
+         */
+        put: operations["update_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Invoice
+         * @description Delete a draft invoice. Issued invoices must be voided instead.
+         */
+        delete: operations["delete_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Job
-         * @description Get a single job with its assigned technicians.
-         */
-        get: operations["get_job_api_v1_workspaces__workspace_id__jobs__job_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete Job
-         * @description Delete a job. Its technician assignments are removed (cascade).
-         */
-        delete: operations["delete_job_api_v1_workspaces__workspace_id__jobs__job_id__delete"];
-        options?: never;
-        head?: never;
-        /**
-         * Update Job
-         * @description Partially update a job. Status is recomputed when the window changes.
-         */
-        patch: operations["update_job_api_v1_workspaces__workspace_id__jobs__job_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items": {
         parameters: {
             query?: never;
             header?: never;
@@ -3925,17 +3827,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Assign Technicians
-         * @description Tag technicians onto a job (idempotent).
+         * Add Line Item
+         * @description Add a line item and recompute invoice totals.
          */
-        post: operations["assign_technicians_api_v1_workspaces__workspace_id__jobs__job_id__assignments_post"];
+        post: operations["add_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments/{technician_id}": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3943,19 +3845,23 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Update Line Item
+         * @description Update a line item and recompute invoice totals.
+         */
+        put: operations["update_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__put"];
         post?: never;
         /**
-         * Unassign Technician
-         * @description Untag a technician from a job (no-op if not tagged).
+         * Remove Line Item
+         * @description Remove a line item and recompute invoice totals.
          */
-        delete: operations["unassign_technician_api_v1_workspaces__workspace_id__jobs__job_id__assignments__technician_id__delete"];
+        delete: operations["remove_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/schedule": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/payment-link": {
         parameters: {
             query?: never;
             header?: never;
@@ -3965,10 +3871,50 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Schedule Job
-         * @description Set a job's time window (flips unscheduled -> scheduled).
+         * Create Payment Link
+         * @description Create a Stripe Checkout link for the invoice's outstanding balance.
          */
-        post: operations["schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post"];
+        post: operations["create_payment_link_api_v1_workspaces__workspace_id__invoices__invoice_id__payment_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Invoice
+         * @description Mark an invoice as sent (email delivery is wired in a later phase).
+         */
+        post: operations["send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Invoice
+         * @description Void an invoice. Fully paid invoices cannot be voided.
+         */
+        post: operations["void_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__void_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4087,90 +4033,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Lead Source Campaign
-         * @description Create an attribution campaign under a lead source.
-         */
-        post: operations["create_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns/{campaign_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Lead Source Campaign
-         * @description Delete an attribution campaign.
-         */
-        delete: operations["delete_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns__campaign_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/lead-source-spend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Lead Source Spend
-         * @description List manual spend entries, optionally filtered to one lead source.
-         */
-        get: operations["list_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_get"];
-        put?: never;
-        /**
-         * Create Lead Source Spend
-         * @description Record a manual ad/source spend entry.
-         */
-        post: operations["create_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/lead-source-spend/{spend_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Lead Source Spend
-         * @description Delete a manual spend entry.
-         */
-        delete: operations["delete_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend__spend_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/lead-sources": {
         parameters: {
             query?: never;
@@ -4189,26 +4051,6 @@ export interface paths {
          * @description Create a new lead source.
          */
         post: operations["create_lead_source_api_v1_workspaces__workspace_id__lead_sources_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/lead-sources/unattributed": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Unattributed Leads
-         * @description List captured leads that have no known first-touch lead source.
-         */
-        get: operations["list_unattributed_leads_api_v1_workspaces__workspace_id__lead_sources_unattributed_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4238,52 +4080,6 @@ export interface paths {
          * @description Delete a lead source.
          */
         delete: operations["delete_lead_source_api_v1_workspaces__workspace_id__lead_sources__lead_source_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/lead-sources/{lead_source_id}/campaigns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Lead Source Campaigns
-         * @description List attribution campaigns nested under a lead source.
-         */
-        get: operations["list_lead_source_campaigns_api_v1_workspaces__workspace_id__lead_sources__lead_source_id__campaigns_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/members/bulk": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Bulk Create Workspace Members
-         * @description Provision many members at once (owner/admin only).
-         *
-         *     Creates a login + workspace membership for each new email and attaches any
-         *     existing accounts as members. Returns a per-row outcome; rows that conflict
-         *     are skipped without failing the batch. Only the owner may grant the admin
-         *     role. Generated temporary passwords are returned once and never stored in
-         *     plaintext.
-         */
-        post: operations["bulk_create_workspace_members_api_v1_workspaces__workspace_id__members_bulk_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6321,58 +6117,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/service-locations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Service Locations
-         * @description List service locations, optionally filtered by customer or active state.
-         */
-        get: operations["list_service_locations_api_v1_workspaces__workspace_id__service_locations_get"];
-        put?: never;
-        /**
-         * Create Service Location
-         * @description Create a service location for a customer.
-         */
-        post: operations["create_service_location_api_v1_workspaces__workspace_id__service_locations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/service-locations/{location_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Service Location
-         * @description Get a single service location.
-         */
-        get: operations["get_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__get"];
-        /**
-         * Update Service Location
-         * @description Update a service location.
-         */
-        put: operations["update_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__put"];
-        post?: never;
-        /**
-         * Delete Service Location
-         * @description Delete a service location.
-         */
-        delete: operations["delete_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/set-default": {
         parameters: {
             query?: never;
@@ -6608,58 +6352,6 @@ export interface paths {
          * @description Delete a tag.
          */
         delete: operations["delete_tag_api_v1_workspaces__workspace_id__tags__tag_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/technicians": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Technicians
-         * @description List technicians, optionally filtered by crew or active state.
-         */
-        get: operations["list_technicians_api_v1_workspaces__workspace_id__technicians_get"];
-        put?: never;
-        /**
-         * Create Technician
-         * @description Create a technician.
-         */
-        post: operations["create_technician_api_v1_workspaces__workspace_id__technicians_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/technicians/{technician_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Technician
-         * @description Get a single technician.
-         */
-        get: operations["get_technician_api_v1_workspaces__workspace_id__technicians__technician_id__get"];
-        /**
-         * Update Technician
-         * @description Update a technician.
-         */
-        put: operations["update_technician_api_v1_workspaces__workspace_id__technicians__technician_id__put"];
-        post?: never;
-        /**
-         * Delete Technician
-         * @description Delete a technician.
-         */
-        delete: operations["delete_technician_api_v1_workspaces__workspace_id__technicians__technician_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8463,20 +8155,6 @@ export interface components {
             arm_status: string;
         };
         /**
-         * AssignLeadSourceRequest
-         * @description Operator action assigning a lead source to an unattributed contact.
-         */
-        AssignLeadSourceRequest: {
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /**
-             * Lead Source Id
-             * Format: uuid
-             */
-            lead_source_id: string;
-            source_type?: components["schemas"]["LeadSourceType"] | null;
-        };
-        /**
          * AssistantChatRequest
          * @description Request to send a message to the CRM assistant.
          */
@@ -8632,34 +8310,6 @@ export interface components {
              * @default 0
              */
             total_amount_at_risk: number;
-        };
-        /**
-         * AttributionConfidenceLevel
-         * @description Human-readable confidence bucket for lead-source attribution.
-         * @enum {string}
-         */
-        AttributionConfidenceLevel: "exact" | "high" | "medium" | "low" | "unknown";
-        /**
-         * AttributionConfidenceSummary
-         * @description Rollup of how reliable the attribution is for a source ROI row.
-         */
-        AttributionConfidenceSummary: {
-            /**
-             * Attributed Closed Won Jobs
-             * @default 0
-             */
-            attributed_closed_won_jobs: number;
-            /** Average Score */
-            average_score?: number | null;
-            /** @default unknown */
-            level: components["schemas"]["AttributionConfidenceLevel"];
-            /** Notes */
-            notes?: string[];
-            /**
-             * Total Closed Won Jobs
-             * @default 0
-             */
-            total_closed_won_jobs: number;
         };
         /**
          * AutomationActionSchema
@@ -9025,74 +8675,6 @@ export interface components {
             errors: string[];
             /** Failed */
             failed: number;
-        };
-        /**
-         * BulkMemberCreateRequest
-         * @description Request body for bulk member creation.
-         */
-        BulkMemberCreateRequest: {
-            /** Members */
-            members: components["schemas"]["BulkMemberItem"][];
-        };
-        /**
-         * BulkMemberCreateResponse
-         * @description Aggregate result of a bulk member creation request.
-         */
-        BulkMemberCreateResponse: {
-            /** Added Existing */
-            added_existing: number;
-            /** Already Member */
-            already_member: number;
-            /** Created */
-            created: number;
-            /** Results */
-            results: components["schemas"]["BulkMemberResultItem"][];
-            /** Skipped */
-            skipped: number;
-            /** Total */
-            total: number;
-        };
-        /**
-         * BulkMemberItem
-         * @description One member to provision in a bulk request.
-         */
-        BulkMemberItem: {
-            /**
-             * Email
-             * Format: email
-             */
-            email: string;
-            /** Full Name */
-            full_name?: string | null;
-            /** Password */
-            password?: string | null;
-            /**
-             * Role
-             * @default member
-             * @enum {string}
-             */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
-        };
-        /**
-         * BulkMemberResultItem
-         * @description Per-row outcome for a bulk member creation request.
-         */
-        BulkMemberResultItem: {
-            /** Email */
-            email: string;
-            /** Error */
-            error?: string | null;
-            /** Role */
-            role?: string | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "created" | "added_existing" | "already_member" | "skipped";
-            /** Temporary Password */
-            temporary_password?: string | null;
-            /** User Id */
-            user_id?: number | null;
         };
         /**
          * BulkStatusUpdateRequest
@@ -10260,46 +9842,24 @@ export interface components {
             address_state?: string | null;
             /** Address Zip */
             address_zip?: string | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Avatar Url */
             avatar_url?: string | null;
             /** Company Name */
             company_name?: string | null;
             /** Email */
             email?: string | null;
-            /** Fbclid */
-            fbclid?: string | null;
             /** First Name */
             first_name: string;
-            /** First Touch At */
-            first_touch_at?: string | null;
-            /** First Touch Lead Source Campaign Id */
-            first_touch_lead_source_campaign_id?: string | null;
-            /** First Touch Lead Source Id */
-            first_touch_lead_source_id?: string | null;
-            /** Gclid */
-            gclid?: string | null;
             /** Important Dates */
             important_dates?: {
                 [key: string]: unknown;
             } | null;
-            /** Landing Page */
-            landing_page?: string | null;
             /** Last Name */
             last_name?: string | null;
-            /** Latest Touch At */
-            latest_touch_at?: string | null;
-            /** Latest Touch Lead Source Campaign Id */
-            latest_touch_lead_source_campaign_id?: string | null;
-            /** Latest Touch Lead Source Id */
-            latest_touch_lead_source_id?: string | null;
             /** Notes */
             notes?: string | null;
             /** Phone Number */
             phone_number: string;
-            /** Referrer */
-            referrer?: string | null;
             /** Source */
             source?: string | null;
             /**
@@ -10309,16 +9869,6 @@ export interface components {
             status: string;
             /** Tags */
             tags?: string[] | null;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /** Utm Content */
-            utm_content?: string | null;
-            /** Utm Medium */
-            utm_medium?: string | null;
-            /** Utm Source */
-            utm_source?: string | null;
-            /** Utm Term */
-            utm_term?: string | null;
         };
         /**
          * ContactEngagementSummary
@@ -10385,8 +9935,6 @@ export interface components {
             address_state?: string | null;
             /** Address Zip */
             address_zip?: string | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Avatar Url */
             avatar_url?: string | null;
             /** Business Intel */
@@ -10411,18 +9959,8 @@ export interface components {
             enriched_at?: string | null;
             /** Enrichment Status */
             enrichment_status?: string | null;
-            /** Fbclid */
-            fbclid?: string | null;
             /** First Name */
             first_name: string;
-            /** First Touch At */
-            first_touch_at?: string | null;
-            /** First Touch Lead Source Campaign Id */
-            first_touch_lead_source_campaign_id?: string | null;
-            /** First Touch Lead Source Id */
-            first_touch_lead_source_id?: string | null;
-            /** Gclid */
-            gclid?: string | null;
             /** Id */
             id: number;
             /** Important Dates */
@@ -10431,20 +9969,12 @@ export interface components {
             } | null;
             /** Is Qualified */
             is_qualified: boolean;
-            /** Landing Page */
-            landing_page?: string | null;
             /** Last Appointment Status */
             last_appointment_status?: string | null;
             /** Last Engaged At */
             last_engaged_at?: string | null;
             /** Last Name */
             last_name: string | null;
-            /** Latest Touch At */
-            latest_touch_at?: string | null;
-            /** Latest Touch Lead Source Campaign Id */
-            latest_touch_lead_source_campaign_id?: string | null;
-            /** Latest Touch Lead Source Id */
-            latest_touch_lead_source_id?: string | null;
             /** Lead Score */
             lead_score: number;
             /** Linkedin Url */
@@ -10461,8 +9991,6 @@ export interface components {
             qualification_signals: components["schemas"]["QualificationSignals"] | null;
             /** Qualified At */
             qualified_at: string | null;
-            /** Referrer */
-            referrer?: string | null;
             /** Source */
             source: string | null;
             /** Source Campaign Id */
@@ -10478,16 +10006,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /** Utm Content */
-            utm_content?: string | null;
-            /** Utm Medium */
-            utm_medium?: string | null;
-            /** Utm Source */
-            utm_source?: string | null;
-            /** Utm Term */
-            utm_term?: string | null;
             /** Website Url */
             website_url?: string | null;
             /**
@@ -10527,62 +10045,30 @@ export interface components {
             address_state?: string | null;
             /** Address Zip */
             address_zip?: string | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Avatar Url */
             avatar_url?: string | null;
             /** Company Name */
             company_name?: string | null;
             /** Email */
             email?: string | null;
-            /** Fbclid */
-            fbclid?: string | null;
             /** First Name */
             first_name?: string | null;
-            /** First Touch At */
-            first_touch_at?: string | null;
-            /** First Touch Lead Source Campaign Id */
-            first_touch_lead_source_campaign_id?: string | null;
-            /** First Touch Lead Source Id */
-            first_touch_lead_source_id?: string | null;
-            /** Gclid */
-            gclid?: string | null;
             /** Important Dates */
             important_dates?: {
                 [key: string]: unknown;
             } | null;
-            /** Landing Page */
-            landing_page?: string | null;
             /** Last Name */
             last_name?: string | null;
-            /** Latest Touch At */
-            latest_touch_at?: string | null;
-            /** Latest Touch Lead Source Campaign Id */
-            latest_touch_lead_source_campaign_id?: string | null;
-            /** Latest Touch Lead Source Id */
-            latest_touch_lead_source_id?: string | null;
             /** Lead Score */
             lead_score?: number | null;
             /** Notes */
             notes?: string | null;
             /** Phone Number */
             phone_number?: string | null;
-            /** Referrer */
-            referrer?: string | null;
             /** Status */
             status?: string | null;
             /** Tags */
             tags?: string[] | null;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /** Utm Content */
-            utm_content?: string | null;
-            /** Utm Medium */
-            utm_medium?: string | null;
-            /** Utm Source */
-            utm_source?: string | null;
-            /** Utm Term */
-            utm_term?: string | null;
         };
         /**
          * ContactWithConversationResponse
@@ -10599,8 +10085,6 @@ export interface components {
             address_state?: string | null;
             /** Address Zip */
             address_zip?: string | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Avatar Url */
             avatar_url?: string | null;
             /** Business Intel */
@@ -10625,18 +10109,8 @@ export interface components {
             enriched_at?: string | null;
             /** Enrichment Status */
             enrichment_status?: string | null;
-            /** Fbclid */
-            fbclid?: string | null;
             /** First Name */
             first_name: string;
-            /** First Touch At */
-            first_touch_at?: string | null;
-            /** First Touch Lead Source Campaign Id */
-            first_touch_lead_source_campaign_id?: string | null;
-            /** First Touch Lead Source Id */
-            first_touch_lead_source_id?: string | null;
-            /** Gclid */
-            gclid?: string | null;
             /** Id */
             id: number;
             /** Important Dates */
@@ -10645,8 +10119,6 @@ export interface components {
             } | null;
             /** Is Qualified */
             is_qualified: boolean;
-            /** Landing Page */
-            landing_page?: string | null;
             /** Last Appointment Status */
             last_appointment_status?: string | null;
             /** Last Engaged At */
@@ -10657,12 +10129,6 @@ export interface components {
             last_message_direction?: string | null;
             /** Last Name */
             last_name: string | null;
-            /** Latest Touch At */
-            latest_touch_at?: string | null;
-            /** Latest Touch Lead Source Campaign Id */
-            latest_touch_lead_source_campaign_id?: string | null;
-            /** Latest Touch Lead Source Id */
-            latest_touch_lead_source_id?: string | null;
             /** Lead Score */
             lead_score: number;
             /** Linkedin Url */
@@ -10679,8 +10145,6 @@ export interface components {
             qualification_signals: components["schemas"]["QualificationSignals"] | null;
             /** Qualified At */
             qualified_at: string | null;
-            /** Referrer */
-            referrer?: string | null;
             /** Source */
             source: string | null;
             /** Source Campaign Id */
@@ -10701,16 +10165,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /** Utm Content */
-            utm_content?: string | null;
-            /** Utm Medium */
-            utm_medium?: string | null;
-            /** Utm Source */
-            utm_source?: string | null;
-            /** Utm Term */
-            utm_term?: string | null;
             /** Website Url */
             website_url?: string | null;
             /**
@@ -10854,89 +10308,6 @@ export interface components {
             rehearsee: string;
         };
         /**
-         * CrewCreate
-         * @description Create a field crew.
-         */
-        CrewCreate: {
-            /**
-             * Color
-             * @default #6366f1
-             */
-            color: string;
-            /** Description */
-            description?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /** Name */
-            name: string;
-        };
-        /**
-         * CrewListResponse
-         * @description List of crews.
-         */
-        CrewListResponse: {
-            /** Items */
-            items: components["schemas"]["CrewResponse"][];
-            /** Total */
-            total: number;
-        };
-        /**
-         * CrewResponse
-         * @description Crew response.
-         */
-        CrewResponse: {
-            /** Color */
-            color: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Name */
-            name: string;
-            /**
-             * Technician Count
-             * @default 0
-             */
-            technician_count: number;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
-         * CrewUpdate
-         * @description Partial update for a crew.
-         */
-        CrewUpdate: {
-            /** Color */
-            color?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Name */
-            name?: string | null;
-        };
-        /**
          * DashboardResponse
          * @description Complete dashboard response.
          */
@@ -10948,7 +10319,6 @@ export interface components {
             campaign_stats: components["schemas"]["CampaignStat"][];
             deal_coach_stats: components["schemas"]["DealCoachStats"];
             knowledge_base_stats: components["schemas"]["KnowledgeBaseStats"];
-            lead_source_roi_stats?: components["schemas"]["LeadSourceROIStats"];
             /** Recent Activity */
             recent_activity: components["schemas"]["RecentActivity"][];
             revenue_stats: components["schemas"]["RevenueStats"];
@@ -12471,7 +11841,7 @@ export interface components {
              * @default member
              * @enum {string}
              */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+            role: "admin" | "member";
         };
         /**
          * InvitationPublicResponse
@@ -12539,93 +11909,92 @@ export interface components {
             workspace_id: string;
         };
         /**
-         * JobAssignRequest
-         * @description Tag one or more technicians onto a job.
+         * InvoiceCreate
+         * @description Create an invoice with its initial line items.
          */
-        JobAssignRequest: {
-            /** Technician Ids */
-            technician_ids: string[];
-        };
-        /**
-         * JobCreate
-         * @description Create a job. Optionally pre-scheduled and/or pre-assigned to workers.
-         */
-        JobCreate: {
-            /**
-             * Contact Id
-             * @description Owning customer contact id
-             */
-            contact_id: number;
-            /**
-             * Crew Id
-             * @description Optional dispatch lane/crew
-             */
-            crew_id?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Scheduled End */
-            scheduled_end?: string | null;
-            /** Scheduled Start */
-            scheduled_start?: string | null;
-            /**
-             * Service Location Id
-             * @description Job site
-             */
-            service_location_id?: string | null;
-            /**
-             * Technician Ids
-             * @description Technicians to tag onto this job
-             */
-            technician_ids?: string[];
-            /** Title */
-            title: string;
-        };
-        /**
-         * JobListResponse
-         * @description List of jobs.
-         */
-        JobListResponse: {
-            /** Items */
-            items: components["schemas"]["JobResponse"][];
-            /** Total */
-            total: number;
-        };
-        /**
-         * JobResponse
-         * @description Job response, including its assigned technicians.
-         */
-        JobResponse: {
+        InvoiceCreate: {
             /** Contact Id */
-            contact_id: number;
+            contact_id?: number | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemCreate"][];
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /**
+             * Tax Amount
+             * @default 0
+             */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+        };
+        /**
+         * InvoiceDetailResponse
+         * @description Invoice with its line items.
+         */
+        InvoiceDetailResponse: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Contact Id */
+            contact_id?: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Crew Id */
-            crew_id: string | null;
-            /** Description */
-            description: string | null;
-            /** External Id */
-            external_id: string | null;
-            /** External Source */
-            external_source: string | null;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Scheduled End */
-            scheduled_end: string | null;
-            /** Scheduled Start */
-            scheduled_start: string | null;
-            /** Service Location Id */
-            service_location_id: string | null;
-            status: components["schemas"]["JobStatus"];
-            /** Technicians */
-            technicians?: components["schemas"]["TechnicianSummary"][];
-            /** Title */
-            title: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Total */
+            total: number;
             /**
              * Updated At
              * Format: date-time
@@ -12638,52 +12007,182 @@ export interface components {
             workspace_id: string;
         };
         /**
-         * JobScheduleRequest
-         * @description Set a job's time window (flips unscheduled -> scheduled).
+         * InvoiceLineItemCreate
+         * @description Create a line item.
          */
-        JobScheduleRequest: {
-            /**
-             * Scheduled End
-             * Format: date-time
-             */
-            scheduled_end: string;
-            /**
-             * Scheduled Start
-             * Format: date-time
-             */
-            scheduled_start: string;
-        };
-        /**
-         * JobStatus
-         * @description Lifecycle of a field-service job (work order).
-         *
-         *     ``unscheduled`` — created but has no time window yet (sits in the queue).
-         *     ``scheduled``   — has a ``scheduled_start``/``scheduled_end`` window.
-         *     ``in_progress`` — a technician is actively working it.
-         *     ``completed``   — work is finished.
-         *     ``cancelled``   — called off; kept for history.
-         * @enum {string}
-         */
-        JobStatus: "unscheduled" | "scheduled" | "in_progress" | "completed" | "cancelled";
-        /**
-         * JobUpdate
-         * @description Partial update for a job. Status is recomputed from the time window.
-         */
-        JobUpdate: {
-            /** Crew Id */
-            crew_id?: string | null;
+        InvoiceLineItemCreate: {
             /** Description */
             description?: string | null;
-            /** Scheduled End */
-            scheduled_end?: string | null;
-            /** Scheduled Start */
-            scheduled_start?: string | null;
-            /** Service Location Id */
-            service_location_id?: string | null;
-            /** @description Advance lifecycle (e.g. in_progress/completed/cancelled) */
-            status?: components["schemas"]["JobStatus"] | null;
-            /** Title */
-            title?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * InvoiceLineItemResponse
+         * @description Line item as returned by the API.
+         */
+        InvoiceLineItemResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Discount
+             * @default 0
+             */
+            discount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Id
+             * Format: uuid
+             */
+            invoice_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Total */
+            total: number;
+            /** Unit Price */
+            unit_price: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InvoiceLineItemUpdate
+         * @description Update a line item (all fields optional).
+         */
+        InvoiceLineItemUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Discount */
+            discount?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Quantity */
+            quantity?: number | null;
+            /** Unit Price */
+            unit_price?: number | null;
+        };
+        /**
+         * InvoicePaymentLinkResponse
+         * @description Stripe Checkout link for collecting an invoice's outstanding balance.
+         */
+        InvoicePaymentLinkResponse: {
+            /** Session Id */
+            session_id: string;
+            /** Url */
+            url: string | null;
+        };
+        /**
+         * InvoiceResponse
+         * @description Invoice header as returned by list endpoints.
+         */
+        InvoiceResponse: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * InvoiceUpdate
+         * @description Update invoice header fields (all optional). Line items have their own
+         *     sub-resource endpoints; ``status``/``number``/totals are server-derived.
+         */
+        InvoiceUpdate: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /** Discount Amount */
+            discount_amount?: number | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Tax Amount */
+            tax_amount?: number | null;
+            /** Terms */
+            terms?: string | null;
         };
         /**
          * KnowledgeBaseStats
@@ -13154,94 +12653,6 @@ export interface components {
             workspace_id: string;
         };
         /**
-         * LeadSourceCampaignCreate
-         * @description Schema for creating an attribution campaign under a lead source.
-         */
-        LeadSourceCampaignCreate: {
-            /** Campaign Metadata */
-            campaign_metadata?: {
-                [key: string]: unknown;
-            };
-            /** Description */
-            description?: string | null;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /** Ended On */
-            ended_on?: string | null;
-            /**
-             * Lead Source Id
-             * Format: uuid
-             */
-            lead_source_id: string;
-            /** Name */
-            name: string;
-            /** Platform Campaign Id */
-            platform_campaign_id?: string | null;
-            /** Platform Campaign Name */
-            platform_campaign_name?: string | null;
-            /** Started On */
-            started_on?: string | null;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-        };
-        /**
-         * LeadSourceCampaignResponse
-         * @description Schema for returning a lead-source campaign.
-         */
-        LeadSourceCampaignResponse: {
-            /** Campaign Metadata */
-            campaign_metadata?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description?: string | null;
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /** Ended On */
-            ended_on?: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Lead Source Id
-             * Format: uuid
-             */
-            lead_source_id: string;
-            /** Name */
-            name: string;
-            /** Platform Campaign Id */
-            platform_campaign_id?: string | null;
-            /** Platform Campaign Name */
-            platform_campaign_name?: string | null;
-            /** Started On */
-            started_on?: string | null;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
          * LeadSourceCreate
          * @description Schema for creating a lead source.
          */
@@ -13260,39 +12671,6 @@ export interface components {
             allowed_domains?: string[];
             /** Name */
             name: string;
-            /** @default other */
-            source_type: components["schemas"]["LeadSourceType"];
-        };
-        /**
-         * LeadSourceROIStats
-         * @description Dashboard payload for ranking lead sources by spend and closed-won jobs.
-         */
-        LeadSourceROIStats: {
-            /**
-             * Currency
-             * @default USD
-             */
-            currency: string;
-            /** Rows */
-            rows?: components["schemas"]["SourceROIRow"][];
-            /** Source Types Ranked */
-            source_types_ranked?: components["schemas"]["LeadSourceType"][];
-            /**
-             * Total Closed Won Jobs
-             * @default 0
-             */
-            total_closed_won_jobs: number;
-            /**
-             * Total Closed Won Revenue
-             * @default 0
-             */
-            total_closed_won_revenue: number;
-            /**
-             * Total Spend
-             * @default 0
-             */
-            total_spend: number;
-            winner?: components["schemas"]["LeadSourceWinnerSummary"];
         };
         /**
          * LeadSourceResponse
@@ -13328,8 +12706,6 @@ export interface components {
             name: string;
             /** Public Key */
             public_key: string;
-            /** @default other */
-            source_type: components["schemas"]["LeadSourceType"];
             /**
              * Updated At
              * Format: date-time
@@ -13341,96 +12717,6 @@ export interface components {
              */
             workspace_id: string;
         };
-        /**
-         * LeadSourceSpendEntryCreate
-         * @description Schema for creating a manual ad/source spend entry.
-         */
-        LeadSourceSpendEntryCreate: {
-            /** Amount */
-            amount: number;
-            /**
-             * Currency
-             * @default USD
-             */
-            currency: string;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /**
-             * Lead Source Id
-             * Format: uuid
-             */
-            lead_source_id: string;
-            /** Notes */
-            notes?: string | null;
-            /**
-             * Spend Ends On
-             * Format: date
-             */
-            spend_ends_on: string;
-            /**
-             * Spend Starts On
-             * Format: date
-             */
-            spend_starts_on: string;
-        };
-        /**
-         * LeadSourceSpendEntryResponse
-         * @description Schema for returning a manual ad/source spend entry.
-         */
-        LeadSourceSpendEntryResponse: {
-            /** Amount */
-            amount: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Currency
-             * @default USD
-             */
-            currency: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /**
-             * Lead Source Id
-             * Format: uuid
-             */
-            lead_source_id: string;
-            /** Notes */
-            notes?: string | null;
-            /**
-             * Spend Ends On
-             * Format: date
-             */
-            spend_ends_on: string;
-            /**
-             * Spend Starts On
-             * Format: date
-             */
-            spend_starts_on: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
-         * LeadSourceType
-         * @description Top-level channel used for lead attribution ROI reporting.
-         * @enum {string}
-         */
-        LeadSourceType: "facebook_ads" | "google_ads" | "organic" | "phone_radio" | "other";
         /**
          * LeadSourceUpdate
          * @description Schema for updating a lead source.
@@ -13448,62 +12734,6 @@ export interface components {
             enabled?: boolean | null;
             /** Name */
             name?: string | null;
-            source_type?: components["schemas"]["LeadSourceType"] | null;
-        };
-        /**
-         * LeadSourceWinnerSummary
-         * @description Summary card for the current winning lead source.
-         */
-        LeadSourceWinnerSummary: {
-            attribution_confidence?: components["schemas"]["AttributionConfidenceSummary"];
-            /**
-             * Closed Won Jobs
-             * @default 0
-             */
-            closed_won_jobs: number;
-            /**
-             * Closed Won Revenue
-             * @default 0
-             */
-            closed_won_revenue: number;
-            /**
-             * Currency
-             * @default USD
-             */
-            currency: string;
-            /**
-             * Has Winner
-             * @default false
-             */
-            has_winner: boolean;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
-            /**
-             * Net Revenue
-             * @default 0
-             */
-            net_revenue: number;
-            /**
-             * Rank By
-             * @default none
-             * @enum {string}
-             */
-            rank_by: "roi" | "closed_won_revenue" | "closed_won_jobs" | "none";
-            /**
-             * Reason
-             * @default No closed-won jobs with attributed lead-source data yet.
-             */
-            reason: string;
-            /** Roi Multiple */
-            roi_multiple?: number | null;
-            /** Source Name */
-            source_name?: string | null;
-            source_type?: components["schemas"]["LeadSourceType"] | null;
-            /**
-             * Spend
-             * @default 0
-             */
-            spend: number;
         };
         /**
          * LiveCallResponse
@@ -14574,8 +13804,6 @@ export interface components {
         OpportunityCreate: {
             /** Amount */
             amount?: number | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /**
              * Currency
              * @default USD
@@ -14585,10 +13813,6 @@ export interface components {
             description?: string | null;
             /** Expected Close Date */
             expected_close_date?: string | null;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
             /** Lost Reason */
             lost_reason?: string | null;
             /** Name */
@@ -14625,8 +13849,6 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Closed By Id */
             closed_by_id?: number | null;
             /** Closed Date */
@@ -14652,10 +13874,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
             /**
              * Line Items
              * @default []
@@ -14787,8 +14005,6 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Closed By Id */
             closed_by_id?: number | null;
             /** Closed Date */
@@ -14814,10 +14030,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
             /**
              * Line Items
              * @default []
@@ -14867,8 +14079,6 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Currency */
             currency?: string | null;
             /** Description */
@@ -14877,10 +14087,6 @@ export interface components {
             expected_close_date?: string | null;
             /** Is Active */
             is_active?: boolean | null;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
             /** Lost Reason */
             lost_reason?: string | null;
             /** Name */
@@ -15320,6 +14526,22 @@ export interface components {
         PaginatedConversations: {
             /** Items */
             items: components["schemas"]["ConversationResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PaginatedInvoices
+         * @description Paginated list of invoices.
+         */
+        PaginatedInvoices: {
+            /** Items */
+            items: components["schemas"]["InvoiceResponse"][];
             /** Page */
             page: number;
             /** Page Size */
@@ -17608,183 +16830,6 @@ export interface components {
          */
         SequenceEnrollmentStatus: "active" | "paused" | "completed" | "replied" | "opted_out" | "converted" | "failed" | "cancelled";
         /**
-         * ServiceLocationCreate
-         * @description Create a service location (job site) for a customer.
-         */
-        ServiceLocationCreate: {
-            /** Access Notes */
-            access_notes?: string | null;
-            /** Address Line1 */
-            address_line1?: string | null;
-            /** Address Line2 */
-            address_line2?: string | null;
-            /** City */
-            city?: string | null;
-            /**
-             * Contact Id
-             * @description Owning customer contact id
-             */
-            contact_id: number;
-            /**
-             * Country
-             * @default US
-             */
-            country: string;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /** Latitude */
-            latitude?: number | null;
-            /** Longitude */
-            longitude?: number | null;
-            /** Name */
-            name?: string | null;
-            /** Postal Code */
-            postal_code?: string | null;
-            /** State */
-            state?: string | null;
-        };
-        /**
-         * ServiceLocationListResponse
-         * @description List of service locations.
-         */
-        ServiceLocationListResponse: {
-            /** Items */
-            items: components["schemas"]["ServiceLocationResponse"][];
-            /** Total */
-            total: number;
-        };
-        /**
-         * ServiceLocationResponse
-         * @description Service location response.
-         */
-        ServiceLocationResponse: {
-            /** Access Notes */
-            access_notes: string | null;
-            /** Address Line1 */
-            address_line1: string | null;
-            /** Address Line2 */
-            address_line2: string | null;
-            /** City */
-            city: string | null;
-            /** Contact Id */
-            contact_id: number;
-            /** Country */
-            country: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Latitude */
-            latitude: number | null;
-            /** Longitude */
-            longitude: number | null;
-            /** Name */
-            name: string | null;
-            /** Postal Code */
-            postal_code: string | null;
-            /** State */
-            state: string | null;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
-         * ServiceLocationUpdate
-         * @description Partial update for a service location.
-         */
-        ServiceLocationUpdate: {
-            /** Access Notes */
-            access_notes?: string | null;
-            /** Address Line1 */
-            address_line1?: string | null;
-            /** Address Line2 */
-            address_line2?: string | null;
-            /** City */
-            city?: string | null;
-            /** Country */
-            country?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Latitude */
-            latitude?: number | null;
-            /** Longitude */
-            longitude?: number | null;
-            /** Name */
-            name?: string | null;
-            /** Postal Code */
-            postal_code?: string | null;
-            /** State */
-            state?: string | null;
-        };
-        /**
-         * SourceROIRow
-         * @description One ranked lead-source ROI row for dashboard reporting.
-         */
-        SourceROIRow: {
-            attribution_confidence?: components["schemas"]["AttributionConfidenceSummary"];
-            /**
-             * Closed Won Jobs
-             * @default 0
-             */
-            closed_won_jobs: number;
-            /**
-             * Closed Won Revenue
-             * @default 0
-             */
-            closed_won_revenue: number;
-            /** Cost Per Closed Won Job */
-            cost_per_closed_won_job?: number | null;
-            /**
-             * Currency
-             * @default USD
-             */
-            currency: string;
-            /**
-             * Is Winner
-             * @default false
-             */
-            is_winner: boolean;
-            /** Lead Source Id */
-            lead_source_id?: string | null;
-            /**
-             * Net Revenue
-             * @default 0
-             */
-            net_revenue: number;
-            /** Rank */
-            rank: number;
-            /** Revenue Per Closed Won Job */
-            revenue_per_closed_won_job?: number | null;
-            /** Roi Multiple */
-            roi_multiple?: number | null;
-            /** Source Name */
-            source_name: string;
-            source_type: components["schemas"]["LeadSourceType"];
-            /**
-             * Spend
-             * @default 0
-             */
-            spend: number;
-        };
-        /**
          * SpeedToLeadMetrics
          * @description First-response SLA rollup over the recent window (operator-facing).
          */
@@ -17983,123 +17028,6 @@ export interface components {
             id: number;
             /** Role */
             role: string;
-        };
-        /**
-         * TechnicianCreate
-         * @description Create a technician.
-         */
-        TechnicianCreate: {
-            /**
-             * Color
-             * @default #0ea5e9
-             */
-            color: string;
-            /** Crew Id */
-            crew_id?: string | null;
-            /** Email */
-            email?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /** Name */
-            name: string;
-            /** Phone */
-            phone?: string | null;
-            /** Skills */
-            skills?: string[];
-            /** User Id */
-            user_id?: number | null;
-        };
-        /**
-         * TechnicianListResponse
-         * @description List of technicians.
-         */
-        TechnicianListResponse: {
-            /** Items */
-            items: components["schemas"]["TechnicianResponse"][];
-            /** Total */
-            total: number;
-        };
-        /**
-         * TechnicianResponse
-         * @description Technician response.
-         */
-        TechnicianResponse: {
-            /** Color */
-            color: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Crew Id */
-            crew_id: string | null;
-            /** Email */
-            email: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Name */
-            name: string;
-            /** Phone */
-            phone: string | null;
-            /** Skills */
-            skills: string[];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** User Id */
-            user_id: number | null;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
-         * TechnicianSummary
-         * @description Compact technician view for rendering avatars/chips on the calendar.
-         */
-        TechnicianSummary: {
-            /** Color */
-            color: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-        };
-        /**
-         * TechnicianUpdate
-         * @description Partial update for a technician.
-         */
-        TechnicianUpdate: {
-            /** Color */
-            color?: string | null;
-            /** Crew Id */
-            crew_id?: string | null;
-            /** Email */
-            email?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Name */
-            name?: string | null;
-            /** Phone */
-            phone?: string | null;
-            /** Skills */
-            skills?: string[] | null;
-            /** User Id */
-            user_id?: number | null;
         };
         /**
          * TestContactAdd
@@ -18425,32 +17353,6 @@ export interface components {
             status: string;
         };
         /**
-         * UnattributedLeadResponse
-         * @description A captured lead that has no known first-touch lead source yet.
-         */
-        UnattributedLeadResponse: {
-            /** Contact Id */
-            contact_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Email */
-            email?: string | null;
-            /** First Name */
-            first_name: string;
-            /** Last Name */
-            last_name?: string | null;
-            /** Phone Number */
-            phone_number?: string | null;
-            /** Source */
-            source?: string | null;
-            /** Suggested Lead Source Id */
-            suggested_lead_source_id?: string | null;
-            suggested_source_type?: components["schemas"]["LeadSourceType"] | null;
-        };
-        /**
          * UpdateMemberRoleRequest
          * @description Request to update a member's role.
          */
@@ -18459,7 +17361,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+            role: "admin" | "member";
         };
         /**
          * UrgencyType
@@ -18558,11 +17460,6 @@ export interface components {
             id: number;
             /** Is Active */
             is_active: boolean;
-            /**
-             * Must Change Password
-             * @default false
-             */
-            must_change_password: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -19045,8 +17942,6 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
-            /** Role */
-            role?: string | null;
             /** Settings */
             settings: {
                 [key: string]: unknown;
@@ -19211,42 +18106,20 @@ export interface components {
          * @description Public-facing lead submission request.
          */
         app__schemas__lead_source__LeadSubmitRequest: {
-            /** Attribution Confidence */
-            attribution_confidence?: number | null;
             /** Company Name */
             company_name?: string | null;
             /** Email */
             email?: string | null;
-            /** Fbclid */
-            fbclid?: string | null;
             /** First Name */
             first_name: string;
-            /** Gclid */
-            gclid?: string | null;
-            /** Landing Page */
-            landing_page?: string | null;
             /** Last Name */
             last_name?: string | null;
-            /** Lead Source Campaign Id */
-            lead_source_campaign_id?: string | null;
             /** Notes */
             notes?: string | null;
             /** Phone Number */
             phone_number: string;
-            /** Referrer */
-            referrer?: string | null;
             /** Source Detail */
             source_detail?: string | null;
-            /** Utm Campaign */
-            utm_campaign?: string | null;
-            /** Utm Content */
-            utm_content?: string | null;
-            /** Utm Medium */
-            utm_medium?: string | null;
-            /** Utm Source */
-            utm_source?: string | null;
-            /** Utm Term */
-            utm_term?: string | null;
         };
         /**
          * LeadSubmitResponse
@@ -25173,40 +24046,6 @@ export interface operations {
             };
         };
     };
-    assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                contact_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AssignLeadSourceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     send_message_to_contact_api_v1_workspaces__workspace_id__contacts__contact_id__messages_post: {
         parameters: {
             query?: never;
@@ -25773,172 +24612,6 @@ export interface operations {
             path: {
                 workspace_id: string;
                 conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_crews_api_v1_workspaces__workspace_id__crews_get: {
-        parameters: {
-            query?: {
-                is_active?: boolean | null;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrewListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_crew_api_v1_workspaces__workspace_id__crews_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CrewCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrewResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_crew_api_v1_workspaces__workspace_id__crews__crew_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                crew_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrewResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_crew_api_v1_workspaces__workspace_id__crews__crew_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                crew_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CrewUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CrewResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_crew_api_v1_workspaces__workspace_id__crews__crew_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                crew_id: string;
-                workspace_id: string;
             };
             cookie?: never;
         };
@@ -26782,16 +25455,13 @@ export interface operations {
             };
         };
     };
-    list_jobs_api_v1_workspaces__workspace_id__jobs_get: {
+    list_invoices_api_v1_workspaces__workspace_id__invoices_get: {
         parameters: {
             query?: {
-                status?: components["schemas"]["JobStatus"] | null;
-                crew_id?: string | null;
-                technician_id?: string | null;
-                /** @description Jobs scheduled on or after this time */
-                date_from?: string | null;
-                /** @description Jobs scheduled on or before this time */
-                date_to?: string | null;
+                status?: string | null;
+                contact_id?: number | null;
+                page?: number;
+                page_size?: number;
             };
             header?: never;
             path: {
@@ -26807,7 +25477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobListResponse"];
+                    "application/json": components["schemas"]["PaginatedInvoices"];
                 };
             };
             /** @description Validation Error */
@@ -26821,7 +25491,7 @@ export interface operations {
             };
         };
     };
-    create_job_api_v1_workspaces__workspace_id__jobs_post: {
+    create_invoice_api_v1_workspaces__workspace_id__invoices_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -26832,7 +25502,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["JobCreate"];
+                "application/json": components["schemas"]["InvoiceCreate"];
             };
         };
         responses: {
@@ -26842,7 +25512,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26856,17 +25526,13 @@ export interface operations {
             };
         };
     };
-    list_my_calendar_api_v1_workspaces__workspace_id__jobs_calendar_mine_get: {
+    get_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__get: {
         parameters: {
-            query?: {
-                /** @description Jobs scheduled on or after this time */
-                date_from?: string | null;
-                /** @description Jobs scheduled on or before this time */
-                date_to?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 workspace_id: string;
+                invoice_id: string;
             };
             cookie?: never;
         };
@@ -26878,7 +25544,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobListResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26892,17 +25558,21 @@ export interface operations {
             };
         };
     };
-    get_job_api_v1_workspaces__workspace_id__jobs__job_id__get: {
+    update_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
                 workspace_id: string;
+                invoice_id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -26910,7 +25580,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26924,13 +25594,13 @@ export interface operations {
             };
         };
     };
-    delete_job_api_v1_workspaces__workspace_id__jobs__job_id__delete: {
+    delete_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
                 workspace_id: string;
+                invoice_id: string;
             };
             cookie?: never;
         };
@@ -26954,29 +25624,29 @@ export interface operations {
             };
         };
     };
-    update_job_api_v1_workspaces__workspace_id__jobs__job_id__patch: {
+    add_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
                 workspace_id: string;
+                invoice_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["JobUpdate"];
+                "application/json": components["schemas"]["InvoiceLineItemCreate"];
             };
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26990,19 +25660,20 @@ export interface operations {
             };
         };
     };
-    assign_technicians_api_v1_workspaces__workspace_id__jobs__job_id__assignments_post: {
+    update_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
                 workspace_id: string;
+                invoice_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["JobAssignRequest"];
+                "application/json": components["schemas"]["InvoiceLineItemUpdate"];
             };
         };
         responses: {
@@ -27012,7 +25683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -27026,14 +25697,14 @@ export interface operations {
             };
         };
     };
-    unassign_technician_api_v1_workspaces__workspace_id__jobs__job_id__assignments__technician_id__delete: {
+    remove_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
-                technician_id: string;
                 workspace_id: string;
+                invoice_id: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -27045,7 +25716,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -27059,21 +25730,17 @@ export interface operations {
             };
         };
     };
-    schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post: {
+    create_payment_link_api_v1_workspaces__workspace_id__invoices__invoice_id__payment_link_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                job_id: string;
                 workspace_id: string;
+                invoice_id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JobScheduleRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -27081,7 +25748,71 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["JobResponse"];
+                    "application/json": components["schemas"]["InvoicePaymentLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -27366,169 +26097,6 @@ export interface operations {
             };
         };
     };
-    create_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LeadSourceCampaignCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeadSourceCampaignResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns__campaign_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                campaign_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_get: {
-        parameters: {
-            query?: {
-                lead_source_id?: string | null;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeadSourceSpendEntryResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LeadSourceSpendEntryCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeadSourceSpendEntryResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend__spend_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                spend_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_lead_sources_api_v1_workspaces__workspace_id__lead_sources_get: {
         parameters: {
             query?: never;
@@ -27582,39 +26150,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadSourceResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_unattributed_leads_api_v1_workspaces__workspace_id__lead_sources_unattributed_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnattributedLeadResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -27714,73 +26249,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_lead_source_campaigns_api_v1_workspaces__workspace_id__lead_sources__lead_source_id__campaigns_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                lead_source_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LeadSourceCampaignResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    bulk_create_workspace_members_api_v1_workspaces__workspace_id__members_bulk_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BulkMemberCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BulkMemberCreateResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
@@ -32250,173 +30718,6 @@ export interface operations {
             };
         };
     };
-    list_service_locations_api_v1_workspaces__workspace_id__service_locations_get: {
-        parameters: {
-            query?: {
-                contact_id?: number | null;
-                is_active?: boolean | null;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ServiceLocationListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_service_location_api_v1_workspaces__workspace_id__service_locations_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ServiceLocationCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ServiceLocationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                location_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ServiceLocationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                location_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ServiceLocationUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ServiceLocationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                location_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     set_default_workspace_api_v1_workspaces__workspace_id__set_default_post: {
         parameters: {
             query?: never;
@@ -32864,173 +31165,6 @@ export interface operations {
             path: {
                 workspace_id: string;
                 tag_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_technicians_api_v1_workspaces__workspace_id__technicians_get: {
-        parameters: {
-            query?: {
-                crew_id?: string | null;
-                is_active?: boolean | null;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TechnicianListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_technician_api_v1_workspaces__workspace_id__technicians_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TechnicianCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TechnicianResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_technician_api_v1_workspaces__workspace_id__technicians__technician_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                technician_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TechnicianResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_technician_api_v1_workspaces__workspace_id__technicians__technician_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                technician_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TechnicianUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TechnicianResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_technician_api_v1_workspaces__workspace_id__technicians__technician_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                technician_id: string;
-                workspace_id: string;
             };
             cookie?: never;
         };

@@ -133,3 +133,10 @@ class PaginatedInvoices(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class InvoicePaymentLinkResponse(BaseModel):
+    """Stripe Checkout link for collecting an invoice's outstanding balance."""
+
+    session_id: str
+    url: str | None

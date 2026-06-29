@@ -367,6 +367,15 @@ async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
     subscription path so they mark a :class:`CallPayment` paid + notify operators.
     """
     metadata = session.get("metadata") or {}
+    # Customer-invoice payments also run in ``payment`` mode, so route them by
+    # their ``invoice_id`` metadata *before* the in-call-payment check below.
+    if metadata.get("invoice_id"):
+        from app.services.invoices.invoice_service import (
+            handle_invoice_checkout_session_completed,
+        )
+
+        await handle_invoice_checkout_session_completed(session, db)
+        return
     if session.get("mode") == "payment" or metadata.get("call_payment_id"):
         from app.services.payments import call_payment_service
 

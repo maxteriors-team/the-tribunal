@@ -3568,43 +3568,6 @@
         "title": "ArmStatusUpdate",
         "type": "object"
       },
-      "AssignLeadSourceRequest": {
-        "description": "Operator action assigning a lead source to an unattributed contact.",
-        "properties": {
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "format": "uuid",
-            "title": "Lead Source Id",
-            "type": "string"
-          },
-          "source_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LeadSourceType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "lead_source_id"
-        ],
-        "title": "AssignLeadSourceRequest",
-        "type": "object"
-      },
       "AssistantChatRequest": {
         "description": "Request to send a message to the CRM assistant.",
         "properties": {
@@ -3947,61 +3910,6 @@
           "total"
         ],
         "title": "AtRiskDealsResponse",
-        "type": "object"
-      },
-      "AttributionConfidenceLevel": {
-        "description": "Human-readable confidence bucket for lead-source attribution.",
-        "enum": [
-          "exact",
-          "high",
-          "medium",
-          "low",
-          "unknown"
-        ],
-        "title": "AttributionConfidenceLevel",
-        "type": "string"
-      },
-      "AttributionConfidenceSummary": {
-        "description": "Rollup of how reliable the attribution is for a source ROI row.",
-        "properties": {
-          "attributed_closed_won_jobs": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Attributed Closed Won Jobs",
-            "type": "integer"
-          },
-          "average_score": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Average Score"
-          },
-          "level": {
-            "$ref": "#/components/schemas/AttributionConfidenceLevel",
-            "default": "unknown"
-          },
-          "notes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Notes",
-            "type": "array"
-          },
-          "total_closed_won_jobs": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Total Closed Won Jobs",
-            "type": "integer"
-          }
-        },
-        "title": "AttributionConfidenceSummary",
         "type": "object"
       },
       "AutomationActionSchema": {
@@ -4861,189 +4769,6 @@
           "errors"
         ],
         "title": "BulkDeleteResponse",
-        "type": "object"
-      },
-      "BulkMemberCreateRequest": {
-        "description": "Request body for bulk member creation.",
-        "properties": {
-          "members": {
-            "items": {
-              "$ref": "#/components/schemas/BulkMemberItem"
-            },
-            "maxItems": 100,
-            "minItems": 1,
-            "title": "Members",
-            "type": "array"
-          }
-        },
-        "required": [
-          "members"
-        ],
-        "title": "BulkMemberCreateRequest",
-        "type": "object"
-      },
-      "BulkMemberCreateResponse": {
-        "description": "Aggregate result of a bulk member creation request.",
-        "properties": {
-          "added_existing": {
-            "title": "Added Existing",
-            "type": "integer"
-          },
-          "already_member": {
-            "title": "Already Member",
-            "type": "integer"
-          },
-          "created": {
-            "title": "Created",
-            "type": "integer"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/BulkMemberResultItem"
-            },
-            "title": "Results",
-            "type": "array"
-          },
-          "skipped": {
-            "title": "Skipped",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total",
-          "created",
-          "added_existing",
-          "already_member",
-          "skipped",
-          "results"
-        ],
-        "title": "BulkMemberCreateResponse",
-        "type": "object"
-      },
-      "BulkMemberItem": {
-        "description": "One member to provision in a bulk request.",
-        "properties": {
-          "email": {
-            "format": "email",
-            "title": "Email",
-            "type": "string"
-          },
-          "full_name": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Name"
-          },
-          "password": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "minLength": 8,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Password"
-          },
-          "role": {
-            "default": "member",
-            "enum": [
-              "admin",
-              "manager",
-              "dispatcher",
-              "sales_rep",
-              "technician",
-              "member"
-            ],
-            "title": "Role",
-            "type": "string"
-          }
-        },
-        "required": [
-          "email"
-        ],
-        "title": "BulkMemberItem",
-        "type": "object"
-      },
-      "BulkMemberResultItem": {
-        "description": "Per-row outcome for a bulk member creation request.",
-        "properties": {
-          "email": {
-            "title": "Email",
-            "type": "string"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "role": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Role"
-          },
-          "status": {
-            "enum": [
-              "created",
-              "added_existing",
-              "already_member",
-              "skipped"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "temporary_password": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temporary Password"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          }
-        },
-        "required": [
-          "email",
-          "status"
-        ],
-        "title": "BulkMemberResultItem",
         "type": "object"
       },
       "BulkStatusUpdateRequest": {
@@ -8062,19 +7787,6 @@
             ],
             "title": "Address Zip"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "avatar_url": {
             "anyOf": [
               {
@@ -8111,71 +7823,11 @@
             ],
             "title": "Email"
           },
-          "fbclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fbclid"
-          },
           "first_name": {
             "maxLength": 100,
             "minLength": 1,
             "title": "First Name",
             "type": "string"
-          },
-          "first_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch At"
-          },
-          "first_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Campaign Id"
-          },
-          "first_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Id"
-          },
-          "gclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gclid"
           },
           "important_dates": {
             "anyOf": [
@@ -8189,18 +7841,6 @@
             ],
             "title": "Important Dates"
           },
-          "landing_page": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Landing Page"
-          },
           "last_name": {
             "anyOf": [
               {
@@ -8212,42 +7852,6 @@
               }
             ],
             "title": "Last Name"
-          },
-          "latest_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch At"
-          },
-          "latest_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Campaign Id"
-          },
-          "latest_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Id"
           },
           "notes": {
             "anyOf": [
@@ -8265,18 +7869,6 @@
             "minLength": 10,
             "title": "Phone Number",
             "type": "string"
-          },
-          "referrer": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referrer"
           },
           "source": {
             "anyOf": [
@@ -8307,66 +7899,6 @@
               }
             ],
             "title": "Tags"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "utm_content": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Content"
-          },
-          "utm_medium": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Medium"
-          },
-          "utm_source": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Source"
-          },
-          "utm_term": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Term"
           }
         },
         "required": [
@@ -8558,19 +8090,6 @@
             ],
             "title": "Address Zip"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "avatar_url": {
             "anyOf": [
               {
@@ -8649,69 +8168,9 @@
             ],
             "title": "Enrichment Status"
           },
-          "fbclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fbclid"
-          },
           "first_name": {
             "title": "First Name",
             "type": "string"
-          },
-          "first_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch At"
-          },
-          "first_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Campaign Id"
-          },
-          "first_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Id"
-          },
-          "gclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gclid"
           },
           "id": {
             "title": "Id",
@@ -8732,18 +8191,6 @@
           "is_qualified": {
             "title": "Is Qualified",
             "type": "boolean"
-          },
-          "landing_page": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Landing Page"
           },
           "last_appointment_status": {
             "anyOf": [
@@ -8778,42 +8225,6 @@
               }
             ],
             "title": "Last Name"
-          },
-          "latest_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch At"
-          },
-          "latest_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Campaign Id"
-          },
-          "latest_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Id"
           },
           "lead_score": {
             "title": "Lead Score",
@@ -8872,18 +8283,6 @@
             ],
             "title": "Qualified At"
           },
-          "referrer": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referrer"
-          },
           "source": {
             "anyOf": [
               {
@@ -8936,66 +8335,6 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "utm_content": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Content"
-          },
-          "utm_medium": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Medium"
-          },
-          "utm_source": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Source"
-          },
-          "utm_term": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Term"
           },
           "website_url": {
             "anyOf": [
@@ -9148,19 +8487,6 @@
             ],
             "title": "Address Zip"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "avatar_url": {
             "anyOf": [
               {
@@ -9197,18 +8523,6 @@
             ],
             "title": "Email"
           },
-          "fbclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fbclid"
-          },
           "first_name": {
             "anyOf": [
               {
@@ -9222,54 +8536,6 @@
             ],
             "title": "First Name"
           },
-          "first_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch At"
-          },
-          "first_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Campaign Id"
-          },
-          "first_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Id"
-          },
-          "gclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gclid"
-          },
           "important_dates": {
             "anyOf": [
               {
@@ -9282,18 +8548,6 @@
             ],
             "title": "Important Dates"
           },
-          "landing_page": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Landing Page"
-          },
           "last_name": {
             "anyOf": [
               {
@@ -9305,42 +8559,6 @@
               }
             ],
             "title": "Last Name"
-          },
-          "latest_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch At"
-          },
-          "latest_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Campaign Id"
-          },
-          "latest_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Id"
           },
           "lead_score": {
             "anyOf": [
@@ -9377,18 +8595,6 @@
             ],
             "title": "Phone Number"
           },
-          "referrer": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referrer"
-          },
           "status": {
             "anyOf": [
               {
@@ -9413,66 +8619,6 @@
               }
             ],
             "title": "Tags"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "utm_content": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Content"
-          },
-          "utm_medium": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Medium"
-          },
-          "utm_source": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Source"
-          },
-          "utm_term": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Term"
           }
         },
         "title": "ContactUpdate",
@@ -9535,19 +8681,6 @@
               }
             ],
             "title": "Address Zip"
-          },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
           },
           "avatar_url": {
             "anyOf": [
@@ -9627,69 +8760,9 @@
             ],
             "title": "Enrichment Status"
           },
-          "fbclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fbclid"
-          },
           "first_name": {
             "title": "First Name",
             "type": "string"
-          },
-          "first_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch At"
-          },
-          "first_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Campaign Id"
-          },
-          "first_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Touch Lead Source Id"
-          },
-          "gclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gclid"
           },
           "id": {
             "title": "Id",
@@ -9710,18 +8783,6 @@
           "is_qualified": {
             "title": "Is Qualified",
             "type": "boolean"
-          },
-          "landing_page": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Landing Page"
           },
           "last_appointment_status": {
             "anyOf": [
@@ -9780,42 +8841,6 @@
             ],
             "title": "Last Name"
           },
-          "latest_touch_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch At"
-          },
-          "latest_touch_lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Campaign Id"
-          },
-          "latest_touch_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Touch Lead Source Id"
-          },
           "lead_score": {
             "title": "Lead Score",
             "type": "integer"
@@ -9872,18 +8897,6 @@
               }
             ],
             "title": "Qualified At"
-          },
-          "referrer": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referrer"
           },
           "source": {
             "anyOf": [
@@ -9942,66 +8955,6 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "utm_content": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Content"
-          },
-          "utm_medium": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Medium"
-          },
-          "utm_source": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Source"
-          },
-          "utm_term": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Term"
           },
           "website_url": {
             "anyOf": [
@@ -10343,187 +9296,6 @@
         "title": "CreateRehearsalRequest",
         "type": "object"
       },
-      "CrewCreate": {
-        "description": "Create a field crew.",
-        "properties": {
-          "color": {
-            "default": "#6366f1",
-            "pattern": "^#[0-9a-fA-F]{6}$",
-            "title": "Color",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "is_active": {
-            "default": true,
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "CrewCreate",
-        "type": "object"
-      },
-      "CrewListResponse": {
-        "description": "List of crews.",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/CrewResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "CrewListResponse",
-        "type": "object"
-      },
-      "CrewResponse": {
-        "description": "Crew response.",
-        "properties": {
-          "color": {
-            "title": "Color",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "technician_count": {
-            "default": 0,
-            "title": "Technician Count",
-            "type": "integer"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "workspace_id",
-          "name",
-          "color",
-          "description",
-          "is_active",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "CrewResponse",
-        "type": "object"
-      },
-      "CrewUpdate": {
-        "description": "Partial update for a crew.",
-        "properties": {
-          "color": {
-            "anyOf": [
-              {
-                "pattern": "^#[0-9a-fA-F]{6}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Color"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "title": "CrewUpdate",
-        "type": "object"
-      },
       "DashboardResponse": {
         "description": "Complete dashboard response.",
         "properties": {
@@ -10549,9 +9321,6 @@
           },
           "knowledge_base_stats": {
             "$ref": "#/components/schemas/KnowledgeBaseStats"
-          },
-          "lead_source_roi_stats": {
-            "$ref": "#/components/schemas/LeadSourceROIStats"
           },
           "recent_activity": {
             "items": {
@@ -14117,10 +12886,6 @@
             "description": "Role to assign when invitation is accepted",
             "enum": [
               "admin",
-              "manager",
-              "dispatcher",
-              "sales_rep",
-              "technician",
               "member"
             ],
             "title": "Role",
@@ -14283,227 +13048,189 @@
         "title": "InvitationResponse",
         "type": "object"
       },
-      "JobAssignRequest": {
-        "description": "Tag one or more technicians onto a job.",
-        "properties": {
-          "technician_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "minItems": 1,
-            "title": "Technician Ids",
-            "type": "array"
-          }
-        },
-        "required": [
-          "technician_ids"
-        ],
-        "title": "JobAssignRequest",
-        "type": "object"
-      },
-      "JobCreate": {
-        "description": "Create a job. Optionally pre-scheduled and/or pre-assigned to workers.",
+      "InvoiceCreate": {
+        "description": "Create an invoice with its initial line items.",
         "properties": {
           "contact_id": {
-            "description": "Owning customer contact id",
-            "title": "Contact Id",
-            "type": "integer"
-          },
-          "crew_id": {
             "anyOf": [
               {
-                "format": "uuid",
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Optional dispatch lane/crew",
-            "title": "Crew Id"
+            "title": "Contact Id"
           },
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 5000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "scheduled_end": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scheduled End"
-          },
-          "scheduled_start": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Scheduled Start"
-          },
-          "service_location_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Job site",
-            "title": "Service Location Id"
-          },
-          "technician_ids": {
-            "description": "Technicians to tag onto this job",
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "title": "Technician Ids",
-            "type": "array"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Title",
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
             "type": "string"
-          }
-        },
-        "required": [
-          "contact_id",
-          "title"
-        ],
-        "title": "JobCreate",
-        "type": "object"
-      },
-      "JobListResponse": {
-        "description": "List of jobs.",
-        "properties": {
-          "items": {
+          },
+          "discount_amount": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "line_items": {
             "items": {
-              "$ref": "#/components/schemas/JobResponse"
+              "$ref": "#/components/schemas/InvoiceLineItemCreate"
             },
-            "title": "Items",
+            "title": "Line Items",
             "type": "array"
           },
-          "total": {
-            "title": "Total",
-            "type": "integer"
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "tax_amount": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
           }
         },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "JobListResponse",
+        "title": "InvoiceCreate",
         "type": "object"
       },
-      "JobResponse": {
-        "description": "Job response, including its assigned technicians.",
+      "InvoiceDetailResponse": {
+        "description": "Invoice with its line items.",
         "properties": {
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "number"
+          },
           "contact_id": {
-            "title": "Contact Id",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
           },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
-          "crew_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crew Id"
+          "currency": {
+            "title": "Currency",
+            "type": "string"
           },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
           },
-          "external_id": {
+          "due_date": {
             "anyOf": [
               {
+                "format": "date",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "External Id"
-          },
-          "external_source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "External Source"
+            "title": "Due Date"
           },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
           },
-          "scheduled_end": {
+          "issue_date": {
             "anyOf": [
               {
-                "format": "date-time",
+                "format": "date",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Scheduled End"
+            "title": "Issue Date"
           },
-          "scheduled_start": {
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItemResponse"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
+          "notes": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Scheduled Start"
+            "title": "Notes"
           },
-          "service_location_id": {
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "opportunity_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -14513,21 +13240,66 @@
                 "type": "null"
               }
             ],
-            "title": "Service Location Id"
+            "title": "Opportunity Id"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
           },
           "status": {
-            "$ref": "#/components/schemas/JobStatus"
-          },
-          "technicians": {
-            "items": {
-              "$ref": "#/components/schemas/TechnicianSummary"
-            },
-            "title": "Technicians",
-            "type": "array"
-          },
-          "title": {
-            "title": "Title",
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "partial",
+              "void",
+              "overdue"
+            ],
+            "title": "Status",
             "type": "string"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_amount": {
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
           },
           "updated_at": {
             "format": "date-time",
@@ -14543,74 +13315,26 @@
         "required": [
           "id",
           "workspace_id",
-          "contact_id",
-          "service_location_id",
-          "crew_id",
-          "title",
-          "description",
+          "number",
           "status",
-          "scheduled_start",
-          "scheduled_end",
-          "external_source",
-          "external_id",
+          "subtotal",
+          "tax_amount",
+          "discount_amount",
+          "total",
+          "amount_paid",
+          "currency",
           "created_at",
           "updated_at"
         ],
-        "title": "JobResponse",
+        "title": "InvoiceDetailResponse",
         "type": "object"
       },
-      "JobScheduleRequest": {
-        "description": "Set a job's time window (flips unscheduled -> scheduled).",
+      "InvoiceLineItemCreate": {
+        "description": "Create a line item.",
         "properties": {
-          "scheduled_end": {
-            "format": "date-time",
-            "title": "Scheduled End",
-            "type": "string"
-          },
-          "scheduled_start": {
-            "format": "date-time",
-            "title": "Scheduled Start",
-            "type": "string"
-          }
-        },
-        "required": [
-          "scheduled_start",
-          "scheduled_end"
-        ],
-        "title": "JobScheduleRequest",
-        "type": "object"
-      },
-      "JobStatus": {
-        "description": "Lifecycle of a field-service job (work order).\n\n``unscheduled`` — created but has no time window yet (sits in the queue).\n``scheduled``   — has a ``scheduled_start``/``scheduled_end`` window.\n``in_progress`` — a technician is actively working it.\n``completed``   — work is finished.\n``cancelled``   — called off; kept for history.",
-        "enum": [
-          "unscheduled",
-          "scheduled",
-          "in_progress",
-          "completed",
-          "cancelled"
-        ],
-        "title": "JobStatus",
-        "type": "string"
-      },
-      "JobUpdate": {
-        "description": "Partial update for a job. Status is recomputed from the time window.",
-        "properties": {
-          "crew_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crew Id"
-          },
           "description": {
             "anyOf": [
               {
-                "maxLength": 5000,
                 "type": "string"
               },
               {
@@ -14619,31 +13343,274 @@
             ],
             "title": "Description"
           },
-          "scheduled_end": {
+          "discount": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Discount",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "unit_price": {
+            "minimum": 0.0,
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "unit_price"
+        ],
+        "title": "InvoiceLineItemCreate",
+        "type": "object"
+      },
+      "InvoiceLineItemResponse": {
+        "description": "Line item as returned by the API.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Scheduled End"
+            "title": "Description"
           },
-          "scheduled_start": {
+          "discount": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Discount",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invoice_id": {
+            "format": "uuid",
+            "title": "Invoice Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "unit_price": {
+            "minimum": 0.0,
+            "title": "Unit Price",
+            "type": "number"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "unit_price",
+          "id",
+          "invoice_id",
+          "total",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InvoiceLineItemResponse",
+        "type": "object"
+      },
+      "InvoiceLineItemUpdate": {
+        "description": "Update a line item (all fields optional).",
+        "properties": {
+          "description": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Scheduled Start"
+            "title": "Description"
           },
-          "service_location_id": {
+          "discount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Price"
+          }
+        },
+        "title": "InvoiceLineItemUpdate",
+        "type": "object"
+      },
+      "InvoicePaymentLinkResponse": {
+        "description": "Stripe Checkout link for collecting an invoice's outstanding balance.",
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "session_id",
+          "url"
+        ],
+        "title": "InvoicePaymentLinkResponse",
+        "type": "object"
+      },
+      "InvoiceResponse": {
+        "description": "Invoice header as returned by list endpoints.",
+        "properties": {
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "number"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "opportunity_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -14653,34 +13620,204 @@
                 "type": "null"
               }
             ],
-            "title": "Service Location Id"
+            "title": "Opportunity Id"
           },
-          "status": {
+          "paid_at": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/JobStatus"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Advance lifecycle (e.g. in_progress/completed/cancelled)"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
+                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Title"
+            "title": "Paid At"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "partial",
+              "void",
+              "overdue"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_amount": {
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
           }
         },
-        "title": "JobUpdate",
+        "required": [
+          "id",
+          "workspace_id",
+          "number",
+          "status",
+          "subtotal",
+          "tax_amount",
+          "discount_amount",
+          "total",
+          "amount_paid",
+          "currency",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InvoiceResponse",
+        "type": "object"
+      },
+      "InvoiceUpdate": {
+        "description": "Update invoice header fields (all optional). Line items have their own\nsub-resource endpoints; ``status``/``number``/totals are server-derived.",
+        "properties": {
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "discount_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Amount"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "tax_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Amount"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          }
+        },
+        "title": "InvoiceUpdate",
         "type": "object"
       },
       "KnowledgeBaseStats": {
@@ -16039,236 +15176,6 @@
         "title": "LeadProspectResponse",
         "type": "object"
       },
-      "LeadSourceCampaignCreate": {
-        "description": "Schema for creating an attribution campaign under a lead source.",
-        "properties": {
-          "campaign_metadata": {
-            "additionalProperties": true,
-            "title": "Campaign Metadata",
-            "type": "object"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "ended_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ended On"
-          },
-          "lead_source_id": {
-            "format": "uuid",
-            "title": "Lead Source Id",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "platform_campaign_id": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Platform Campaign Id"
-          },
-          "platform_campaign_name": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Platform Campaign Name"
-          },
-          "started_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started On"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          }
-        },
-        "required": [
-          "name",
-          "lead_source_id"
-        ],
-        "title": "LeadSourceCampaignCreate",
-        "type": "object"
-      },
-      "LeadSourceCampaignResponse": {
-        "description": "Schema for returning a lead-source campaign.",
-        "properties": {
-          "campaign_metadata": {
-            "additionalProperties": true,
-            "title": "Campaign Metadata",
-            "type": "object"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "ended_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ended On"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "lead_source_id": {
-            "format": "uuid",
-            "title": "Lead Source Id",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "platform_campaign_id": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Platform Campaign Id"
-          },
-          "platform_campaign_name": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Platform Campaign Name"
-          },
-          "started_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started On"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "id",
-          "workspace_id",
-          "lead_source_id",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "LeadSourceCampaignResponse",
-        "type": "object"
-      },
       "LeadSourceCreate": {
         "description": "Schema for creating a lead source.",
         "properties": {
@@ -16300,65 +15207,12 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
-          },
-          "source_type": {
-            "$ref": "#/components/schemas/LeadSourceType",
-            "default": "other"
           }
         },
         "required": [
           "name"
         ],
         "title": "LeadSourceCreate",
-        "type": "object"
-      },
-      "LeadSourceROIStats": {
-        "description": "Dashboard payload for ranking lead sources by spend and closed-won jobs.",
-        "properties": {
-          "currency": {
-            "default": "USD",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Currency",
-            "type": "string"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/SourceROIRow"
-            },
-            "title": "Rows",
-            "type": "array"
-          },
-          "source_types_ranked": {
-            "items": {
-              "$ref": "#/components/schemas/LeadSourceType"
-            },
-            "title": "Source Types Ranked",
-            "type": "array"
-          },
-          "total_closed_won_jobs": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Total Closed Won Jobs",
-            "type": "integer"
-          },
-          "total_closed_won_revenue": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Total Closed Won Revenue",
-            "type": "number"
-          },
-          "total_spend": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Total Spend",
-            "type": "number"
-          },
-          "winner": {
-            "$ref": "#/components/schemas/LeadSourceWinnerSummary"
-          }
-        },
-        "title": "LeadSourceROIStats",
         "type": "object"
       },
       "LeadSourceResponse": {
@@ -16407,10 +15261,6 @@
             "title": "Public Key",
             "type": "string"
           },
-          "source_type": {
-            "$ref": "#/components/schemas/LeadSourceType",
-            "default": "other"
-          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -16436,168 +15286,6 @@
         ],
         "title": "LeadSourceResponse",
         "type": "object"
-      },
-      "LeadSourceSpendEntryCreate": {
-        "description": "Schema for creating a manual ad/source spend entry.",
-        "properties": {
-          "amount": {
-            "minimum": 0.0,
-            "title": "Amount",
-            "type": "number"
-          },
-          "currency": {
-            "default": "USD",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Currency",
-            "type": "string"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "format": "uuid",
-            "title": "Lead Source Id",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "spend_ends_on": {
-            "format": "date",
-            "title": "Spend Ends On",
-            "type": "string"
-          },
-          "spend_starts_on": {
-            "format": "date",
-            "title": "Spend Starts On",
-            "type": "string"
-          }
-        },
-        "required": [
-          "spend_starts_on",
-          "spend_ends_on",
-          "amount",
-          "lead_source_id"
-        ],
-        "title": "LeadSourceSpendEntryCreate",
-        "type": "object"
-      },
-      "LeadSourceSpendEntryResponse": {
-        "description": "Schema for returning a manual ad/source spend entry.",
-        "properties": {
-          "amount": {
-            "minimum": 0.0,
-            "title": "Amount",
-            "type": "number"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "currency": {
-            "default": "USD",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Currency",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "format": "uuid",
-            "title": "Lead Source Id",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "spend_ends_on": {
-            "format": "date",
-            "title": "Spend Ends On",
-            "type": "string"
-          },
-          "spend_starts_on": {
-            "format": "date",
-            "title": "Spend Starts On",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "spend_starts_on",
-          "spend_ends_on",
-          "amount",
-          "id",
-          "workspace_id",
-          "lead_source_id",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "LeadSourceSpendEntryResponse",
-        "type": "object"
-      },
-      "LeadSourceType": {
-        "description": "Top-level channel used for lead attribution ROI reporting.",
-        "enum": [
-          "facebook_ads",
-          "google_ads",
-          "organic",
-          "phone_radio",
-          "other"
-        ],
-        "title": "LeadSourceType",
-        "type": "string"
       },
       "LeadSourceUpdate": {
         "description": "Schema for updating a lead source.",
@@ -16668,125 +15356,9 @@
               }
             ],
             "title": "Name"
-          },
-          "source_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LeadSourceType"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "title": "LeadSourceUpdate",
-        "type": "object"
-      },
-      "LeadSourceWinnerSummary": {
-        "description": "Summary card for the current winning lead source.",
-        "properties": {
-          "attribution_confidence": {
-            "$ref": "#/components/schemas/AttributionConfidenceSummary"
-          },
-          "closed_won_jobs": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Closed Won Jobs",
-            "type": "integer"
-          },
-          "closed_won_revenue": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Closed Won Revenue",
-            "type": "number"
-          },
-          "currency": {
-            "default": "USD",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Currency",
-            "type": "string"
-          },
-          "has_winner": {
-            "default": false,
-            "title": "Has Winner",
-            "type": "boolean"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
-          },
-          "net_revenue": {
-            "default": 0.0,
-            "title": "Net Revenue",
-            "type": "number"
-          },
-          "rank_by": {
-            "default": "none",
-            "enum": [
-              "roi",
-              "closed_won_revenue",
-              "closed_won_jobs",
-              "none"
-            ],
-            "title": "Rank By",
-            "type": "string"
-          },
-          "reason": {
-            "default": "No closed-won jobs with attributed lead-source data yet.",
-            "title": "Reason",
-            "type": "string"
-          },
-          "roi_multiple": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Roi Multiple"
-          },
-          "source_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Name"
-          },
-          "source_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LeadSourceType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "spend": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Spend",
-            "type": "number"
-          }
-        },
-        "title": "LeadSourceWinnerSummary",
         "type": "object"
       },
       "LiveCallResponse": {
@@ -20110,19 +18682,6 @@
             ],
             "title": "Amount"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "currency": {
             "default": "USD",
             "title": "Currency",
@@ -20150,30 +18709,6 @@
               }
             ],
             "title": "Expected Close Date"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
           },
           "lost_reason": {
             "anyOf": [
@@ -20281,19 +18816,6 @@
             ],
             "title": "Assigned User Id"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "closed_by_id": {
             "anyOf": [
               {
@@ -20358,30 +18880,6 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
           },
           "line_items": {
             "default": [],
@@ -20692,19 +19190,6 @@
             ],
             "title": "Assigned User Id"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "closed_by_id": {
             "anyOf": [
               {
@@ -20769,30 +19254,6 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
           },
           "line_items": {
             "default": [],
@@ -20932,19 +19393,6 @@
             ],
             "title": "Assigned User Id"
           },
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "currency": {
             "anyOf": [
               {
@@ -20989,30 +19437,6 @@
               }
             ],
             "title": "Is Active"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
           },
           "lost_reason": {
             "anyOf": [
@@ -22275,6 +20699,43 @@
           "pages"
         ],
         "title": "PaginatedConversations",
+        "type": "object"
+      },
+      "PaginatedInvoices": {
+        "description": "Paginated list of invoices.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "PaginatedInvoices",
         "type": "object"
       },
       "PaginatedLeadDiscoveryJobs": {
@@ -28243,572 +26704,6 @@
         "title": "SequenceEnrollmentStatus",
         "type": "string"
       },
-      "ServiceLocationCreate": {
-        "description": "Create a service location (job site) for a customer.",
-        "properties": {
-          "access_notes": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Access Notes"
-          },
-          "address_line1": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line1"
-          },
-          "address_line2": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line2"
-          },
-          "city": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "City"
-          },
-          "contact_id": {
-            "description": "Owning customer contact id",
-            "title": "Contact Id",
-            "type": "integer"
-          },
-          "country": {
-            "default": "US",
-            "maxLength": 2,
-            "minLength": 2,
-            "title": "Country",
-            "type": "string"
-          },
-          "is_active": {
-            "default": true,
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "latitude": {
-            "anyOf": [
-              {
-                "maximum": 90.0,
-                "minimum": -90.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latitude"
-          },
-          "longitude": {
-            "anyOf": [
-              {
-                "maximum": 180.0,
-                "minimum": -180.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Longitude"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "postal_code": {
-            "anyOf": [
-              {
-                "maxLength": 50,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Postal Code"
-          },
-          "state": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "State"
-          }
-        },
-        "required": [
-          "contact_id"
-        ],
-        "title": "ServiceLocationCreate",
-        "type": "object"
-      },
-      "ServiceLocationListResponse": {
-        "description": "List of service locations.",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ServiceLocationResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "ServiceLocationListResponse",
-        "type": "object"
-      },
-      "ServiceLocationResponse": {
-        "description": "Service location response.",
-        "properties": {
-          "access_notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Access Notes"
-          },
-          "address_line1": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line1"
-          },
-          "address_line2": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line2"
-          },
-          "city": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "City"
-          },
-          "contact_id": {
-            "title": "Contact Id",
-            "type": "integer"
-          },
-          "country": {
-            "title": "Country",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "latitude": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latitude"
-          },
-          "longitude": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Longitude"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "postal_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Postal Code"
-          },
-          "state": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "State"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "workspace_id",
-          "contact_id",
-          "name",
-          "address_line1",
-          "address_line2",
-          "city",
-          "state",
-          "postal_code",
-          "country",
-          "latitude",
-          "longitude",
-          "access_notes",
-          "is_active",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "ServiceLocationResponse",
-        "type": "object"
-      },
-      "ServiceLocationUpdate": {
-        "description": "Partial update for a service location.",
-        "properties": {
-          "access_notes": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Access Notes"
-          },
-          "address_line1": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line1"
-          },
-          "address_line2": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address Line2"
-          },
-          "city": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "City"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "maxLength": 2,
-                "minLength": 2,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          },
-          "latitude": {
-            "anyOf": [
-              {
-                "maximum": 90.0,
-                "minimum": -90.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latitude"
-          },
-          "longitude": {
-            "anyOf": [
-              {
-                "maximum": 180.0,
-                "minimum": -180.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Longitude"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "postal_code": {
-            "anyOf": [
-              {
-                "maxLength": 50,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Postal Code"
-          },
-          "state": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "State"
-          }
-        },
-        "title": "ServiceLocationUpdate",
-        "type": "object"
-      },
-      "SourceROIRow": {
-        "description": "One ranked lead-source ROI row for dashboard reporting.",
-        "properties": {
-          "attribution_confidence": {
-            "$ref": "#/components/schemas/AttributionConfidenceSummary"
-          },
-          "closed_won_jobs": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Closed Won Jobs",
-            "type": "integer"
-          },
-          "closed_won_revenue": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Closed Won Revenue",
-            "type": "number"
-          },
-          "cost_per_closed_won_job": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Per Closed Won Job"
-          },
-          "currency": {
-            "default": "USD",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Currency",
-            "type": "string"
-          },
-          "is_winner": {
-            "default": false,
-            "title": "Is Winner",
-            "type": "boolean"
-          },
-          "lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Id"
-          },
-          "net_revenue": {
-            "default": 0.0,
-            "title": "Net Revenue",
-            "type": "number"
-          },
-          "rank": {
-            "minimum": 1.0,
-            "title": "Rank",
-            "type": "integer"
-          },
-          "revenue_per_closed_won_job": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revenue Per Closed Won Job"
-          },
-          "roi_multiple": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Roi Multiple"
-          },
-          "source_name": {
-            "title": "Source Name",
-            "type": "string"
-          },
-          "source_type": {
-            "$ref": "#/components/schemas/LeadSourceType"
-          },
-          "spend": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Spend",
-            "type": "number"
-          }
-        },
-        "required": [
-          "rank",
-          "source_type",
-          "source_name"
-        ],
-        "title": "SourceROIRow",
-        "type": "object"
-      },
       "SpeedToLeadMetrics": {
         "description": "First-response SLA rollup over the recent window (operator-facing).",
         "properties": {
@@ -29301,343 +27196,6 @@
           "created_at"
         ],
         "title": "TeamMemberResponse",
-        "type": "object"
-      },
-      "TechnicianCreate": {
-        "description": "Create a technician.",
-        "properties": {
-          "color": {
-            "default": "#0ea5e9",
-            "pattern": "^#[0-9a-fA-F]{6}$",
-            "title": "Color",
-            "type": "string"
-          },
-          "crew_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crew Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "is_active": {
-            "default": true,
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "phone": {
-            "anyOf": [
-              {
-                "maxLength": 50,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
-          },
-          "skills": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Skills",
-            "type": "array"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "TechnicianCreate",
-        "type": "object"
-      },
-      "TechnicianListResponse": {
-        "description": "List of technicians.",
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TechnicianResponse"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "TechnicianListResponse",
-        "type": "object"
-      },
-      "TechnicianResponse": {
-        "description": "Technician response.",
-        "properties": {
-          "color": {
-            "title": "Color",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "crew_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crew Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "phone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
-          },
-          "skills": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Skills",
-            "type": "array"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "workspace_id",
-          "user_id",
-          "crew_id",
-          "name",
-          "email",
-          "phone",
-          "skills",
-          "color",
-          "is_active",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "TechnicianResponse",
-        "type": "object"
-      },
-      "TechnicianSummary": {
-        "description": "Compact technician view for rendering avatars/chips on the calendar.",
-        "properties": {
-          "color": {
-            "title": "Color",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "color"
-        ],
-        "title": "TechnicianSummary",
-        "type": "object"
-      },
-      "TechnicianUpdate": {
-        "description": "Partial update for a technician.",
-        "properties": {
-          "color": {
-            "anyOf": [
-              {
-                "pattern": "^#[0-9a-fA-F]{6}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Color"
-          },
-          "crew_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Crew Id"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "phone": {
-            "anyOf": [
-              {
-                "maxLength": 50,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
-          },
-          "skills": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Skills"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          }
-        },
-        "title": "TechnicianUpdate",
         "type": "object"
       },
       "TestContactAdd": {
@@ -30344,107 +27902,12 @@
         "title": "TranscriptResponse",
         "type": "object"
       },
-      "UnattributedLeadResponse": {
-        "description": "A captured lead that has no known first-touch lead source yet.",
-        "properties": {
-          "contact_id": {
-            "title": "Contact Id",
-            "type": "integer"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "first_name": {
-            "title": "First Name",
-            "type": "string"
-          },
-          "last_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Name"
-          },
-          "phone_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          },
-          "suggested_lead_source_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Suggested Lead Source Id"
-          },
-          "suggested_source_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LeadSourceType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "contact_id",
-          "first_name",
-          "created_at"
-        ],
-        "title": "UnattributedLeadResponse",
-        "type": "object"
-      },
       "UpdateMemberRoleRequest": {
         "description": "Request to update a member's role.",
         "properties": {
           "role": {
             "enum": [
               "admin",
-              "manager",
-              "dispatcher",
-              "sales_rep",
-              "technician",
               "member"
             ],
             "title": "Role",
@@ -30698,11 +28161,6 @@
           },
           "is_active": {
             "title": "Is Active",
-            "type": "boolean"
-          },
-          "must_change_password": {
-            "default": false,
-            "title": "Must Change Password",
             "type": "boolean"
           }
         },
@@ -32134,17 +29592,6 @@
             "title": "Name",
             "type": "string"
           },
-          "role": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Role"
-          },
           "settings": {
             "additionalProperties": true,
             "title": "Settings",
@@ -32530,19 +29977,6 @@
       "app__schemas__lead_source__LeadSubmitRequest": {
         "description": "Public-facing lead submission request.",
         "properties": {
-          "attribution_confidence": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attribution Confidence"
-          },
           "company_name": {
             "anyOf": [
               {
@@ -32567,47 +30001,11 @@
             ],
             "title": "Email"
           },
-          "fbclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fbclid"
-          },
           "first_name": {
             "maxLength": 100,
             "minLength": 1,
             "title": "First Name",
             "type": "string"
-          },
-          "gclid": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gclid"
-          },
-          "landing_page": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Landing Page"
           },
           "last_name": {
             "anyOf": [
@@ -32620,18 +30018,6 @@
               }
             ],
             "title": "Last Name"
-          },
-          "lead_source_campaign_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lead Source Campaign Id"
           },
           "notes": {
             "anyOf": [
@@ -32650,18 +30036,6 @@
             "title": "Phone Number",
             "type": "string"
           },
-          "referrer": {
-            "anyOf": [
-              {
-                "maxLength": 2048,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Referrer"
-          },
           "source_detail": {
             "anyOf": [
               {
@@ -32673,66 +30047,6 @@
               }
             ],
             "title": "Source Detail"
-          },
-          "utm_campaign": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Campaign"
-          },
-          "utm_content": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Content"
-          },
-          "utm_medium": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Medium"
-          },
-          "utm_source": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Source"
-          },
-          "utm_term": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Utm Term"
           }
         },
         "required": [
@@ -35710,7 +33024,7 @@
         ]
       },
       "get": {
-        "description": "Get a specific workspace, including the caller's role.",
+        "description": "Get a specific workspace.",
         "operationId": "get_workspace_api_v1_workspaces__workspace_id__get",
         "parameters": [
           {
@@ -43614,67 +40928,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/lead-source": {
-      "post": {
-        "description": "Manually attribute a lead source to a contact from the cleanup queue.\n\nBackfills the contact's touch fields and any still-unattributed\nopportunities so the correction flows through to closed-won ROI.",
-        "operationId": "assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "contact_id",
-            "required": true,
-            "schema": {
-              "title": "Contact Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssignLeadSourceRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Assign Contact Lead Source",
-        "tags": [
-          "Contacts"
-        ]
-      }
-    },
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/messages": {
       "post": {
         "description": "Send an SMS message to a contact.\n\nThis endpoint finds or creates a conversation for the contact and sends the message.",
@@ -44843,304 +42096,6 @@
         "summary": "Send Message",
         "tags": [
           "Conversations"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/crews": {
-      "get": {
-        "description": "List crews with active-technician counts.",
-        "operationId": "list_crews_api_v1_workspaces__workspace_id__crews_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "is_active",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Is Active"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CrewListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Crews",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "post": {
-        "description": "Create a crew.",
-        "operationId": "create_crew_api_v1_workspaces__workspace_id__crews_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CrewCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CrewResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Crew",
-        "tags": [
-          "Field Service"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/crews/{crew_id}": {
-      "delete": {
-        "description": "Delete a crew. Assigned technicians are unassigned (crew set to null).",
-        "operationId": "delete_crew_api_v1_workspaces__workspace_id__crews__crew_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "crew_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Crew Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Delete Crew",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "get": {
-        "description": "Get a single crew.",
-        "operationId": "get_crew_api_v1_workspaces__workspace_id__crews__crew_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "crew_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Crew Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CrewResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Crew",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "put": {
-        "description": "Update a crew.",
-        "operationId": "update_crew_api_v1_workspaces__workspace_id__crews__crew_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "crew_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Crew Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CrewUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CrewResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Update Crew",
-        "tags": [
-          "Field Service"
         ]
       }
     },
@@ -46568,10 +43523,10 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/jobs": {
+    "/api/v1/workspaces/{workspace_id}/invoices": {
       "get": {
-        "description": "List jobs for the dispatch board / calendar, with optional filters.",
-        "operationId": "list_jobs_api_v1_workspaces__workspace_id__jobs_get",
+        "description": "List invoices in a workspace, newest first, with optional filters.",
+        "operationId": "list_invoices_api_v1_workspaces__workspace_id__invoices_get",
         "parameters": [
           {
             "in": "path",
@@ -46590,7 +43545,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/JobStatus"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -46601,74 +43556,41 @@
           },
           {
             "in": "query",
-            "name": "crew_id",
+            "name": "contact_id",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "format": "uuid",
-                  "type": "string"
+                  "type": "integer"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Crew Id"
+              "title": "Contact Id"
             }
           },
           {
             "in": "query",
-            "name": "technician_id",
+            "name": "page",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Technician Id"
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
             }
           },
           {
-            "description": "Jobs scheduled on or after this time",
             "in": "query",
-            "name": "date_from",
+            "name": "page_size",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Jobs scheduled on or after this time",
-              "title": "Date From"
-            }
-          },
-          {
-            "description": "Jobs scheduled on or before this time",
-            "in": "query",
-            "name": "date_to",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Jobs scheduled on or before this time",
-              "title": "Date To"
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           }
         ],
@@ -46677,7 +43599,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobListResponse"
+                  "$ref": "#/components/schemas/PaginatedInvoices"
                 }
               }
             },
@@ -46699,14 +43621,14 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "List Jobs",
+        "summary": "List Invoices",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       },
       "post": {
-        "description": "Create a job, optionally pre-scheduled and/or pre-assigned to workers.",
-        "operationId": "create_job_api_v1_workspaces__workspace_id__jobs_post",
+        "description": "Create a draft invoice with its initial line items.",
+        "operationId": "create_invoice_api_v1_workspaces__workspace_id__invoices_post",
         "parameters": [
           {
             "in": "path",
@@ -46723,7 +43645,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobCreate"
+                "$ref": "#/components/schemas/InvoiceCreate"
               }
             }
           },
@@ -46734,7 +43656,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -46756,114 +43678,17 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Create Job",
+        "summary": "Create Invoice",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/jobs/calendar/mine": {
-      "get": {
-        "description": "Jobs assigned to the current user, shown on *their* calendar.\n\nResolves the signed-in user to their technician record(s) in this workspace.\nReturns an empty list (not an error) when the user is not a field worker.",
-        "operationId": "list_my_calendar_api_v1_workspaces__workspace_id__jobs_calendar_mine_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Jobs scheduled on or after this time",
-            "in": "query",
-            "name": "date_from",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Jobs scheduled on or after this time",
-              "title": "Date From"
-            }
-          },
-          {
-            "description": "Jobs scheduled on or before this time",
-            "in": "query",
-            "name": "date_to",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Jobs scheduled on or before this time",
-              "title": "Date To"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List My Calendar",
-        "tags": [
-          "Field Service"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}": {
       "delete": {
-        "description": "Delete a job. Its technician assignments are removed (cascade).",
-        "operationId": "delete_job_api_v1_workspaces__workspace_id__jobs__job_id__delete",
+        "description": "Delete a draft invoice. Issued invoices must be voided instead.",
+        "operationId": "delete_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__delete",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -46871,6 +43696,16 @@
             "schema": {
               "format": "uuid",
               "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
               "type": "string"
             }
           }
@@ -46895,25 +43730,15 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Delete Job",
+        "summary": "Delete Invoice",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       },
       "get": {
-        "description": "Get a single job with its assigned technicians.",
-        "operationId": "get_job_api_v1_workspaces__workspace_id__jobs__job_id__get",
+        "description": "Get a specific invoice with its line items.",
+        "operationId": "get_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__get",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -46923,6 +43748,16 @@
               "title": "Workspace Id",
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -46930,7 +43765,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -46952,25 +43787,15 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Get Job",
+        "summary": "Get Invoice",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       },
-      "patch": {
-        "description": "Partially update a job. Status is recomputed when the window changes.",
-        "operationId": "update_job_api_v1_workspaces__workspace_id__jobs__job_id__patch",
+      "put": {
+        "description": "Update an invoice's header fields (totals/status are re-derived).",
+        "operationId": "update_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__put",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -46980,13 +43805,23 @@
               "title": "Workspace Id",
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobUpdate"
+                "$ref": "#/components/schemas/InvoiceUpdate"
               }
             }
           },
@@ -46997,7 +43832,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -47019,27 +43854,17 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Update Job",
+        "summary": "Update Invoice",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items": {
       "post": {
-        "description": "Tag technicians onto a job (idempotent).",
-        "operationId": "assign_technicians_api_v1_workspaces__workspace_id__jobs__job_id__assignments_post",
+        "description": "Add a line item and recompute invoice totals.",
+        "operationId": "add_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items_post",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -47049,24 +43874,34 @@
               "title": "Workspace Id",
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobAssignRequest"
+                "$ref": "#/components/schemas/InvoiceLineItemCreate"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -47088,37 +43923,17 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Assign Technicians",
+        "summary": "Add Line Item",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments/{technician_id}": {
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items/{item_id}": {
       "delete": {
-        "description": "Untag a technician from a job (no-op if not tagged).",
-        "operationId": "unassign_technician_api_v1_workspaces__workspace_id__jobs__job_id__assignments__technician_id__delete",
+        "description": "Remove a line item and recompute invoice totals.",
+        "operationId": "remove_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__delete",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "technician_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Technician Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -47128,6 +43943,26 @@
               "title": "Workspace Id",
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -47135,7 +43970,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -47157,27 +43992,15 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Unassign Technician",
+        "summary": "Remove Line Item",
         "tags": [
-          "Field Service"
+          "Invoices"
         ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/schedule": {
-      "post": {
-        "description": "Set a job's time window (flips unscheduled -> scheduled).",
-        "operationId": "schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post",
+      },
+      "put": {
+        "description": "Update a line item and recompute invoice totals.",
+        "operationId": "update_line_item_api_v1_workspaces__workspace_id__invoices__invoice_id__line_items__item_id__put",
         "parameters": [
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
           {
             "in": "path",
             "name": "workspace_id",
@@ -47187,13 +44010,33 @@
               "title": "Workspace Id",
               "type": "string"
             }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JobScheduleRequest"
+                "$ref": "#/components/schemas/InvoiceLineItemUpdate"
               }
             }
           },
@@ -47204,7 +44047,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JobResponse"
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
                 }
               }
             },
@@ -47226,9 +44069,186 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Schedule Job",
+        "summary": "Update Line Item",
         "tags": [
-          "Field Service"
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/payment-link": {
+      "post": {
+        "description": "Create a Stripe Checkout link for the invoice's outstanding balance.",
+        "operationId": "create_payment_link_api_v1_workspaces__workspace_id__invoices__invoice_id__payment_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicePaymentLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Payment Link",
+        "tags": [
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/send": {
+      "post": {
+        "description": "Mark an invoice as sent (email delivery is wired in a later phase).",
+        "operationId": "send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Send Invoice",
+        "tags": [
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/void": {
+      "post": {
+        "description": "Void an invoice. Fully paid invoices cannot be voided.",
+        "operationId": "void_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__void_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Void Invoice",
+        "tags": [
+          "Invoices"
         ]
       }
     },
@@ -47740,296 +44760,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns": {
-      "post": {
-        "description": "Create an attribution campaign under a lead source.",
-        "operationId": "create_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LeadSourceCampaignCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LeadSourceCampaignResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Lead Source Campaign",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/lead-source-campaigns/{campaign_id}": {
-      "delete": {
-        "description": "Delete an attribution campaign.",
-        "operationId": "delete_lead_source_campaign_api_v1_workspaces__workspace_id__lead_source_campaigns__campaign_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Campaign Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Delete Lead Source Campaign",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/lead-source-spend": {
-      "get": {
-        "description": "List manual spend entries, optionally filtered to one lead source.",
-        "operationId": "list_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "lead_source_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lead Source Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LeadSourceSpendEntryResponse"
-                  },
-                  "title": "Response List Lead Source Spend Api V1 Workspaces  Workspace Id  Lead Source Spend Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Lead Source Spend",
-        "tags": [
-          "Lead Sources"
-        ]
-      },
-      "post": {
-        "description": "Record a manual ad/source spend entry.",
-        "operationId": "create_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LeadSourceSpendEntryCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LeadSourceSpendEntryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Lead Source Spend",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/lead-source-spend/{spend_id}": {
-      "delete": {
-        "description": "Delete a manual spend entry.",
-        "operationId": "delete_lead_source_spend_api_v1_workspaces__workspace_id__lead_source_spend__spend_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "spend_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Spend Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Delete Lead Source Spend",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
     "/api/v1/workspaces/{workspace_id}/lead-sources": {
       "get": {
         "description": "List all lead sources for a workspace.",
@@ -48135,71 +44865,6 @@
           }
         ],
         "summary": "Create Lead Source",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/lead-sources/unattributed": {
-      "get": {
-        "description": "List captured leads that have no known first-touch lead source.",
-        "operationId": "list_unattributed_leads_api_v1_workspaces__workspace_id__lead_sources_unattributed_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/UnattributedLeadResponse"
-                  },
-                  "title": "Response List Unattributed Leads Api V1 Workspaces  Workspace Id  Lead Sources Unattributed Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Unattributed Leads",
         "tags": [
           "Lead Sources"
         ]
@@ -48378,128 +45043,6 @@
         "summary": "Update Lead Source",
         "tags": [
           "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/lead-sources/{lead_source_id}/campaigns": {
-      "get": {
-        "description": "List attribution campaigns nested under a lead source.",
-        "operationId": "list_lead_source_campaigns_api_v1_workspaces__workspace_id__lead_sources__lead_source_id__campaigns_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "lead_source_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Lead Source Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LeadSourceCampaignResponse"
-                  },
-                  "title": "Response List Lead Source Campaigns Api V1 Workspaces  Workspace Id  Lead Sources  Lead Source Id  Campaigns Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Lead Source Campaigns",
-        "tags": [
-          "Lead Sources"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/members/bulk": {
-      "post": {
-        "description": "Provision many members at once (owner/admin only).\n\nCreates a login + workspace membership for each new email and attaches any\nexisting accounts as members. Returns a per-row outcome; rows that conflict\nare skipped without failing the batch. Only the owner may grant the admin\nrole. Generated temporary passwords are returned once and never stored in\nplaintext.",
-        "operationId": "bulk_create_workspace_members_api_v1_workspaces__workspace_id__members_bulk_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkMemberCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BulkMemberCreateResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Bulk Create Workspace Members",
-        "tags": [
-          "Workspaces"
         ]
       }
     },
@@ -57443,320 +53986,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/service-locations": {
-      "get": {
-        "description": "List service locations, optionally filtered by customer or active state.",
-        "operationId": "list_service_locations_api_v1_workspaces__workspace_id__service_locations_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "contact_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contact Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "is_active",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Is Active"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceLocationListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Service Locations",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "post": {
-        "description": "Create a service location for a customer.",
-        "operationId": "create_service_location_api_v1_workspaces__workspace_id__service_locations_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceLocationCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceLocationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Service Location",
-        "tags": [
-          "Field Service"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/service-locations/{location_id}": {
-      "delete": {
-        "description": "Delete a service location.",
-        "operationId": "delete_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "location_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Location Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Delete Service Location",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "get": {
-        "description": "Get a single service location.",
-        "operationId": "get_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "location_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Location Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceLocationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Service Location",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "put": {
-        "description": "Update a service location.",
-        "operationId": "update_service_location_api_v1_workspaces__workspace_id__service_locations__location_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "location_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Location Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceLocationUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceLocationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Update Service Location",
-        "tags": [
-          "Field Service"
-        ]
-      }
-    },
     "/api/v1/workspaces/{workspace_id}/set-default": {
       "post": {
         "description": "Set a workspace as the user's default workspace.",
@@ -58625,321 +54854,6 @@
         "summary": "Update Tag",
         "tags": [
           "Tags"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/technicians": {
-      "get": {
-        "description": "List technicians, optionally filtered by crew or active state.",
-        "operationId": "list_technicians_api_v1_workspaces__workspace_id__technicians_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "crew_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Crew Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "is_active",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Is Active"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TechnicianListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "List Technicians",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "post": {
-        "description": "Create a technician.",
-        "operationId": "create_technician_api_v1_workspaces__workspace_id__technicians_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TechnicianCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TechnicianResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Technician",
-        "tags": [
-          "Field Service"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/technicians/{technician_id}": {
-      "delete": {
-        "description": "Delete a technician.",
-        "operationId": "delete_technician_api_v1_workspaces__workspace_id__technicians__technician_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "technician_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Technician Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Delete Technician",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "get": {
-        "description": "Get a single technician.",
-        "operationId": "get_technician_api_v1_workspaces__workspace_id__technicians__technician_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "technician_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Technician Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TechnicianResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Technician",
-        "tags": [
-          "Field Service"
-        ]
-      },
-      "put": {
-        "description": "Update a technician.",
-        "operationId": "update_technician_api_v1_workspaces__workspace_id__technicians__technician_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "technician_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Technician Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TechnicianUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TechnicianResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Update Technician",
-        "tags": [
-          "Field Service"
         ]
       }
     },

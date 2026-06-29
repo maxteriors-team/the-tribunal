@@ -14,6 +14,7 @@ has one home and is testable without Stripe configured.
 
 import uuid
 from datetime import UTC, date, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -32,7 +33,8 @@ from app.schemas.invoice import (
     InvoiceUpdate,
     PaginatedInvoices,
 )
-from app.services.exceptions import ConflictError
+from app.services.exceptions import ConflictError, ServiceUnavailableError
+from app.services.payments import call_payment_service
 
 logger = structlog.get_logger()
 
@@ -441,3 +443,107 @@ class InvoiceService:
         if invoice.status in ("paid", "void"):
             raise ConflictError(f"Cannot edit line items on a {invoice.status} invoice")
         return invoice
+
+    # ------------------------------------------------------------------
+    # Stripe payment link
+    # ------------------------------------------------------------------
+
+    async def create_payment_link(
+        self,
+        workspace_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+    ) -> tuple[str, str | None]:
+        """Create a Stripe Checkout link for the invoice's outstanding balance.
+
+        Returns ``(session_id, url)``. Raises :class:`ServiceUnavailableError`
+        when Stripe is not configured and :class:`ConflictError` when the invoice
+        is void or has nothing left to pay.
+
+        Only the checkout *session id* is persisted here. The payment-intent id is
+        deliberately left unset until the webhook records the payment, because
+        ``record_payment`` keys idempotency on it -- pre-storing it would make the
+        completion webhook a no-op and the payment would never be recorded.
+        """
+        if not call_payment_service.is_payment_configured():
+            raise ServiceUnavailableError("Stripe is not configured for payments")
+
+        invoice = await get_or_404(
+            self.db,
+            Invoice,
+            invoice_id,
+            workspace_id=workspace_id,
+            options=[selectinload(Invoice.contact)],
+        )
+        if invoice.status == "void":
+            raise ConflictError("Cannot collect payment on a voided invoice")
+        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        if balance <= 0:
+            raise ConflictError("Invoice has no outstanding balance")
+
+        customer_email = invoice.contact.email if invoice.contact else None
+        result = await call_payment_service.create_payment_checkout_session(
+            amount=balance,
+            currency=invoice.currency,
+            product_name=f"Invoice {invoice.number}",
+            metadata={"invoice_id": str(invoice.id), "workspace_id": str(workspace_id)},
+            customer_email=customer_email,
+        )
+        invoice.stripe_checkout_session_id = result.session_id
+        await self.db.commit()
+
+        self.log.info(
+            "invoice_payment_link_created",
+            invoice_id=str(invoice.id),
+            workspace_id=str(workspace_id),
+            amount=balance,
+            session_id=result.session_id,
+        )
+        return result.session_id, result.url
+
+
+async def handle_invoice_checkout_session_completed(
+    session: dict[str, Any],
+    db: AsyncSession,
+) -> None:
+    """Reconcile a Stripe ``checkout.session.completed`` event for an invoice.
+
+    Resolves the invoice from ``metadata.invoice_id`` (or the stored checkout
+    session id) and records the collected amount. Idempotent via
+    :meth:`InvoiceService.record_payment`, so Stripe retries are safe.
+    """
+    metadata = session.get("metadata") or {}
+    invoice_id_raw = metadata.get("invoice_id")
+    session_id = session.get("id")
+
+    invoice: Invoice | None = None
+    if invoice_id_raw:
+        try:
+            invoice = await db.get(Invoice, uuid.UUID(invoice_id_raw))
+        except ValueError:
+            invoice = None
+    if invoice is None and session_id:
+        result = await db.execute(
+            select(Invoice).where(Invoice.stripe_checkout_session_id == session_id)
+        )
+        invoice = result.scalar_one_or_none()
+
+    if invoice is None:
+        logger.warning(
+            "invoice_webhook_no_match",
+            invoice_id=invoice_id_raw,
+            session_id=session_id,
+        )
+        return
+
+    payment_intent = session.get("payment_intent")
+    payment_intent_id = payment_intent if isinstance(payment_intent, str) else None
+
+    amount_total = session.get("amount_total")
+    if amount_total is None:
+        # Fall back to the outstanding balance if Stripe omitted the amount.
+        amount = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+    else:
+        amount = call_payment_service.from_minor_units(int(amount_total), invoice.currency)
+
+    service = InvoiceService(db)
+    await service.record_payment(invoice, amount, payment_intent_id=payment_intent_id)
