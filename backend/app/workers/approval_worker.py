@@ -7,6 +7,7 @@ Runs every 30 seconds to:
 """
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,16 +63,29 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
             await self.execute_with_retry(
                 self._notify_pending_action,
                 db,
-                action,
+                action.id,
                 item_key=derive_worker_retry_key("notify", action.id),
             )
 
-    async def _notify_pending_action(self, db: AsyncSession, action: PendingAction) -> None:
-        """Notify a single pending action; raises on failure for retry."""
+    async def _notify_pending_action(self, db: AsyncSession, action_id: UUID) -> None:
+        """Notify a single pending action; raises on failure for retry.
+
+        Takes the action *id* and re-loads the row on every attempt. A prior
+        failed attempt calls ``db.rollback()``, which expires every ORM
+        instance in the session; reusing that stale ``action`` would trigger a
+        lazy attribute refresh outside the async greenlet context
+        (``MissingGreenlet``). Loading inside the awaited ``db.get`` keeps each
+        retry on a live, fully-populated instance.
+        """
         try:
+            action = await db.get(PendingAction, action_id)
+            if action is None:
+                return
             delivered = await self.delivery_service.notify_pending_action(db, action)
             if not delivered:
-                raise RuntimeError(f"approval notification delivery failed for action {action.id}")
+                raise RuntimeError(
+                    f"approval notification delivery failed for action {action_id}"
+                )
             await db.commit()
             self.record_items_processed()
         except Exception:
@@ -87,13 +101,21 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
             await self.execute_with_retry(
                 self._execute_single_action,
                 db,
-                action,
+                action.id,
                 item_key=derive_worker_retry_key("execute", action.id),
             )
 
-    async def _execute_single_action(self, db: AsyncSession, action: PendingAction) -> None:
-        """Execute a single approved action; raises on failure for retry."""
+    async def _execute_single_action(self, db: AsyncSession, action_id: UUID) -> None:
+        """Execute a single approved action; raises on failure for retry.
+
+        Re-loads the action by id each attempt for the same reason as
+        :meth:`_notify_pending_action`: a rolled-back retry expires the prior
+        ORM instance, so reusing it would lazy-load outside the greenlet.
+        """
         try:
+            action = await db.get(PendingAction, action_id)
+            if action is None:
+                return
             await self.gate_service.execute_approved_action(db, action)
             await db.commit()
             self.record_items_processed()

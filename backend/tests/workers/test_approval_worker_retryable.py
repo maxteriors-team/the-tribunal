@@ -40,6 +40,7 @@ async def test_failed_notification_routes_to_dead_letter() -> None:
     action = MagicMock(id=uuid4())
     db = MagicMock()
     db.rollback = AsyncMock()
+    db.get = AsyncMock(return_value=action)
     worker.delivery_service.notify_pending_action = AsyncMock(
         side_effect=RuntimeError("boom")
     )
@@ -47,7 +48,7 @@ async def test_failed_notification_routes_to_dead_letter() -> None:
     await worker.execute_with_retry(
         worker._notify_pending_action,
         db,
-        action,
+        action.id,
         item_key=f"notify:{action.id}",
     )
 
@@ -68,6 +69,7 @@ async def test_failed_execution_routes_to_dead_letter() -> None:
     action = MagicMock(id=uuid4())
     db = MagicMock()
     db.rollback = AsyncMock()
+    db.get = AsyncMock(return_value=action)
     worker.gate_service.execute_approved_action = AsyncMock(
         side_effect=RuntimeError("nope")
     )
@@ -75,12 +77,49 @@ async def test_failed_execution_routes_to_dead_letter() -> None:
     await worker.execute_with_retry(
         worker._execute_single_action,
         db,
-        action,
+        action.id,
         item_key=f"execute:{action.id}",
     )
 
     assert len(recorder.calls) == 1
     assert recorder.calls[0]["item_key"] == f"execute:{action.id}"
+
+
+@pytest.mark.asyncio
+async def test_notify_refetches_live_action_on_each_attempt() -> None:
+    """Regression: a stale ORM action is re-loaded by id on every attempt.
+
+    A failed attempt rolls back the session, expiring the action. Reusing it
+    would lazy-load outside the async greenlet (``MissingGreenlet``). The
+    worker must re-fetch via ``db.get`` so each attempt holds a live row and
+    delivery always receives the freshly-loaded instance.
+    """
+    worker = ApprovalWorker()
+    worker.backoff_base_seconds = 0.0
+    worker.max_retries = 1
+
+    action_id = uuid4()
+    live_action = MagicMock(id=action_id)
+    db = MagicMock()
+    db.get = AsyncMock(return_value=live_action)
+    db.rollback = AsyncMock()
+    db.commit = AsyncMock()
+    # Fail the first attempt, succeed on the retry.
+    worker.delivery_service.notify_pending_action = AsyncMock(
+        side_effect=[RuntimeError("boom"), True]
+    )
+
+    await worker.execute_with_retry(
+        worker._notify_pending_action,
+        db,
+        action_id,
+        item_key=f"notify:{action_id}",
+    )
+
+    # Re-fetched once per attempt (initial failure + successful retry).
+    assert db.get.await_count == 2
+    # Delivery always got the live, re-loaded instance — never a stale object.
+    worker.delivery_service.notify_pending_action.assert_awaited_with(db, live_action)
 
 
 @pytest.mark.asyncio
