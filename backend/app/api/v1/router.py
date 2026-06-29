@@ -16,6 +16,7 @@ from app.api.v1 import (
     calls,
     campaign_reports,
     campaigns,
+    catalog,
     contacts,
     conversations,
     crm_assistant,
@@ -199,6 +200,11 @@ api_router.include_router(
     quotes.router,
     prefix="/workspaces/{workspace_id}/quotes",
     tags=["Quotes"],
+)
+api_router.include_router(
+    catalog.router,
+    prefix="/workspaces/{workspace_id}/catalog-items",
+    tags=["Catalog"],
 )
 api_router.include_router(
     dashboard.router,
