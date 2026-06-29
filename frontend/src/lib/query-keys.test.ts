@@ -160,6 +160,19 @@ describe("queryKeys factory composition", () => {
     ]);
   });
 
+  it("nests job costing sub-resources under the job detail key", () => {
+    const detail = queryKeys.jobs.detail("ws_1", "job_1");
+    expect(queryKeys.jobs.timeEntries("ws_1", "job_1")).toEqual([
+      ...detail,
+      "time-entries",
+    ]);
+    expect(queryKeys.jobs.expenses("ws_1", "job_1")).toEqual([...detail, "expenses"]);
+    expect(queryKeys.jobs.profitability("ws_1", "job_1")).toEqual([
+      ...detail,
+      "profitability",
+    ]);
+  });
+
   it("nests stat keys under the workspace `all` key so a broad invalidate clears them", () => {
     const all = queryKeys.appointments.all("ws_1");
     const stats = queryKeys.appointments.stats("ws_1");
