@@ -37,6 +37,17 @@ from app.models.field_service import (
 )
 from app.models.invoice import Invoice
 from app.schemas.job import JobResponse, TechnicianSummary
+from app.services.automations.events import (
+    EVENT_JOB_COMPLETED,
+    EVENT_JOB_SCHEDULED,
+    emit_automation_event,
+)
+
+# Job lifecycle states that drive an automation event when first entered.
+_STATUS_EVENTS: dict[JobStatus, str] = {
+    JobStatus.SCHEDULED: EVENT_JOB_SCHEDULED,
+    JobStatus.COMPLETED: EVENT_JOB_COMPLETED,
+}
 
 
 class JobService:
@@ -214,6 +225,41 @@ class JobService:
         return {"items": items, "total": len(items)}
 
     # ------------------------------------------------------------------ #
+    # Automation events
+    # ------------------------------------------------------------------ #
+    async def _emit_status_event(
+        self, job: Job, prior_status: JobStatus | str | None
+    ) -> None:
+        """Emit a lifecycle event when ``job`` first enters scheduled/completed.
+
+        No-op when the status did not change or the new status has no mapped
+        event. Shares the caller's transaction (the route's transactional
+        session, or the converting quote's), so the event is durable iff the
+        status change commits. ``emit_automation_event`` itself no-ops when no
+        automation listens for the trigger.
+        """
+        new_status = JobStatus(job.status)
+        if prior_status is not None and JobStatus(prior_status) == new_status:
+            return
+        event_type = _STATUS_EVENTS.get(new_status)
+        if event_type is None:
+            return
+        await emit_automation_event(
+            self.db,
+            workspace_id=job.workspace_id,
+            event_type=event_type,
+            contact_id=job.contact_id,
+            payload={
+                "job_id": str(job.id),
+                "status": str(new_status),
+                "title": job.title,
+                "scheduled_start": (
+                    job.scheduled_start.isoformat() if job.scheduled_start else None
+                ),
+            },
+        )
+
+    # ------------------------------------------------------------------ #
     # Mutations
     # ------------------------------------------------------------------ #
     @staticmethod
@@ -243,12 +289,15 @@ class JobService:
             self.db.add(JobAssignment(job_id=job.id, technician_id=technician_id))
         await self.db.flush()
 
+        # A job created already inside a time window lands ``scheduled``.
+        await self._emit_status_event(job, prior_status=None)
         return self._to_response(await self._load(job.id, workspace_id))
 
     async def update(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, data: dict[str, Any]
     ) -> JobResponse:
         job = await self._load(job_id, workspace_id)
+        prior_status = job.status
         await self._validate_refs(workspace_id, data)
 
         for key, value in data.items():
@@ -273,6 +322,7 @@ class JobService:
             job.status = self._status_for_window(job.scheduled_start, job.scheduled_end)
 
         await self.db.flush()
+        await self._emit_status_event(job, prior_status)
         return self._to_response(await self._load(job.id, workspace_id))
 
     async def schedule(
@@ -284,11 +334,13 @@ class JobService:
     ) -> JobResponse:
         """Set the time window; flip ``unscheduled`` -> ``scheduled``."""
         job = await self._load(job_id, workspace_id)
+        prior_status = job.status
         job.scheduled_start = start
         job.scheduled_end = end
         if job.status == JobStatus.UNSCHEDULED:
             job.status = JobStatus.SCHEDULED
         await self.db.flush()
+        await self._emit_status_event(job, prior_status)
         return self._to_response(await self._load(job.id, workspace_id))
 
     async def assign_technicians(

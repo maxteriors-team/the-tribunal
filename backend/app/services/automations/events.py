@@ -36,6 +36,19 @@ EVENT_MISSED_CALL = "missed_call"
 EVENT_ROLEPLAY_COMPLETED = "roleplay_completed"
 EVENT_KNOWLEDGE_DOCUMENT_UPLOADED = "knowledge_document_uploaded"
 
+# Billing & field-service lifecycle triggers. Each is emitted by exactly one
+# transition in its service (quotes/invoices/jobs) inside the producer's
+# transaction; see the respective ``*_service`` modules. Payloads carry ids plus
+# minimal context (number/total/status) so automation conditions can branch.
+EVENT_QUOTE_SENT = "quote_sent"
+EVENT_QUOTE_APPROVED = "quote_approved"
+EVENT_QUOTE_DECLINED = "quote_declined"
+EVENT_QUOTE_CONVERTED = "quote_converted"
+EVENT_INVOICE_SENT = "invoice_sent"
+EVENT_INVOICE_PAID = "invoice_paid"
+EVENT_JOB_SCHEDULED = "job_scheduled"
+EVENT_JOB_COMPLETED = "job_completed"
+
 # All event-based triggers the worker drains from ``automation_events`` (as
 # opposed to the polling triggers it evaluates against ``contacts`` directly).
 AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
@@ -47,6 +60,14 @@ AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
         EVENT_MISSED_CALL,
         EVENT_ROLEPLAY_COMPLETED,
         EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
+        EVENT_QUOTE_SENT,
+        EVENT_QUOTE_APPROVED,
+        EVENT_QUOTE_DECLINED,
+        EVENT_QUOTE_CONVERTED,
+        EVENT_INVOICE_SENT,
+        EVENT_INVOICE_PAID,
+        EVENT_JOB_SCHEDULED,
+        EVENT_JOB_COMPLETED,
     }
 )
 

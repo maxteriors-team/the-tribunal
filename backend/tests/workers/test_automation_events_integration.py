@@ -12,6 +12,7 @@ executed: it writes a ``ContactTag`` row with no external provider.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -25,18 +26,25 @@ from app.models.automation_event import (
 )
 from app.models.automation_execution import AutomationExecution
 from app.models.contact import Contact
+from app.models.field_service import JobStatus
+from app.models.invoice import Invoice
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.review_request import ReviewRequest, ReviewRequestChannel, ReviewRequestStatus
 from app.models.tag import ContactTag, Tag
 from app.models.workspace import Workspace
+from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate
+from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
 from app.services.automations.events import (
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
     EVENT_MISSED_CALL,
     EVENT_ROLEPLAY_COMPLETED,
     emit_automation_event,
 )
+from app.services.invoices import InvoiceService
+from app.services.jobs import JobService
 from app.services.opportunities.opportunity_service import OpportunityService
+from app.services.quotes import QuoteService
 from app.services.reviews.review_service import ReviewService
 from app.workers.automation_worker import AutomationWorker
 
@@ -220,6 +228,125 @@ async def test_deal_stage_changed_runs_automation() -> None:
         await db.commit()
 
         assert await _contact_has_tag(db, contact.id, "deal-moved")
+
+
+async def test_quote_lifecycle_emits_and_runs_automations() -> None:
+    """QuoteService send/approve/convert each fire their lifecycle trigger."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _automation(db, ws.id, "quote_sent", "quote-sent")
+        await _automation(db, ws.id, "quote_approved", "quote-approved")
+        await _automation(db, ws.id, "quote_converted", "quote-converted")
+        await db.commit()
+
+        quote = await QuoteService(db).create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Roof repair",
+                line_items=[QuoteLineItemCreate(name="Labor", quantity=1, unit_price=500)],
+            ),
+        )
+
+        await QuoteService(db).mark_sent(ws.id, quote.id)
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "quote-sent")
+
+        await QuoteService(db).approve_quote(ws.id, quote.id)
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "quote-approved")
+
+        await QuoteService(db).convert_quote(ws.id, quote.id)
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "quote-converted")
+
+        # Re-converting an already-converted quote is a no-op and must not
+        # enqueue a second event (idempotent — no double-fire).
+        await QuoteService(db).convert_quote(ws.id, quote.id)
+        pending = await db.execute(
+            select(AutomationEvent).where(
+                AutomationEvent.workspace_id == ws.id,
+                AutomationEvent.status == EVENT_STATUS_PENDING,
+            )
+        )
+        assert pending.scalars().all() == []
+
+
+async def test_invoice_sent_and_paid_emit_on_transition() -> None:
+    """InvoiceService fires invoice_sent on first send and invoice_paid only on
+    the transition into fully paid (not on a partial payment)."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _automation(db, ws.id, "invoice_sent", "invoice-sent")
+        await _automation(db, ws.id, "invoice_paid", "invoice-paid")
+        await db.commit()
+
+        created = await InvoiceService(db).create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Labor", quantity=1, unit_price=200)],
+            ),
+        )
+
+        await InvoiceService(db).mark_sent(ws.id, created.id)
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "invoice-sent")
+
+        invoice = await db.get(Invoice, created.id)
+        assert invoice is not None
+
+        # A partial payment leaves the invoice ``partial`` -> no invoice_paid.
+        await InvoiceService(db).record_payment(invoice, 50.0, payment_intent_id="pi_partial")
+        await _drain(db)
+        await db.commit()
+        assert not await _contact_has_tag(db, contact.id, "invoice-paid")
+
+        # Settling the balance flips it to ``paid`` and emits exactly once.
+        await InvoiceService(db).record_payment(invoice, 150.0, payment_intent_id="pi_full")
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "invoice-paid")
+
+
+async def test_job_scheduled_and_completed_emit() -> None:
+    """JobService fires job_scheduled when a job enters a window and job_completed
+    when its status advances to completed."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _automation(db, ws.id, "job_scheduled", "job-scheduled")
+        await _automation(db, ws.id, "job_completed", "job-completed")
+        await db.commit()
+
+        start = datetime(2026, 6, 1, 9, tzinfo=UTC)
+        end = datetime(2026, 6, 1, 11, tzinfo=UTC)
+        job = await JobService(db).create(
+            ws.id,
+            {
+                "contact_id": contact.id,
+                "title": "Maintenance visit",
+                "scheduled_start": start,
+                "scheduled_end": end,
+                "technician_ids": [],
+            },
+        )
+        await db.commit()
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "job-scheduled")
+
+        await JobService(db).update(job.id, ws.id, {"status": JobStatus.COMPLETED})
+        await db.commit()
+        await _drain(db)
+        await db.commit()
+        assert await _contact_has_tag(db, contact.id, "job-completed")
 
 
 # --------------------------------------------------------------------------- #

@@ -35,6 +35,13 @@ from app.schemas.quote import (
     QuoteResponse,
     QuoteUpdate,
 )
+from app.services.automations.events import (
+    EVENT_QUOTE_APPROVED,
+    EVENT_QUOTE_CONVERTED,
+    EVENT_QUOTE_DECLINED,
+    EVENT_QUOTE_SENT,
+    emit_automation_event,
+)
 from app.services.exceptions import ConflictError
 
 logger = structlog.get_logger()
@@ -54,6 +61,27 @@ class QuoteService:
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
     # ------------------------------------------------------------------
+
+    async def _emit_lifecycle_event(self, quote: Quote, event_type: str) -> None:
+        """Queue a quote lifecycle event for automations (no commit).
+
+        Shares the caller's transaction so the event is durable only if the
+        transition itself commits. ``emit_automation_event`` no-ops when the
+        workspace has no automation listening for ``event_type``.
+        """
+        await emit_automation_event(
+            self.db,
+            workspace_id=quote.workspace_id,
+            event_type=event_type,
+            contact_id=quote.contact_id,
+            payload={
+                "quote_id": str(quote.id),
+                "number": quote.number,
+                "status": quote.status,
+                "total": float(quote.total or 0),
+                "currency": quote.currency,
+            },
+        )
 
     def _recompute_totals(self, quote: Quote) -> None:
         """Recompute subtotal/total from line items in place.
@@ -279,6 +307,7 @@ class QuoteService:
         if quote.sent_at is None:
             quote.sent_at = datetime.now(UTC)
         quote.status = "sent"
+        await self._emit_lifecycle_event(quote, EVENT_QUOTE_SENT)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
 
@@ -305,6 +334,7 @@ class QuoteService:
             raise ConflictError(f"Cannot approve a {quote.status} quote")
         quote.status = "approved"
         quote.approved_at = datetime.now(UTC)
+        await self._emit_lifecycle_event(quote, EVENT_QUOTE_APPROVED)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))
@@ -333,6 +363,7 @@ class QuoteService:
         quote.status = "declined"
         quote.declined_at = datetime.now(UTC)
         quote.decline_reason = reason
+        await self._emit_lifecycle_event(quote, EVENT_QUOTE_DECLINED)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
@@ -399,6 +430,8 @@ class QuoteService:
 
         job_id = quote.converted_job_id
         invoice_id = quote.converted_invoice_id
+        prior_job_id = job_id
+        prior_invoice_id = invoice_id
 
         # Create the invoice first so the job can be linked to it for costing
         # (its profitability reads revenue from the linked invoice).
@@ -447,6 +480,22 @@ class QuoteService:
             )
             job_id = job.id
             quote.converted_job_id = job_id
+
+        # Emit only when this call actually converted something — re-running an
+        # already-converted quote is a no-op and must not re-fire the event.
+        if job_id != prior_job_id or invoice_id != prior_invoice_id:
+            await emit_automation_event(
+                self.db,
+                workspace_id=quote.workspace_id,
+                event_type=EVENT_QUOTE_CONVERTED,
+                contact_id=quote.contact_id,
+                payload={
+                    "quote_id": str(quote.id),
+                    "number": quote.number,
+                    "job_id": str(job_id) if job_id else None,
+                    "invoice_id": str(invoice_id) if invoice_id else None,
+                },
+            )
 
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])

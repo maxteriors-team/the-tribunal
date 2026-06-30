@@ -28,6 +28,15 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "missed_call",
     "roleplay_completed",
     "knowledge_document_uploaded",
+    # Billing & field-service lifecycle triggers
+    "quote_sent",
+    "quote_approved",
+    "quote_declined",
+    "quote_converted",
+    "invoice_sent",
+    "invoice_paid",
+    "job_scheduled",
+    "job_completed",
 )
 
 _TRIGGER_PATTERN = "^(" + "|".join(AUTOMATION_TRIGGER_TYPES) + ")$"

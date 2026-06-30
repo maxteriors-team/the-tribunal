@@ -33,6 +33,11 @@ from app.schemas.invoice import (
     InvoiceUpdate,
     PaginatedInvoices,
 )
+from app.services.automations.events import (
+    EVENT_INVOICE_PAID,
+    EVENT_INVOICE_SENT,
+    emit_automation_event,
+)
 from app.services.exceptions import ConflictError, ServiceUnavailableError
 from app.services.payments import call_payment_service
 
@@ -278,9 +283,24 @@ class InvoiceService:
         )
         if invoice.status == "void":
             raise ConflictError("Cannot send a voided invoice")
+        was_sent = invoice.sent_at is not None
         if invoice.sent_at is None:
             invoice.sent_at = datetime.now(UTC)
         invoice.status = self.derive_status(invoice)
+        # Fire on the first send only; re-sending a reminder must not re-trigger.
+        if not was_sent:
+            await emit_automation_event(
+                self.db,
+                workspace_id=workspace_id,
+                event_type=EVENT_INVOICE_SENT,
+                contact_id=invoice.contact_id,
+                payload={
+                    "invoice_id": str(invoice.id),
+                    "number": invoice.number,
+                    "total": float(invoice.total or 0),
+                    "currency": invoice.currency,
+                },
+            )
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
 
@@ -373,12 +393,29 @@ class InvoiceService:
         if already_applied:
             return False
 
+        was_paid = invoice.status == "paid"
         invoice.amount_paid = round(float(invoice.amount_paid or 0) + float(amount), 2)
         if payment_intent_id:
             invoice.stripe_payment_intent_id = payment_intent_id
         invoice.status = self.derive_status(invoice)
         if invoice.status == "paid":
             invoice.paid_at = datetime.now(UTC)
+        # Fire once, on the transition into fully paid (not on partial payments
+        # and not on a replay that leaves an already-paid invoice paid).
+        if invoice.status == "paid" and not was_paid:
+            await emit_automation_event(
+                self.db,
+                workspace_id=invoice.workspace_id,
+                event_type=EVENT_INVOICE_PAID,
+                contact_id=invoice.contact_id,
+                payload={
+                    "invoice_id": str(invoice.id),
+                    "number": invoice.number,
+                    "total": float(invoice.total or 0),
+                    "amount_paid": float(invoice.amount_paid or 0),
+                    "currency": invoice.currency,
+                },
+            )
         await self.db.commit()
 
         self.log.info(
