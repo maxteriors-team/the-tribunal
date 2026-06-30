@@ -289,6 +289,22 @@ db.backup.local: ## pg_dump the local dev Postgres (custom format) into backend/
 		docker exec $(DB_CONTAINER) pg_dump -Fc -U $(DB_USER) -d $(DB_NAME) > "$$out"; \
 		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1))"
 
+.PHONY: db.backup.prod
+db.backup.prod: ## pg_dump a remote/prod Postgres (read-only) into backend/backups/. Usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:5432/db'
+	@if [ -z "$(DATABASE_URL)" ]; then \
+		echo "✗ missing DATABASE_URL — usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:port/db'"; \
+		echo "  (copy the prod connection string from Railway → Postgres → Connect; the +asyncpg suffix is stripped automatically)"; \
+		exit 1; \
+	fi
+	@mkdir -p $(BACKUP_DIR)
+	@stamp=$$(date +%Y%m%d-%H%M%S); \
+		out="$(BACKUP_DIR)/prod-$$stamp.dump"; \
+		url="$$(echo '$(DATABASE_URL)' | sed -E 's#\+asyncpg##; s#\+psycopg2##')"; \
+		echo "▶ pg_dump (read-only, custom format) of prod → $$out"; \
+		docker run --rm -i postgres:17 pg_dump -Fc "$$url" > "$$out"; \
+		if [ ! -s "$$out" ]; then echo "✗ dump is empty — check DATABASE_URL / network"; rm -f "$$out"; exit 1; fi; \
+		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1)) — verify before pushing/migrating"
+
 .PHONY: db.restore.local
 db.restore.local: ## Restore a pg_dump file into local dev DB. Usage: make db.restore.local f=backend/backups/<file>.dump
 	@if [ -z "$(f)" ]; then echo "✗ missing file — usage: make db.restore.local f=path/to/dump"; exit 1; fi
