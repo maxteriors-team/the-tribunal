@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import contacts as contacts_module
 
 WS_ID = uuid.uuid4()
@@ -61,9 +61,19 @@ def _make_auth_test_app(
     async def override_get_current_user() -> MagicMock:
         return mock_user
 
+    async def override_get_membership() -> MagicMock:
+        # "owner" -> admin tier -> every capability, so the capability gate
+        # (require_capability) passes and these tests exercise validation.
+        membership = MagicMock()
+        membership.role = "owner"
+        membership.workspace_id = mock_workspace.id
+        membership.user_id = mock_user.id
+        return membership
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = override_get_membership
 
     app.include_router(
         contacts_module.router,
@@ -130,9 +140,7 @@ async def noauth_client() -> AsyncIterator[AsyncClient]:
 class TestCreateContactValidation:
     """Validation failures for POST /contacts (happy path auth)."""
 
-    async def test_missing_first_name_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_missing_first_name_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts without first_name returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -140,9 +148,7 @@ class TestCreateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_missing_phone_number_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_missing_phone_number_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts without phone_number returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -150,9 +156,7 @@ class TestCreateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_empty_first_name_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_empty_first_name_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts with empty first_name (min_length=1) returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -160,9 +164,7 @@ class TestCreateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_invalid_email_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_invalid_email_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts with invalid email format returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -174,9 +176,7 @@ class TestCreateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_phone_too_short_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_phone_too_short_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts with phone_number shorter than 10 chars returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -184,9 +184,7 @@ class TestCreateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_first_name_too_long_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_first_name_too_long_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts with first_name > 100 chars returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts",
@@ -222,14 +220,10 @@ class TestCreateContactSuccess:
         """
         from unittest.mock import patch
 
-        create_mock = AsyncMock(
-            side_effect=RuntimeError("short-circuit after service called")
-        )
+        create_mock = AsyncMock(side_effect=RuntimeError("short-circuit after service called"))
 
         with (
-            patch.object(
-                contacts_module.ContactService, "create_contact", new=create_mock
-            ),
+            patch.object(contacts_module.ContactService, "create_contact", new=create_mock),
             suppress(RuntimeError),
         ):
             await client.post(
@@ -254,40 +248,26 @@ class TestCreateContactSuccess:
 class TestListContactsAuth:
     """Tests for GET /contacts."""
 
-    async def test_list_contacts_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_list_contacts_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """GET /contacts without auth returns 401."""
-        response = await noauth_client.get(
-            f"/api/v1/workspaces/{WS_ID}/contacts"
-        )
+        response = await noauth_client.get(f"/api/v1/workspaces/{WS_ID}/contacts")
         assert response.status_code == 401
 
     async def test_list_contacts_with_invalid_filters_json_returns_400(
         self, client: AsyncClient, mock_db: AsyncMock
     ) -> None:
         """GET /contacts with malformed `filters` JSON returns 400."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/contacts?filters=not-json"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts?filters=not-json")
         assert response.status_code == 400
 
-    async def test_list_contacts_invalid_page_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_contacts_invalid_page_returns_422(self, client: AsyncClient) -> None:
         """GET /contacts with page=0 (violates ge=1) returns 422."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/contacts?page=0"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts?page=0")
         assert response.status_code == 422
 
-    async def test_list_contacts_page_size_too_large_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_list_contacts_page_size_too_large_returns_422(self, client: AsyncClient) -> None:
         """GET /contacts with page_size=200 (violates le=100) returns 422."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/contacts?page_size=200"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts?page_size=200")
         assert response.status_code == 422
 
 
@@ -308,13 +288,9 @@ class TestCreateContactAuth:
 class TestGetContactAuth:
     """Auth failures for GET /contacts/{id}."""
 
-    async def test_get_contact_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_get_contact_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """GET /contacts/{id} without auth returns 401."""
-        response = await noauth_client.get(
-            f"/api/v1/workspaces/{WS_ID}/contacts/1"
-        )
+        response = await noauth_client.get(f"/api/v1/workspaces/{WS_ID}/contacts/1")
         assert response.status_code == 401
 
     async def test_get_nonexistent_contact_returns_404(
@@ -330,9 +306,7 @@ class TestGetContactAuth:
             "get_contact",
             new=AsyncMock(side_effect=ContactNotFoundError("Contact not found")),
         ):
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/contacts/999999"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts/999999")
 
         assert response.status_code == 404
 
@@ -340,9 +314,7 @@ class TestGetContactAuth:
 class TestUpdateContactValidation:
     """Validation for PUT /contacts/{id}."""
 
-    async def test_update_with_invalid_email_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_update_with_invalid_email_returns_422(self, client: AsyncClient) -> None:
         """PUT /contacts/{id} with invalid email returns 422."""
         response = await client.put(
             f"/api/v1/workspaces/{WS_ID}/contacts/1",
@@ -350,9 +322,7 @@ class TestUpdateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_update_empty_first_name_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_update_empty_first_name_returns_422(self, client: AsyncClient) -> None:
         """PUT /contacts/{id} with empty first_name (min_length=1) returns 422."""
         response = await client.put(
             f"/api/v1/workspaces/{WS_ID}/contacts/1",
@@ -360,9 +330,7 @@ class TestUpdateContactValidation:
         )
         assert response.status_code == 422
 
-    async def test_update_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_update_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """PUT /contacts/{id} without auth returns 401."""
         response = await noauth_client.put(
             f"/api/v1/workspaces/{WS_ID}/contacts/1",
@@ -378,18 +346,14 @@ class TestDeleteContactAuth:
         self, noauth_client: AsyncClient
     ) -> None:
         """DELETE /contacts/{id} without auth returns 401."""
-        response = await noauth_client.delete(
-            f"/api/v1/workspaces/{WS_ID}/contacts/1"
-        )
+        response = await noauth_client.delete(f"/api/v1/workspaces/{WS_ID}/contacts/1")
         assert response.status_code == 401
 
 
 class TestBulkDeleteValidation:
     """Validation for POST /contacts/bulk-delete."""
 
-    async def test_bulk_delete_missing_ids_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_bulk_delete_missing_ids_returns_422(self, client: AsyncClient) -> None:
         """POST /contacts/bulk-delete without ids field returns 422."""
         response = await client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts/bulk-delete",
@@ -397,9 +361,7 @@ class TestBulkDeleteValidation:
         )
         assert response.status_code == 422
 
-    async def test_bulk_delete_without_auth_returns_401(
-        self, noauth_client: AsyncClient
-    ) -> None:
+    async def test_bulk_delete_without_auth_returns_401(self, noauth_client: AsyncClient) -> None:
         """POST /contacts/bulk-delete without auth returns 401."""
         response = await noauth_client.post(
             f"/api/v1/workspaces/{WS_ID}/contacts/bulk-delete",

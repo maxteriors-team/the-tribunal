@@ -19,7 +19,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import opportunities as opportunities_module
 from app.schemas.deal_coach import (
     AtRiskDeal,
@@ -115,9 +115,19 @@ def _make_auth_app() -> FastAPI:
         user.is_active = True
         return user
 
+    async def override_get_membership() -> MagicMock:
+        # "owner" -> admin tier -> every capability, so the capability gate
+        # (require_capability) passes and these tests exercise the endpoint.
+        membership = MagicMock()
+        membership.role = "owner"
+        membership.workspace_id = WS_ID
+        membership.user_id = 1
+        return membership
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = override_get_membership
     app.include_router(
         opportunities_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/opportunities",

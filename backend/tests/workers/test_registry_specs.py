@@ -32,6 +32,7 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "automation_worker",
         "noshow_reengagement_worker",
         "review_request_worker",
+        "recurring_job_worker",
         "never_booked_worker",
         "nudge_worker",
         "approval_worker",

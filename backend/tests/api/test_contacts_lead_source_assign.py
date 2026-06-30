@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import contacts as contacts_module
 from app.services.lead_sources.attribution_service import AttributionCleanupError
 
@@ -70,9 +70,19 @@ async def client(mock_db: AsyncMock) -> AsyncIterator[AsyncClient]:
     async def override_get_current_user() -> MagicMock:
         return _make_mock_user()
 
+    async def override_get_membership() -> MagicMock:
+        # "owner" -> admin tier -> every capability, so the capability gate
+        # (require_capability) passes and these tests exercise the endpoint.
+        membership = MagicMock()
+        membership.role = "owner"
+        membership.workspace_id = WS_ID
+        membership.user_id = 1
+        return membership
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = override_get_membership
     _mount(app)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
