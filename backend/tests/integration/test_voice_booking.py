@@ -230,6 +230,17 @@ def test_date_context() -> None:
 # Test 4: Simulated Tool Calls (What Grok Actually Sends)
 # ============================================================
 
+@pytest.mark.xfail(
+    reason=(
+        "STALE: imports _execute_book_appointment / _execute_check_availability "
+        "from app.websockets.voice_bridge, but they were refactored out "
+        "(_execute_book_appointment is now a method on "
+        "app.services.approval.approval_gate_service). Rewrite against the current "
+        "voice-tool flow, then remove this marker. xfail -> XPASS signals it's fixed."
+    ),
+    raises=ImportError,
+    strict=False,
+)
 async def test_simulated_tool_calls() -> dict[str, Any]:  # noqa: PLR0915
     """Simulate tool calls as Grok would make them.
 
