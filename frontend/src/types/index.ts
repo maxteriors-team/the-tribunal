@@ -11,6 +11,7 @@ export * from "./opportunity";
 export * from "./invoice";
 export * from "./quote";
 export * from "./catalog";
+export * from "./recurring-job";
 export * from "./phone";
 export * from "./experiment";
 export * from "./call";
