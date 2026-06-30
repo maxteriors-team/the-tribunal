@@ -163,6 +163,9 @@ class Settings(BaseSettings):
     prospect_enrichment_poll_interval: int = 30
     prospect_promotion_worker_enabled: bool = True
     prospect_promotion_poll_interval: int = 30
+    # Recurring-job materializer: how often (seconds) to generate due jobs from
+    # active recurring templates. Hourly is plenty — generation runs days ahead.
+    recurring_job_poll_interval: int = 3600
     # Optional config-gated email-finder for prospect enrichment.
     email_finder_provider: str = ""  # hunter | apollo
     email_finder_api_key: str = ""

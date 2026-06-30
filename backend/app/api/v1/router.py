@@ -49,6 +49,7 @@ from app.api.v1 import (
     prospects,
     quotes,
     realtime,
+    recurring_jobs,
     reviews,
     roleplay,
     scorecard,
@@ -320,6 +321,11 @@ api_router.include_router(
 api_router.include_router(
     jobs.router,
     prefix="/workspaces/{workspace_id}/jobs",
+    tags=["Field Service"],
+)
+api_router.include_router(
+    recurring_jobs.router,
+    prefix="/workspaces/{workspace_id}/recurring-jobs",
     tags=["Field Service"],
 )
 api_router.include_router(

@@ -49,6 +49,7 @@ from app.workers.prospect_enrichment_worker import (
 from app.workers.prospect_promotion_worker import (
     _registry as prospect_promotion_registry,
 )
+from app.workers.recurring_job_worker import _registry as recurring_job_registry
 from app.workers.reminder_worker import _registry as reminder_registry
 from app.workers.reputation_worker import _registry as reputation_registry
 from app.workers.review_request_worker import _registry as review_request_registry
@@ -191,6 +192,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="review_request_worker",
         registry=review_request_registry,
         dependencies=("postgres", "text_message_provider"),
+    ),
+    WorkerSpec(
+        name="recurring_job_worker",
+        registry=recurring_job_registry,
+        dependencies=("postgres",),
     ),
     WorkerSpec(
         name="never_booked_worker",

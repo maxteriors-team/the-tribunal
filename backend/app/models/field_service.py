@@ -396,6 +396,16 @@ class Job(Base):
         nullable=True,
         index=True,
     )
+    # Provenance: the recurring-job template that materialized this job, if any.
+    # Set by the recurring-job worker; also a defensive duplicate guard (one job
+    # per template per occurrence start). SET NULL keeps the job if the template
+    # is removed.
+    recurring_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("recurring_job_templates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
