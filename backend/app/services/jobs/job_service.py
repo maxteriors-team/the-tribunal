@@ -227,9 +227,7 @@ class JobService:
     # ------------------------------------------------------------------ #
     # Automation events
     # ------------------------------------------------------------------ #
-    async def _emit_status_event(
-        self, job: Job, prior_status: JobStatus | str | None
-    ) -> None:
+    async def _emit_status_event(self, job: Job, prior_status: JobStatus | str | None) -> None:
         """Emit a lifecycle event when ``job`` first enters scheduled/completed.
 
         No-op when the status did not change or the new status has no mapped

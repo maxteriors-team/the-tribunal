@@ -38,9 +38,7 @@ class RecurringJobTemplateCreate(RecurringJobTemplateBase):
     """Create a recurring job template."""
 
     contact_id: int = Field(..., description="Customer this contract serves")
-    next_run_at: datetime = Field(
-        ..., description="Start time of the first occurrence to generate"
-    )
+    next_run_at: datetime = Field(..., description="Start time of the first occurrence to generate")
     is_active: bool = True
 
 

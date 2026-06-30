@@ -156,11 +156,7 @@ class ReportingService:
             criteria.append(Job.scheduled_start <= date_to)
 
         jobs = (
-            (
-                await self.db.execute(
-                    select_workspace_owned(Job, workspace_id, *criteria)
-                )
-            )
+            (await self.db.execute(select_workspace_owned(Job, workspace_id, *criteria)))
             .scalars()
             .all()
         )

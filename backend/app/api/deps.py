@@ -399,18 +399,12 @@ WorkspaceDispatcher = Annotated[
 # Capability-gated membership dependencies (preferred for new endpoints). Each
 # resolves (and returns) the caller's membership, raising 403 when the role's
 # tier lacks the capability. See :mod:`app.core.permissions` for the matrix.
-CanReadCRM = Annotated[
-    WorkspaceMembership, Depends(require_capability(Capability.CRM_READ))
-]
-CanWriteCRM = Annotated[
-    WorkspaceMembership, Depends(require_capability(Capability.CRM_WRITE))
-]
+CanReadCRM = Annotated[WorkspaceMembership, Depends(require_capability(Capability.CRM_READ))]
+CanWriteCRM = Annotated[WorkspaceMembership, Depends(require_capability(Capability.CRM_WRITE))]
 CanWritePipelineOwn = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.PIPELINE_WRITE_OWN))
 ]
-CanSendComms = Annotated[
-    WorkspaceMembership, Depends(require_capability(Capability.COMMS_SEND))
-]
+CanSendComms = Annotated[WorkspaceMembership, Depends(require_capability(Capability.COMMS_SEND))]
 CanManageComms = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.COMMS_MANAGE))
 ]

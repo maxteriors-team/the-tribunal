@@ -120,9 +120,7 @@ class RecurringJobService:
     def _to_response(template: RecurringJobTemplate) -> RecurringJobTemplateResponse:
         return RecurringJobTemplateResponse.model_validate(template)
 
-    async def _load(
-        self, template_id: uuid.UUID, workspace_id: uuid.UUID
-    ) -> RecurringJobTemplate:
+    async def _load(self, template_id: uuid.UUID, workspace_id: uuid.UUID) -> RecurringJobTemplate:
         return await assert_workspace_owned(
             self.db,
             RecurringJobTemplate,
@@ -190,9 +188,7 @@ class RecurringJobService:
     # ------------------------------------------------------------------ #
     # Materialization
     # ------------------------------------------------------------------ #
-    async def _existing_occurrence(
-        self, template_id: uuid.UUID, scheduled_start: datetime
-    ) -> bool:
+    async def _existing_occurrence(self, template_id: uuid.UUID, scheduled_start: datetime) -> bool:
         """True if a job was already generated for this template at this start."""
         row = (
             await self.db.execute(
@@ -211,13 +207,17 @@ class RecurringJobService:
         if not technician_ids:
             return []
         rows = (
-            await self.db.execute(
-                select(Technician.id).where(
-                    Technician.workspace_id == workspace_id,
-                    Technician.id.in_(set(technician_ids)),
+            (
+                await self.db.execute(
+                    select(Technician.id).where(
+                        Technician.workspace_id == workspace_id,
+                        Technician.id.in_(set(technician_ids)),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         live = set(rows)
         # Preserve the template's order, dropping any removed technicians.
         return [tid for tid in dict.fromkeys(technician_ids) if tid in live]
@@ -274,9 +274,7 @@ class RecurringJobService:
                         self.db.add(job)
                         await self.db.flush()
                         for technician_id in technician_ids:
-                            self.db.add(
-                                JobAssignment(job_id=job.id, technician_id=technician_id)
-                            )
+                            self.db.add(JobAssignment(job_id=job.id, technician_id=technician_id))
                 except IntegrityError:
                     # Lost the race for this occurrence; another run created it.
                     self.log.info(

@@ -113,9 +113,7 @@ class RecurringJobTemplate(Base):
     # Schedule. ``frequency`` is validated against RecurrenceFrequency at the
     # schema boundary; ``interval`` repeats every N periods (>= 1).
     frequency: Mapped[str] = mapped_column(String(20), nullable=False)
-    interval: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1, server_default="1"
-    )
+    interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     # Length of each generated job's time window, in minutes.
     duration_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60, server_default="60"

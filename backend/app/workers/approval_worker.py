@@ -83,9 +83,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
                 return
             delivered = await self.delivery_service.notify_pending_action(db, action)
             if not delivered:
-                raise RuntimeError(
-                    f"approval notification delivery failed for action {action_id}"
-                )
+                raise RuntimeError(f"approval notification delivery failed for action {action_id}")
             await db.commit()
             self.record_items_processed()
         except Exception:

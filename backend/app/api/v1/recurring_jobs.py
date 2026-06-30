@@ -41,9 +41,7 @@ async def list_templates(
 ) -> RecurringJobTemplateListResponse:
     """List recurring job templates, soonest next-occurrence first."""
     service = RecurringJobService(db)
-    return RecurringJobTemplateListResponse(
-        **await service.list(workspace.id, is_active=is_active)
-    )
+    return RecurringJobTemplateListResponse(**await service.list(workspace.id, is_active=is_active))
 
 
 @router.post("", response_model=RecurringJobTemplateResponse, status_code=201)
