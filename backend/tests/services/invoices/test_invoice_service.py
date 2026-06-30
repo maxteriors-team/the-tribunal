@@ -372,13 +372,17 @@ async def test_webhook_matches_by_session_id_when_metadata_absent() -> None:
             ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=80.0)])
         )
         # Simulate the link having been created: only the session id is stored.
+        # Use a unique id per run so leftover rows from prior integration runs
+        # (these tests commit against the shared dev DB) can't make the
+        # session-id lookup match multiple invoices.
+        session_id = f"cs_fallback_{uuid.uuid4().hex}"
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
-        invoice_row.stripe_checkout_session_id = "cs_fallback"
+        invoice_row.stripe_checkout_session_id = session_id
         await db.commit()
 
         session = {
-            "id": "cs_fallback",
+            "id": session_id,
             "mode": "payment",
             "payment_intent": "pi_fallback",
             "amount_total": 8000,
