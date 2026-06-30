@@ -4129,7 +4129,7 @@
           },
           "trigger_type": {
             "default": "event",
-            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded)$",
+            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
             "title": "Trigger Type",
             "type": "string"
           }
@@ -4319,7 +4319,7 @@
           "trigger_type": {
             "anyOf": [
               {
-                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded)$",
+                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
                 "type": "string"
               },
               {
@@ -43508,7 +43508,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/calls": {
       "get": {
-        "description": "List call history in workspace.\n\nArgs:\n    workspace_id: Workspace ID\n    current_user: Current user\n    db: Database session\n    workspace: Workspace object\n    page: Page number\n    page_size: Items per page\n    direction: Filter by direction (inbound/outbound)\n    status: Filter by status (completed/no_answer/busy/failed)\n    search: Search by contact name\n\nReturns:\n    Paginated list of calls",
+        "description": "List call history in workspace.\n\nArgs:\n    workspace_id: Workspace ID\n    current_user: Current user\n    db: Database session\n    page: Page number\n    page_size: Items per page\n    direction: Filter by direction (inbound/outbound)\n    status: Filter by status (completed/no_answer/busy/failed)\n    search: Search by contact name\n\nReturns:\n    Paginated list of calls",
         "operationId": "list_calls_api_v1_workspaces__workspace_id__calls_get",
         "parameters": [
           {
@@ -43626,7 +43626,7 @@
         ]
       },
       "post": {
-        "description": "Initiate outbound voice call.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n    workspace: Workspace object\n\nReturns:\n    Created Message record for the call",
+        "description": "Initiate outbound voice call.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n\nReturns:\n    Created Message record for the call",
         "operationId": "initiate_call_api_v1_workspaces__workspace_id__calls_post",
         "parameters": [
           {
@@ -43734,7 +43734,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/calls/{call_id}": {
       "get": {
-        "description": "Get call details with recording and transcript.\n\nArgs:\n    workspace_id: Workspace ID\n    call_id: Call (Message) ID\n    current_user: Current user\n    db: Database session\n    workspace: Workspace object\n\nReturns:\n    Message record with call details",
+        "description": "Get call details with recording and transcript.\n\nArgs:\n    workspace_id: Workspace ID\n    call_id: Call (Message) ID\n    current_user: Current user\n    db: Database session\n\nReturns:\n    Message record with call details",
         "operationId": "get_call_api_v1_workspaces__workspace_id__calls__call_id__get",
         "parameters": [
           {
@@ -43793,7 +43793,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/calls/{call_id}/hangup": {
       "post": {
-        "description": "Hang up active call.\n\nArgs:\n    workspace_id: Workspace ID\n    call_id: Call (Message) ID\n    current_user: Current user\n    db: Database session\n    workspace: Workspace object\n\nReturns:\n    Success status",
+        "description": "Hang up active call.\n\nArgs:\n    workspace_id: Workspace ID\n    call_id: Call (Message) ID\n    current_user: Current user\n    db: Database session\n\nReturns:\n    Success status",
         "operationId": "hangup_call_api_v1_workspaces__workspace_id__calls__call_id__hangup_post",
         "parameters": [
           {
@@ -55960,7 +55960,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/opportunities": {
       "get": {
-        "description": "List opportunities in a workspace.",
+        "description": "List opportunities in a workspace (sales callers see only their own).",
         "operationId": "list_opportunities_api_v1_workspaces__workspace_id__opportunities_get",
         "parameters": [
           {
@@ -56241,7 +56241,7 @@
         ]
       },
       "post": {
-        "description": "Create a new opportunity.",
+        "description": "Create a new opportunity (sales callers are forced to self-assign).",
         "operationId": "create_opportunity_api_v1_workspaces__workspace_id__opportunities_post",
         "parameters": [
           {
@@ -56807,7 +56807,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}": {
       "delete": {
-        "description": "Delete an opportunity.",
+        "description": "Delete an opportunity (sales callers may only delete their own).",
         "operationId": "delete_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__delete",
         "parameters": [
           {
@@ -56857,7 +56857,7 @@
         ]
       },
       "get": {
-        "description": "Get a specific opportunity.",
+        "description": "Get a specific opportunity (sales callers are scoped to their own).",
         "operationId": "get_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__get",
         "parameters": [
           {
@@ -56914,7 +56914,7 @@
         ]
       },
       "put": {
-        "description": "Update an opportunity.",
+        "description": "Update an opportunity (sales callers may only touch their own).",
         "operationId": "update_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__put",
         "parameters": [
           {

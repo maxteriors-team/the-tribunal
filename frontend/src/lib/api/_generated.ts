@@ -2208,7 +2208,6 @@ export interface paths {
          *         workspace_id: Workspace ID
          *         current_user: Current user
          *         db: Database session
-         *         workspace: Workspace object
          *         page: Page number
          *         page_size: Items per page
          *         direction: Filter by direction (inbound/outbound)
@@ -2229,7 +2228,6 @@ export interface paths {
          *         call_data: Call request data
          *         current_user: Current user
          *         db: Database session
-         *         workspace: Workspace object
          *
          *     Returns:
          *         Created Message record for the call
@@ -2281,7 +2279,6 @@ export interface paths {
          *         call_id: Call (Message) ID
          *         current_user: Current user
          *         db: Database session
-         *         workspace: Workspace object
          *
          *     Returns:
          *         Message record with call details
@@ -2313,7 +2310,6 @@ export interface paths {
          *         call_id: Call (Message) ID
          *         current_user: Current user
          *         db: Database session
-         *         workspace: Workspace object
          *
          *     Returns:
          *         Success status
@@ -5268,13 +5264,13 @@ export interface paths {
         };
         /**
          * List Opportunities
-         * @description List opportunities in a workspace.
+         * @description List opportunities in a workspace (sales callers see only their own).
          */
         get: operations["list_opportunities_api_v1_workspaces__workspace_id__opportunities_get"];
         put?: never;
         /**
          * Create Opportunity
-         * @description Create a new opportunity.
+         * @description Create a new opportunity (sales callers are forced to self-assign).
          */
         post: operations["create_opportunity_api_v1_workspaces__workspace_id__opportunities_post"];
         delete?: never;
@@ -5404,18 +5400,18 @@ export interface paths {
         };
         /**
          * Get Opportunity
-         * @description Get a specific opportunity.
+         * @description Get a specific opportunity (sales callers are scoped to their own).
          */
         get: operations["get_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__get"];
         /**
          * Update Opportunity
-         * @description Update an opportunity.
+         * @description Update an opportunity (sales callers may only touch their own).
          */
         put: operations["update_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__put"];
         post?: never;
         /**
          * Delete Opportunity
-         * @description Delete an opportunity.
+         * @description Delete an opportunity (sales callers may only delete their own).
          */
         delete: operations["delete_opportunity_api_v1_workspaces__workspace_id__opportunities__opportunity_id__delete"];
         options?: never;
