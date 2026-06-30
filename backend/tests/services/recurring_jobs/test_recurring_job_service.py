@@ -11,13 +11,14 @@ the worker ``materialize_due`` lead-window behaviour, and cross-workspace 404s.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from dateutil.relativedelta import relativedelta
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
@@ -194,6 +195,53 @@ async def test_run_template_is_idempotent_per_occurrence() -> None:
         result = await svc.run_template(tpl.id, ws.id)
         assert result["created"] == 0
         assert len(await _jobs_for_template(db, tpl.id)) == 1
+
+
+async def test_concurrent_materialization_creates_one_job_per_occurrence() -> None:
+    """Two runs racing the *same* occurrence must yield exactly one job.
+
+    The in-process SELECT pre-check is a TOCTOU race (both runs can see "no job"
+    before either inserts), so the real guard is the partial-unique index on
+    ``(recurring_template_id, scheduled_start)``. This drives the race for real:
+    two independent sessions each load the template and force-generate the same
+    occurrence concurrently, each committing inside its own coroutine. One wins
+    the insert; the loser blocks on the index, hits IntegrityError, and skips.
+    """
+    # Seed committed data so both racing sessions observe the same template.
+    async with AsyncSessionLocal() as setup:
+        ws = await _workspace(setup)
+        contact = await _contact(setup, ws.id)
+        tech = await _technician(setup, ws.id)
+        svc = RecurringJobService(setup)
+        start = datetime(2099, 6, 1, 9, 0, tzinfo=UTC)
+        tpl = await svc.create(
+            ws.id, _create_payload(contact.id, start, default_technician_ids=[tech.id])
+        )
+        await setup.commit()
+
+    async def attempt() -> int:
+        # Each attempt is its own session/connection → its own transaction.
+        async with AsyncSessionLocal() as db:
+            created = (await RecurringJobService(db).run_template(tpl.id, ws.id))["created"]
+            await db.commit()
+            return created
+
+    try:
+        results = await asyncio.gather(attempt(), attempt())
+        # Exactly one attempt created the job; the other skipped the duplicate.
+        assert sorted(results) == [0, 1]
+
+        async with AsyncSessionLocal() as check:
+            jobs = await _jobs_for_template(check, tpl.id)
+            assert len(jobs) == 1
+            assert jobs[0].scheduled_start == start
+    finally:
+        # Committed rows: clean up with a single core DELETE so the database's
+        # ON DELETE CASCADE clears jobs/assignments/template (an ORM delete would
+        # try to micro-manage the assignment cascade and fail).
+        async with AsyncSessionLocal() as cleanup:
+            await cleanup.execute(delete(Workspace).where(Workspace.id == ws.id))
+            await cleanup.commit()
 
 
 # --------------------------------------------------------------------------- #

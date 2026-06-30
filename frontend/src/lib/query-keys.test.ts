@@ -173,6 +173,30 @@ describe("queryKeys factory composition", () => {
     ]);
   });
 
+  it("builds reporting keys, defaulting the optional as-of/params slot to null", () => {
+    expect(queryKeys.reports.arAging("ws_1")).toEqual([
+      "reports",
+      "ws_1",
+      "ar-aging",
+      null,
+    ]);
+    expect(queryKeys.reports.arAging("ws_1", "2026-07-01")).toEqual([
+      "reports",
+      "ws_1",
+      "ar-aging",
+      "2026-07-01",
+    ]);
+    expect(queryKeys.reports.jobPnl("ws_1")).toEqual([
+      "reports",
+      "ws_1",
+      "job-pnl",
+      undefined,
+    ]);
+    expect(
+      queryKeys.reports.jobPnl("ws_1", { date_from: "2026-06-01", date_to: undefined }),
+    ).toEqual(["reports", "ws_1", "job-pnl", { date_from: "2026-06-01" }]);
+  });
+
   it("nests stat keys under the workspace `all` key so a broad invalidate clears them", () => {
     const all = queryKeys.appointments.all("ws_1");
     const stats = queryKeys.appointments.stats("ws_1");

@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,25 @@ def _duration_hours(started_at: datetime, ended_at: datetime | None) -> float:
     if ended_at is None:
         return 0.0
     return (ended_at - started_at).total_seconds() / 3600.0
+
+
+def _require_single_currency(currencies: set[str], report: str) -> str:
+    """Return the lone currency in ``currencies`` (default USD when empty).
+
+    Summing money across currencies is meaningless, so rather than silently
+    emit a wrong total we refuse with 422 and name the clashing currencies.
+    """
+    present = {code for code in currencies if code}
+    if len(present) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"{report} spans multiple currencies "
+                f"({', '.join(sorted(present))}); reporting across currencies "
+                "is not supported."
+            ),
+        )
+    return next(iter(present), "USD")
 
 
 class ReportingService:
@@ -74,7 +94,7 @@ class ReportingService:
             ("61-90", 0.0, 0),
             ("90+", 0.0, 0),
         ]
-        currency = "USD"
+        currencies: set[str] = set()
         total_outstanding = 0.0
         total_invoices = 0
 
@@ -82,7 +102,8 @@ class ReportingService:
             balance = float(invoice.total or 0) - float(invoice.amount_paid or 0)
             if balance <= 0:
                 continue
-            currency = invoice.currency or currency
+            if invoice.currency:
+                currencies.add(invoice.currency)
             total_outstanding += balance
             total_invoices += 1
 
@@ -102,6 +123,7 @@ class ReportingService:
             label, amount, count = buckets[index]
             buckets[index] = (label, amount + balance, count + 1)
 
+        currency = _require_single_currency(currencies, "AR aging")
         return ARAgingReport(
             as_of=today,
             currency=currency,
@@ -147,7 +169,7 @@ class ReportingService:
 
         # Revenue: distinct linked invoices (avoid double-counting shared invoices).
         revenue = 0.0
-        currency = "USD"
+        currencies: set[str] = set()
         if invoice_ids:
             invoices = (
                 (
@@ -163,7 +185,9 @@ class ReportingService:
             )
             for invoice in invoices:
                 revenue += float(invoice.total or 0)
-                currency = invoice.currency or currency
+                if invoice.currency:
+                    currencies.add(invoice.currency)
+        currency = _require_single_currency(currencies, "Job P&L")
 
         labor_cost = 0.0
         total_hours = 0.0

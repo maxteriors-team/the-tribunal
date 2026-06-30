@@ -9,10 +9,13 @@ Two responsibilities:
    :class:`Job`. :meth:`materialize_due` is the global worker entrypoint (it
    scans every workspace's due templates); :meth:`run_template` lets an operator
    force-generate the next job for one template on demand. Both share
-   :meth:`_materialize_one`, which is **idempotent per period**: each occurrence
-   start produces exactly one job (guarded by ``Job.recurring_template_id`` +
-   ``scheduled_start``), and the template cursor (``next_run_at``) advances by
-   ``interval`` × ``frequency`` after each one.
+   :meth:`_materialize_one`, which is **idempotent per occurrence**: each
+   occurrence start produces exactly one job, and the template cursor
+   (``next_run_at``) advances by ``interval`` × ``frequency`` after each one.
+   Idempotency is enforced at the database — a partial-unique index on
+   ``(recurring_template_id, scheduled_start)`` — so concurrent runs (overlapping
+   ticks, multiple replicas, or a tick racing an operator "generate next now")
+   cannot create duplicates; the in-process check is only a fast pre-filter.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from typing import Any
 import structlog
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import assert_workspace_owned, select_workspace_owned
@@ -245,7 +249,13 @@ class RecurringJobService:
             occurrence_start = template.next_run_at
             occurrence_end = occurrence_start + timedelta(minutes=template.duration_minutes)
 
-            # Idempotency guard: never double-generate the same occurrence.
+            # Idempotency. The cheap SELECT pre-check skips the common
+            # already-generated case, but the *authoritative* guard is the
+            # partial-unique index (recurring_template_id, scheduled_start):
+            # the insert runs in a savepoint, and if a concurrent run (an
+            # overlapping tick, another replica, or an operator "generate next
+            # now") won the race, the IntegrityError makes us skip rather than
+            # duplicate. The cursor still advances either way.
             if not await self._existing_occurrence(template.id, occurrence_start):
                 job = Job(
                     workspace_id=template.workspace_id,
@@ -259,17 +269,29 @@ class RecurringJobService:
                     scheduled_start=occurrence_start,
                     scheduled_end=occurrence_end,
                 )
-                self.db.add(job)
-                await self.db.flush()
-                for technician_id in technician_ids:
-                    self.db.add(JobAssignment(job_id=job.id, technician_id=technician_id))
-                created.append(job)
-                self.log.info(
-                    "recurring_job_materialized",
-                    template_id=str(template.id),
-                    job_id=str(job.id),
-                    scheduled_start=occurrence_start.isoformat(),
-                )
+                try:
+                    async with self.db.begin_nested():
+                        self.db.add(job)
+                        await self.db.flush()
+                        for technician_id in technician_ids:
+                            self.db.add(
+                                JobAssignment(job_id=job.id, technician_id=technician_id)
+                            )
+                except IntegrityError:
+                    # Lost the race for this occurrence; another run created it.
+                    self.log.info(
+                        "recurring_job_materialize_skipped_duplicate",
+                        template_id=str(template.id),
+                        scheduled_start=occurrence_start.isoformat(),
+                    )
+                else:
+                    created.append(job)
+                    self.log.info(
+                        "recurring_job_materialized",
+                        template_id=str(template.id),
+                        job_id=str(job.id),
+                        scheduled_start=occurrence_start.isoformat(),
+                    )
 
             template.last_run_at = now
             template.next_run_at = advance_occurrence(

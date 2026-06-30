@@ -357,6 +357,18 @@ class Job(Base):
             unique=True,
             postgresql_where=text("external_id IS NOT NULL"),
         ),
+        # A recurring template materializes at most one job per occurrence start.
+        # This is the *authoritative* idempotency guard for the recurring-job
+        # worker: it makes concurrent runs (overlapping ticks, multiple replicas,
+        # or a tick racing an operator "generate next now") safe, where the
+        # in-process SELECT check alone is a TOCTOU race.
+        Index(
+            "uq_field_service_jobs_recurring_occurrence",
+            "recurring_template_id",
+            "scheduled_start",
+            unique=True,
+            postgresql_where=text("recurring_template_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

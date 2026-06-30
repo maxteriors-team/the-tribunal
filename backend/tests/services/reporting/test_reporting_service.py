@@ -15,6 +15,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
@@ -65,6 +66,7 @@ async def _invoice(
     status: str,
     due_date: date | None,
     amount_paid: float = 0.0,
+    currency: str = "USD",
 ) -> Invoice:
     invoice = Invoice(
         workspace_id=workspace_id,
@@ -75,7 +77,7 @@ async def _invoice(
         amount_paid=amount_paid,
         status=status,
         due_date=due_date,
-        currency="USD",
+        currency=currency,
     )
     db.add(invoice)
     await db.flush()
@@ -161,6 +163,35 @@ async def test_ar_aging_uses_outstanding_balance_for_partial() -> None:
         by_label = {b.label: b for b in report.buckets}
         assert by_label["1-30"].amount == 300.0
         assert by_label["1-30"].count == 1
+
+
+async def test_ar_aging_reflects_a_single_non_usd_currency() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _invoice(
+            db, ws.id, contact.id, total=100, status="sent", due_date=None, currency="EUR"
+        )
+        report = await ReportingService(db).ar_aging(ws.id)
+        assert report.currency == "EUR"
+        assert report.total_outstanding == 100.0
+
+
+async def test_ar_aging_refuses_to_sum_across_currencies() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _invoice(
+            db, ws.id, contact.id, total=100, status="sent", due_date=None, currency="USD"
+        )
+        await _invoice(
+            db, ws.id, contact.id, total=200, status="sent", due_date=None, currency="EUR"
+        )
+        # Summing USD + EUR would be silently wrong, so the report must refuse.
+        with pytest.raises(HTTPException) as exc:
+            await ReportingService(db).ar_aging(ws.id)
+        assert exc.value.status_code == 422
+        assert "EUR" in exc.value.detail and "USD" in exc.value.detail
 
 
 # --------------------------------------------------------------------------- #
@@ -249,3 +280,21 @@ async def test_job_pnl_summary_respects_date_window_and_tenancy() -> None:
         )
         assert summary.job_count == 1
         assert summary.revenue == 500.0
+
+
+async def test_job_pnl_summary_refuses_to_sum_across_currencies() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
+        usd = await _invoice(
+            db, ws.id, contact.id, total=500, status="sent", due_date=None, currency="USD"
+        )
+        eur = await _invoice(
+            db, ws.id, contact.id, total=700, status="sent", due_date=None, currency="EUR"
+        )
+        await _job(db, ws.id, contact.id, invoice_id=usd.id, start=start)
+        await _job(db, ws.id, contact.id, invoice_id=eur.id, start=start)
+        with pytest.raises(HTTPException) as exc:
+            await ReportingService(db).job_pnl_summary(ws.id)
+        assert exc.value.status_code == 422
