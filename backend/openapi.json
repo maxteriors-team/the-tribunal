@@ -291,6 +291,71 @@
         "title": "APIKeyResponse",
         "type": "object"
       },
+      "ARAgingBucket": {
+        "description": "One aging bucket of outstanding receivables.",
+        "properties": {
+          "amount": {
+            "description": "Outstanding balance in this bucket",
+            "title": "Amount",
+            "type": "number"
+          },
+          "count": {
+            "description": "Number of invoices in this bucket",
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Bucket label, e.g. 'Current' or '31-60'",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "amount",
+          "count"
+        ],
+        "title": "ARAgingBucket",
+        "type": "object"
+      },
+      "ARAgingReport": {
+        "description": "Accounts-receivable aging as of a given date.",
+        "properties": {
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/ARAgingBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "total_invoices": {
+            "title": "Total Invoices",
+            "type": "integer"
+          },
+          "total_outstanding": {
+            "title": "Total Outstanding",
+            "type": "number"
+          }
+        },
+        "required": [
+          "as_of",
+          "currency",
+          "total_outstanding",
+          "total_invoices",
+          "buckets"
+        ],
+        "title": "ARAgingReport",
+        "type": "object"
+      },
       "ActionSummary": {
         "description": "Summary of a tool action taken by the assistant.",
         "properties": {
@@ -15602,6 +15667,100 @@
           "total"
         ],
         "title": "JobListResponse",
+        "type": "object"
+      },
+      "JobPnLSummary": {
+        "description": "Aggregate job profitability over a period.\n\nRevenue is the sum of the distinct invoices linked to the jobs in range\n(so two jobs sharing one invoice are not double-counted); cost is tracked\nlabor (hours x rate) plus logged expenses.",
+        "properties": {
+          "billable_job_count": {
+            "description": "Jobs with a linked invoice",
+            "title": "Billable Job Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "date_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date From"
+          },
+          "date_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date To"
+          },
+          "expense_cost": {
+            "title": "Expense Cost",
+            "type": "number"
+          },
+          "job_count": {
+            "description": "Jobs considered in the period",
+            "title": "Job Count",
+            "type": "integer"
+          },
+          "labor_cost": {
+            "title": "Labor Cost",
+            "type": "number"
+          },
+          "margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "profit / revenue, or null when revenue is 0",
+            "title": "Margin"
+          },
+          "profit": {
+            "title": "Profit",
+            "type": "number"
+          },
+          "revenue": {
+            "title": "Revenue",
+            "type": "number"
+          },
+          "total_cost": {
+            "title": "Total Cost",
+            "type": "number"
+          },
+          "total_hours": {
+            "title": "Total Hours",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "currency",
+          "job_count",
+          "billable_job_count",
+          "revenue",
+          "labor_cost",
+          "expense_cost",
+          "total_cost",
+          "profit",
+          "total_hours"
+        ],
+        "title": "JobPnLSummary",
         "type": "object"
       },
       "JobProfitability": {
@@ -61219,6 +61378,161 @@
         "summary": "Run Template",
         "tags": [
           "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/reports/ar-aging": {
+      "get": {
+        "description": "Accounts-receivable aging: outstanding balances bucketed by overdue age.",
+        "operationId": "ar_aging_api_v1_workspaces__workspace_id__reports_ar_aging_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Aging reference date (defaults to today)",
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Aging reference date (defaults to today)",
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ARAgingReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Ar Aging",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/reports/job-pnl": {
+      "get": {
+        "description": "Aggregate job profitability (revenue minus labor and expenses) over a period.",
+        "operationId": "job_pnl_api_v1_workspaces__workspace_id__reports_job_pnl_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Jobs scheduled on or after this time",
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jobs scheduled on or after this time",
+              "title": "Date From"
+            }
+          },
+          {
+            "description": "Jobs scheduled on or before this time",
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Jobs scheduled on or before this time",
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPnLSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Job Pnl",
+        "tags": [
+          "Reporting"
         ]
       }
     },

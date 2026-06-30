@@ -312,6 +312,12 @@ export const queryKeys = {
   recurringJobs: {
     ...recurringJobs,
   },
+  reports: {
+    arAging: (workspaceId: string, asOf?: string) =>
+      ["reports", workspaceId, "ar-aging", asOf ?? null] as const,
+    jobPnl: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["reports", workspaceId, "job-pnl", normalizeQueryKeyParams(params)] as const,
+  },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
   leadSources: {

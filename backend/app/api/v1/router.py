@@ -50,6 +50,7 @@ from app.api.v1 import (
     quotes,
     realtime,
     recurring_jobs,
+    reporting,
     reviews,
     roleplay,
     scorecard,
@@ -327,6 +328,11 @@ api_router.include_router(
     recurring_jobs.router,
     prefix="/workspaces/{workspace_id}/recurring-jobs",
     tags=["Field Service"],
+)
+api_router.include_router(
+    reporting.router,
+    prefix="/workspaces/{workspace_id}/reports",
+    tags=["Reporting"],
 )
 api_router.include_router(
     nudges.router,

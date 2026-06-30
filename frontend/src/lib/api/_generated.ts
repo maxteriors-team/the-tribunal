@@ -6459,6 +6459,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/reports/ar-aging": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ar Aging
+         * @description Accounts-receivable aging: outstanding balances bucketed by overdue age.
+         */
+        get: operations["ar_aging_api_v1_workspaces__workspace_id__reports_ar_aging_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/reports/job-pnl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Pnl
+         * @description Aggregate job profitability (revenue minus labor and expenses) over a period.
+         */
+        get: operations["job_pnl_api_v1_workspaces__workspace_id__reports_job_pnl_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/reviews": {
         parameters: {
             query?: never;
@@ -7855,6 +7895,46 @@ export interface components {
             last_used_at: string | null;
             /** Name */
             name: string;
+        };
+        /**
+         * ARAgingBucket
+         * @description One aging bucket of outstanding receivables.
+         */
+        ARAgingBucket: {
+            /**
+             * Amount
+             * @description Outstanding balance in this bucket
+             */
+            amount: number;
+            /**
+             * Count
+             * @description Number of invoices in this bucket
+             */
+            count: number;
+            /**
+             * Label
+             * @description Bucket label, e.g. 'Current' or '31-60'
+             */
+            label: string;
+        };
+        /**
+         * ARAgingReport
+         * @description Accounts-receivable aging as of a given date.
+         */
+        ARAgingReport: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Buckets */
+            buckets: components["schemas"]["ARAgingBucket"][];
+            /** Currency */
+            currency: string;
+            /** Total Invoices */
+            total_invoices: number;
+            /** Total Outstanding */
+            total_outstanding: number;
         };
         /**
          * ActionSummary
@@ -13643,6 +13723,49 @@ export interface components {
             items: components["schemas"]["JobResponse"][];
             /** Total */
             total: number;
+        };
+        /**
+         * JobPnLSummary
+         * @description Aggregate job profitability over a period.
+         *
+         *     Revenue is the sum of the distinct invoices linked to the jobs in range
+         *     (so two jobs sharing one invoice are not double-counted); cost is tracked
+         *     labor (hours x rate) plus logged expenses.
+         */
+        JobPnLSummary: {
+            /**
+             * Billable Job Count
+             * @description Jobs with a linked invoice
+             */
+            billable_job_count: number;
+            /** Currency */
+            currency: string;
+            /** Date From */
+            date_from: string | null;
+            /** Date To */
+            date_to: string | null;
+            /** Expense Cost */
+            expense_cost: number;
+            /**
+             * Job Count
+             * @description Jobs considered in the period
+             */
+            job_count: number;
+            /** Labor Cost */
+            labor_cost: number;
+            /**
+             * Margin
+             * @description profit / revenue, or null when revenue is 0
+             */
+            margin?: number | null;
+            /** Profit */
+            profit: number;
+            /** Revenue */
+            revenue: number;
+            /** Total Cost */
+            total_cost: number;
+            /** Total Hours */
+            total_hours: number;
         };
         /**
          * JobProfitability
@@ -34324,6 +34447,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecurringJobRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ar_aging_api_v1_workspaces__workspace_id__reports_ar_aging_get: {
+        parameters: {
+            query?: {
+                /** @description Aging reference date (defaults to today) */
+                as_of?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ARAgingReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_pnl_api_v1_workspaces__workspace_id__reports_job_pnl_get: {
+        parameters: {
+            query?: {
+                /** @description Jobs scheduled on or after this time */
+                date_from?: string | null;
+                /** @description Jobs scheduled on or before this time */
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPnLSummary"];
                 };
             };
             /** @description Validation Error */

@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Bell,
   BookMarked,
   BookOpen,
@@ -167,6 +168,13 @@ export const workspaceNavItems: AppNavItem[] = [
     title: "Scorecard",
     url: "/scorecard",
     icon: ClipboardList,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
+    title: "Reports",
+    url: "/reports",
+    icon: BarChart3,
     sidebar: true,
     commandPalette: true,
   },
@@ -356,6 +364,7 @@ export const breadcrumbLabels: Record<string, string> = {
   campaign: "Campaign",
   calls: "Calls",
   scorecard: "Receptionist Scorecard",
+  reports: "Reports",
   dashboard: "Dashboard",
   assistant: "Assistant",
   agents: "AI Agents",
