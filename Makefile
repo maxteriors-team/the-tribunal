@@ -293,7 +293,8 @@ db.backup.local: ## pg_dump the local dev Postgres (custom format) into backend/
 db.backup.prod: ## pg_dump a remote/prod Postgres (read-only) into backend/backups/. Usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:5432/db'
 	@if [ -z "$(DATABASE_URL)" ]; then \
 		echo "✗ missing DATABASE_URL — usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:port/db'"; \
-		echo "  (copy the prod connection string from Railway → Postgres → Connect; the +asyncpg suffix is stripped automatically)"; \
+		echo "  Use the PUBLIC url (Railway → Postgres → Connect → 'Public Network', host *.proxy.rlwy.net); the internal *.railway.internal host is unreachable from here."; \
+		echo "  The +asyncpg suffix is stripped automatically."; \
 		exit 1; \
 	fi
 	@mkdir -p $(BACKUP_DIR)

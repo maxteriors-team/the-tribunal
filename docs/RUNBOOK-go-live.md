@@ -20,7 +20,7 @@ These are external prerequisites — no code can supply them:
 
 | # | Needed | For | Where it goes |
 |---|--------|-----|---------------|
-| A | **Prod `DATABASE_URL`** (Railway → Postgres → Connect) | Step 1 backup | local shell only (never commit) |
+| A | **Prod `DATABASE_URL`** — the **public** url (Railway → Postgres → Connect → *Public Network*, host `*.proxy.rlwy.net`; **not** the internal `*.railway.internal`, which is unreachable from your laptop) | Step 1 backup | local shell only (never commit) |
 | B | **Jobber data**: either a JSON export *or* a `JOBBER_ACCESS_TOKEN` | Step 4 import | `--from-file` / env var |
 | C | **Stripe live keys** + **`STRIPE_WEBHOOK_SECRET`** | Step 5 payments | Railway env vars |
 | D | Three cutover decisions (see end) | scope | — |
@@ -49,7 +49,8 @@ This dump is **read-only** — it cannot harm prod. Uses a dockerized `pg_17`
 client so no local Postgres install is needed.
 
 ```bash
-make db.backup.prod DATABASE_URL='postgresql://USER:PASS@HOST:PORT/DB'
+# HOST must be the PUBLIC proxy host (*.proxy.rlwy.net), not *.railway.internal.
+make db.backup.prod DATABASE_URL='postgresql://USER:PASS@HOST.proxy.rlwy.net:PORT/railway'
 # → writes backend/backups/prod-<timestamp>.dump and refuses to continue if empty
 ```
 
