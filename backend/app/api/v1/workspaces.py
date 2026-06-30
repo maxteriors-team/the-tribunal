@@ -12,6 +12,7 @@ from app.api.deps import (
     WorkspaceAccess,
     WorkspaceAdminAccess,
 )
+from app.core.permissions import Capability, role_can
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.bulk_members import (
     BulkMemberCreateRequest,
@@ -183,7 +184,7 @@ async def update_member_role(
     db: DB,
 ) -> MemberResponse:
     """Update a member's role (owner/admin only)."""
-    if membership.role not in ("owner", "admin"):
+    if not role_can(membership.role, Capability.MEMBERS_MANAGE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage members",
@@ -239,7 +240,7 @@ async def remove_member(
     db: DB,
 ) -> None:
     """Remove a member from the workspace (owner/admin only)."""
-    if membership.role not in ("owner", "admin"):
+    if not role_can(membership.role, Capability.MEMBERS_MANAGE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage members",
@@ -297,7 +298,7 @@ async def bulk_create_workspace_members(
     role. Generated temporary passwords are returned once and never stored in
     plaintext.
     """
-    if membership.role not in ("owner", "admin"):
+    if not role_can(membership.role, Capability.MEMBERS_MANAGE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage members",

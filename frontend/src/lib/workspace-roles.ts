@@ -33,14 +33,19 @@ export const ROLE_LABELS: Record<string, string> = {
   member: "Member",
 };
 
-/** Short description shown beneath each role option in pickers. */
+/**
+ * Short description shown beneath each role option in pickers. These summarize
+ * the four access tiers enforced by `@/lib/permissions` (admin ⊃ manager ⊃ sales
+ * ⊃ tech): admin alone sees reports and manages members/numbers; managers run
+ * CRM, jobs, and billing; sales own their pipeline; tech/member read and message.
+ */
 export const ROLE_DESCRIPTIONS: Record<AssignableRole, string> = {
-  admin: "Full access including team and billing management",
-  manager: "Manage maintenance plans, schedules, and crews",
-  dispatcher: "Assign jobs and run the dispatch board",
-  sales_rep: "Sell and track personal KPIs in the sales portal",
-  technician: "Field tech — view and update assigned jobs",
-  member: "View and manage contacts and campaigns",
+  admin: "Full access — team, billing, reports, and settings",
+  manager: "Run CRM, jobs, and billing (no reports or member management)",
+  dispatcher: "Run CRM, jobs, and billing (no reports or member management)",
+  sales_rep: "Manage your own sales pipeline; text and call customers",
+  technician: "View work, log time on jobs, and message customers",
+  member: "View contacts and pipeline; text and call customers",
 };
 
 /** Display label for a role string, falling back to the raw value. */

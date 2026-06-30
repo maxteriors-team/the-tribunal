@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  PageEmptyState,
   PageErrorState,
   PageLoadingState,
 } from "@/components/ui/page-state";
@@ -22,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reportingApi } from "@/lib/api/reporting";
 import { queryKeys } from "@/lib/query-keys";
@@ -205,6 +207,19 @@ function JobPnLCard() {
 }
 
 export function ReportsOverview() {
+  const { can } = useCapabilities();
+
+  // Reports are admin-only (reports:view). Render a friendly no-access state
+  // rather than firing requests that the backend would reject with 403.
+  if (!can("reports:view")) {
+    return (
+      <PageEmptyState
+        title="No access to reports"
+        description="Reporting is available to workspace admins. Ask an admin for access."
+      />
+    );
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <ARAgingCard />

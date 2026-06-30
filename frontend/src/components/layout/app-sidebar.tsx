@@ -49,10 +49,12 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { NoWorkspaceGate } from "@/components/workspaces/no-workspace-gate";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useSetupStatus } from "@/hooks/useSetupStatus";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { nudgesApi } from "@/lib/api/nudges";
 import { pendingActionsApi } from "@/lib/api/pending-actions";
+import type { Capability } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 import { useAuth } from "@/providers/auth-provider";
@@ -110,12 +112,19 @@ function buildBreadcrumbs(pathname: string): BreadcrumbSegment[] {
   }));
 }
 
-function getVisibleSidebarSections(): AppNavSection[] {
+function getVisibleSidebarSections(
+  can: (capability: Capability) => boolean,
+): AppNavSection[] {
   return appNavSections
     .filter((section) => !section.devOnly || process.env.NODE_ENV !== "production")
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.sidebar && isNavItemVisible(item)),
+      items: section.items.filter(
+        (item) =>
+          item.sidebar &&
+          isNavItemVisible(item) &&
+          (!item.requires || can(item.requires)),
+      ),
     }))
     .filter((section) => section.items.length > 0);
 }
@@ -227,7 +236,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
     </SidebarGroupContent>
   );
 
-  const visibleSidebarSections = getVisibleSidebarSections();
+  const { can } = useCapabilities();
+  const visibleSidebarSections = getVisibleSidebarSections(can);
 
   return (
     <SidebarProvider data-app-shell>

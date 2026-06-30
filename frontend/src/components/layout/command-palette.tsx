@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignsApi } from "@/lib/api/campaigns";
@@ -78,6 +79,7 @@ export function CommandPalette({
     placeholderData: keepPreviousData,
   });
 
+  const { can } = useCapabilities();
   const commandGroups = useMemo(
     () =>
       appNavSections
@@ -85,11 +87,14 @@ export function CommandPalette({
         .map((section) => ({
           title: section.title,
           items: section.items.filter(
-            (item) => item.commandPalette && isNavItemVisible(item)
+            (item) =>
+              item.commandPalette &&
+              isNavItemVisible(item) &&
+              (!item.requires || can(item.requires))
           ),
         }))
         .filter((section) => section.items.length > 0),
-    []
+    [can]
   );
 
   const contacts = contactsQuery.data?.items ?? [];

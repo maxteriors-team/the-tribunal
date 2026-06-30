@@ -2,19 +2,20 @@
 
 Thin transport layer over :class:`app.services.quotes.QuoteService`; all domain
 rules (number allocation, total computation, lifecycle guards, expiry, and
-conversion to job/invoice) live in the service. Workspace scoping and auth
-follow the same deps as ``invoices.py``. Line-item mutations return the full
-quote detail because they recompute the parent totals.
+conversion to job/invoice) live in the service. Access is capability-gated:
+reads require ``billing:read`` and mutations ``billing:write`` (see
+:mod:`app.core.permissions`); the gating dependency also resolves workspace
+membership, replacing the old ``get_workspace`` access check. Line-item
+mutations return the full quote detail because they recompute the parent totals.
 """
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
-from app.models.workspace import Workspace
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertRequest,
@@ -36,7 +37,7 @@ async def list_quotes(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
     quote_status: Annotated[str | None, Query(alias="status")] = None,
     contact_id: Annotated[int | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -59,7 +60,7 @@ async def create_quote(
     quote_in: QuoteCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Create a draft quote with its initial line items."""
     service = QuoteService(db)
@@ -72,7 +73,7 @@ async def get_quote(
     quote_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
 ) -> QuoteDetailResponse:
     """Get a specific quote with its line items."""
     service = QuoteService(db)
@@ -86,7 +87,7 @@ async def update_quote(
     quote_in: QuoteUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Update a quote's header fields (totals are re-derived)."""
     service = QuoteService(db)
@@ -99,7 +100,7 @@ async def delete_quote(
     quote_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> None:
     """Delete a draft/sent quote. Decided or expired quotes are kept."""
     service = QuoteService(db)
@@ -113,7 +114,7 @@ async def send_quote(
     quote_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Mark a quote as sent and email it to the quote-to contact."""
     service = QuoteService(db)
@@ -126,7 +127,7 @@ async def approve_quote(
     quote_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Operator approves a quote on the customer's behalf."""
     service = QuoteService(db)
@@ -140,7 +141,7 @@ async def decline_quote(
     payload: QuoteDeclineRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Operator declines a quote on the customer's behalf."""
     service = QuoteService(db)
@@ -154,7 +155,7 @@ async def convert_quote(
     payload: QuoteConvertRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteConvertResponse:
     """Convert an approved quote into a scheduled job and/or an invoice."""
     service = QuoteService(db)
@@ -178,7 +179,7 @@ async def add_line_item(
     item_in: QuoteLineItemCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Add a line item and recompute quote totals."""
     service = QuoteService(db)
@@ -193,7 +194,7 @@ async def update_line_item(
     item_in: QuoteLineItemUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Update a line item and recompute quote totals."""
     service = QuoteService(db)
@@ -210,7 +211,7 @@ async def remove_line_item(
     item_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> QuoteDetailResponse:
     """Remove a line item and recompute quote totals."""
     service = QuoteService(db)

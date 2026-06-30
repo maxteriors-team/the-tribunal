@@ -1,16 +1,24 @@
-"""Contact endpoints."""
+"""Contact endpoints.
+
+Access is capability-gated via :mod:`app.core.permissions`: reads require
+``crm:read`` and record mutations require ``crm:write``. The one exception is
+``POST /{contact_id}/messages`` — sending a text to the contact — which requires
+``comms:send`` (it is messaging, not record editing), so field techs and sales
+can reach customers without being able to edit the CRM. The gating dependency
+also resolves workspace membership, replacing the old ``get_workspace`` check;
+``workspace_id`` (the path param) is the workspace identifier used throughout.
+"""
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanSendComms, CanWriteCRM, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
 from app.models.contact import Contact
-from app.models.workspace import Workspace
 from app.schemas.contact import (
     AIToggleRequest,
     AIToggleResponse,
@@ -63,7 +71,7 @@ async def list_contacts(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
@@ -88,7 +96,7 @@ async def list_contacts(
     service = ContactQueryService(db)
     try:
         result = await service.list_contacts(
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             page=page,
             page_size=page_size,
             status_filter=status_filter,
@@ -117,7 +125,7 @@ async def list_contact_ids(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     status_filter: str | None = Query(None, alias="status"),
     search: str | None = None,
     # Advanced filters
@@ -137,7 +145,7 @@ async def list_contact_ids(
     service = ContactQueryService(db)
     try:
         result = await service.list_contact_ids(
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             status_filter=status_filter,
             search=search,
             tags=tags,
@@ -164,7 +172,7 @@ async def create_contact(
     contact_in: ContactCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> Contact:
     """Create a new contact."""
     service = ContactService(db)
@@ -172,7 +180,7 @@ async def create_contact(
         include=set(LeadAttributionFields.model_fields), exclude_none=True
     )
     return await service.create_contact(
-        workspace_id=workspace.id,
+        workspace_id=workspace_id,
         first_name=contact_in.first_name,
         last_name=contact_in.last_name,
         email=contact_in.email,
@@ -193,12 +201,12 @@ async def get_contact(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> Contact:
     """Get a specific contact."""
     service = ContactService(db)
     try:
-        return await service.get_contact(contact_id, workspace.id)
+        return await service.get_contact(contact_id, workspace_id)
     except ContactNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -210,13 +218,13 @@ async def update_contact(
     contact_in: ContactUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> Contact:
     """Update a contact."""
     service = ContactService(db)
     update_data = contact_in.model_dump(exclude_unset=True)
     try:
-        return await service.update_contact(contact_id, workspace.id, update_data)
+        return await service.update_contact(contact_id, workspace_id, update_data)
     except ContactNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -227,12 +235,12 @@ async def delete_contact(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> None:
     """Delete a contact."""
     service = ContactService(db)
     try:
-        await service.delete_contact(contact_id, workspace.id)
+        await service.delete_contact(contact_id, workspace_id)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -243,12 +251,12 @@ async def bulk_delete_contacts(
     request: BulkDeleteRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> BulkDeleteResponse:
     """Delete multiple contacts at once."""
     service = ContactBulkService(db)
     try:
-        result = await service.bulk_delete_contacts(request.ids, workspace.id)
+        result = await service.bulk_delete_contacts(request.ids, workspace_id)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -261,12 +269,12 @@ async def bulk_update_status(
     request: BulkStatusUpdateRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> BulkStatusUpdateResponse:
     """Update the status of multiple contacts at once."""
     service = ContactBulkService(db)
     try:
-        result = await service.bulk_update_status(request.ids, workspace.id, request.status)
+        result = await service.bulk_update_status(request.ids, workspace_id, request.status)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -280,7 +288,7 @@ async def send_message_to_contact(
     message_in: SendMessageToContactRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanSendComms,
 ) -> Any:
     """Send an SMS message to a contact.
 
@@ -290,7 +298,7 @@ async def send_message_to_contact(
     try:
         return await service.send_message(
             contact_id=contact_id,
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             message_body=message_in.body,
             from_number=message_in.from_number,
         )
@@ -309,7 +317,7 @@ async def toggle_contact_ai(
     toggle_in: AIToggleRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> AIToggleResponse:
     """Toggle AI for a contact's conversation.
 
@@ -319,7 +327,7 @@ async def toggle_contact_ai(
     try:
         result = await service.toggle_ai(
             contact_id=contact_id,
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             enabled=toggle_in.enabled,
         )
     except NotFoundError as e:
@@ -337,14 +345,14 @@ async def assign_contact_agent(
     assign_in: ContactAgentAssignRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> ContactAgentAssignResponse:
     """Assign an AI agent to the contact's active conversation."""
     service = ContactAIStateService(db)
     try:
         result = await service.assign_agent(
             contact_id=contact_id,
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             agent_id=assign_in.agent_id,
         )
     except NotFoundError as e:
@@ -362,7 +370,7 @@ async def assign_contact_lead_source(
     assign_in: AssignLeadSourceRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> None:
     """Manually attribute a lead source to a contact from the cleanup queue.
 
@@ -372,7 +380,7 @@ async def assign_contact_lead_source(
     service = AttributionCleanupService(db)
     try:
         await service.assign(
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             contact_id=contact_id,
             lead_source_id=assign_in.lead_source_id,
             lead_source_campaign_id=assign_in.lead_source_campaign_id,
@@ -382,7 +390,7 @@ async def assign_contact_lead_source(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     # Backfilled opportunities change closed-won attribution — refresh ROI now.
-    await invalidate_dashboard_cache(workspace.id)
+    await invalidate_dashboard_cache(workspace_id)
 
 
 @router.get("/{contact_id}/timeline", response_model=list[TimelineItem])
@@ -391,7 +399,7 @@ async def get_contact_timeline(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     limit: int = Query(100, ge=1, le=500),
 ) -> list[TimelineItem]:
     """Get the conversation timeline for a contact.
@@ -401,7 +409,7 @@ async def get_contact_timeline(
     service = ContactTimelineService(db)
     timeline_items_data = await service.get_contact_timeline(
         contact_id=contact_id,
-        workspace_id=workspace.id,
+        workspace_id=workspace_id,
         limit=limit,
     )
 
@@ -418,19 +426,19 @@ async def get_contact_engagement_summary(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> ContactEngagementSummary:
     """Return aggregated engagement stats for a contact."""
     service = ContactService(db)
     try:
-        contact = await service.get_contact(contact_id, workspace.id)
+        contact = await service.get_contact(contact_id, workspace_id)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     return await get_engagement_summary(
         db=db,
         contact=contact,
-        workspace_id=workspace.id,
+        workspace_id=workspace_id,
     )
 
 
@@ -444,7 +452,7 @@ async def preview_import_csv(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
     file: UploadFile,
 ) -> CSVPreviewResponse:
     """Preview a CSV file before importing.
@@ -465,7 +473,7 @@ async def import_contacts_csv(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
     file: UploadFile,
     skip_duplicates: bool = Form(default=True),
     default_status: str = Form(default="new"),
@@ -489,7 +497,7 @@ async def import_contacts_csv(
     import_service = ContactImportService(db)
     try:
         result = await import_service.import_upload(
-            workspace_id=workspace.id,
+            workspace_id=workspace_id,
             file=file,
             skip_duplicates=skip_duplicates,
             default_status=default_status,
@@ -515,7 +523,7 @@ async def get_import_template(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> dict[str, Any]:
     """Get CSV import template information."""
     return ContactImportService.get_template_info()
@@ -532,7 +540,7 @@ async def qualify_contact(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> QualifyContactResponse:
     """Analyze a contact's conversations and update their qualification status.
 
@@ -548,7 +556,7 @@ async def qualify_contact(
     result = await db.execute(
         select(Contact).where(
             Contact.id == contact_id,
-            Contact.workspace_id == workspace.id,
+            Contact.workspace_id == workspace_id,
         )
     )
     contact = result.scalar_one_or_none()
@@ -591,14 +599,14 @@ async def get_contact_qualification(
     contact_id: int,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> QualifyContactResponse:
     """Get the current qualification status of a contact without re-analyzing."""
     # Get contact
     result = await db.execute(
         select(Contact).where(
             Contact.id == contact_id,
-            Contact.workspace_id == workspace.id,
+            Contact.workspace_id == workspace_id,
         )
     )
     contact = result.scalar_one_or_none()
@@ -628,7 +636,7 @@ async def batch_qualify_contacts(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
     limit: int = Query(50, ge=1, le=100),
 ) -> BatchQualifyResponse:
     """Analyze and qualify multiple contacts in the workspace.
@@ -642,7 +650,7 @@ async def batch_qualify_contacts(
     from app.services.ai.qualification import batch_analyze_contacts
 
     # Run batch analysis
-    result = await batch_analyze_contacts(str(workspace.id), db, limit)
+    result = await batch_analyze_contacts(str(workspace_id), db, limit)
 
     if not result.get("success"):
         return BatchQualifyResponse(

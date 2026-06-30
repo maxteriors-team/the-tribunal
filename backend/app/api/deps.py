@@ -12,6 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Capability, role_can
 from app.core.roles import WorkspaceRole
 from app.core.security import decode_access_token
 from app.db.session import get_db, transaction_boundary
@@ -324,6 +325,31 @@ def require_workspace_roles(
     return _require
 
 
+def require_capability(
+    *required: Capability,
+) -> Callable[[WorkspaceMembership], Awaitable[WorkspaceMembership]]:
+    """Build a dependency that requires the caller's role to hold every capability.
+
+    Resolves the membership via :func:`get_membership` (which already enforces
+    workspace access and the API-key workspace binding), maps the role to its
+    tier via :mod:`app.core.permissions`, and rejects with 403 unless the role is
+    granted **all** of ``required``. Unknown/legacy role strings resolve to the
+    lowest tier (fail-closed), so a corrupt value never escalates.
+    """
+
+    async def _require(
+        membership: Annotated[WorkspaceMembership, Depends(get_membership)],
+    ) -> WorkspaceMembership:
+        if not all(role_can(membership.role, cap) for cap in required):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return membership
+
+    return _require
+
+
 async def get_transactional_db(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AsyncGenerator[AsyncSession, None]:
@@ -368,4 +394,35 @@ WorkspaceDispatcher = Annotated[
             WorkspaceRole.DISPATCHER,
         )
     ),
+]
+
+# Capability-gated membership dependencies (preferred for new endpoints). Each
+# resolves (and returns) the caller's membership, raising 403 when the role's
+# tier lacks the capability. See :mod:`app.core.permissions` for the matrix.
+CanReadCRM = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.CRM_READ))
+]
+CanWriteCRM = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.CRM_WRITE))
+]
+CanWritePipelineOwn = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.PIPELINE_WRITE_OWN))
+]
+CanSendComms = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.COMMS_SEND))
+]
+CanManageComms = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.COMMS_MANAGE))
+]
+CanReadBilling = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.BILLING_READ))
+]
+CanWriteBilling = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.BILLING_WRITE))
+]
+CanViewReports = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.REPORTS_VIEW))
+]
+CanManageMembers = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.MEMBERS_MANAGE))
 ]

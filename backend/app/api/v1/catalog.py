@@ -1,19 +1,19 @@
 """Price book / catalog management endpoints.
 
-Thin transport layer over :class:`app.services.catalog.CatalogService`. Workspace
-scoping and auth follow the same deps as ``quotes.py`` / ``invoices.py``. These
-items are the source the quote / invoice line-item editors pull names and prices
-from.
+Thin transport layer over :class:`app.services.catalog.CatalogService`. Access is
+capability-gated: reads require ``billing:read`` and mutations ``billing:write``
+(see :mod:`app.core.permissions`); the gating dependency also resolves workspace
+membership, replacing the old ``get_workspace`` access check. These items are the
+source the quote / invoice line-item editors pull names and prices from.
 """
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
-from app.models.workspace import Workspace
 from app.schemas.catalog import (
     CatalogItemCreate,
     CatalogItemResponse,
@@ -30,7 +30,7 @@ async def list_catalog_items(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
     kind: Annotated[str | None, Query()] = None,
     search: Annotated[str | None, Query()] = None,
     include_inactive: Annotated[bool, Query()] = False,
@@ -55,7 +55,7 @@ async def create_catalog_item(
     item_in: CatalogItemCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> CatalogItemResponse:
     """Create a catalog item."""
     service = CatalogService(db)
@@ -68,7 +68,7 @@ async def get_catalog_item(
     item_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
 ) -> CatalogItemResponse:
     """Get a specific catalog item."""
     service = CatalogService(db)
@@ -82,7 +82,7 @@ async def update_catalog_item(
     item_in: CatalogItemUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> CatalogItemResponse:
     """Update a catalog item's fields."""
     service = CatalogService(db)
@@ -95,7 +95,7 @@ async def delete_catalog_item(
     item_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> None:
     """Delete a catalog item (templates are safe to delete; documents snapshot)."""
     service = CatalogService(db)

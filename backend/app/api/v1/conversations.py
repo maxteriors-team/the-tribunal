@@ -1,13 +1,11 @@
 """Conversations and messages endpoints."""
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanSendComms, CanWriteCRM, CurrentUser
 from app.models.conversation import Message
-from app.models.workspace import Workspace
 from app.schemas.conversation import (
     AgentAssign,
     AIToggle,
@@ -32,7 +30,7 @@ async def list_conversations(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     status_filter: str | None = None,
@@ -57,7 +55,7 @@ async def get_conversation(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     limit: int = Query(50, ge=1, le=200),
 ) -> ConversationWithMessages:
     """Get a conversation with its messages."""
@@ -76,7 +74,7 @@ async def send_message(
     message_in: MessageCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanSendComms,
 ) -> Message:
     """Send a message in a conversation."""
     svc = ConversationService(db)
@@ -94,7 +92,7 @@ async def toggle_ai(
     toggle: AIToggle,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> dict[str, bool]:
     """Toggle AI for a conversation."""
     svc = ConversationService(db)
@@ -111,7 +109,7 @@ async def pause_ai(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> dict[str, bool]:
     """Pause AI for a conversation (temporary)."""
     svc = ConversationService(db)
@@ -127,7 +125,7 @@ async def resume_ai(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> dict[str, bool]:
     """Resume AI for a conversation."""
     svc = ConversationService(db)
@@ -144,7 +142,7 @@ async def assign_agent(
     assign: AgentAssign,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> dict[str, uuid.UUID | None]:
     """Assign an agent to a conversation."""
     svc = ConversationService(db)
@@ -161,7 +159,7 @@ async def clear_conversation_history(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> None:
     """Clear all messages in a conversation."""
     svc = ConversationService(db)
@@ -180,7 +178,7 @@ async def get_followup_status(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> FollowupSettingsResponse:
     """Get follow-up settings and status for a conversation."""
     svc = ConversationService(db)
@@ -200,7 +198,7 @@ async def update_followup_settings(
     settings_update: FollowupSettingsUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> FollowupSettingsResponse:
     """Update follow-up settings for a conversation."""
     svc = ConversationService(db)
@@ -223,7 +221,7 @@ async def generate_followup(
     request: FollowupGenerateRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> FollowupGenerateResponse:
     """Generate a follow-up message preview (does not send)."""
     svc = ConversationService(db)
@@ -244,7 +242,7 @@ async def send_followup(
     request: FollowupSendRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanSendComms,
 ) -> FollowupSendResponse:
     """Send a follow-up message. Generates one if not provided."""
     svc = ConversationService(db)
@@ -262,7 +260,7 @@ async def reset_followup_counter(
     conversation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> dict[str, int]:
     """Reset the follow-up counter to 0."""
     svc = ConversationService(db)

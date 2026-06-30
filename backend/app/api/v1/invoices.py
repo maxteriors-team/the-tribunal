@@ -2,19 +2,20 @@
 
 Thin transport layer over :class:`app.services.invoices.InvoiceService`; all
 domain rules (number allocation, total computation, derived status, void/delete
-guards, payment reconciliation) live in the service. Workspace scoping and auth
-follow the same deps as ``opportunities.py``. Line-item mutations return the full
-invoice detail because they recompute the parent totals.
+guards, payment reconciliation) live in the service. Access is capability-gated:
+reads require ``billing:read`` and mutations ``billing:write`` (see
+:mod:`app.core.permissions`); the gating dependency also resolves workspace
+membership, so it replaces the old ``get_workspace`` access check. Line-item
+mutations return the full invoice detail because they recompute the parent totals.
 """
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
-from app.models.workspace import Workspace
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceDetailResponse,
@@ -34,7 +35,7 @@ async def list_invoices(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
     invoice_status: Annotated[str | None, Query(alias="status")] = None,
     contact_id: Annotated[int | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -57,7 +58,7 @@ async def create_invoice(
     invoice_in: InvoiceCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Create a draft invoice with its initial line items."""
     service = InvoiceService(db)
@@ -70,7 +71,7 @@ async def get_invoice(
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadBilling,
 ) -> InvoiceDetailResponse:
     """Get a specific invoice with its line items."""
     service = InvoiceService(db)
@@ -84,7 +85,7 @@ async def update_invoice(
     invoice_in: InvoiceUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Update an invoice's header fields (totals/status are re-derived)."""
     service = InvoiceService(db)
@@ -97,7 +98,7 @@ async def delete_invoice(
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> None:
     """Delete a draft invoice. Issued invoices must be voided instead."""
     service = InvoiceService(db)
@@ -111,7 +112,7 @@ async def send_invoice(
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Mark an invoice as sent (email delivery is wired in a later phase)."""
     service = InvoiceService(db)
@@ -124,7 +125,7 @@ async def void_invoice(
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Void an invoice. Fully paid invoices cannot be voided."""
     service = InvoiceService(db)
@@ -137,7 +138,7 @@ async def create_payment_link(
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoicePaymentLinkResponse:
     """Create a Stripe Checkout link for the invoice's outstanding balance."""
     service = InvoiceService(db)
@@ -157,7 +158,7 @@ async def add_line_item(
     item_in: InvoiceLineItemCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Add a line item and recompute invoice totals."""
     service = InvoiceService(db)
@@ -172,7 +173,7 @@ async def update_line_item(
     item_in: InvoiceLineItemUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Update a line item and recompute invoice totals."""
     service = InvoiceService(db)
@@ -189,7 +190,7 @@ async def remove_line_item(
     item_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteBilling,
 ) -> InvoiceDetailResponse:
     """Remove a line item and recompute invoice totals."""
     service = InvoiceService(db)

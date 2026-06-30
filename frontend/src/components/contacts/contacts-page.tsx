@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageErrorState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useBulkDeleteContacts, useBulkUpdateStatus, useContactIds, useContactsPaginated } from "@/hooks/useContacts";
 import { useRowSelection } from "@/hooks/useRowSelection";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -41,6 +42,9 @@ import type { Contact, ContactStatus } from "@/types";
 export function ContactsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { can } = useCapabilities();
+  // crm:write — managers/admins. Sales & tech have crm:read only (view, no edit).
+  const canWriteContacts = can("crm:write");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isScrapeDialogOpen, setIsScrapeDialogOpen] = useState(false);
 
@@ -264,7 +268,7 @@ export function ContactsPage() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            {!isSelectionMode && (
+            {!isSelectionMode && canWriteContacts && (
               <>
                 <Button variant="outline" className="gap-2" onClick={() => setIsImportDialogOpen(true)}>
                   <Upload className="h-4 w-4" />

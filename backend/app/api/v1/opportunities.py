@@ -5,11 +5,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanWriteCRM,
+    CanWritePipelineOwn,
+    CurrentUser,
+)
 from app.api.service_errors import ServiceErrorRoute
-from app.models.workspace import Workspace
+from app.core.permissions import pipeline_owner_scope
 from app.schemas.deal_coach import (
     AtRiskDealsResponse,
     DealCoachCard,
@@ -43,7 +49,7 @@ async def list_pipelines(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> list[PipelineResponse]:
     """List all pipelines in a workspace."""
     service = OpportunityService(db)
@@ -56,7 +62,7 @@ async def create_pipeline(
     pipeline_in: PipelineCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> PipelineResponse:
     """Create a new pipeline."""
     service = OpportunityService(db)
@@ -69,7 +75,7 @@ async def get_pipeline(
     pipeline_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> PipelineResponse:
     """Get a specific pipeline."""
     service = OpportunityService(db)
@@ -83,7 +89,7 @@ async def update_pipeline(
     pipeline_in: PipelineUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> PipelineResponse:
     """Update a pipeline."""
     service = OpportunityService(db)
@@ -96,7 +102,7 @@ async def delete_pipeline(
     pipeline_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> None:
     """Delete a pipeline."""
     service = OpportunityService(db)
@@ -115,7 +121,7 @@ async def create_pipeline_stage(
     stage_in: PipelineStageCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> PipelineStageResponse:
     """Create a new pipeline stage."""
     service = OpportunityService(db)
@@ -130,7 +136,7 @@ async def update_pipeline_stage(
     stage_in: PipelineStageUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWriteCRM,
 ) -> PipelineStageResponse:
     """Update a pipeline stage."""
     service = OpportunityService(db)
@@ -143,7 +149,7 @@ async def list_opportunities(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     pipeline_id: Annotated[uuid.UUID | None, Query()] = None,
     stage_id: Annotated[uuid.UUID | None, Query()] = None,
     owner_id: Annotated[uuid.UUID | None, Query()] = None,
@@ -159,7 +165,7 @@ async def list_opportunities(
     page_size: Annotated[int, Query(ge=1, le=500)] = 50,
     search: str | None = None,
 ) -> PaginatedOpportunities:
-    """List opportunities in a workspace."""
+    """List opportunities in a workspace (sales callers see only their own)."""
     service = OpportunityService(db)
     return await service.list_opportunities(
         workspace_id,
@@ -177,6 +183,7 @@ async def list_opportunities(
         probability_max=probability_max,
         created_after=created_after,
         created_before=created_before,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
     )
 
 
@@ -189,7 +196,7 @@ async def list_at_risk_deals(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     min_risk_score: Annotated[int, Query(ge=0, le=100)] = 25,
 ) -> AtRiskDealsResponse:
@@ -204,11 +211,15 @@ async def create_opportunity(
     opportunity_in: OpportunityCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> OpportunityResponse:
-    """Create a new opportunity."""
+    """Create a new opportunity (sales callers are forced to self-assign)."""
     service = OpportunityService(db)
-    return await service.create_opportunity(workspace_id, opportunity_in)
+    return await service.create_opportunity(
+        workspace_id,
+        opportunity_in,
+        assigned_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityDetailResponse)
@@ -217,11 +228,15 @@ async def get_opportunity(
     opportunity_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> OpportunityDetailResponse:
-    """Get a specific opportunity."""
+    """Get a specific opportunity (sales callers are scoped to their own)."""
     service = OpportunityService(db)
-    return await service.get_opportunity(workspace_id, opportunity_id)
+    return await service.get_opportunity(
+        workspace_id,
+        opportunity_id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.put("/{opportunity_id}", response_model=OpportunityResponse)
@@ -231,12 +246,16 @@ async def update_opportunity(
     opportunity_in: OpportunityUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> OpportunityResponse:
-    """Update an opportunity."""
+    """Update an opportunity (sales callers may only touch their own)."""
     service = OpportunityService(db)
     return await service.update_opportunity(
-        workspace_id, opportunity_id, opportunity_in, current_user.id
+        workspace_id,
+        opportunity_id,
+        opportunity_in,
+        current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
     )
 
 
@@ -246,11 +265,15 @@ async def delete_opportunity(
     opportunity_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> None:
-    """Delete an opportunity."""
+    """Delete an opportunity (sales callers may only delete their own)."""
     service = OpportunityService(db)
-    await service.delete_opportunity(workspace_id, opportunity_id)
+    await service.delete_opportunity(
+        workspace_id,
+        opportunity_id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.get("/{opportunity_id}/coach", response_model=DealCoachCard)
@@ -259,7 +282,7 @@ async def coach_opportunity(
     opportunity_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> DealCoachCard:
     """Get the AI Deal Coach card for one opportunity."""
     service = DealCoachService(db)
@@ -276,7 +299,7 @@ async def draft_coach_action(
     opportunity_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
     body: DraftActionRequest | None = None,
 ) -> DraftActionResponse:
     """Queue the coach's drafted next-best action through the approval gate."""
@@ -308,11 +331,16 @@ async def create_line_item(
     item_in: OpportunityLineItemCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> dict[str, Any]:
     """Create a line item for an opportunity."""
     service = OpportunityService(db)
-    return await service.create_line_item(workspace_id, opportunity_id, item_in)
+    return await service.create_line_item(
+        workspace_id,
+        opportunity_id,
+        item_in,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.put(
@@ -326,11 +354,17 @@ async def update_line_item(
     item_in: OpportunityLineItemUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> dict[str, Any]:
     """Update a line item."""
     service = OpportunityService(db)
-    return await service.update_line_item(workspace_id, opportunity_id, item_id, item_in)
+    return await service.update_line_item(
+        workspace_id,
+        opportunity_id,
+        item_id,
+        item_in,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.delete("/{opportunity_id}/line-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -340,8 +374,13 @@ async def delete_line_item(
     item_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanWritePipelineOwn,
 ) -> None:
     """Delete a line item."""
     service = OpportunityService(db)
-    await service.delete_line_item(workspace_id, opportunity_id, item_id)
+    await service.delete_line_item(
+        workspace_id,
+        opportunity_id,
+        item_id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )

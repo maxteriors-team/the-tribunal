@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.api.crud import get_nested_or_404
 from app.api.deps import DB, CurrentUser, OptionalCurrentUser
 from app.core.config import settings
+from app.core.permissions import Capability, role_can
 from app.db.scope import apply_workspace_scope
 from app.models.invitation import WorkspaceInvitation
 from app.models.user import User
@@ -47,7 +48,7 @@ async def verify_workspace_admin(
             detail="Workspace not found or access denied",
         )
 
-    if membership.role not in ("owner", "admin"):
+    if not role_can(membership.role, Capability.MEMBERS_MANAGE):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required to manage invitations",

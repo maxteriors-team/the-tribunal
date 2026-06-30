@@ -1,19 +1,17 @@
 """Voice call management endpoints."""
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanSendComms, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
-from app.models.workspace import Workspace
 from app.schemas.call import (
     CallCreate,
     CallResponse,
@@ -34,7 +32,7 @@ async def initiate_call(
     call_data: CallCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanSendComms,
 ) -> CallResponse:
     """Initiate outbound voice call.
 
@@ -43,7 +41,6 @@ async def initiate_call(
         call_data: Call request data
         current_user: Current user
         db: Database session
-        workspace: Workspace object
 
     Returns:
         Created Message record for the call
@@ -176,7 +173,7 @@ async def list_calls(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     direction: str | None = Query(None),
@@ -189,7 +186,6 @@ async def list_calls(
         workspace_id: Workspace ID
         current_user: Current user
         db: Database session
-        workspace: Workspace object
         page: Page number
         page_size: Items per page
         direction: Filter by direction (inbound/outbound)
@@ -280,7 +276,7 @@ async def list_live_calls(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> LiveCallsResponse:
     """List calls currently in progress in this workspace (supervision roster).
 
@@ -300,7 +296,7 @@ async def get_call(
     call_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> CallResponse:
     """Get call details with recording and transcript.
 
@@ -309,7 +305,6 @@ async def get_call(
         call_id: Call (Message) ID
         current_user: Current user
         db: Database session
-        workspace: Workspace object
 
     Returns:
         Message record with call details
@@ -364,7 +359,7 @@ async def hangup_call(
     call_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanSendComms,
 ) -> dict[str, bool]:
     """Hang up active call.
 
@@ -373,7 +368,6 @@ async def hangup_call(
         call_id: Call (Message) ID
         current_user: Current user
         db: Database session
-        workspace: Workspace object
 
     Returns:
         Success status

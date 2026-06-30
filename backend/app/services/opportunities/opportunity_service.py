@@ -195,6 +195,17 @@ class OpportunityService:
     # Opportunity methods
     # ------------------------------------------------------------------
 
+    def _enforce_owner(self, opportunity: Opportunity, restrict_to_user_id: int | None) -> None:
+        """Object-level guard for the sales tier.
+
+        When ``restrict_to_user_id`` is set (a sales caller, see
+        :func:`app.core.permissions.pipeline_owner_scope`), an opportunity the
+        caller does not own is treated as **not found** (404 rather than 403, so
+        we never leak the existence of another rep's deal).
+        """
+        if restrict_to_user_id is not None and opportunity.assigned_user_id != restrict_to_user_id:
+            raise NotFoundError("Opportunity not found")
+
     async def list_opportunities(
         self,
         workspace_id: uuid.UUID,
@@ -213,8 +224,14 @@ class OpportunityService:
         probability_max: int | None = None,
         created_after: datetime | None = None,
         created_before: datetime | None = None,
+        restrict_to_user_id: int | None = None,
     ) -> PaginatedOpportunities:
-        """List opportunities with optional filters."""
+        """List opportunities with optional filters.
+
+        ``restrict_to_user_id`` scopes results to a single deal owner
+        (``assigned_user_id``); the sales tier passes its own user id so reps
+        see only their own pipeline.
+        """
         query = apply_opportunity_filters(
             select(Opportunity),
             workspace_id,
@@ -230,7 +247,10 @@ class OpportunityService:
             probability_max=probability_max,
             created_after=created_after,
             created_before=created_before,
-        ).order_by(Opportunity.created_at.desc())
+        )
+        if restrict_to_user_id is not None:
+            query = query.where(Opportunity.assigned_user_id == restrict_to_user_id)
+        query = query.order_by(Opportunity.created_at.desc())
 
         # Eager-load line_items: OpportunityResponse serializes them, and a lazy
         # load during async serialization raises MissingGreenlet.
@@ -246,8 +266,14 @@ class OpportunityService:
         self,
         workspace_id: uuid.UUID,
         opportunity_in: OpportunityCreate,
+        assigned_user_id: int | None = None,
     ) -> OpportunityResponse:
-        """Create an opportunity after validating pipeline and stage."""
+        """Create an opportunity after validating pipeline and stage.
+
+        ``assigned_user_id`` sets the deal owner. ``OpportunityCreate`` carries no
+        owner field, so this is the only way to assign on create; the sales tier
+        passes its own user id (forced self-assignment).
+        """
         pipeline_query = select(Pipeline).where(
             (Pipeline.id == opportunity_in.pipeline_id) & (Pipeline.workspace_id == workspace_id)
         )
@@ -267,6 +293,8 @@ class OpportunityService:
             probability=stage.probability if stage else 0,
             **opportunity_in.model_dump(),
         )
+        if assigned_user_id is not None:
+            opportunity.assigned_user_id = assigned_user_id
         self.db.add(opportunity)
         await self.db.flush()
         await emit_automation_event(
@@ -293,8 +321,9 @@ class OpportunityService:
         self,
         workspace_id: uuid.UUID,
         opportunity_id: uuid.UUID,
+        restrict_to_user_id: int | None = None,
     ) -> OpportunityDetailResponse:
-        """Get an opportunity by ID."""
+        """Get an opportunity by ID (sales callers are scoped to their own)."""
         opportunity = await get_or_404(
             self.db,
             Opportunity,
@@ -305,6 +334,7 @@ class OpportunityService:
                 selectinload(Opportunity.activities),
             ],
         )
+        self._enforce_owner(opportunity, restrict_to_user_id)
         return OpportunityDetailResponse.model_validate(opportunity)
 
     async def update_opportunity(
@@ -313,11 +343,18 @@ class OpportunityService:
         opportunity_id: uuid.UUID,
         opportunity_in: OpportunityUpdate,
         user_id: int,
+        restrict_to_user_id: int | None = None,
     ) -> OpportunityResponse:
         """Update an opportunity, logging stage/status changes as activities."""
         opportunity = await get_or_404(
             self.db, Opportunity, opportunity_id, workspace_id=workspace_id
         )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+        if restrict_to_user_id is not None:
+            # A sales caller may not reassign a deal away from (or to) themselves.
+            opportunity_in = opportunity_in.model_copy(
+                update={"assigned_user_id": restrict_to_user_id}
+            )
 
         # Stage change — update probability and log activity
         if opportunity_in.stage_id and opportunity_in.stage_id != opportunity.stage_id:
@@ -407,11 +444,13 @@ class OpportunityService:
         self,
         workspace_id: uuid.UUID,
         opportunity_id: uuid.UUID,
+        restrict_to_user_id: int | None = None,
     ) -> None:
-        """Delete an opportunity."""
+        """Delete an opportunity (sales callers may only delete their own)."""
         opportunity = await get_or_404(
             self.db, Opportunity, opportunity_id, workspace_id=workspace_id
         )
+        self._enforce_owner(opportunity, restrict_to_user_id)
         await self.db.delete(opportunity)
         await self.db.commit()
 
@@ -424,9 +463,13 @@ class OpportunityService:
         workspace_id: uuid.UUID,
         opportunity_id: uuid.UUID,
         item_in: OpportunityLineItemCreate,
+        restrict_to_user_id: int | None = None,
     ) -> dict[str, uuid.UUID | float]:
         """Create a line item for an opportunity."""
-        await get_or_404(self.db, Opportunity, opportunity_id, workspace_id=workspace_id)
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
 
         total = (item_in.quantity * item_in.unit_price) - item_in.discount
         line_item = OpportunityLineItem(
@@ -450,10 +493,14 @@ class OpportunityService:
         opportunity_id: uuid.UUID,
         item_id: uuid.UUID,
         item_in: OpportunityLineItemUpdate,
+        restrict_to_user_id: int | None = None,
     ) -> dict[str, uuid.UUID | float]:
         """Update a line item and recalculate its total."""
-        # Verify opportunity belongs to workspace
-        await get_or_404(self.db, Opportunity, opportunity_id, workspace_id=workspace_id)
+        # Verify opportunity belongs to workspace (and to the caller, if sales).
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
 
         line_item = await get_nested_or_404(
             self.db,
@@ -487,10 +534,14 @@ class OpportunityService:
         workspace_id: uuid.UUID,
         opportunity_id: uuid.UUID,
         item_id: uuid.UUID,
+        restrict_to_user_id: int | None = None,
     ) -> None:
         """Delete a line item."""
-        # Verify opportunity belongs to workspace
-        await get_or_404(self.db, Opportunity, opportunity_id, workspace_id=workspace_id)
+        # Verify opportunity belongs to workspace (and to the caller, if sales).
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
 
         line_item = await get_nested_or_404(
             self.db,

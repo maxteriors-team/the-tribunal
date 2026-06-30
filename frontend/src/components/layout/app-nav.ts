@@ -37,6 +37,8 @@ import {
   Zap,
 } from "lucide-react";
 
+import type { Capability } from "@/lib/permissions";
+
 export type AppNavBadgeKey = "nudges" | "pending-actions";
 
 export interface AppNavItem {
@@ -47,6 +49,12 @@ export interface AppNavItem {
   commandPalette?: boolean;
   devOnly?: boolean;
   badgeKey?: AppNavBadgeKey;
+  /**
+   * Capability required to see this item. When set, the sidebar and command
+   * palette hide it unless the caller's role grants the capability (mirrors the
+   * backend gate in `app/api/deps.py`). Omit for items every member can reach.
+   */
+  requires?: Capability;
 }
 
 export interface AppNavSection {
@@ -114,6 +122,7 @@ export const workspaceNavItems: AppNavItem[] = [
     icon: KanbanSquare,
     sidebar: true,
     commandPalette: true,
+    requires: "pipeline:write_own",
   },
   {
     title: "Deal Coach",
@@ -128,6 +137,7 @@ export const workspaceNavItems: AppNavItem[] = [
     icon: FileText,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
   },
   {
     title: "Invoices",
@@ -135,6 +145,7 @@ export const workspaceNavItems: AppNavItem[] = [
     icon: Receipt,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
   },
   {
     title: "Contacts",
@@ -177,6 +188,7 @@ export const workspaceNavItems: AppNavItem[] = [
     icon: BarChart3,
     sidebar: true,
     commandPalette: true,
+    requires: "reports:view",
   },
 ];
 
@@ -267,6 +279,7 @@ export const toolsNavItems: AppNavItem[] = [
     icon: PhoneCall,
     sidebar: true,
     commandPalette: true,
+    requires: "comms:manage",
   },
   {
     title: "Automations",
@@ -302,6 +315,7 @@ export const toolsNavItems: AppNavItem[] = [
     icon: Repeat,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
   },
   {
     title: "Price Book",
@@ -309,6 +323,7 @@ export const toolsNavItems: AppNavItem[] = [
     icon: BookMarked,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
   },
   {
     title: "Billing",
@@ -316,6 +331,7 @@ export const toolsNavItems: AppNavItem[] = [
     icon: CreditCard,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
   },
 ];
 

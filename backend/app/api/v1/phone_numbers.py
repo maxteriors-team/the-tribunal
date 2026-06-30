@@ -1,16 +1,14 @@
 """Phone number management endpoints."""
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanManageComms, CanReadCRM, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.models.phone_number import PhoneNumber
-from app.models.workspace import Workspace
 from app.schemas.phone_number import (
     PaginatedPhoneNumbers,
     PhoneNumberInfoResponse,
@@ -29,7 +27,7 @@ async def list_phone_numbers(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     sms_enabled: bool | None = None,
@@ -57,7 +55,7 @@ async def get_phone_number(
     phone_number_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanReadCRM,
 ) -> PhoneNumber:
     """Get a phone number by ID (shared across workspaces)."""
     # Phone numbers are shared across workspaces - don't filter by workspace_id
@@ -84,7 +82,7 @@ async def update_phone_number(
     phone_number_in: PhoneNumberUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanManageComms,
 ) -> PhoneNumber:
     """Update a phone number."""
     result = await db.execute(
@@ -116,7 +114,7 @@ async def search_phone_numbers(
     workspace_id: uuid.UUID,
     request_data: SearchPhoneNumbersRequest,
     current_user: CurrentUser,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanManageComms,
 ) -> list[PhoneNumberInfoResponse]:
     """Search for available phone numbers to purchase."""
     if not settings.telnyx_api_key:
@@ -152,7 +150,7 @@ async def purchase_phone_number(
     request_data: PurchasePhoneNumberRequest,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanManageComms,
 ) -> PhoneNumber:
     """Purchase a phone number from Telnyx."""
     if not settings.telnyx_api_key:
@@ -190,7 +188,7 @@ async def release_phone_number(
     phone_number_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanManageComms,
 ) -> dict[str, bool]:
     """Release a phone number back to Telnyx."""
     result = await db.execute(
@@ -233,7 +231,7 @@ async def sync_phone_numbers(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    membership: CanManageComms,
 ) -> dict[str, int]:
     """Sync phone numbers from Telnyx account."""
     if not settings.telnyx_api_key:
