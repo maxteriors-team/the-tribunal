@@ -47,8 +47,13 @@ from app.utils.datetime import parse_time_string
 router = APIRouter()
 
 
-async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str) -> None:
+async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str | None) -> None:
     """Ensure a campaign sender has a usable text channel."""
+    if not from_phone_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A sender phone number is required for this campaign type.",
+        )
     sender_result = await db.execute(
         select(PhoneNumber).where(
             PhoneNumber.phone_number == from_phone_number,

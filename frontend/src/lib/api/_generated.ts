@@ -220,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/email/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unsubscribe
+         * @description Honor an email unsubscribe link. Always returns 200 with an HTML page.
+         */
+        get: operations["unsubscribe_api_v1_email_unsubscribe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/openai/oauth/callback": {
         parameters: {
             query?: never;
@@ -10500,6 +10520,13 @@ export interface components {
              */
             ai_enabled: boolean;
             /**
+             * Campaign Type
+             * @default sms
+             */
+            campaign_type: string;
+            /** Email Subject */
+            email_subject?: string | null;
+            /**
              * Follow Up Delay Hours
              * @default 24
              */
@@ -10512,7 +10539,7 @@ export interface components {
             /** Follow Up Message */
             follow_up_message?: string | null;
             /** From Phone Number */
-            from_phone_number: string;
+            from_phone_number?: string | null;
             /** Guarantee Target */
             guarantee_target?: number | null;
             /** Guarantee Window Days */
@@ -10689,6 +10716,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Email Subject */
+            email_subject?: string | null;
             /** Follow Up Delay Hours */
             follow_up_delay_hours: number;
             /** Follow Up Enabled */
@@ -10696,7 +10725,7 @@ export interface components {
             /** Follow Up Message */
             follow_up_message: string | null;
             /** From Phone Number */
-            from_phone_number: string;
+            from_phone_number: string | null;
             /** Guarantee Status */
             guarantee_status?: string | null;
             /** Guarantee Target */
@@ -10782,6 +10811,8 @@ export interface components {
             agent_id?: string | null;
             /** Ai Enabled */
             ai_enabled?: boolean | null;
+            /** Email Subject */
+            email_subject?: string | null;
             /** Follow Up Delay Hours */
             follow_up_delay_hours?: number | null;
             /** Follow Up Enabled */
@@ -21352,6 +21383,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingStatus"];
+                };
+            };
+        };
+    };
+    unsubscribe_api_v1_email_unsubscribe_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

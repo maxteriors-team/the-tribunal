@@ -6790,6 +6790,22 @@
             "title": "Ai Enabled",
             "type": "boolean"
           },
+          "campaign_type": {
+            "default": "sms",
+            "title": "Campaign Type",
+            "type": "string"
+          },
+          "email_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Subject"
+          },
           "follow_up_delay_hours": {
             "default": 24,
             "title": "Follow Up Delay Hours",
@@ -6812,8 +6828,15 @@
             "title": "Follow Up Message"
           },
           "from_phone_number": {
-            "title": "From Phone Number",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Phone Number"
           },
           "guarantee_target": {
             "anyOf": [
@@ -6934,7 +6957,6 @@
         },
         "required": [
           "name",
-          "from_phone_number",
           "initial_message"
         ],
         "title": "CampaignCreate",
@@ -7317,6 +7339,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "email_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Subject"
+          },
           "follow_up_delay_hours": {
             "title": "Follow Up Delay Hours",
             "type": "integer"
@@ -7337,8 +7370,15 @@
             "title": "Follow Up Message"
           },
           "from_phone_number": {
-            "title": "From Phone Number",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Phone Number"
           },
           "guarantee_status": {
             "anyOf": [
@@ -7616,6 +7656,17 @@
               }
             ],
             "title": "Ai Enabled"
+          },
+          "email_subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Subject"
           },
           "follow_up_delay_hours": {
             "anyOf": [
@@ -36240,6 +36291,49 @@
         "summary": "Get Billing Status",
         "tags": [
           "Billing"
+        ]
+      }
+    },
+    "/api/v1/email/unsubscribe": {
+      "get": {
+        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.",
+        "operationId": "unsubscribe_api_v1_email_unsubscribe_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "Email Unsubscribe"
         ]
       }
     },

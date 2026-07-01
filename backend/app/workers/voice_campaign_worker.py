@@ -118,6 +118,14 @@ class VoiceCampaignWorker(BaseCampaignWorker):
         if not pending_contacts:
             return
 
+        # Voice campaigns dial from a phone sender. The column is nullable to
+        # accommodate email campaigns, so guard here: without a sender there is
+        # nothing to place the call from.
+        from_number = campaign.from_phone_number
+        if not from_number:
+            log.warning("Voice campaign has no sender phone number, skipping")
+            return
+
         log.info(
             "Initiating calls",
             count=len(pending_contacts),
@@ -156,7 +164,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
                 # Initiate call
                 message = await voice_service.initiate_call(
                     to_number=contact.phone_number,
-                    from_number=campaign.from_phone_number,
+                    from_number=from_number,
                     connection_id=connection_id,
                     webhook_url=webhook_url,
                     db=db,
