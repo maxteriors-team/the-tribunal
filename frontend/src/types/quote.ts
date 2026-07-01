@@ -44,6 +44,8 @@ export interface Quote {
   terms?: string | null;
   converted_job_id?: string | null;
   converted_invoice_id?: string | null;
+  /** Client-proposal share token; null until the quote is first sent. */
+  public_token?: string | null;
   created_at: string;
   updated_at: string;
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */

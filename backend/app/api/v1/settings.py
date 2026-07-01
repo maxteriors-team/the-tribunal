@@ -6,6 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.proposal import (
+    ProposalTemplateSettings,
+    ProposalTemplateUpdate,
+)
 from app.schemas.speed_to_lead import (
     MissedCallTextbackSettingsResponse,
     MissedCallTextbackSettingsUpdate,
@@ -25,6 +29,12 @@ from app.schemas.user import (
     TeamMemberResponse,
     UserProfileResponse,
     UserProfileUpdate,
+)
+from app.services.quotes.proposal_template import (
+    SETTINGS_KEY as PROPOSAL_TEMPLATE_KEY,
+)
+from app.services.quotes.proposal_template import (
+    get_proposal_template,
 )
 from app.services.sla.speed_to_lead import (
     SETTINGS_KEY as SPEED_TO_LEAD_KEY,
@@ -255,6 +265,44 @@ async def update_business_hours(
     await db.refresh(workspace)
 
     return BusinessHoursSettings(**workspace.settings.get("business_hours", {}))
+
+
+@router.get(
+    "/workspaces/{workspace_id}/proposal-template",
+    response_model=ProposalTemplateSettings,
+)
+async def get_proposal_template_settings(
+    workspace: WorkspaceAccess,
+) -> ProposalTemplateSettings:
+    """Get the workspace's client-proposal branding + boilerplate template."""
+    return get_proposal_template(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/proposal-template",
+    response_model=ProposalTemplateSettings,
+)
+async def update_proposal_template_settings(
+    update: ProposalTemplateUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> ProposalTemplateSettings:
+    """Update the proposal template (partial merge into ``workspace.settings``).
+
+    Only provided keys are written, so editing one field never clobbers the
+    others. This is the self-serve extensibility layer: the client proposal page
+    re-renders from these values with no code change.
+    """
+    current_settings = dict(workspace.settings)
+    template = dict(current_settings.get(PROPOSAL_TEMPLATE_KEY, {}))
+    template.update(update.model_dump(exclude_unset=True))
+    current_settings[PROPOSAL_TEMPLATE_KEY] = template
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    return get_proposal_template(workspace)
 
 
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)

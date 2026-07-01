@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileText, MoreHorizontal, Plus, X } from "lucide-react";
+import { Check, Copy, ExternalLink, FileText, MoreHorizontal, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -122,6 +122,23 @@ export function QuotesList() {
     declineMutation.isPending ||
     convertMutation.isPending;
 
+  const clientProposalUrl = (quote: Quote): string | null =>
+    quote.public_token ? `${window.location.origin}/p/quotes/${quote.public_token}` : null;
+
+  const copyClientLink = (quote: Quote) => {
+    const url = clientProposalUrl(quote);
+    if (!url) return;
+    void navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success("Client proposal link copied"))
+      .catch(() => toast.error("Couldn't copy link"));
+  };
+
+  const openClientProposal = (quote: Quote) => {
+    const url = clientProposalUrl(quote);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const newQuoteButton = (
     <Button onClick={() => setCreateOpen(true)} size="sm">
       <Plus className="mr-1.5 h-4 w-4" />
@@ -196,6 +213,8 @@ export function QuotesList() {
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
                     onConvert={() => convertMutation.mutate(quote.id)}
+                    onCopyLink={() => copyClientLink(quote)}
+                    onPreview={() => openClientProposal(quote)}
                   />
                 </TableCell>
               </TableRow>
@@ -222,6 +241,8 @@ interface RowActionsProps {
   onApprove: () => void;
   onDecline: () => void;
   onConvert: () => void;
+  onCopyLink: () => void;
+  onPreview: () => void;
 }
 
 function RowActions({
@@ -231,6 +252,8 @@ function RowActions({
   onApprove,
   onDecline,
   onConvert,
+  onCopyLink,
+  onPreview,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
   const isApproved = quote.status === "approved";
@@ -238,8 +261,10 @@ function RowActions({
     quote.converted_job_id && quote.converted_invoice_id
   );
   const canConvert = isApproved && !alreadyConverted;
+  // The client proposal link only exists once a quote has been sent.
+  const hasClientLink = Boolean(quote.public_token);
 
-  if (!isOpen && !canConvert) return null;
+  if (!isOpen && !canConvert && !hasClientLink) return null;
 
   return (
     <DropdownMenu>
@@ -264,9 +289,22 @@ function RowActions({
             </DropdownMenuItem>
           </>
         )}
-        {canConvert && (
+        {hasClientLink && (
           <>
             {isOpen && <DropdownMenuSeparator />}
+            <DropdownMenuItem onClick={onPreview}>
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Preview client proposal
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onCopyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy client link
+            </DropdownMenuItem>
+          </>
+        )}
+        {canConvert && (
+          <>
+            {(isOpen || hasClientLink) && <DropdownMenuSeparator />}
             <DropdownMenuItem onClick={onConvert}>
               Convert to job &amp; invoice
             </DropdownMenuItem>

@@ -601,6 +601,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/quotes/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Proposal
+         * @description Render a client's proposal from its share token. Drafts/unknown 404.
+         */
+        get: operations["get_public_proposal_api_v1_p_quotes__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/quotes/{token}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Public Proposal
+         * @description Client approves their proposal (idempotent; expired/declined rejected).
+         */
+        post: operations["approve_public_proposal_api_v1_p_quotes__token__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/quotes/{token}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Public Proposal
+         * @description Client declines their proposal with an optional reason (idempotent).
+         */
+        post: operations["decline_public_proposal_api_v1_p_quotes__token__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/reviews/{token}": {
         parameters: {
             query?: never;
@@ -1022,6 +1082,34 @@ export interface paths {
          * @description Update workspace missed-call text-back settings.
          */
         put: operations["update_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/proposal-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Proposal Template Settings
+         * @description Get the workspace's client-proposal branding + boilerplate template.
+         */
+        get: operations["get_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_get"];
+        /**
+         * Update Proposal Template Settings
+         * @description Update the proposal template (partial merge into ``workspace.settings``).
+         *
+         *     Only provided keys are written, so editing one field never clobbers the
+         *     others. This is the self-serve extensibility layer: the client proposal page
+         *     re-renders from these values with no code change.
+         */
+        put: operations["update_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -17489,6 +17577,72 @@ export interface components {
             traffic_percentage?: number | null;
         };
         /**
+         * ProposalTemplateSettings
+         * @description Branding + boilerplate for a workspace's client proposals (read view).
+         *
+         *     Read leniently: values come from a JSON blob the operator can edit, so this
+         *     schema never rejects a stored value. ``business_name`` falls back to the
+         *     workspace name in the service when unset.
+         */
+        ProposalTemplateSettings: {
+            /**
+             * Accent Color
+             * @default #2563EB
+             */
+            accent_color: string;
+            /**
+             * Brand Color
+             * @default #0F172A
+             */
+            brand_color: string;
+            /** Business Address */
+            business_address?: string | null;
+            /** Business Email */
+            business_email?: string | null;
+            /** Business Name */
+            business_name?: string | null;
+            /** Business Phone */
+            business_phone?: string | null;
+            /** Default Terms */
+            default_terms?: string | null;
+            /** Footer */
+            footer?: string | null;
+            /** Intro */
+            intro?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
+        };
+        /**
+         * ProposalTemplateUpdate
+         * @description Partial update of the proposal template (merged into the settings blob).
+         *
+         *     Every field is optional; only provided keys are written. Colors are
+         *     validated as hex here so a bad value is rejected at the edge instead of
+         *     breaking every proposal render.
+         */
+        ProposalTemplateUpdate: {
+            /** Accent Color */
+            accent_color?: string | null;
+            /** Brand Color */
+            brand_color?: string | null;
+            /** Business Address */
+            business_address?: string | null;
+            /** Business Email */
+            business_email?: string | null;
+            /** Business Name */
+            business_name?: string | null;
+            /** Business Phone */
+            business_phone?: string | null;
+            /** Default Terms */
+            default_terms?: string | null;
+            /** Footer */
+            footer?: string | null;
+            /** Intro */
+            intro?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
+        };
+        /**
          * ProspectIdentityKind
          * @description Primary identity facet for a prospect.
          *
@@ -17715,6 +17869,124 @@ export interface components {
             urgency_type?: string | null;
             /** Value Stack Items */
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
+        };
+        /**
+         * PublicProposal
+         * @description Read-only proposal payload for the client-facing page.
+         *
+         *     Safe fields only — no workspace/contact/quote ids, costs, or margins. The
+         *     ``token`` is echoed back so the page can call approve/decline.
+         */
+        PublicProposal: {
+            branding: components["schemas"]["PublicProposalBranding"];
+            /** Client Name */
+            client_name?: string | null;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Expiry Date */
+            expiry_date?: string | null;
+            /** Intro */
+            intro?: string | null;
+            /**
+             * Is Decided
+             * @default false
+             */
+            is_decided: boolean;
+            /**
+             * Is Expired
+             * @default false
+             */
+            is_expired: boolean;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["PublicProposalLineItem"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Status */
+            status: string;
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Token */
+            token: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PublicProposalActionResult
+         * @description Result of a client approve/decline on the public proposal page.
+         */
+        PublicProposalActionResult: {
+            /** Message */
+            message: string;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+        };
+        /**
+         * PublicProposalBranding
+         * @description The branding subset rendered on the public proposal page.
+         */
+        PublicProposalBranding: {
+            /**
+             * Accent Color
+             * @default #2563EB
+             */
+            accent_color: string;
+            /**
+             * Brand Color
+             * @default #0F172A
+             */
+            brand_color: string;
+            /** Business Address */
+            business_address?: string | null;
+            /** Business Email */
+            business_email?: string | null;
+            /** Business Name */
+            business_name: string;
+            /** Business Phone */
+            business_phone?: string | null;
+            /** Footer */
+            footer?: string | null;
+            /** Logo Url */
+            logo_url?: string | null;
+        };
+        /**
+         * PublicProposalDecline
+         * @description Optional decline reason from the client.
+         */
+        PublicProposalDecline: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * PublicProposalLineItem
+         * @description A single proposal line as shown to the client (no internal ids).
+         */
+        PublicProposalLineItem: {
+            /** Description */
+            description?: string | null;
+            /** Discount */
+            discount: number;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number;
+            /** Total */
+            total: number;
+            /** Unit Price */
+            unit_price: number;
         };
         /**
          * PublicRatingResult
@@ -18042,6 +18314,8 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /** Public Token */
+            public_token?: string | null;
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */
@@ -18195,6 +18469,8 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /** Public Token */
+            public_token?: string | null;
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */
@@ -22048,6 +22324,103 @@ export interface operations {
             };
         };
     };
+    get_public_proposal_api_v1_p_quotes__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_public_proposal_api_v1_p_quotes__token__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_public_proposal_api_v1_p_quotes__token__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicProposalDecline"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_public_review_request_api_v1_p_reviews__token__get: {
         parameters: {
             query?: never;
@@ -22905,6 +23278,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MissedCallTextbackSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalTemplateSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalTemplateSettings"];
                 };
             };
             /** @description Validation Error */

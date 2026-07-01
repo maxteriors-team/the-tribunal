@@ -209,6 +209,12 @@ api_router.include_router(
     prefix="/workspaces/{workspace_id}/catalog-items",
     tags=["Catalog"],
 )
+# Public client-facing proposal page (no auth, token-keyed)
+api_router.include_router(
+    quotes.public_router,
+    prefix="/p/quotes",
+    tags=["Public Proposals"],
+)
 api_router.include_router(
     dashboard.router,
     prefix="/workspaces/{workspace_id}/dashboard",

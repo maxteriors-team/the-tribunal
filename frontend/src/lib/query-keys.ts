@@ -368,6 +368,14 @@ export const queryKeys = {
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
   quotes,
+  proposalTemplate: {
+    settings: (workspaceId: string) =>
+      ["proposal-template", workspaceId] as const,
+  },
+  publicProposals: {
+    all: () => ["public-proposals"] as const,
+    byToken: (token: string) => ["public-proposals", token] as const,
+  },
   reviews: {
     ...reviews,
     summary: (workspaceId: string) =>

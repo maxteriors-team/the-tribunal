@@ -23,8 +23,14 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
-from app.models.quote import Quote, QuoteLineItem
+from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
+from app.schemas.proposal import (
+    PublicProposal,
+    PublicProposalActionResult,
+    PublicProposalBranding,
+    PublicProposalLineItem,
+)
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertResponse,
@@ -42,7 +48,8 @@ from app.services.automations.events import (
     EVENT_QUOTE_SENT,
     emit_automation_event,
 )
-from app.services.exceptions import ConflictError
+from app.services.exceptions import ConflictError, NotFoundError
+from app.services.quotes.proposal_template import get_proposal_template
 
 logger = structlog.get_logger()
 
@@ -306,6 +313,11 @@ class QuoteService:
             raise ConflictError(f"Cannot send a {quote.status} quote")
         if quote.sent_at is None:
             quote.sent_at = datetime.now(UTC)
+        # Allocate the public proposal token once, on first send. Re-sending a
+        # quote keeps the same token so a link already in a customer's inbox
+        # never breaks.
+        if quote.public_token is None:
+            quote.public_token = generate_quote_token()
         quote.status = "sent"
         await self._emit_lifecycle_event(quote, EVENT_QUOTE_SENT)
         await self.db.commit()
@@ -371,6 +383,7 @@ class QuoteService:
 
     async def _email_quote(self, quote: Quote) -> None:
         """Email the quote to its contact (best-effort; never raises)."""
+        from app.core.config import settings
         from app.services.email import send_quote_email
         from app.services.idempotency import derive_outbound_key
 
@@ -382,6 +395,13 @@ class QuoteService:
         workspace_name = quote.workspace.name if quote.workspace else ""
         amount_str = f"{float(quote.total or 0):.2f} {quote.currency.upper()}"
         expiry = quote.expiry_date.isoformat() if quote.expiry_date else None
+        # Link to the client-facing proposal page so the email is a doorway to a
+        # branded, approvable proposal — not just a plain-text summary.
+        proposal_url = (
+            f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}"
+            if quote.public_token
+            else None
+        )
 
         try:
             await send_quote_email(
@@ -392,10 +412,119 @@ class QuoteService:
                 title=quote.title,
                 expiry_date=expiry,
                 notes=quote.notes,
+                proposal_url=proposal_url,
                 idempotency_key=derive_outbound_key("quote_send", quote.id),
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Public client proposal (no auth, token-keyed)
+    # ------------------------------------------------------------------
+
+    async def _load_by_token(self, token: str) -> Quote:
+        """Load a sent quote by its public token, or raise ``NotFoundError``.
+
+        Drafts have no token and never resolve; an unknown token 404s. Expiry is
+        applied lazily so a lapsed proposal reads (and behaves) truthfully.
+        """
+        result = await self.db.execute(
+            select(Quote)
+            .where(Quote.public_token == token)
+            .options(
+                selectinload(Quote.line_items),
+                selectinload(Quote.contact),
+                selectinload(Quote.workspace),
+            )
+        )
+        quote = result.scalar_one_or_none()
+        if quote is None or quote.status == "draft":
+            raise NotFoundError("Proposal not found")
+        if (
+            quote.status == "sent"
+            and quote.expiry_date is not None
+            and quote.expiry_date < date.today()
+        ):
+            quote.status = "expired"
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
+        return quote
+
+    async def get_public_proposal(self, token: str) -> PublicProposal:
+        """Return the read-only, safe-fields-only proposal for a public token."""
+        quote = await self._load_by_token(token)
+        template = get_proposal_template(quote.workspace)
+        business_name = template.business_name or (quote.workspace.name if quote.workspace else "")
+        client_name: str | None = None
+        if quote.contact is not None:
+            client_name = quote.contact.full_name or quote.contact.first_name
+
+        return PublicProposal(
+            token=token,
+            number=quote.number,
+            title=quote.title,
+            status=quote.status,
+            currency=quote.currency,
+            subtotal=float(quote.subtotal or 0),
+            tax_amount=float(quote.tax_amount or 0),
+            discount_amount=float(quote.discount_amount or 0),
+            total=float(quote.total or 0),
+            issue_date=quote.issue_date,
+            expiry_date=quote.expiry_date,
+            is_expired=quote.status == "expired",
+            is_decided=quote.status in {"approved", "declined", "expired"},
+            intro=template.intro,
+            notes=quote.notes,
+            terms=quote.terms or template.default_terms,
+            client_name=client_name,
+            line_items=[
+                PublicProposalLineItem(
+                    name=li.name,
+                    description=li.description,
+                    quantity=float(li.quantity),
+                    unit_price=float(li.unit_price),
+                    discount=float(li.discount),
+                    total=float(li.total),
+                )
+                for li in quote.line_items
+            ],
+            branding=PublicProposalBranding(
+                business_name=business_name,
+                logo_url=template.logo_url,
+                brand_color=template.brand_color,
+                accent_color=template.accent_color,
+                business_address=template.business_address,
+                business_phone=template.business_phone,
+                business_email=template.business_email,
+                footer=template.footer,
+            ),
+        )
+
+    async def approve_public(self, token: str) -> PublicProposalActionResult:
+        """Client approves their proposal via the public token (idempotent).
+
+        Reuses the operator approve path so the same lifecycle guards and
+        automation event fire; an expired/declined proposal is rejected there.
+        """
+        quote = await self._load_by_token(token)
+        result = await self.approve_quote(quote.workspace_id, quote.id)
+        return PublicProposalActionResult(
+            token=token,
+            status=result.status,
+            message="Thank you! Your proposal has been approved.",
+        )
+
+    async def decline_public(
+        self, token: str, *, reason: str | None = None
+    ) -> PublicProposalActionResult:
+        """Client declines their proposal via the public token (idempotent)."""
+        quote = await self._load_by_token(token)
+        result = await self.decline_quote(quote.workspace_id, quote.id, reason=reason)
+        return PublicProposalActionResult(
+            token=token,
+            status=result.status,
+            message="Your response has been recorded. Thank you.",
+        )
 
     # ------------------------------------------------------------------
     # Conversion

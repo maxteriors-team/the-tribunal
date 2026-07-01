@@ -164,6 +164,26 @@ async def test_send_sets_status_and_timestamp() -> None:
         assert sent.sent_at is not None
 
 
+async def test_send_allocates_public_token_once() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(
+            ws.id, QuoteCreate(line_items=[QuoteLineItemCreate(name="Job", unit_price=300.0)])
+        )
+        # Drafts have no token.
+        assert quote.public_token is None
+
+        sent = await svc.mark_sent(ws.id, quote.id)
+        assert sent.public_token is not None
+        first_token = sent.public_token
+
+        # Re-sending is idempotent for the token: a link already in a customer's
+        # inbox must keep working.
+        resent = await svc.mark_sent(ws.id, quote.id)
+        assert resent.public_token == first_token
+
+
 async def test_approve_and_decline_guards() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

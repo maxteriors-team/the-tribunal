@@ -135,6 +135,9 @@ class QuoteResponse(BaseModel):
     terms: str | None = None
     converted_job_id: uuid.UUID | None = None
     converted_invoice_id: uuid.UUID | None = None
+    # Public client-proposal token (staff-only field; null until first sent). The
+    # dashboard uses it to build/copy the client-facing proposal link.
+    public_token: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -26242,6 +26242,238 @@
         "title": "PromptVersionUpdate",
         "type": "object"
       },
+      "ProposalTemplateSettings": {
+        "description": "Branding + boilerplate for a workspace's client proposals (read view).\n\nRead leniently: values come from a JSON blob the operator can edit, so this\nschema never rejects a stored value. ``business_name`` falls back to the\nworkspace name in the service when unset.",
+        "properties": {
+          "accent_color": {
+            "default": "#2563EB",
+            "title": "Accent Color",
+            "type": "string"
+          },
+          "brand_color": {
+            "default": "#0F172A",
+            "title": "Brand Color",
+            "type": "string"
+          },
+          "business_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Address"
+          },
+          "business_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Email"
+          },
+          "business_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Name"
+          },
+          "business_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Phone"
+          },
+          "default_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Terms"
+          },
+          "footer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footer"
+          },
+          "intro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intro"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          }
+        },
+        "title": "ProposalTemplateSettings",
+        "type": "object"
+      },
+      "ProposalTemplateUpdate": {
+        "description": "Partial update of the proposal template (merged into the settings blob).\n\nEvery field is optional; only provided keys are written. Colors are\nvalidated as hex here so a bad value is rejected at the edge instead of\nbreaking every proposal render.",
+        "properties": {
+          "accent_color": {
+            "anyOf": [
+              {
+                "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accent Color"
+          },
+          "brand_color": {
+            "anyOf": [
+              {
+                "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Color"
+          },
+          "business_address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Address"
+          },
+          "business_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Email"
+          },
+          "business_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Name"
+          },
+          "business_phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Phone"
+          },
+          "default_terms": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Terms"
+          },
+          "footer": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footer"
+          },
+          "intro": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intro"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          }
+        },
+        "title": "ProposalTemplateUpdate",
+        "type": "object"
+      },
       "ProspectIdentityKind": {
         "description": "Primary identity facet for a prospect.\n\nUsed to route enrichment + dedupe behaviour. ``MULTI`` means more than one\nidentifier is populated (e.g. phone + email + website).",
         "enum": [
@@ -26898,6 +27130,322 @@
           "name"
         ],
         "title": "PublicOfferResponse",
+        "type": "object"
+      },
+      "PublicProposal": {
+        "description": "Read-only proposal payload for the client-facing page.\n\nSafe fields only — no workspace/contact/quote ids, costs, or margins. The\n``token`` is echoed back so the page can call approve/decline.",
+        "properties": {
+          "branding": {
+            "$ref": "#/components/schemas/PublicProposalBranding"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "expiry_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiry Date"
+          },
+          "intro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intro"
+          },
+          "is_decided": {
+            "default": false,
+            "title": "Is Decided",
+            "type": "boolean"
+          },
+          "is_expired": {
+            "default": false,
+            "title": "Is Expired",
+            "type": "boolean"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProposalLineItem"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_amount": {
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "token",
+          "number",
+          "status",
+          "currency",
+          "subtotal",
+          "tax_amount",
+          "discount_amount",
+          "total",
+          "branding"
+        ],
+        "title": "PublicProposal",
+        "type": "object"
+      },
+      "PublicProposalActionResult": {
+        "description": "Result of a client approve/decline on the public proposal page.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "status",
+          "message"
+        ],
+        "title": "PublicProposalActionResult",
+        "type": "object"
+      },
+      "PublicProposalBranding": {
+        "description": "The branding subset rendered on the public proposal page.",
+        "properties": {
+          "accent_color": {
+            "default": "#2563EB",
+            "title": "Accent Color",
+            "type": "string"
+          },
+          "brand_color": {
+            "default": "#0F172A",
+            "title": "Brand Color",
+            "type": "string"
+          },
+          "business_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Address"
+          },
+          "business_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Email"
+          },
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "business_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Phone"
+          },
+          "footer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Footer"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          }
+        },
+        "required": [
+          "business_name"
+        ],
+        "title": "PublicProposalBranding",
+        "type": "object"
+      },
+      "PublicProposalDecline": {
+        "description": "Optional decline reason from the client.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "PublicProposalDecline",
+        "type": "object"
+      },
+      "PublicProposalLineItem": {
+        "description": "A single proposal line as shown to the client (no internal ids).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "discount": {
+            "title": "Discount",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "unit_price",
+          "discount",
+          "total"
+        ],
+        "title": "PublicProposalLineItem",
         "type": "object"
       },
       "PublicRatingResult": {
@@ -27702,6 +28250,17 @@
             ],
             "title": "Opportunity Id"
           },
+          "public_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Token"
+          },
           "sent_at": {
             "anyOf": [
               {
@@ -28119,6 +28678,17 @@
               }
             ],
             "title": "Opportunity Id"
+          },
+          "public_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Token"
           },
           "sent_at": {
             "anyOf": [
@@ -37248,6 +37818,145 @@
         ]
       }
     },
+    "/api/v1/p/quotes/{token}": {
+      "get": {
+        "description": "Render a client's proposal from its share token. Drafts/unknown 404.",
+        "operationId": "get_public_proposal_api_v1_p_quotes__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Public Proposal",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/approve": {
+      "post": {
+        "description": "Client approves their proposal (idempotent; expired/declined rejected).",
+        "operationId": "approve_public_proposal_api_v1_p_quotes__token__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Public Proposal",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/decline": {
+      "post": {
+        "description": "Client declines their proposal with an optional reason (idempotent).",
+        "operationId": "decline_public_proposal_api_v1_p_quotes__token__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicProposalDecline"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decline Public Proposal",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
     "/api/v1/p/reviews/{token}": {
       "get": {
         "description": "Public landing-page data for a review-request token.",
@@ -38593,6 +39302,112 @@
           }
         ],
         "summary": "Update Missed Call Textback",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/proposal-template": {
+      "get": {
+        "description": "Get the workspace's client-proposal branding + boilerplate template.",
+        "operationId": "get_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTemplateSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Proposal Template Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the proposal template (partial merge into ``workspace.settings``).\n\nOnly provided keys are written, so editing one field never clobbers the\nothers. This is the self-serve extensibility layer: the client proposal page\nre-renders from these values with no code change.",
+        "operationId": "update_proposal_template_settings_api_v1_settings_workspaces__workspace_id__proposal_template_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalTemplateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalTemplateSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Proposal Template Settings",
         "tags": [
           "Settings"
         ]

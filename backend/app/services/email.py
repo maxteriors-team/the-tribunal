@@ -668,13 +668,17 @@ async def send_quote_email(
     title: str | None = None,
     expiry_date: str | None = None,
     notes: str | None = None,
+    proposal_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
 ) -> bool:
     """Email a customer their quote/estimate.
 
     ``amount_str`` is the pre-formatted quoted total (e.g. ``"250.00 USD"``).
     ``title`` and ``notes`` are operator-authored free text and are HTML-escaped.
-    Returns True only when the provider accepted the send.
+    ``proposal_url`` is the client-facing proposal page link; when provided a
+    prominent "View your proposal" button is rendered so the customer can open,
+    review, and approve/decline online. Returns True only when the provider
+    accepted the send.
     """
     subject = f"Quote {quote_number} from {workspace_name}"
 
@@ -702,6 +706,18 @@ async def send_quote_email(
     if notes:
         notes_block = f'<p style="color: #555; margin: 24px 0;">{html_escape(notes)}</p>'
 
+    view_button = ""
+    if proposal_url:
+        # proposal_url is built server-side from settings.frontend_url + the
+        # quote's own share token, not user input.
+        view_button = (
+            '<div style="text-align: center; margin: 32px 0;">'
+            f'<a href="{html_escape(proposal_url)}" '
+            'style="background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; '
+            "border-radius: 8px; text-decoration: none; font-weight: 600; "
+            'display: inline-block;">View your proposal</a></div>'
+        )
+
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -719,6 +735,7 @@ async def send_quote_email(
         <p style="{value_style}">{html_escape(amount_str)}</p>
         {expiry_row}
     </div>
+    {view_button}
     {notes_block}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">

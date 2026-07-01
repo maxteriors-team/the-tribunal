@@ -16,6 +16,11 @@ from fastapi import APIRouter, Query, status
 
 from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
+from app.schemas.proposal import (
+    PublicProposal,
+    PublicProposalActionResult,
+    PublicProposalDecline,
+)
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertRequest,
@@ -30,6 +35,9 @@ from app.schemas.quote import (
 from app.services.quotes import QuoteService
 
 router = APIRouter(route_class=ServiceErrorRoute)
+# No-auth, token-keyed client proposal surface. Uses ServiceErrorRoute so the
+# service's NotFoundError/ConflictError map to 404/409 at the boundary.
+public_router = APIRouter(route_class=ServiceErrorRoute)
 
 
 @router.get("", response_model=PaginatedQuotes)
@@ -216,3 +224,28 @@ async def remove_line_item(
     """Remove a line item and recompute quote totals."""
     service = QuoteService(db)
     return await service.remove_line_item(workspace_id, quote_id, item_id)
+
+
+# ---------------------------------------------------------------------------
+# Public client proposal (no auth, token-keyed)
+# ---------------------------------------------------------------------------
+@public_router.get("/{token}", response_model=PublicProposal)
+async def get_public_proposal(token: str, db: DB) -> PublicProposal:
+    """Render a client's proposal from its share token. Drafts/unknown 404."""
+    return await QuoteService(db).get_public_proposal(token)
+
+
+@public_router.post("/{token}/approve", response_model=PublicProposalActionResult)
+async def approve_public_proposal(token: str, db: DB) -> PublicProposalActionResult:
+    """Client approves their proposal (idempotent; expired/declined rejected)."""
+    return await QuoteService(db).approve_public(token)
+
+
+@public_router.post("/{token}/decline", response_model=PublicProposalActionResult)
+async def decline_public_proposal(
+    token: str,
+    payload: PublicProposalDecline,
+    db: DB,
+) -> PublicProposalActionResult:
+    """Client declines their proposal with an optional reason (idempotent)."""
+    return await QuoteService(db).decline_public(token, reason=payload.reason)
