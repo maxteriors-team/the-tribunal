@@ -20,6 +20,7 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
     assert [spec.name for spec in WORKER_SPECS] == [
         "campaign_worker",
         "voice_campaign_worker",
+        "email_campaign_worker",
         "followup_worker",
         "reminder_worker",
         "message_test_worker",

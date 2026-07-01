@@ -28,6 +28,7 @@ from app.workers.automation_worker import _registry as automation_registry
 from app.workers.base import BaseWorker
 from app.workers.campaign_worker import _registry as campaign_registry
 from app.workers.drip_campaign_worker import _registry as drip_campaign_registry
+from app.workers.email_campaign_worker import _registry as email_campaign_registry
 from app.workers.enrichment_worker import _registry as enrichment_registry
 from app.workers.experiment_evaluation_worker import _registry as experiment_evaluation_registry
 from app.workers.followup_worker import _registry as followup_registry
@@ -132,6 +133,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="voice_campaign_worker",
         registry=voice_campaign_registry,
         dependencies=("postgres", "redis", "telnyx_voice", "openai"),
+    ),
+    WorkerSpec(
+        name="email_campaign_worker",
+        registry=email_campaign_registry,
+        dependencies=("postgres", "resend"),
     ),
     WorkerSpec(
         name="followup_worker",

@@ -10,10 +10,12 @@ class CampaignCreate(BaseModel):
     """Schema for creating a campaign."""
 
     name: str
+    campaign_type: str = "sms"  # "sms" | "voice_sms_fallback" | "email"
     agent_id: uuid.UUID | None = None
     offer_id: uuid.UUID | None = None
-    from_phone_number: str
-    initial_message: str
+    from_phone_number: str | None = None  # required for sms/voice; unused for email
+    initial_message: str  # SMS/voice text, or the email body for email campaigns
+    email_subject: str | None = None  # required for email campaigns
     ai_enabled: bool = True
     qualification_criteria: str | None = None
     scheduled_start: datetime | None = None
@@ -38,6 +40,7 @@ class CampaignUpdate(BaseModel):
     offer_id: uuid.UUID | None = None
     from_phone_number: str | None = None
     initial_message: str | None = None
+    email_subject: str | None = None
     ai_enabled: bool | None = None
     qualification_criteria: str | None = None
     scheduled_start: datetime | None = None
@@ -64,8 +67,9 @@ class CampaignResponse(BaseModel):
     offer_id: uuid.UUID | None
     name: str
     status: str
-    from_phone_number: str
+    from_phone_number: str | None
     initial_message: str | None
+    email_subject: str | None = None
     ai_enabled: bool
     qualification_criteria: str | None
     scheduled_start: datetime | None

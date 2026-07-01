@@ -194,6 +194,73 @@ async def send_automation_email(
     return True
 
 
+def _campaign_html(body: str, unsubscribe_url: str | None) -> str:
+    """Render marketing-campaign email HTML with a compliant unsubscribe footer.
+
+    ``body`` is operator-authored copy (placeholders already substituted) and is
+    HTML-escaped so it can never inject markup. Bulk/marketing email must carry a
+    visible one-click unsubscribe link (CAN-SPAM), so the footer is always
+    rendered when an ``unsubscribe_url`` is provided.
+    """
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    safe_body = html_escape(body).replace("\n", "<br>")
+    footer = ""
+    if unsubscribe_url:
+        safe_url = html_escape(unsubscribe_url, quote=True)
+        footer = (
+            '<hr style="border:none;border-top:1px solid #eee;margin:32px 0 12px;">'
+            '<p style="font-size:12px;color:#999;text-align:center;">'
+            f"If you no longer wish to receive these emails, "
+            f'<a href="{safe_url}" style="color:#999;">unsubscribe here</a>.'
+            "</p>"
+        )
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <p>{safe_body}</p>
+    {footer}
+</body>
+</html>"""
+
+
+async def send_campaign_email(
+    to_email: str,
+    subject: str,
+    body: str,
+    *,
+    unsubscribe_url: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> str | None:
+    """Send one marketing-campaign email to a contact via Resend.
+
+    ``subject`` and ``body`` are rendered template output (placeholders already
+    substituted by the email campaign worker). Returns the provider message id on
+    success, or ``None`` when the send was not accepted — the caller uses the id
+    presence to mark the campaign contact SENT vs FAILED.
+    """
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": _campaign_html(body, unsubscribe_url),
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return None
+
+    email_id = response.get("id")
+    logger.info("campaign_email_sent", to_email=to_email, email_id=email_id)
+    return str(email_id) if email_id else None
+
+
 async def send_invitation_email(
     to_email: str,
     workspace_name: str,

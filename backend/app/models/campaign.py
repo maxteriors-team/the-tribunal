@@ -39,6 +39,7 @@ class CampaignType(StrEnum):
 
     SMS = "sms"
     VOICE_SMS_FALLBACK = "voice_sms_fallback"
+    EMAIL = "email"
 
 
 class CampaignStatus(StrEnum):
@@ -123,14 +124,19 @@ class Campaign(Base):
         index=True,
     )
 
-    # Phone settings
-    from_phone_number: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Phone settings (nullable: email campaigns have no phone sender)
+    from_phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     use_number_pool: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # Initial message (for SMS campaigns, nullable for voice campaigns)
+    # Initial message (for SMS campaigns, nullable for voice campaigns).
+    # For EMAIL campaigns this holds the email body (HTML-escaped on send).
     initial_message: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # Supports {first_name}, {company_name}
+
+    # Email campaign subject line (for campaign_type="email").
+    # Supports {first_name}, {company_name} placeholders.
+    email_subject: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # AI settings
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

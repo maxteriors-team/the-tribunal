@@ -24,6 +24,7 @@ from app.api.v1 import (
     demo,
     device_tokens,
     drip_campaigns,
+    email_unsubscribe,
     embed,
     field_service,
     find_leads_ai,
@@ -274,6 +275,12 @@ api_router.include_router(
     offers.public_router,
     prefix="/p/offers",
     tags=["Public Offers"],
+)
+# Public email unsubscribe endpoint (no auth) — linked from marketing email footers
+api_router.include_router(
+    email_unsubscribe.public_router,
+    prefix="/email",
+    tags=["Email Unsubscribe"],
 )
 # Public demo endpoints (no auth, rate limited)
 api_router.include_router(

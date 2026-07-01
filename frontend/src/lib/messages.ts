@@ -27,6 +27,8 @@ export const messages = {
     smsCreateFailed: "Failed to create campaign",
     voiceCreated: "Voice campaign created successfully!",
     voiceCreateFailed: "Failed to create campaign",
+    emailCreated: "Email campaign created successfully!",
+    emailCreateFailed: "Failed to create email campaign",
   },
 
   offers: {

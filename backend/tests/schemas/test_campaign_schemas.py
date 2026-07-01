@@ -58,13 +58,31 @@ class TestCampaignCreate:
                 initial_message="Hello!",
             )
 
-    def test_missing_from_phone_raises(self) -> None:
-        """Missing from_phone_number raises ValidationError."""
-        with pytest.raises(ValidationError):
-            CampaignCreate(  # type: ignore[call-arg]
-                name="Test",
-                initial_message="Hello!",
-            )
+    def test_from_phone_optional_at_schema_layer(self) -> None:
+        """from_phone_number is optional in the schema.
+
+        Email campaigns have no phone sender, so the sender requirement for
+        SMS/voice campaigns is enforced at the API layer
+        (see tests/api/test_campaigns_validation.py), not by the schema.
+        """
+        campaign = CampaignCreate(
+            name="Test",
+            initial_message="Hello!",
+        )
+        assert campaign.from_phone_number is None
+        assert campaign.campaign_type == "sms"
+
+    def test_email_campaign_fields(self) -> None:
+        """Email campaigns accept a type, subject, and body without a phone."""
+        campaign = CampaignCreate(
+            name="Newsletter",
+            campaign_type="email",
+            email_subject="Hi {first_name}",
+            initial_message="Welcome!",
+        )
+        assert campaign.campaign_type == "email"
+        assert campaign.email_subject == "Hi {first_name}"
+        assert campaign.from_phone_number is None
 
     def test_default_messages_per_minute(self) -> None:
         """messages_per_minute defaults to 10."""

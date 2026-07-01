@@ -14,7 +14,7 @@ from app.api.deps import DB, CurrentUser, get_workspace
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.models.agent import Agent
-from app.models.campaign import Campaign, CampaignContact, CampaignStatus
+from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
@@ -126,7 +126,26 @@ async def create_campaign(
                 detail="Agent not found",
             )
 
-    await _validate_campaign_sender(db, campaign_in.from_phone_number)
+    # Email campaigns send via Resend and have no phone sender; SMS/voice
+    # campaigns must resolve to a usable text channel.
+    if campaign_in.campaign_type == CampaignType.EMAIL.value:
+        if not campaign_in.email_subject or not campaign_in.email_subject.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Email campaigns require an email subject.",
+            )
+        if not campaign_in.initial_message or not campaign_in.initial_message.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Email campaigns require an email body.",
+            )
+    else:
+        if not campaign_in.from_phone_number:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A sender phone number is required for this campaign type.",
+            )
+        await _validate_campaign_sender(db, campaign_in.from_phone_number)
 
     # Convert time strings to datetime.time objects
     campaign_data = campaign_in.model_dump()
@@ -211,7 +230,8 @@ async def start_campaign(
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
     try:
-        await _validate_campaign_sender(db, campaign.from_phone_number)
+        if campaign.campaign_type != CampaignType.EMAIL:
+            await _validate_campaign_sender(db, campaign.from_phone_number)
         lifecycle_result = await start_campaign_lifecycle(db, campaign)
     except CampaignLifecycleError as exc:
         raise HTTPException(

@@ -82,8 +82,10 @@ export function CampaignForm({ campaignId }: CampaignFormProps) {
       router.push("/campaigns/sms/new");
     } else if (campaignType === "voice") {
       router.push("/campaigns/voice/new");
+    } else if (campaignType === "email") {
+      router.push("/campaigns/email/new");
     } else {
-      // For email and multi_channel, show coming soon message
+      // multi_channel is not yet available; return to the list.
       router.push("/campaigns");
     }
   };
