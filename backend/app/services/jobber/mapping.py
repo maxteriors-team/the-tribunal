@@ -111,10 +111,15 @@ def _address_fields(address: Any) -> dict[str, Any]:
     """Flatten a Jobber address object to our contact/location column names.
 
     Jobber addresses use ``street1``/``street2``/``city``/``province``/
-    ``postalCode``/``country`` (+ optional ``latitude``/``longitude``).
+    ``postalCode``/``country``. Coordinates were flat ``latitude``/``longitude``
+    fields in older exports; the live API nests them under ``coordinates``.
+    Both shapes are accepted (nested wins when present).
     """
     if not isinstance(address, dict):
         return {}
+    coords = address.get("coordinates")
+    if not isinstance(coords, dict):
+        coords = address  # legacy flat shape
     return {
         "address_line1": _clean(address.get("street1")),
         "address_line2": _clean(address.get("street2")),
@@ -122,8 +127,8 @@ def _address_fields(address: Any) -> dict[str, Any]:
         "state": _clean(address.get("province")),
         "postal_code": _clean(address.get("postalCode")),
         "country": _clean(address.get("country")),
-        "latitude": _coerce_float(address.get("latitude")),
-        "longitude": _coerce_float(address.get("longitude")),
+        "latitude": _coerce_float(coords.get("latitude")),
+        "longitude": _coerce_float(coords.get("longitude")),
     }
 
 
@@ -283,6 +288,38 @@ def map_jobber_job_status(raw: Any, *, has_start: bool) -> JobStatus:
     return JobStatus.SCHEDULED if has_start else JobStatus.UNSCHEDULED
 
 
+def _assigned_user_ids(node: dict[str, Any]) -> list[str]:
+    """Collect assigned technician ids from a Jobber job node.
+
+    Older exports carry ``assignedUsers`` directly on the job; the live API
+    (2023-11-15) only exposes assignment per **visit**, so we union the
+    ``visits -> assignedUsers`` connections (order-preserving dedupe). Both
+    shapes are accepted.
+    """
+
+    def _ids(connection: Any) -> list[str]:
+        nodes = connection.get("nodes") if isinstance(connection, dict) else connection
+        if not isinstance(nodes, list):
+            return []
+        return [
+            cleaned
+            for u in nodes
+            if isinstance(u, dict) and (cleaned := _clean(u.get("id")))
+        ]
+
+    seen: dict[str, None] = {}
+    for uid in _ids(node.get("assignedUsers")):
+        seen.setdefault(uid, None)
+    visits = node.get("visits")
+    visit_nodes = visits.get("nodes") if isinstance(visits, dict) else None
+    if isinstance(visit_nodes, list):
+        for visit in visit_nodes:
+            if isinstance(visit, dict):
+                for uid in _ids(visit.get("assignedUsers")):
+                    seen.setdefault(uid, None)
+    return list(seen)
+
+
 def jobber_job_to_job_data(node: dict[str, Any]) -> dict[str, Any]:
     """Map a Jobber ``job`` node to ``Job`` fields + the ids to resolve.
 
@@ -307,14 +344,7 @@ def jobber_job_to_job_data(node: dict[str, Any]) -> dict[str, Any]:
     prop = node.get("property")
     property_external_id = _clean(prop.get("id")) if isinstance(prop, dict) else None
 
-    assigned = node.get("assignedUsers")
-    if isinstance(assigned, dict):
-        assigned = assigned.get("nodes")
-    assigned_ids = (
-        [_clean(u.get("id")) for u in assigned if isinstance(u, dict) and _clean(u.get("id"))]
-        if isinstance(assigned, list)
-        else []
-    )
+    assigned_ids = _assigned_user_ids(node)
 
     start = _parse_dt(node.get("startAt"))
     end = _parse_dt(node.get("endAt"))

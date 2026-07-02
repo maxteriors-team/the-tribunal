@@ -13,6 +13,7 @@ out of band.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -22,6 +23,31 @@ import structlog
 logger = structlog.get_logger()
 
 JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql"
+
+# Throttle handling: Jobber's leaky bucket restores 500 cost-points/second.
+# Retry a throttled request this many times, waiting long enough for the
+# bucket to refill meaningfully between attempts.
+_THROTTLE_RETRIES = 5
+_THROTTLE_DEFAULT_WAIT = 12.0
+
+
+def _throttle_wait_seconds(extensions: Any) -> float:
+    """Wait long enough for the cost bucket to visibly refill.
+
+    Uses ``extensions.cost.throttleStatus`` when Jobber includes it (wait
+    until ~half the bucket is back); otherwise a conservative default.
+    """
+    try:
+        ts = extensions["cost"]["throttleStatus"]
+        maximum = float(ts["maximumAvailable"])
+        available = float(ts["currentlyAvailable"])
+        restore = float(ts["restoreRate"]) or 500.0
+        needed = (maximum / 2.0) - available
+        if needed <= 0:
+            return 2.0
+        return min(max(needed / restore, 2.0), 30.0)
+    except (KeyError, TypeError, ValueError):
+        return _THROTTLE_DEFAULT_WAIT
 
 # Page size for the ``users`` connection. Jobber rate-limits by query *cost*
 # (a leaky bucket), so modest pages with cursor pagination stay well under the
@@ -71,7 +97,8 @@ query SyncClients($first: Int!, $after: String, $propertyFirst: Int!) {
         nodes {
           id
           address {
-            street1 street2 city province postalCode country latitude longitude
+            street1 street2 city province postalCode country
+            coordinates { latitude longitude }
           }
         }
       }
@@ -82,10 +109,11 @@ query SyncClients($first: Int!, $after: String, $propertyFirst: Int!) {
 """
 
 # Jobs are work orders. ``client``/``property`` carry the Jobber ids we resolve
-# to already-imported contacts/service-locations; ``assignedUsers`` carry the
-# technician ids (matched to previously-synced ``Technician.external_id``).
+# to already-imported contacts/service-locations. Assignment lives per
+# **visit** in this schema version, so technician ids come from the union of
+# ``visits -> assignedUsers`` (matched to synced ``Technician.external_id``).
 JOBS_QUERY = """
-query SyncJobs($first: Int!, $after: String, $assignedFirst: Int!) {
+query SyncJobs($first: Int!, $after: String, $visitFirst: Int!, $assignedFirst: Int!) {
   jobs(first: $first, after: $after) {
     nodes {
       id
@@ -97,12 +125,23 @@ query SyncJobs($first: Int!, $after: String, $assignedFirst: Int!) {
       endAt
       client { id }
       property { id }
-      assignedUsers(first: $assignedFirst) { nodes { id } }
+      visits(first: $visitFirst) {
+        nodes { assignedUsers(first: $assignedFirst) { nodes { id } } }
+      }
     }
     pageInfo { hasNextPage endCursor }
   }
 }
 """
+
+# Nested page sizes for the jobs query. Jobber *pre-charges* the worst-case
+# query cost (first × nested first × nested first), and a request whose
+# estimate exceeds the 10k bucket is rejected as ``Throttled`` no matter how
+# long you wait — so these must stay small. 25 jobs × 10 visits × 5 users
+# estimates ~2k points (verified live); distinct techs on a job virtually
+# always appear within its first 10 visits.
+JOBS_VISIT_PAGE_SIZE = 10
+JOBS_ASSIGNED_PAGE_SIZE = 5
 
 # Invoices are imported as historical/AR records only (never re-billed).
 # ``amounts`` holds the money; ``invoiceStatus`` maps to our status set.
@@ -163,25 +202,42 @@ class JobberClient:
         Raises :class:`JobberApiError` on HTTP failure or any GraphQL
         ``errors`` — GraphQL returns 200 with an ``errors`` array for query
         problems, so a clean status alone is not success.
-        """
-        try:
-            resp = await self._client.post(
-                self._base_url,
-                json={"query": query, "variables": variables or {}},
-            )
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise JobberApiError(
-                f"Jobber API returned HTTP {exc.response.status_code}: {exc.response.text[:300]}"
-            ) from exc
-        except httpx.HTTPError as exc:
-            raise JobberApiError(f"Jobber API request failed: {exc}") from exc
 
-        payload: dict[str, Any] = resp.json()
-        if payload.get("errors"):
-            messages = "; ".join(str(err.get("message", err)) for err in payload["errors"])
-            raise JobberApiError(f"Jobber GraphQL errors: {messages}")
-        return payload.get("data") or {}
+        Jobber rate-limits with a cost-based leaky bucket (restores 500
+        points/sec) and reports ``Throttled`` via the GraphQL ``errors``
+        array (HTTP 200) or an HTTP 429. Both are retried with a wait
+        sized from ``extensions.cost.throttleStatus`` when present so a
+        large import rides the bucket instead of dying mid-run.
+        """
+        for attempt in range(_THROTTLE_RETRIES + 1):
+            try:
+                resp = await self._client.post(
+                    self._base_url,
+                    json={"query": query, "variables": variables or {}},
+                )
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429 and attempt < _THROTTLE_RETRIES:
+                    await asyncio.sleep(_throttle_wait_seconds(None))
+                    continue
+                raise JobberApiError(
+                    f"Jobber API returned HTTP {exc.response.status_code}: "
+                    f"{exc.response.text[:300]}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise JobberApiError(f"Jobber API request failed: {exc}") from exc
+
+            payload: dict[str, Any] = resp.json()
+            if payload.get("errors"):
+                messages = "; ".join(str(err.get("message", err)) for err in payload["errors"])
+                if "Throttled" in messages and attempt < _THROTTLE_RETRIES:
+                    wait = _throttle_wait_seconds(payload.get("extensions"))
+                    logger.info("jobber_throttled_waiting", seconds=wait, attempt=attempt + 1)
+                    await asyncio.sleep(wait)
+                    continue
+                raise JobberApiError(f"Jobber GraphQL errors: {messages}")
+            return payload.get("data") or {}
+        raise JobberApiError("Jobber GraphQL errors: Throttled (retries exhausted)")
 
     async def _iter_connection(
         self,
@@ -244,7 +300,10 @@ class JobberClient:
         return self._iter_connection(
             JOBS_QUERY,
             "jobs",
-            extra_variables={"assignedFirst": IMPORT_PAGE_SIZE},
+            extra_variables={
+                "visitFirst": JOBS_VISIT_PAGE_SIZE,
+                "assignedFirst": JOBS_ASSIGNED_PAGE_SIZE,
+            },
             page_size=IMPORT_PAGE_SIZE,
         )
 
