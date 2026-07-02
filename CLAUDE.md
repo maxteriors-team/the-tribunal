@@ -44,6 +44,19 @@ The Tribunal is a proprietary AI-powered CRM command center for capturing leads,
 - Frontend uses Node `20.18.0` from `frontend/.nvmrc`, `npm@10.9.0`, and deploys from `frontend/` on Vercel with `npm ci` + `npm run build`.
 - Backend deploys on Railway via `backend/railway.toml`; pre-deploy runs `alembic upgrade head`, start command runs `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*`, and healthcheck is `/readyz`.
 - Production contains live CRM/contact data. Test migrations locally first and back up data before schema changes that touch contact/lead tables.
+- Production URLs: backend `https://the-tribunal-api-production.up.railway.app` (Railway project `the-tribunal`, service `the-tribunal-api`), frontend `https://the-tribunal-two.vercel.app` (Vercel project `the-tribunal`, team `maxteriors`).
+- Production Postgres is **18.x** (local dev compose is 17): `make db.backup.prod` uses the `postgres:18` docker client; restoring a prod dump locally may need a newer client than the dev container.
+
+## Release process (production changes)
+
+Follow in order; do not skip. Verified against this repo 2026-07-02.
+
+1. **Build locally**: `make dev`; schema changes via `make migrate.new m="..."` then `make migrate` locally; public API contract changes require `make codegen` and committing `backend/openapi.json` + `frontend/src/lib/api/_generated.ts` **in the same commit** (`codegen/check` diffs against HEAD, so it fails on uncommitted artifacts — commit first, then run `make ci.all`).
+2. **Prove it**: `make ci.all` must exit 0 (codegen drift, backend lint/type/tests, frontend lint/type/tests/build, migration up→check→down→up).
+3. **Protect prod data**: if a migration touches contact/lead/invoice tables, run `make db.backup.prod DATABASE_URL='<public *.proxy.rlwy.net url>'` first (read-only; verify the dump is non-empty). Keep the dump until the release is proven.
+4. **Ship**: `git push origin main` (GitHub CI runs 7 workflows). **Git auto-deploy is NOT connected on either platform** — pushes do not deploy. Deploy manually: backend `railway up --service the-tribunal-api --detach`, frontend `cd frontend && npx vercel deploy --prod`. Deploy **backend before frontend** when both change (old frontend + new API is safe; the reverse often isn't). If Git integration gets reconnected later, the manual deploy step collapses into the push.
+5. **Verify live**: `make smoke.backend SMOKE_BASE_URL=https://the-tribunal-api-production.up.railway.app` and `make smoke.frontend PLAYWRIGHT_BASE_URL=https://the-tribunal-two.vercel.app`; then eyeball the changed feature logged in and watch Sentry/Railway logs.
+6. **Rollback**: backend `railway redeploy` (previous deployment), frontend `npx vercel rollback <deployment-url>`; bad migration → `alembic downgrade -1` against prod or restore the pre-deploy dump from `backend/backups/`.
 
 ## Repo-local agent assets
 
