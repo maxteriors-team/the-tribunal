@@ -104,6 +104,9 @@
     btn.textContent = "Sending…";
     var f = new FormData(form);
     var heard = f.get("heard_about") || "";
+    // NL via fromCharCode: WordPress strips backslashes in Custom HTML blocks,
+    // so a "backslash-n" escape here becomes a syntax error after publishing.
+    var NL = String.fromCharCode(10);
     var noteParts = [];
     if (f.get("address")) noteParts.push("Property address: " + f.get("address"));
     if (heard) noteParts.push("How they heard about us: " + heard);
@@ -114,7 +117,7 @@
       last_name: f.get("last_name") || null,
       email: f.get("email") || null,
       phone_number: f.get("phone_number"),
-      notes: noteParts.join("\n"),
+      notes: noteParts.join(NL),
       source_detail: heard ? "website-quote-form: " + heard.slice(0, 170) : "website-quote-form",
       landing_page: location.href.slice(0, 2048),
       referrer: document.referrer ? document.referrer.slice(0, 2048) : null
@@ -129,6 +132,13 @@
         if (res.ok && res.d.success) {
           form.reset();
           show("Thanks! We received your request and will text you shortly to schedule your free consultation.", true);
+          // Meta Pixel lead tracking (replaces the old Jobber-iframe listener)
+          if (typeof fbq !== "undefined") {
+            fbq("track", "Lead", {
+              content_name: "Website Quote Form",
+              content_category: "Landscape Lighting Quote Request"
+            });
+          }
         } else {
           show((res.d && (res.d.message || res.d.detail)) || "Something went wrong — please call us at 248-877-4672.", false);
         }
