@@ -274,3 +274,54 @@ async def test_wizard_defaults_selected_tier_to_headline_and_respects_pick() -> 
         payload.selected_tier = "nope"
         doc2 = await svc.preview_from_wizard(ws.id, payload)
         assert doc2.selected_tier == "best"  # unknown pick falls back to headline
+
+
+async def test_deliver_quote_emails_snapshot_client(monkeypatch) -> None:
+    """deliver(email) sends to the wizard snapshot's client email (no Contact
+    row needed) and transitions the quote to sent."""
+    sent_calls: list[dict] = []
+
+    async def fake_send_quote_email(**kwargs):  # noqa: ANN003
+        sent_calls.append(kwargs)
+        return True
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_quote_email", fake_send_quote_email)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.client.email = "sarah@example.com"
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+
+        result = await svc.deliver_quote(
+            ws.id, uuid.UUID(str(saved.id)), channel="email", to=None
+        )
+
+        assert result.ok is True
+        assert result.to == "sarah@example.com"
+        assert sent_calls and sent_calls[0]["to_email"] == "sarah@example.com"
+        assert "/p/quotes/" in (sent_calls[0]["proposal_url"] or "")
+
+        refreshed = await svc.get_quote(ws.id, uuid.UUID(str(saved.id)))
+        assert refreshed.status == "sent"
+        assert refreshed.public_token
+
+
+async def test_deliver_quote_validates_missing_destination_and_channel() -> None:
+    from app.services.exceptions import ValidationError
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+        qid = uuid.UUID(str(saved.id))
+
+        with pytest.raises(ValidationError, match="No client email"):
+            await svc.deliver_quote(ws.id, qid, channel="email", to=None)
+        with pytest.raises(ValidationError, match="No client phone"):
+            await svc.deliver_quote(ws.id, qid, channel="sms", to=None)
+        with pytest.raises(ValidationError, match="Unknown delivery channel"):
+            await svc.deliver_quote(ws.id, qid, channel="fax", to=None)

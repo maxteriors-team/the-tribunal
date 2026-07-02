@@ -110,6 +110,35 @@ export function CalculatorScreen({
     }
   };
 
+  const handleDeliver = async (channel: "email" | "sms") => {
+    try {
+      const result = await wizard.deliver(channel);
+      toast.success(
+        channel === "email"
+          ? `Proposal emailed to ${result.to}`
+          : `Proposal texted to ${result.to}`,
+      );
+    } catch (err) {
+      // Surface the backend's actionable message (service errors return
+      // `{code, message}`; plain HTTPExceptions return `{detail}`).
+      const data = (
+        err as { response?: { data?: { message?: unknown; detail?: unknown } } }
+      )?.response?.data;
+      const message =
+        typeof data?.message === "string"
+          ? data.message
+          : typeof data?.detail === "string"
+            ? data.detail
+            : null;
+      toast.error(
+        message ??
+          (channel === "email"
+            ? "Could not email the proposal."
+            : "Could not text the proposal."),
+      );
+    }
+  };
+
   return (
     <div className="screen active" id="screen-calc">
       <div>
@@ -424,6 +453,38 @@ export function CalculatorScreen({
                     onClick={() => void copyShareLink()}
                   >
                     Copy
+                  </button>
+                </div>
+                <div className="share-link-row">
+                  <button
+                    type="button"
+                    className="share-send-btn"
+                    disabled={wizard.isDelivering || !wizard.client.email}
+                    title={
+                      wizard.client.email
+                        ? undefined
+                        : "Add a client email in step 1"
+                    }
+                    onClick={() => void handleDeliver("email")}
+                  >
+                    {wizard.isDelivering
+                      ? "Sending…"
+                      : `✉ Email to ${wizard.client.email || "client"}`}
+                  </button>
+                  <button
+                    type="button"
+                    className="share-send-btn"
+                    disabled={wizard.isDelivering || !wizard.client.phone}
+                    title={
+                      wizard.client.phone
+                        ? undefined
+                        : "Add a client phone in step 1"
+                    }
+                    onClick={() => void handleDeliver("sms")}
+                  >
+                    {wizard.isDelivering
+                      ? "Sending…"
+                      : `☎ Text to ${wizard.client.phone || "client"}`}
                   </button>
                 </div>
               </div>

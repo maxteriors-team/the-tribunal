@@ -58,4 +58,16 @@ export const salesWizardApi = {
   /** Mark the saved quote sent (allocates the public token) so it can be shared. */
   send: (workspaceId: string, quoteId: string): Promise<QuoteDetail> =>
     apiPost<QuoteDetail>(`${base(workspaceId)}/quotes/${quoteId}/send`),
+
+  /** Deliver the client proposal link by email or SMS (server sends it). */
+  deliver: (
+    workspaceId: string,
+    quoteId: string,
+    channel: "email" | "sms",
+    to?: string,
+  ): Promise<{ ok: boolean; channel: string; to: string }> =>
+    apiPost<{ ok: boolean; channel: string; to: string }>(
+      `${base(workspaceId)}/quotes/${quoteId}/deliver`,
+      { channel, to: to || null },
+    ),
 };

@@ -39,6 +39,7 @@ from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertResponse,
     QuoteCreate,
+    QuoteDeliverResult,
     QuoteDetailResponse,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
@@ -52,7 +53,7 @@ from app.services.automations.events import (
     EVENT_QUOTE_SENT,
     emit_automation_event,
 )
-from app.services.exceptions import ConflictError, NotFoundError
+from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
 from app.services.quotes.proposal_template import get_proposal_template
@@ -304,7 +305,14 @@ class QuoteService:
     ) -> QuoteDetailResponse:
         """Mark a quote as sent (sets ``sent_at`` once) and email it to the
         quote-to contact (best-effort)."""
-        quote = await get_or_404(
+        quote = await self._load_for_send(workspace_id, quote_id)
+        await self._ensure_sent_state(quote)
+
+        await self._email_quote(quote)
+        return QuoteDetailResponse.model_validate(quote)
+
+    async def _load_for_send(self, workspace_id: uuid.UUID, quote_id: uuid.UUID) -> Quote:
+        return await get_or_404(
             self.db,
             Quote,
             quote_id,
@@ -315,22 +323,143 @@ class QuoteService:
                 selectinload(Quote.workspace),
             ],
         )
+
+    async def _ensure_sent_state(self, quote: Quote) -> None:
+        """Transition a quote into ``sent`` (idempotent).
+
+        Sets ``sent_at`` once and allocates the public proposal token once, on
+        first send — re-sending keeps the same token so a link already in a
+        customer's inbox never breaks.
+        """
         if quote.status in {"approved", "declined"}:
             raise ConflictError(f"Cannot send a {quote.status} quote")
         if quote.sent_at is None:
             quote.sent_at = datetime.now(UTC)
-        # Allocate the public proposal token once, on first send. Re-sending a
-        # quote keeps the same token so a link already in a customer's inbox
-        # never breaks.
         if quote.public_token is None:
             quote.public_token = generate_quote_token()
+        already_sent = quote.status == "sent"
         quote.status = "sent"
-        await self._emit_lifecycle_event(quote, EVENT_QUOTE_SENT)
+        if not already_sent:
+            await self._emit_lifecycle_event(quote, EVENT_QUOTE_SENT)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
 
-        await self._email_quote(quote)
-        return QuoteDetailResponse.model_validate(quote)
+    async def deliver_quote(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        *,
+        channel: str,
+        to: str | None = None,
+    ) -> QuoteDeliverResult:
+        """Send the client proposal link by ``email`` or ``sms``.
+
+        Transitions the quote to ``sent`` first (allocating its share token),
+        then delivers. Destination precedence: explicit ``to`` → the wizard
+        snapshot's client email/phone → the linked contact's. Raises
+        ``ValidationError`` with an actionable message when a rail isn't ready
+        (no destination, Telnyx unconfigured, no SMS-enabled number, opt-out).
+        """
+        from app.core.config import settings
+
+        quote = await self._load_for_send(workspace_id, quote_id)
+        await self._ensure_sent_state(quote)
+
+        client = (quote.proposal_document or {}).get("client") or {}
+        link = f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}"
+        business = quote.workspace.name if quote.workspace else "our team"
+
+        if channel == "email":
+            email_to = (
+                (to or "").strip()
+                or (client.get("email") or "").strip()
+                or (quote.contact.email if quote.contact else None)
+            )
+            if not email_to:
+                raise ValidationError(
+                    "No client email on this proposal — add one or pass a destination."
+                )
+            await self._email_quote(quote, override_email=email_to)
+            self.log.info("quote_delivered", quote_id=str(quote.id), channel="email")
+            return QuoteDeliverResult(ok=True, channel="email", to=email_to)
+
+        if channel != "sms":
+            raise ValidationError(f"Unknown delivery channel: {channel!r}")
+
+        phone = (
+            (to or "").strip()
+            or (client.get("phone") or "").strip()
+            or (quote.contact.phone_number if quote.contact else None)
+        )
+        if not phone:
+            raise ValidationError(
+                "No client phone on this proposal — add one or pass a destination."
+            )
+        if not settings.telnyx_api_key:
+            raise ValidationError("Texting isn't configured (Telnyx API key missing).")
+
+        from app.services.calendar.reminder_service import resolve_from_number
+        from app.services.idempotency import derive_outbound_key
+        from app.services.rate_limiting.opt_out_manager import OptOutManager
+        from app.services.telephony.telnyx import TelnyxSMSService
+
+        if await OptOutManager().check_opt_out(workspace_id, phone, self.db):
+            raise ValidationError("This phone number has opted out of texts.")
+
+        from_number = None
+        if quote.contact_id is not None:
+            from_number = await resolve_from_number(self.db, quote.contact_id, workspace_id, None)
+        if not from_number:
+            from_number = await self._any_sms_number(workspace_id)
+        if not from_number:
+            raise ValidationError(
+                "No SMS-enabled phone number in this workspace — add one under Settings."
+            )
+
+        first = (client.get("first_name") or "").strip()
+        greeting = f"Hi {first}, " if first else ""
+        body = (
+            f"{greeting}your lighting proposal from {business} is ready — "
+            f"view and approve it here: {link}"
+        )
+
+        sms = TelnyxSMSService(settings.telnyx_api_key)
+        try:
+            await sms.send_message(
+                to_number=phone,
+                from_number=from_number,
+                body=body,
+                db=self.db,
+                workspace_id=workspace_id,
+                idempotency_key=derive_outbound_key(
+                    "quote_sms", quote.id, phone, datetime.now(UTC).isoformat()
+                ),
+            )
+        finally:
+            await sms.close()
+        self.log.info("quote_delivered", quote_id=str(quote.id), channel="sms")
+        return QuoteDeliverResult(ok=True, channel="sms", to=phone)
+
+    async def _any_sms_number(self, workspace_id: uuid.UUID) -> str | None:
+        """Oldest active SMS-enabled workspace number (agentless fallback)."""
+        from sqlalchemy import and_
+
+        from app.models.phone_number import PhoneNumber
+
+        result = await self.db.execute(
+            select(PhoneNumber.phone_number)
+            .where(
+                and_(
+                    PhoneNumber.workspace_id == workspace_id,
+                    PhoneNumber.is_active.is_(True),
+                    PhoneNumber.sms_enabled.is_(True),
+                )
+            )
+            .order_by(PhoneNumber.created_at)
+            .limit(1)
+        )
+        phone = result.scalar_one_or_none()
+        return str(phone) if phone else None
 
     async def approve_quote(
         self,
@@ -387,13 +516,23 @@ class QuoteService:
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
         return QuoteDetailResponse.model_validate(quote)
 
-    async def _email_quote(self, quote: Quote) -> None:
-        """Email the quote to its contact (best-effort; never raises)."""
+    async def _email_quote(self, quote: Quote, *, override_email: str | None = None) -> None:
+        """Email the quote's proposal link (best-effort; never raises).
+
+        Destination: explicit override → wizard snapshot's client email → the
+        linked contact's email. Wizard proposals usually have no Contact row,
+        so the snapshot fallback is what makes their sends actually deliver.
+        """
         from app.core.config import settings
         from app.services.email import send_quote_email
         from app.services.idempotency import derive_outbound_key
 
-        contact_email = quote.contact.email if quote.contact else None
+        client = (quote.proposal_document or {}).get("client") or {}
+        contact_email = (
+            (override_email or "").strip()
+            or (client.get("email") or "").strip()
+            or (quote.contact.email if quote.contact else None)
+        )
         if not contact_email:
             self.log.info("quote_email_skipped_no_contact", quote_id=str(quote.id))
             return
@@ -419,7 +558,7 @@ class QuoteService:
                 expiry_date=expiry,
                 notes=quote.notes,
                 proposal_url=proposal_url,
-                idempotency_key=derive_outbound_key("quote_send", quote.id),
+                idempotency_key=derive_outbound_key("quote_send", quote.id, contact_email),
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))

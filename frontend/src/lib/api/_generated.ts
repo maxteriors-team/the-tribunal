@@ -6476,6 +6476,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver Quote
+         * @description Send the client proposal link by email or SMS.
+         *
+         *     Marks the quote sent (allocating its share token) and delivers the link to
+         *     the wizard snapshot's client email/phone, the linked contact's, or an
+         *     explicit ``to`` override.
+         */
+        post: operations["deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/line-items": {
         parameters: {
             query?: never;
@@ -18907,6 +18931,37 @@ export interface components {
         QuoteDeclineRequest: {
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * QuoteDeliverRequest
+         * @description Send the client proposal link by email or SMS.
+         *
+         *     ``to`` overrides the destination; otherwise the wizard snapshot's client
+         *     email/phone is used, falling back to the linked contact's.
+         */
+        QuoteDeliverRequest: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "sms";
+            /** To */
+            to?: string | null;
+        };
+        /**
+         * QuoteDeliverResult
+         * @description Outcome of a proposal delivery attempt.
+         */
+        QuoteDeliverResult: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "sms";
+            /** Ok */
+            ok: boolean;
+            /** To */
+            to: string;
         };
         /**
          * QuoteDetailResponse
@@ -35548,6 +35603,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteDeliverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDeliverResult"];
                 };
             };
             /** @description Validation Error */

@@ -347,6 +347,9 @@
   .share-link-input { flex: 1; min-width: 0; background: var(--black); border: 1px solid var(--bdr); color: var(--t2); font-size: 12px; font-family: var(--font-montserrat), sans-serif; padding: 10px 12px; outline: none; }
   .share-link-copy { flex-shrink: 0; background: var(--gold); color: #0a0a0a; border: none; font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 0 16px; cursor: pointer; transition: all 0.2s; }
   .share-link-copy:hover { background: var(--gold-l); }
+  .share-send-btn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: transparent; border: 1px solid var(--bdr-g); color: var(--gold-d); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 11px 12px; cursor: pointer; transition: all 0.2s; }
+  .share-send-btn:hover { background: var(--gold-g); color: var(--gold); }
+  .share-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   /* Toast */
   .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(8px); background: var(--s2); border: 1px solid var(--bdr-g); color: var(--t1); padding: 10px 22px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }

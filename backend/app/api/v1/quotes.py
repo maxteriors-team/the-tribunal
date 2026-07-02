@@ -28,6 +28,8 @@ from app.schemas.quote import (
     QuoteConvertResponse,
     QuoteCreate,
     QuoteDeclineRequest,
+    QuoteDeliverRequest,
+    QuoteDeliverResult,
     QuoteDetailResponse,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
@@ -128,6 +130,27 @@ async def send_quote(
     """Mark a quote as sent and email it to the quote-to contact."""
     service = QuoteService(db)
     return await service.mark_sent(workspace_id, quote_id)
+
+
+@router.post("/{quote_id}/deliver", response_model=QuoteDeliverResult)
+async def deliver_quote(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: QuoteDeliverRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDeliverResult:
+    """Send the client proposal link by email or SMS.
+
+    Marks the quote sent (allocating its share token) and delivers the link to
+    the wizard snapshot's client email/phone, the linked contact's, or an
+    explicit ``to`` override.
+    """
+    service = QuoteService(db)
+    return await service.deliver_quote(
+        workspace_id, quote_id, channel=payload.channel, to=payload.to
+    )
 
 
 @router.post("/{quote_id}/approve", response_model=QuoteDetailResponse)

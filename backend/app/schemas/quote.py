@@ -102,6 +102,25 @@ class QuoteDeclineRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class QuoteDeliverRequest(BaseModel):
+    """Send the client proposal link by email or SMS.
+
+    ``to`` overrides the destination; otherwise the wizard snapshot's client
+    email/phone is used, falling back to the linked contact's.
+    """
+
+    channel: Literal["email", "sms"]
+    to: str | None = Field(default=None, max_length=320)
+
+
+class QuoteDeliverResult(BaseModel):
+    """Outcome of a proposal delivery attempt."""
+
+    ok: bool
+    channel: Literal["email", "sms"]
+    to: str
+
+
 class QuoteConvertRequest(BaseModel):
     """Choose what an approved quote converts into. Defaults to both."""
 

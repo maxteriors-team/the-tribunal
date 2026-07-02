@@ -29536,6 +29536,64 @@
         "title": "QuoteDeclineRequest",
         "type": "object"
       },
+      "QuoteDeliverRequest": {
+        "description": "Send the client proposal link by email or SMS.\n\n``to`` overrides the destination; otherwise the wizard snapshot's client\nemail/phone is used, falling back to the linked contact's.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "title": "QuoteDeliverRequest",
+        "type": "object"
+      },
+      "QuoteDeliverResult": {
+        "description": "Outcome of a proposal delivery attempt.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "channel",
+          "to"
+        ],
+        "title": "QuoteDeliverResult",
+        "type": "object"
+      },
       "QuoteDetailResponse": {
         "description": "Quote with its line items and (when built by the wizard) its rich snapshot.",
         "properties": {
@@ -63722,6 +63780,75 @@
           }
         ],
         "summary": "Decline Quote",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/deliver": {
+      "post": {
+        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override.",
+        "operationId": "deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteDeliverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDeliverResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deliver Quote",
         "tags": [
           "Quotes"
         ]

@@ -136,6 +136,9 @@ export interface UseSalesWizardReturn {
   save: () => Promise<QuoteDetail>;
   isSaving: boolean;
   savedQuote: QuoteDetail | null;
+  // Deliver flow (server emails/texts the client link)
+  deliver: (channel: "email" | "sms") => Promise<{ to: string }>;
+  isDelivering: boolean;
 }
 
 export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
@@ -345,6 +348,27 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     }
   }, [workspaceId, payload]);
 
+  // ── Deliver flow (server emails/texts the client link) ──
+  const [isDelivering, setIsDelivering] = useState(false);
+
+  const deliver = useCallback(
+    async (channel: "email" | "sms"): Promise<{ to: string }> => {
+      setIsDelivering(true);
+      try {
+        // Reuse the saved quote; save first if the rep skipped that step.
+        const quote = savedQuote ?? (await save());
+        return await salesWizardApi.deliver(
+          workspaceId,
+          String(quote.id),
+          channel,
+        );
+      } finally {
+        setIsDelivering(false);
+      }
+    },
+    [workspaceId, savedQuote, save],
+  );
+
   return {
     pricing,
     catalog: catalogQuery.data,
@@ -377,5 +401,7 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     save,
     isSaving,
     savedQuote,
+    deliver,
+    isDelivering,
   };
 }
