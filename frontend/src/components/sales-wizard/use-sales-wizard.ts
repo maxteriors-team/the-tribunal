@@ -42,6 +42,9 @@ export interface BistroDraft {
 export interface NightLight {
   nx: number;
   ny: number;
+  /** Second anchor — only for string ("bistro") lights. */
+  nx2?: number;
+  ny2?: number;
   type: string;
   glow: number;
   intensity: number;
