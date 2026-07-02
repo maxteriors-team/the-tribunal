@@ -15,7 +15,7 @@ quote -> job -> invoice chain stays auditable.
 import secrets
 import uuid
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     DATE,
@@ -28,7 +28,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -122,6 +122,14 @@ class Quote(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Structured snapshot of the sales-wizard's collected state: selected tiers,
+    # per-tier fixture lines, financing terms, cash pricing, Care Plan choice,
+    # savings, and add-ons. The canonical ``line_items`` above stay the trusted,
+    # server-computed totals for the accepted headline tier; this JSONB holds the
+    # richer multi-tier presentation the public page renders. Nullable — a plain
+    # quote created outside the wizard never sets it.
+    proposal_document: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Public client-proposal token (unguessable, indexed for O(1) lookup). Null
     # until the quote is first sent; the public ``/p/quotes/{token}`` page and

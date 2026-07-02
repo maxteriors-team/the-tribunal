@@ -125,7 +125,14 @@ const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
 const technicians = createResourceQueryKeys("technicians");
 
+// Sales-wizard: config + catalog are the inputs the wizard loads per workspace.
+const salesWizard = {
+  pricing: (workspaceId: string) => ["sales-wizard-pricing", workspaceId] as const,
+  catalog: (workspaceId: string) => ["sales-wizard-catalog", workspaceId] as const,
+};
+
 export const queryKeys = {
+  salesWizard,
   adLibrary: {
     ...adAdvertisers,
     advertisers: (workspaceId: string, params?: QueryKeyParams | null) =>

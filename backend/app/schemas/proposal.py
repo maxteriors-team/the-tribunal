@@ -16,6 +16,7 @@ never turns a settings read into a 500.
 """
 
 from datetime import date
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -124,6 +125,10 @@ class PublicProposal(BaseModel):
     terms: str | None = None
     client_name: str | None = None
     line_items: list[PublicProposalLineItem] = Field(default_factory=list)
+    # Rich multi-tier presentation snapshot built by the sales wizard. When set,
+    # the public page renders the Good/Better/Best tiers, financing, Care Plan,
+    # and add-ons from it; when null it falls back to the flat ``line_items``.
+    proposal_document: dict[str, Any] | None = None
     branding: PublicProposalBranding
 
 

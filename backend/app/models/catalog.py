@@ -13,7 +13,7 @@ Money is stored in major units via ``Numeric`` to match
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -25,7 +25,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -73,6 +73,16 @@ class CatalogItem(Base):
     taxable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Soft archive: inactive items are hidden from pickers but kept for history.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    # Free-form attributes a fixture/service carries beyond price. Drives config
+    # behaviour without new columns — e.g. ``{"transformer": true}`` excludes a
+    # fixture from the Care Plan count, ``{"per_linear_foot": true}`` marks a
+    # string-lighting rate. Nullable JSONB so existing rows are untouched.
+    attributes: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # SKU bill-of-materials for the internal fulfillment sheet: a list of
+    # ``{"sku", "description", "qty"}`` parts that make up one unit of this item.
+    # Purely internal; never rendered on the client proposal. Nullable JSONB.
+    components: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(
         Integer,

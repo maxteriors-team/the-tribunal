@@ -4428,6 +4428,287 @@
         "title": "BillingStatus",
         "type": "object"
       },
+      "BistroConfig": {
+        "description": "Optional string-lighting add-on. A lighting brand may omit it entirely.",
+        "properties": {
+          "classic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BistroProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BistroProduct"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "minimum": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "number"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/BistroTier"
+            },
+            "title": "Tiers",
+            "type": "array"
+          }
+        },
+        "title": "BistroConfig",
+        "type": "object"
+      },
+      "BistroLine": {
+        "description": "One line in the bistro breakdown (a strand/case/pack or a note).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "qty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qty"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          }
+        },
+        "title": "BistroLine",
+        "type": "object"
+      },
+      "BistroPricing": {
+        "description": "Computed bistro string-lighting price + component breakdown.",
+        "properties": {
+          "feet": {
+            "title": "Feet",
+            "type": "number"
+          },
+          "hardware": {
+            "title": "Hardware",
+            "type": "number"
+          },
+          "lights_cost": {
+            "title": "Lights Cost",
+            "type": "number"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/BistroLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "min_applied": {
+            "title": "Min Applied",
+            "type": "boolean"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "ordered_ft": {
+            "title": "Ordered Ft",
+            "type": "number"
+          },
+          "per_ft": {
+            "title": "Per Ft",
+            "type": "number"
+          },
+          "product": {
+            "title": "Product",
+            "type": "string"
+          },
+          "raw_total": {
+            "title": "Raw Total",
+            "type": "number"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "feet",
+          "product",
+          "tier",
+          "per_ft",
+          "hardware",
+          "minimum",
+          "lights_cost",
+          "raw_total",
+          "total",
+          "min_applied",
+          "ordered_ft"
+        ],
+        "title": "BistroPricing",
+        "type": "object"
+      },
+      "BistroProduct": {
+        "description": "A bistro product (color-changing or classic) with its own hardware cost.",
+        "properties": {
+          "bulb_spacing_ft": {
+            "default": 2,
+            "exclusiveMinimum": 0.0,
+            "title": "Bulb Spacing Ft",
+            "type": "number"
+          },
+          "hardware": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Hardware",
+            "type": "number"
+          },
+          "min_footage": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Min Footage",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "strand_lengths": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Strand Lengths",
+            "type": "array"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "BistroProduct",
+        "type": "object"
+      },
+      "BistroTier": {
+        "description": "Install-difficulty tier for string lighting priced per linear foot.",
+        "properties": {
+          "classic_per_ft": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Classic Per Ft",
+            "type": "number"
+          },
+          "desc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desc"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "per_ft": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Per Ft",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "BistroTier",
+        "type": "object"
+      },
       "Body_create_realtor_campaign_api_v1_realtor_campaigns_post": {
         "properties": {
           "campaign_name": {
@@ -7950,9 +8231,228 @@
         "title": "CapturedMessageResponse",
         "type": "object"
       },
+      "CarePlanConfig": {
+        "description": "Auto-priced maintenance plan, keyed off the proposal's fixture count.",
+        "properties": {
+          "free_fixtures": {
+            "default": 10,
+            "minimum": 0.0,
+            "title": "Free Fixtures",
+            "type": "integer"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/CarePlanTier"
+            },
+            "title": "Tiers",
+            "type": "array"
+          }
+        },
+        "title": "CarePlanConfig",
+        "type": "object"
+      },
+      "CarePlanPricing": {
+        "description": "A priced Care Plan option for a given fixture count.",
+        "properties": {
+          "blurb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blurb"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "repair_discount": {
+            "title": "Repair Discount",
+            "type": "number"
+          },
+          "savings": {
+            "title": "Savings",
+            "type": "number"
+          },
+          "visits": {
+            "title": "Visits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "price",
+          "savings",
+          "visits",
+          "repair_discount"
+        ],
+        "title": "CarePlanPricing",
+        "type": "object"
+      },
+      "CarePlanTier": {
+        "description": "One Care Plan tier; price = base + perFixture × (fixtures over free).",
+        "properties": {
+          "base": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Base",
+            "type": "number"
+          },
+          "blurb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blurb"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "per_fixture": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Per Fixture",
+            "type": "number"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "repair_discount": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Repair Discount",
+            "type": "number"
+          },
+          "visits": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Visits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "CarePlanTier",
+        "type": "object"
+      },
+      "CashDiscountConfig": {
+        "description": "Cash/check pricing: backs out the finance buffer, keeps a card reserve.",
+        "properties": {
+          "card_reserve_rate": {
+            "default": 0.03,
+            "exclusiveMaximum": 0.95,
+            "minimum": 0.0,
+            "title": "Card Reserve Rate",
+            "type": "number"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label": {
+            "default": "Cash / Check Pricing",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "CashDiscountConfig",
+        "type": "object"
+      },
+      "CatalogComponent": {
+        "description": "One part in a catalog item's SKU bill-of-materials (fulfillment sheet).\n\nInternal-only: the qty is *per unit* of the parent item, so a fixture that\nships as a body + a lamp lists both here and the fulfillment sheet multiplies\nby the quantity on the proposal.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "qty": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Qty",
+            "type": "number"
+          },
+          "sku": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku"
+        ],
+        "title": "CatalogComponent",
+        "type": "object"
+      },
       "CatalogItemCreate": {
         "description": "Create a catalog item.",
         "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CatalogComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          },
           "description": {
             "anyOf": [
               {
@@ -8017,6 +8517,32 @@
       "CatalogItemResponse": {
         "description": "Catalog item as returned by the API.",
         "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CatalogComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -8105,6 +8631,32 @@
       "CatalogItemUpdate": {
         "description": "Update a catalog item (all fields optional).",
         "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CatalogComponent"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Components"
+          },
           "description": {
             "anyOf": [
               {
@@ -8339,6 +8891,35 @@
           }
         },
         "title": "ClockInRequest",
+        "type": "object"
+      },
+      "CommissionConfig": {
+        "description": "Internal-only rep commission. Never rendered on the client proposal.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "in_price": {
+            "default": false,
+            "title": "In Price",
+            "type": "boolean"
+          },
+          "label": {
+            "default": "Sales Commission",
+            "title": "Label",
+            "type": "string"
+          },
+          "rate": {
+            "default": 0.12,
+            "exclusiveMaximum": 0.95,
+            "minimum": 0.0,
+            "title": "Rate",
+            "type": "number"
+          }
+        },
+        "title": "CommissionConfig",
         "type": "object"
       },
       "ContactAgentAssignRequest": {
@@ -12662,6 +13243,95 @@
         "title": "FilterRule",
         "type": "object"
       },
+      "FinancingConfig": {
+        "description": "Wisetack 0% APR promotional financing (shared across lighting brands).\n\n``feeBuffer`` grosses every price up by ``price / (1 - feeBuffer)`` so a\nfinanced job never eats margin; cash pricing backs it out again while keeping\nthe card reserve. Defaults mirror the landscape wizard so a new lighting\nworkspace inherits the same financing before it customizes anything.",
+        "properties": {
+          "apr": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Apr",
+            "type": "number"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "default_term": {
+            "default": 24,
+            "title": "Default Term",
+            "type": "integer"
+          },
+          "disclaimer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclaimer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "fee_buffer": {
+            "default": 0.11,
+            "exclusiveMaximum": 0.95,
+            "minimum": 0.0,
+            "title": "Fee Buffer",
+            "type": "number"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "max_amount": {
+            "default": 25000,
+            "minimum": 0.0,
+            "title": "Max Amount",
+            "type": "number"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "provider": {
+            "default": "Wisetack",
+            "title": "Provider",
+            "type": "string"
+          },
+          "terms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "title": "FinancingConfig",
+        "type": "object"
+      },
       "FollowupGenerateRequest": {
         "description": "Request for generating a follow-up message.",
         "properties": {
@@ -12856,6 +13526,36 @@
           }
         },
         "title": "FollowupSettingsUpdate",
+        "type": "object"
+      },
+      "FulfillmentPart": {
+        "description": "Aggregated internal SKU line for the fulfillment sheet (never client-facing).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "number"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "qty"
+        ],
+        "title": "FulfillmentPart",
         "type": "object"
       },
       "GenerateSuggestionsRequest": {
@@ -25706,6 +26406,153 @@
         "title": "PortalResponse",
         "type": "object"
       },
+      "PricingSettings": {
+        "description": "The full sales-pricing config for a workspace (read view, lenient).\n\nMirrors the uploaded wizard's ``CONFIG`` minus the fixture catalog. Sensible\nlighting defaults so a brand-new workspace prices before customization; the\nseed script overwrites tiers/care-plan/savings/bistro with real data.",
+        "properties": {
+          "bistro": {
+            "$ref": "#/components/schemas/BistroConfig"
+          },
+          "care_plan": {
+            "$ref": "#/components/schemas/CarePlanConfig"
+          },
+          "cash_discount": {
+            "$ref": "#/components/schemas/CashDiscountConfig"
+          },
+          "commission": {
+            "$ref": "#/components/schemas/CommissionConfig"
+          },
+          "financing": {
+            "$ref": "#/components/schemas/FinancingConfig"
+          },
+          "savings": {
+            "$ref": "#/components/schemas/SavingsConfig"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/TaxConfig"
+          },
+          "tier_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tier Order",
+            "type": "array"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/TierConfig"
+            },
+            "title": "Tiers",
+            "type": "array"
+          }
+        },
+        "title": "PricingSettings",
+        "type": "object"
+      },
+      "PricingSettingsUpdate": {
+        "description": "Partial update of the pricing config (shallow top-level merge).\n\nEvery block is optional; only provided top-level keys are written, so editing\n``financing`` never clobbers ``tiers``. A provided block replaces that whole\nblock (validated), matching how the seed/fork flow writes config wholesale.",
+        "properties": {
+          "bistro": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BistroConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "care_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CarePlanConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cash_discount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CashDiscountConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "commission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CommissionConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "financing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FinancingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "savings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavingsConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tax": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tier_order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier Order"
+          },
+          "tiers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TierConfig"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tiers"
+          }
+        },
+        "title": "PricingSettingsUpdate",
+        "type": "object"
+      },
       "PromptVersionActivateResponse": {
         "description": "Schema for prompt version activation response.",
         "properties": {
@@ -26242,6 +27089,329 @@
         "title": "PromptVersionUpdate",
         "type": "object"
       },
+      "ProposalCarePlan": {
+        "description": "Care Plan block: fixture count + priced options + the client's pick.",
+        "properties": {
+          "fixture_count": {
+            "title": "Fixture Count",
+            "type": "integer"
+          },
+          "free_fixtures": {
+            "title": "Free Fixtures",
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/CarePlanPricing"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "required": [
+          "fixture_count",
+          "free_fixtures"
+        ],
+        "title": "ProposalCarePlan",
+        "type": "object"
+      },
+      "ProposalCharge": {
+        "description": "A grossed-up add-on charge included in every tier's price.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "amount"
+        ],
+        "title": "ProposalCharge",
+        "type": "object"
+      },
+      "ProposalDocument": {
+        "description": "The full computed snapshot stored on ``quote.proposal_document``.",
+        "properties": {
+          "additional_charges": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalCharge"
+            },
+            "title": "Additional Charges",
+            "type": "array"
+          },
+          "bistro": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BistroPricing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "care_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalCarePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardClient"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "financing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalFinancing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fulfillment": {
+            "items": {
+              "$ref": "#/components/schemas/FulfillmentPart"
+            },
+            "title": "Fulfillment",
+            "type": "array"
+          },
+          "headline_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline Tier"
+          },
+          "night_preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Night Preview"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "selected_cash_total": {
+            "default": 0,
+            "title": "Selected Cash Total",
+            "type": "number"
+          },
+          "selected_financed_total": {
+            "default": 0,
+            "title": "Selected Financed Total",
+            "type": "number"
+          },
+          "selected_monthly_payment": {
+            "default": 0,
+            "title": "Selected Monthly Payment",
+            "type": "number"
+          },
+          "selected_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Tier"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "tier_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tier Order",
+            "type": "array"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalTierView"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "ProposalDocument",
+        "type": "object"
+      },
+      "ProposalFinancing": {
+        "description": "Financing copy echoed into the snapshot for the public page.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "default_term": {
+            "title": "Default Term",
+            "type": "integer"
+          },
+          "disclaimer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclaimer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "max_amount": {
+            "title": "Max Amount",
+            "type": "number"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "terms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider",
+          "terms",
+          "default_term",
+          "max_amount"
+        ],
+        "title": "ProposalFinancing",
+        "type": "object"
+      },
+      "ProposalLine": {
+        "description": "A priced fixture line within a tier (grossed-up unit price).",
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "line_total": {
+            "title": "Line Total",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          },
+          "transformer": {
+            "default": false,
+            "title": "Transformer",
+            "type": "boolean"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item_id",
+          "name",
+          "unit_price",
+          "quantity",
+          "line_total"
+        ],
+        "title": "ProposalLine",
+        "type": "object"
+      },
       "ProposalTemplateSettings": {
         "description": "Branding + boilerplate for a workspace's client proposals (read view).\n\nRead leniently: values come from a JSON blob the operator can edit, so this\nschema never rejects a stored value. ``business_name`` falls back to the\nworkspace name in the service when unset.",
         "properties": {
@@ -26472,6 +27642,259 @@
           }
         },
         "title": "ProposalTemplateUpdate",
+        "type": "object"
+      },
+      "ProposalTierView": {
+        "description": "One tier's presentation copy + priced lines + computed money.",
+        "properties": {
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/TierPricing"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "pricing"
+        ],
+        "title": "ProposalTierView",
+        "type": "object"
+      },
+      "ProposalWizardPayload": {
+        "description": "Everything the wizard submits on save/preview (selection only, no money).",
+        "properties": {
+          "additional_charges": {
+            "items": {
+              "$ref": "#/components/schemas/WizardCharge"
+            },
+            "title": "Additional Charges",
+            "type": "array"
+          },
+          "bistro": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardBistroSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "care_count_manual": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Care Count Manual"
+          },
+          "care_plan_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Care Plan Tier"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardClient"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "night_preview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Night Preview"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "quantities": {
+            "items": {
+              "$ref": "#/components/schemas/WizardFixtureQty"
+            },
+            "title": "Quantities",
+            "type": "array"
+          },
+          "selected_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Tier"
+          },
+          "service_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Location Id"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ProposalWizardPayload",
         "type": "object"
       },
       "ProspectIdentityKind": {
@@ -27223,6 +28646,18 @@
           "number": {
             "title": "Number",
             "type": "string"
+          },
+          "proposal_document": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Document"
           },
           "status": {
             "title": "Status",
@@ -28102,7 +29537,7 @@
         "type": "object"
       },
       "QuoteDetailResponse": {
-        "description": "Quote with its line items.",
+        "description": "Quote with its line items and (when built by the wizard) its rich snapshot.",
         "properties": {
           "approved_at": {
             "anyOf": [
@@ -28249,6 +29684,18 @@
               }
             ],
             "title": "Opportunity Id"
+          },
+          "proposal_document": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Document"
           },
           "public_token": {
             "anyOf": [
@@ -31513,6 +32960,31 @@
         "title": "RoleplayStats",
         "type": "object"
       },
+      "SavingsConfig": {
+        "description": "First-year savings estimate inputs (per-fixture so they scale).",
+        "properties": {
+          "assumed_repair_spend_per_fixture": {
+            "default": 40,
+            "minimum": 0.0,
+            "title": "Assumed Repair Spend Per Fixture",
+            "type": "number"
+          },
+          "avoided_repair_per_fixture": {
+            "default": 28,
+            "minimum": 0.0,
+            "title": "Avoided Repair Per Fixture",
+            "type": "number"
+          },
+          "per_visit_value": {
+            "default": 179,
+            "minimum": 0.0,
+            "title": "Per Visit Value",
+            "type": "number"
+          }
+        },
+        "title": "SavingsConfig",
+        "type": "object"
+      },
       "SearchPhoneNumbersRequest": {
         "description": "Search phone numbers request.",
         "properties": {
@@ -32852,6 +34324,39 @@
         "title": "TagUpdate",
         "type": "object"
       },
+      "TaxConfig": {
+        "description": "Sales-tax rule applied to the proposal + canonical totals.",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label": {
+            "default": "Sales Tax",
+            "title": "Label",
+            "type": "string"
+          },
+          "method": {
+            "default": "Exclusive",
+            "enum": [
+              "Exclusive",
+              "Inclusive"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "rate": {
+            "default": 0.06,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Rate",
+            "type": "number"
+          }
+        },
+        "title": "TaxConfig",
+        "type": "object"
+      },
       "TeamMemberResponse": {
         "description": "Schema for team member response.",
         "properties": {
@@ -33532,6 +35037,209 @@
           }
         },
         "title": "TestVariantUpdate",
+        "type": "object"
+      },
+      "TierConfig": {
+        "description": "One proposal package (a named group of catalog items + presentation copy).\n\n``item_ids`` reference catalog items by their ``sku`` (or a stable key) so the\nsame tier definition survives catalog edits. All copy is per-business.",
+        "properties": {
+          "card_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Tier"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/TierSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "tab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tab"
+          },
+          "tab_sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tab Sub"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "TierConfig",
+        "type": "object"
+      },
+      "TierPricing": {
+        "description": "Computed money for one tier, both financed and cash.",
+        "properties": {
+          "additional": {
+            "title": "Additional",
+            "type": "number"
+          },
+          "base": {
+            "title": "Base",
+            "type": "number"
+          },
+          "cash_savings": {
+            "title": "Cash Savings",
+            "type": "number"
+          },
+          "cash_total": {
+            "title": "Cash Total",
+            "type": "number"
+          },
+          "commission_cash": {
+            "title": "Commission Cash",
+            "type": "number"
+          },
+          "commission_financed": {
+            "title": "Commission Financed",
+            "type": "number"
+          },
+          "financed_total": {
+            "title": "Financed Total",
+            "type": "number"
+          },
+          "monthly_by_term": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Monthly By Term",
+            "type": "object"
+          },
+          "monthly_payment": {
+            "title": "Monthly Payment",
+            "type": "number"
+          }
+        },
+        "required": [
+          "base",
+          "additional",
+          "financed_total",
+          "cash_total",
+          "cash_savings",
+          "monthly_payment",
+          "commission_financed",
+          "commission_cash"
+        ],
+        "title": "TierPricing",
+        "type": "object"
+      },
+      "TierSection": {
+        "description": "A titled group of catalog-item ids inside a tier (calculator section).",
+        "properties": {
+          "item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Item Ids",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "TierSection",
         "type": "object"
       },
       "TimeEntryCreate": {
@@ -35801,6 +37509,191 @@
           "message"
         ],
         "title": "WinnerDetectionResponse",
+        "type": "object"
+      },
+      "WizardBistroSelection": {
+        "description": "Optional string-lighting selection.",
+        "properties": {
+          "feet": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Feet",
+            "type": "number"
+          },
+          "product": {
+            "default": "color",
+            "title": "Product",
+            "type": "string"
+          },
+          "tier": {
+            "default": "easy",
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "title": "WizardBistroSelection",
+        "type": "object"
+      },
+      "WizardCharge": {
+        "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "net_amount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Net Amount",
+            "type": "number"
+          }
+        },
+        "title": "WizardCharge",
+        "type": "object"
+      },
+      "WizardClient": {
+        "description": "Client + job-site details captured on the wizard's first step.",
+        "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "rep_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rep Name"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          }
+        },
+        "title": "WizardClient",
+        "type": "object"
+      },
+      "WizardFixtureQty": {
+        "description": "Quantity for one catalog item, keyed by its stable id (``sku`` or key).",
+        "properties": {
+          "item_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "WizardFixtureQty",
         "type": "object"
       },
       "WorkspaceCreate": {
@@ -39302,6 +41195,112 @@
           }
         ],
         "summary": "Update Missed Call Textback",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/pricing": {
+      "get": {
+        "description": "Get the workspace's sales-pricing config (the proposal engine).",
+        "operationId": "get_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Pricing Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the pricing config (shallow top-level merge into ``settings``).\n\nOnly provided blocks are written, so editing ``financing`` never clobbers\n``tiers``. A provided block replaces that whole block (validated at the edge).\nThis is the \"fork the data\" boundary: a second lighting business clones this\nconfig and tweaks a few blocks with no code change.",
+        "operationId": "update_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PricingSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PricingSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Pricing Settings",
         "tags": [
           "Settings"
         ]
@@ -61232,6 +63231,124 @@
           }
         ],
         "summary": "Create Quote",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard": {
+      "post": {
+        "description": "Save a wizard proposal as a draft quote + its multi-tier snapshot.",
+        "operationId": "save_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Save Wizard Proposal",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard/preview": {
+      "post": {
+        "description": "Compute the full multi-tier proposal document without saving.",
+        "operationId": "preview_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Wizard Proposal",
         "tags": [
           "Quotes"
         ]

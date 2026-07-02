@@ -15,6 +15,7 @@ recorded on the quote so the sales -> work -> billing chain stays auditable.
 
 import uuid
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import structlog
 from sqlalchemy import select, update
@@ -23,7 +24,9 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
+from app.models.catalog import CatalogItem
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
+from app.models.workspace import Workspace
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.proposal import (
     PublicProposal,
@@ -31,6 +34,7 @@ from app.schemas.proposal import (
     PublicProposalBranding,
     PublicProposalLineItem,
 )
+from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertResponse,
@@ -49,6 +53,8 @@ from app.services.automations.events import (
     emit_automation_event,
 )
 from app.services.exceptions import ConflictError, NotFoundError
+from app.services.quotes.pricing_config import get_pricing_config
+from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
 from app.services.quotes.proposal_template import get_proposal_template
 
 logger = structlog.get_logger()
@@ -477,6 +483,7 @@ class QuoteService:
             notes=quote.notes,
             terms=quote.terms or template.default_terms,
             client_name=client_name,
+            proposal_document=quote.proposal_document,
             line_items=[
                 PublicProposalLineItem(
                     name=li.name,
@@ -525,6 +532,115 @@ class QuoteService:
             status=result.status,
             message="Your response has been recorded. Thank you.",
         )
+
+    # ------------------------------------------------------------------
+    # Sales wizard (config-driven multi-tier proposal builder)
+    # ------------------------------------------------------------------
+
+    async def _resolve_wizard_catalog(self, workspace_id: uuid.UUID) -> dict[str, CatalogEntry]:
+        """Load active catalog items, keyed by their stable id (``sku`` or id).
+
+        Tiers in the pricing config and the wizard's quantities both reference an
+        item by this key, so the seed sets each fixture's ``sku`` to a stable key.
+        """
+        result = await self.db.execute(
+            select(CatalogItem).where(
+                CatalogItem.workspace_id == workspace_id,
+                CatalogItem.is_active.is_(True),
+            )
+        )
+        entries: dict[str, CatalogEntry] = {}
+        for item in result.scalars().all():
+            key = item.sku or str(item.id)
+            attrs = item.attributes or {}
+            entries[key] = CatalogEntry(
+                item_id=key,
+                name=item.name,
+                unit_price=Decimal(str(item.unit_price)),
+                transformer=bool(attrs.get("transformer")),
+                components=list(item.components or []),
+            )
+        return entries
+
+    @staticmethod
+    def _wizard_title(document: ProposalDocument) -> str:
+        """A sensible default title from the client's name."""
+        client = document.client
+        if client and (client.last_name or client.first_name):
+            who = client.last_name or client.first_name
+            return f"The {who} Residence — Lighting Proposal"
+        return "Lighting Proposal"
+
+    async def preview_from_wizard(
+        self,
+        workspace_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+    ) -> ProposalDocument:
+        """Compute the full proposal document without persisting (live preview).
+
+        Same code path as save, so the previewed numbers are exactly what gets
+        stored. The client submits only a selection; all money is server-computed.
+        """
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+        catalog = await self._resolve_wizard_catalog(workspace_id)
+        document, _ = build_proposal_document(config, catalog, payload)
+        return document
+
+    async def save_from_wizard(
+        self,
+        workspace_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+        *,
+        created_by_id: int | None = None,
+    ) -> QuoteDetailResponse:
+        """Persist a wizard proposal: a draft quote whose headline-tier lines are
+        recomputed server-side, plus the rich multi-tier snapshot on
+        ``proposal_document``. Client totals are never trusted.
+        """
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+        catalog = await self._resolve_wizard_catalog(workspace_id)
+        document, line_items = build_proposal_document(config, catalog, payload)
+
+        quote = Quote(
+            workspace_id=workspace_id,
+            contact_id=payload.contact_id,
+            service_location_id=payload.service_location_id,
+            opportunity_id=payload.opportunity_id,
+            number=await self._next_quote_number(workspace_id),
+            title=payload.title or self._wizard_title(document),
+            currency="USD",
+            notes=payload.notes,
+            terms=payload.terms,
+            status="draft",
+            proposal_document=document.model_dump(mode="json"),
+            created_by_id=created_by_id,
+        )
+        for item in line_items:
+            quote.line_items.append(
+                QuoteLineItem(
+                    name=item.name,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    discount=item.discount,
+                    total=self._line_total(item.quantity, item.unit_price, item.discount),
+                )
+            )
+        self._recompute_totals(quote)
+        self.db.add(quote)
+        await self.db.commit()
+        await self.db.refresh(quote, ["line_items"])
+        self.log.info(
+            "quote_saved_from_wizard",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            number=quote.number,
+            total=float(quote.total),
+            selected_tier=document.selected_tier,
+        )
+        return QuoteDetailResponse.model_validate(quote)
 
     # ------------------------------------------------------------------
     # Conversion

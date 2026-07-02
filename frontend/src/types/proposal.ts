@@ -47,6 +47,8 @@ export interface PublicProposal {
   client_name?: string | null;
   line_items: PublicProposalLineItem[];
   branding: PublicProposalBranding;
+  /** Sales-wizard snapshot (multi-tier presentation); null for plain quotes. */
+  proposal_document?: Record<string, unknown> | null;
 }
 
 export interface PublicProposalActionResult {

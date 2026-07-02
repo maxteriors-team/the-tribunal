@@ -81,6 +81,12 @@ class CatalogService:
             unit_price=item_in.unit_price,
             taxable=item_in.taxable,
             is_active=item_in.is_active,
+            attributes=item_in.attributes,
+            components=(
+                [c.model_dump() for c in item_in.components]
+                if item_in.components is not None
+                else None
+            ),
             created_by_id=created_by_id,
         )
         self.db.add(item)
@@ -119,10 +125,14 @@ class CatalogService:
             "unit_price",
             "taxable",
             "is_active",
+            "attributes",
         ):
             value = getattr(item_in, field)
             if value is not None:
                 setattr(item, field, value)
+        # Components are Pydantic models — serialize to plain dicts for JSONB.
+        if item_in.components is not None:
+            item.components = [c.model_dump() for c in item_in.components]
         await self.db.commit()
         await self.db.refresh(item)
         return CatalogItemResponse.model_validate(item)

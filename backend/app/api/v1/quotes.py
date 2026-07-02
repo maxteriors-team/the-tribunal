@@ -21,6 +21,7 @@ from app.schemas.proposal import (
     PublicProposalActionResult,
     PublicProposalDecline,
 )
+from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertRequest,
@@ -173,6 +174,39 @@ async def convert_quote(
         create_job=payload.create_job,
         create_invoice=payload.create_invoice,
     )
+
+
+# Sales wizard: config-driven multi-tier proposal builder. Preview computes the
+# document without persisting; save materializes a draft quote (server-recomputed
+# headline-tier line items) plus the rich snapshot on ``proposal_document``.
+@router.post("/wizard/preview", response_model=ProposalDocument)
+async def preview_wizard_proposal(
+    workspace_id: uuid.UUID,
+    payload: ProposalWizardPayload,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadBilling,
+) -> ProposalDocument:
+    """Compute the full multi-tier proposal document without saving."""
+    service = QuoteService(db)
+    return await service.preview_from_wizard(workspace_id, payload)
+
+
+@router.post(
+    "/wizard",
+    response_model=QuoteDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def save_wizard_proposal(
+    workspace_id: uuid.UUID,
+    payload: ProposalWizardPayload,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Save a wizard proposal as a draft quote + its multi-tier snapshot."""
+    service = QuoteService(db)
+    return await service.save_from_wizard(workspace_id, payload, created_by_id=current_user.id)
 
 
 # Line-item sub-resource. Mutations return the full quote because totals change.

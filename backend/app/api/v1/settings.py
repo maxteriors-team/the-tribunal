@@ -6,6 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.pricing import (
+    PricingSettings,
+    PricingSettingsUpdate,
+)
 from app.schemas.proposal import (
     ProposalTemplateSettings,
     ProposalTemplateUpdate,
@@ -29,6 +33,12 @@ from app.schemas.user import (
     TeamMemberResponse,
     UserProfileResponse,
     UserProfileUpdate,
+)
+from app.services.quotes.pricing_config import (
+    SETTINGS_KEY as PRICING_KEY,
+)
+from app.services.quotes.pricing_config import (
+    get_pricing_config,
 )
 from app.services.quotes.proposal_template import (
     SETTINGS_KEY as PROPOSAL_TEMPLATE_KEY,
@@ -303,6 +313,45 @@ async def update_proposal_template_settings(
     await db.refresh(workspace)
 
     return get_proposal_template(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/pricing",
+    response_model=PricingSettings,
+)
+async def get_pricing_settings(
+    workspace: WorkspaceAccess,
+) -> PricingSettings:
+    """Get the workspace's sales-pricing config (the proposal engine)."""
+    return get_pricing_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/pricing",
+    response_model=PricingSettings,
+)
+async def update_pricing_settings(
+    update: PricingSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> PricingSettings:
+    """Update the pricing config (shallow top-level merge into ``settings``).
+
+    Only provided blocks are written, so editing ``financing`` never clobbers
+    ``tiers``. A provided block replaces that whole block (validated at the edge).
+    This is the "fork the data" boundary: a second lighting business clones this
+    config and tweaks a few blocks with no code change.
+    """
+    current_settings = dict(workspace.settings)
+    config = dict(current_settings.get(PRICING_KEY, {}))
+    config.update(update.model_dump(exclude_unset=True))
+    current_settings[PRICING_KEY] = config
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    return get_pricing_config(workspace)
 
 
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)

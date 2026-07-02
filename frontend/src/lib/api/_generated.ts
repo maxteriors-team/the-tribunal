@@ -1089,6 +1089,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pricing Settings
+         * @description Get the workspace's sales-pricing config (the proposal engine).
+         */
+        get: operations["get_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_get"];
+        /**
+         * Update Pricing Settings
+         * @description Update the pricing config (shallow top-level merge into ``settings``).
+         *
+         *     Only provided blocks are written, so editing ``financing`` never clobbers
+         *     ``tiers``. A provided block replaces that whole block (validated at the edge).
+         *     This is the "fork the data" boundary: a second lighting business clones this
+         *     config and tweaks a few blocks with no code change.
+         */
+        put: operations["update_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/proposal-template": {
         parameters: {
             query?: never;
@@ -6319,6 +6348,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Wizard Proposal
+         * @description Save a wizard proposal as a draft quote + its multi-tier snapshot.
+         */
+        post: operations["save_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Wizard Proposal
+         * @description Compute the full multi-tier proposal document without saving.
+         */
+        post: operations["preview_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}": {
         parameters: {
             query?: never;
@@ -9612,6 +9681,123 @@ export interface components {
             /** Subscribed */
             subscribed: boolean;
         };
+        /**
+         * BistroConfig
+         * @description Optional string-lighting add-on. A lighting brand may omit it entirely.
+         */
+        BistroConfig: {
+            classic?: components["schemas"]["BistroProduct"] | null;
+            color?: components["schemas"]["BistroProduct"] | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Minimum
+             * @default 0
+             */
+            minimum: number;
+            /** Tiers */
+            tiers?: components["schemas"]["BistroTier"][];
+        };
+        /**
+         * BistroLine
+         * @description One line in the bistro breakdown (a strand/case/pack or a note).
+         */
+        BistroLine: {
+            /** Description */
+            description?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Qty */
+            qty?: number | null;
+            /** Sku */
+            sku?: string | null;
+        };
+        /**
+         * BistroPricing
+         * @description Computed bistro string-lighting price + component breakdown.
+         */
+        BistroPricing: {
+            /** Feet */
+            feet: number;
+            /** Hardware */
+            hardware: number;
+            /** Lights Cost */
+            lights_cost: number;
+            /** Lines */
+            lines?: components["schemas"]["BistroLine"][];
+            /** Min Applied */
+            min_applied: boolean;
+            /** Minimum */
+            minimum: number;
+            /** Ordered Ft */
+            ordered_ft: number;
+            /** Per Ft */
+            per_ft: number;
+            /** Product */
+            product: string;
+            /** Raw Total */
+            raw_total: number;
+            /** Tier */
+            tier: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * BistroProduct
+         * @description A bistro product (color-changing or classic) with its own hardware cost.
+         */
+        BistroProduct: {
+            /**
+             * Bulb Spacing Ft
+             * @default 2
+             */
+            bulb_spacing_ft: number;
+            /**
+             * Hardware
+             * @default 0
+             */
+            hardware: number;
+            /**
+             * Min Footage
+             * @default 0
+             */
+            min_footage: number;
+            /** Name */
+            name: string;
+            /** Strand Lengths */
+            strand_lengths?: number[];
+            /** Subtitle */
+            subtitle?: string | null;
+        };
+        /**
+         * BistroTier
+         * @description Install-difficulty tier for string lighting priced per linear foot.
+         */
+        BistroTier: {
+            /**
+             * Classic Per Ft
+             * @default 0
+             */
+            classic_per_ft: number;
+            /** Desc */
+            desc?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Per Ft
+             * @default 0
+             */
+            per_ft: number;
+        };
         /** Body_create_realtor_campaign_api_v1_realtor_campaigns_post */
         Body_create_realtor_campaign_api_v1_realtor_campaigns_post: {
             /** Campaign Name */
@@ -10967,10 +11153,131 @@ export interface components {
             urgency: string;
         };
         /**
+         * CarePlanConfig
+         * @description Auto-priced maintenance plan, keyed off the proposal's fixture count.
+         */
+        CarePlanConfig: {
+            /**
+             * Free Fixtures
+             * @default 10
+             */
+            free_fixtures: number;
+            /** Tiers */
+            tiers?: components["schemas"]["CarePlanTier"][];
+        };
+        /**
+         * CarePlanPricing
+         * @description A priced Care Plan option for a given fixture count.
+         */
+        CarePlanPricing: {
+            /** Blurb */
+            blurb?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /** Price */
+            price: number;
+            /** Repair Discount */
+            repair_discount: number;
+            /** Savings */
+            savings: number;
+            /** Visits */
+            visits: number;
+        };
+        /**
+         * CarePlanTier
+         * @description One Care Plan tier; price = base + perFixture × (fixtures over free).
+         */
+        CarePlanTier: {
+            /**
+             * Base
+             * @default 0
+             */
+            base: number;
+            /** Blurb */
+            blurb?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Per Fixture
+             * @default 0
+             */
+            per_fixture: number;
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /**
+             * Repair Discount
+             * @default 0
+             */
+            repair_discount: number;
+            /**
+             * Visits
+             * @default 1
+             */
+            visits: number;
+        };
+        /**
+         * CashDiscountConfig
+         * @description Cash/check pricing: backs out the finance buffer, keeps a card reserve.
+         */
+        CashDiscountConfig: {
+            /**
+             * Card Reserve Rate
+             * @default 0.03
+             */
+            card_reserve_rate: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Label
+             * @default Cash / Check Pricing
+             */
+            label: string;
+        };
+        /**
+         * CatalogComponent
+         * @description One part in a catalog item's SKU bill-of-materials (fulfillment sheet).
+         *
+         *     Internal-only: the qty is *per unit* of the parent item, so a fixture that
+         *     ships as a body + a lamp lists both here and the fulfillment sheet multiplies
+         *     by the quantity on the proposal.
+         */
+        CatalogComponent: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Qty
+             * @default 1
+             */
+            qty: number;
+            /** Sku */
+            sku: string;
+        };
+        /**
          * CatalogItemCreate
          * @description Create a catalog item.
          */
         CatalogItemCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Components */
+            components?: components["schemas"]["CatalogComponent"][] | null;
             /** Description */
             description?: string | null;
             /**
@@ -11004,6 +11311,12 @@ export interface components {
          * @description Catalog item as returned by the API.
          */
         CatalogItemResponse: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Components */
+            components?: components["schemas"]["CatalogComponent"][] | null;
             /**
              * Created At
              * Format: date-time
@@ -11057,6 +11370,12 @@ export interface components {
          * @description Update a catalog item (all fields optional).
          */
         CatalogItemUpdate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Components */
+            components?: components["schemas"]["CatalogComponent"][] | null;
             /** Description */
             description?: string | null;
             /** Is Active */
@@ -11142,6 +11461,32 @@ export interface components {
             rate: number;
             /** Technician Id */
             technician_id?: string | null;
+        };
+        /**
+         * CommissionConfig
+         * @description Internal-only rep commission. Never rendered on the client proposal.
+         */
+        CommissionConfig: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * In Price
+             * @default false
+             */
+            in_price: boolean;
+            /**
+             * Label
+             * @default Sales Commission
+             */
+            label: string;
+            /**
+             * Rate
+             * @default 0.12
+             */
+            rate: number;
         };
         /**
          * ContactAgentAssignRequest
@@ -12572,6 +12917,57 @@ export interface components {
             value?: string | number | boolean | string[] | number[] | null;
         };
         /**
+         * FinancingConfig
+         * @description Wisetack 0% APR promotional financing (shared across lighting brands).
+         *
+         *     ``feeBuffer`` grosses every price up by ``price / (1 - feeBuffer)`` so a
+         *     financed job never eats margin; cash pricing backs it out again while keeping
+         *     the card reserve. Defaults mirror the landscape wizard so a new lighting
+         *     workspace inherits the same financing before it customizes anything.
+         */
+        FinancingConfig: {
+            /**
+             * Apr
+             * @default 0
+             */
+            apr: number;
+            /** Body */
+            body?: string | null;
+            /**
+             * Default Term
+             * @default 24
+             */
+            default_term: number;
+            /** Disclaimer */
+            disclaimer?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Fee Buffer
+             * @default 0.11
+             */
+            fee_buffer: number;
+            /** Headline */
+            headline?: string | null;
+            /**
+             * Max Amount
+             * @default 25000
+             */
+            max_amount: number;
+            /** Points */
+            points?: string[];
+            /**
+             * Provider
+             * @default Wisetack
+             */
+            provider: string;
+            /** Terms */
+            terms?: number[];
+        };
+        /**
          * FollowupGenerateRequest
          * @description Request for generating a follow-up message.
          */
@@ -12640,6 +13036,18 @@ export interface components {
             enabled?: boolean | null;
             /** Max Count */
             max_count?: number | null;
+        };
+        /**
+         * FulfillmentPart
+         * @description Aggregated internal SKU line for the fulfillment sheet (never client-facing).
+         */
+        FulfillmentPart: {
+            /** Description */
+            description?: string | null;
+            /** Qty */
+            qty: number;
+            /** Sku */
+            sku: string;
         };
         /**
          * GenerateSuggestionsRequest
@@ -17401,6 +17809,48 @@ export interface components {
             portal_url: string;
         };
         /**
+         * PricingSettings
+         * @description The full sales-pricing config for a workspace (read view, lenient).
+         *
+         *     Mirrors the uploaded wizard's ``CONFIG`` minus the fixture catalog. Sensible
+         *     lighting defaults so a brand-new workspace prices before customization; the
+         *     seed script overwrites tiers/care-plan/savings/bistro with real data.
+         */
+        PricingSettings: {
+            bistro?: components["schemas"]["BistroConfig"];
+            care_plan?: components["schemas"]["CarePlanConfig"];
+            cash_discount?: components["schemas"]["CashDiscountConfig"];
+            commission?: components["schemas"]["CommissionConfig"];
+            financing?: components["schemas"]["FinancingConfig"];
+            savings?: components["schemas"]["SavingsConfig"];
+            tax?: components["schemas"]["TaxConfig"];
+            /** Tier Order */
+            tier_order?: string[];
+            /** Tiers */
+            tiers?: components["schemas"]["TierConfig"][];
+        };
+        /**
+         * PricingSettingsUpdate
+         * @description Partial update of the pricing config (shallow top-level merge).
+         *
+         *     Every block is optional; only provided top-level keys are written, so editing
+         *     ``financing`` never clobbers ``tiers``. A provided block replaces that whole
+         *     block (validated), matching how the seed/fork flow writes config wholesale.
+         */
+        PricingSettingsUpdate: {
+            bistro?: components["schemas"]["BistroConfig"] | null;
+            care_plan?: components["schemas"]["CarePlanConfig"] | null;
+            cash_discount?: components["schemas"]["CashDiscountConfig"] | null;
+            commission?: components["schemas"]["CommissionConfig"] | null;
+            financing?: components["schemas"]["FinancingConfig"] | null;
+            savings?: components["schemas"]["SavingsConfig"] | null;
+            tax?: components["schemas"]["TaxConfig"] | null;
+            /** Tier Order */
+            tier_order?: string[] | null;
+            /** Tiers */
+            tiers?: components["schemas"]["TierConfig"][] | null;
+        };
+        /**
          * PromptVersionActivateResponse
          * @description Schema for prompt version activation response.
          */
@@ -17577,6 +18027,125 @@ export interface components {
             traffic_percentage?: number | null;
         };
         /**
+         * ProposalCarePlan
+         * @description Care Plan block: fixture count + priced options + the client's pick.
+         */
+        ProposalCarePlan: {
+            /** Fixture Count */
+            fixture_count: number;
+            /** Free Fixtures */
+            free_fixtures: number;
+            /** Options */
+            options?: components["schemas"]["CarePlanPricing"][];
+            /** Selected */
+            selected?: string | null;
+        };
+        /**
+         * ProposalCharge
+         * @description A grossed-up add-on charge included in every tier's price.
+         */
+        ProposalCharge: {
+            /** Amount */
+            amount: number;
+            /** Description */
+            description: string;
+        };
+        /**
+         * ProposalDocument
+         * @description The full computed snapshot stored on ``quote.proposal_document``.
+         */
+        ProposalDocument: {
+            /** Additional Charges */
+            additional_charges?: components["schemas"]["ProposalCharge"][];
+            bistro?: components["schemas"]["BistroPricing"] | null;
+            care_plan?: components["schemas"]["ProposalCarePlan"] | null;
+            client?: components["schemas"]["WizardClient"] | null;
+            financing?: components["schemas"]["ProposalFinancing"] | null;
+            /** Fulfillment */
+            fulfillment?: components["schemas"]["FulfillmentPart"][];
+            /** Headline Tier */
+            headline_tier?: string | null;
+            /** Night Preview */
+            night_preview?: {
+                [key: string]: unknown;
+            } | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Selected Cash Total
+             * @default 0
+             */
+            selected_cash_total: number;
+            /**
+             * Selected Financed Total
+             * @default 0
+             */
+            selected_financed_total: number;
+            /**
+             * Selected Monthly Payment
+             * @default 0
+             */
+            selected_monthly_payment: number;
+            /** Selected Tier */
+            selected_tier?: string | null;
+            /** Terms */
+            terms?: string | null;
+            /** Tier Order */
+            tier_order?: string[];
+            /** Tiers */
+            tiers?: components["schemas"]["ProposalTierView"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /**
+         * ProposalFinancing
+         * @description Financing copy echoed into the snapshot for the public page.
+         */
+        ProposalFinancing: {
+            /** Body */
+            body?: string | null;
+            /** Default Term */
+            default_term: number;
+            /** Disclaimer */
+            disclaimer?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Headline */
+            headline?: string | null;
+            /** Max Amount */
+            max_amount: number;
+            /** Points */
+            points?: string[];
+            /** Provider */
+            provider: string;
+            /** Terms */
+            terms: number[];
+        };
+        /**
+         * ProposalLine
+         * @description A priced fixture line within a tier (grossed-up unit price).
+         */
+        ProposalLine: {
+            /** Item Id */
+            item_id: string;
+            /** Line Total */
+            line_total: number;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Transformer
+             * @default false
+             */
+            transformer: boolean;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
          * ProposalTemplateSettings
          * @description Branding + boilerplate for a workspace's client proposals (read view).
          *
@@ -17641,6 +18210,70 @@ export interface components {
             intro?: string | null;
             /** Logo Url */
             logo_url?: string | null;
+        };
+        /**
+         * ProposalTierView
+         * @description One tier's presentation copy + priced lines + computed money.
+         */
+        ProposalTierView: {
+            /** Experience */
+            experience?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Lines */
+            lines?: components["schemas"]["ProposalLine"][];
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            pricing: components["schemas"]["TierPricing"];
+            /** Value Tag */
+            value_tag?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+        };
+        /**
+         * ProposalWizardPayload
+         * @description Everything the wizard submits on save/preview (selection only, no money).
+         */
+        ProposalWizardPayload: {
+            /** Additional Charges */
+            additional_charges?: components["schemas"]["WizardCharge"][];
+            bistro?: components["schemas"]["WizardBistroSelection"] | null;
+            /** Care Count Manual */
+            care_count_manual?: number | null;
+            /** Care Plan Tier */
+            care_plan_tier?: string | null;
+            client?: components["schemas"]["WizardClient"] | null;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Night Preview */
+            night_preview?: {
+                [key: string]: unknown;
+            } | null;
+            /** Notes */
+            notes?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Quantities */
+            quantities?: components["schemas"]["WizardFixtureQty"][];
+            /** Selected Tier */
+            selected_tier?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /** Terms */
+            terms?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * ProspectIdentityKind
@@ -17907,6 +18540,10 @@ export interface components {
             notes?: string | null;
             /** Number */
             number: string;
+            /** Proposal Document */
+            proposal_document?: {
+                [key: string]: unknown;
+            } | null;
             /** Status */
             status: string;
             /** Subtotal */
@@ -18273,7 +18910,7 @@ export interface components {
         };
         /**
          * QuoteDetailResponse
-         * @description Quote with its line items.
+         * @description Quote with its line items and (when built by the wizard) its rich snapshot.
          */
         QuoteDetailResponse: {
             /** Approved At */
@@ -18314,6 +18951,10 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /** Proposal Document */
+            proposal_document?: {
+                [key: string]: unknown;
+            } | null;
             /** Public Token */
             public_token?: string | null;
             /** Sent At */
@@ -19527,6 +20168,27 @@ export interface components {
             total_runs: number;
         };
         /**
+         * SavingsConfig
+         * @description First-year savings estimate inputs (per-fixture so they scale).
+         */
+        SavingsConfig: {
+            /**
+             * Assumed Repair Spend Per Fixture
+             * @default 40
+             */
+            assumed_repair_spend_per_fixture: number;
+            /**
+             * Avoided Repair Per Fixture
+             * @default 28
+             */
+            avoided_repair_per_fixture: number;
+            /**
+             * Per Visit Value
+             * @default 179
+             */
+            per_visit_value: number;
+        };
+        /**
          * SearchPhoneNumbersRequest
          * @description Search phone numbers request.
          */
@@ -20034,6 +20696,33 @@ export interface components {
             name?: string | null;
         };
         /**
+         * TaxConfig
+         * @description Sales-tax rule applied to the proposal + canonical totals.
+         */
+        TaxConfig: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Label
+             * @default Sales Tax
+             */
+            label: string;
+            /**
+             * Method
+             * @default Exclusive
+             * @enum {string}
+             */
+            method: "Exclusive" | "Inclusive";
+            /**
+             * Rate
+             * @default 0.06
+             */
+            rate: number;
+        };
+        /**
          * TeamMemberResponse
          * @description Schema for team member response.
          */
@@ -20297,6 +20986,80 @@ export interface components {
             name?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /**
+         * TierConfig
+         * @description One proposal package (a named group of catalog items + presentation copy).
+         *
+         *     ``item_ids`` reference catalog items by their ``sku`` (or a stable key) so the
+         *     same tier definition survives catalog edits. All copy is per-business.
+         */
+        TierConfig: {
+            /** Card Tier */
+            card_tier?: string | null;
+            /** Experience */
+            experience?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /** Sections */
+            sections?: components["schemas"]["TierSection"][];
+            /** Tab */
+            tab?: string | null;
+            /** Tab Sub */
+            tab_sub?: string | null;
+            /** Value Tag */
+            value_tag?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+        };
+        /**
+         * TierPricing
+         * @description Computed money for one tier, both financed and cash.
+         */
+        TierPricing: {
+            /** Additional */
+            additional: number;
+            /** Base */
+            base: number;
+            /** Cash Savings */
+            cash_savings: number;
+            /** Cash Total */
+            cash_total: number;
+            /** Commission Cash */
+            commission_cash: number;
+            /** Commission Financed */
+            commission_financed: number;
+            /** Financed Total */
+            financed_total: number;
+            /** Monthly By Term */
+            monthly_by_term?: {
+                [key: string]: number;
+            };
+            /** Monthly Payment */
+            monthly_payment: number;
+        };
+        /**
+         * TierSection
+         * @description A titled group of catalog-item ids inside a tier (calculator section).
+         */
+        TierSection: {
+            /** Item Ids */
+            item_ids?: string[];
+            /** Title */
+            title: string;
         };
         /**
          * TimeEntryCreate
@@ -21145,6 +21908,78 @@ export interface components {
             winner_id: string | null;
             /** Winner Probability */
             winner_probability: number | null;
+        };
+        /**
+         * WizardBistroSelection
+         * @description Optional string-lighting selection.
+         */
+        WizardBistroSelection: {
+            /**
+             * Feet
+             * @default 0
+             */
+            feet: number;
+            /**
+             * Product
+             * @default color
+             */
+            product: string;
+            /**
+             * Tier
+             * @default easy
+             */
+            tier: string;
+        };
+        /**
+         * WizardCharge
+         * @description A custom add-on charge. The rep enters the *net* they want to keep; the
+         *     server grosses it up by the finance buffer like every other price.
+         */
+        WizardCharge: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Net Amount
+             * @default 0
+             */
+            net_amount: number;
+        };
+        /**
+         * WizardClient
+         * @description Client + job-site details captured on the wizard's first step.
+         */
+        WizardClient: {
+            /** City */
+            city?: string | null;
+            /** Email */
+            email?: string | null;
+            /** First Name */
+            first_name?: string | null;
+            /** Last Name */
+            last_name?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Rep Name */
+            rep_name?: string | null;
+            /** State */
+            state?: string | null;
+            /** Street */
+            street?: string | null;
+            /** Zip */
+            zip?: string | null;
+        };
+        /**
+         * WizardFixtureQty
+         * @description Quantity for one catalog item, keyed by its stable id (``sku`` or key).
+         */
+        WizardFixtureQty: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Quantity
+             * @default 0
+             */
+            quantity: number;
         };
         /**
          * WorkspaceCreate
@@ -23278,6 +24113,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MissedCallTextbackSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_pricing_settings_api_v1_settings_workspaces__workspace_id__pricing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PricingSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricingSettings"];
                 };
             };
             /** @description Validation Error */
@@ -34375,6 +35276,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalWizardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalWizardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDocument"];
                 };
             };
             /** @description Validation Error */

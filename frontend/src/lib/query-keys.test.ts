@@ -211,6 +211,21 @@ describe("queryKeys factory composition", () => {
     expect(byContact.slice(0, all.length)).toEqual([...all]);
   });
 
+  it("builds the bespoke proposal-template + public-proposal keys with a stable shape", () => {
+    // These drive cache invalidation across the settings tab, the public
+    // proposal page, and the quotes-list link actions, so their shape is a
+    // contract. `publicProposals` mirrors the `publicReviews` namespace.
+    expect(queryKeys.proposalTemplate.settings("ws_1")).toEqual([
+      "proposal-template",
+      "ws_1",
+    ]);
+    expect(queryKeys.publicProposals.all()).toEqual(["public-proposals"]);
+    expect(queryKeys.publicProposals.byToken("tok_abc")).toEqual([
+      "public-proposals",
+      "tok_abc",
+    ]);
+  });
+
   it("normalizes infinite-contacts filters and prefixes with the contacts root", () => {
     expect(
       queryKeys.contacts.infinite("ws_1", { status: "lead", search: undefined }),

@@ -8,7 +8,7 @@ never accepted from clients.
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -145,9 +145,11 @@ class QuoteResponse(BaseModel):
 
 
 class QuoteDetailResponse(QuoteResponse):
-    """Quote with its line items."""
+    """Quote with its line items and (when built by the wizard) its rich snapshot."""
 
     line_items: list[QuoteLineItemResponse] = Field(default_factory=list)
+    # Multi-tier sales-wizard snapshot; null for quotes created outside the wizard.
+    proposal_document: dict[str, Any] | None = None
 
 
 class PaginatedQuotes(BaseModel):
