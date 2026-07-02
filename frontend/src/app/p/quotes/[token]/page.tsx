@@ -4,9 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Printer, XCircle } from "lucide-react";
 import { use, useState } from "react";
 
-import { LightingProposalBody } from "@/components/proposal/lighting-proposal-body";
+import { LightingProposalView } from "@/components/proposal/lighting-proposal-view";
 import { parseProposalDocument } from "@/components/sales-wizard/document";
-import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
 import { Button } from "@/components/ui/button";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,7 +64,8 @@ export default function PublicProposalPage({
   });
 
   const declineMutation = useMutation({
-    mutationFn: () => publicProposalsApi.decline(token, declineReason || undefined),
+    mutationFn: (reason?: string) =>
+      publicProposalsApi.decline(token, reason || undefined),
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
@@ -103,14 +103,27 @@ export default function PublicProposalPage({
   const busy = approveMutation.isPending || declineMutation.isPending;
   const justApproved = approveMutation.isSuccess || data.status === "approved";
   const justDeclined = declineMutation.isSuccess || data.status === "declined";
-  // Wizard-built proposals carry the full multi-tier snapshot; plain quotes
-  // fall back to the flat line-item table below.
+  // Wizard-built proposals render the same dark/gold presentation the rep
+  // shows in the sales wizard; plain quotes keep the light sheet below.
   const wizardDocument = parseProposalDocument(data.proposal_document);
 
+  if (wizardDocument) {
+    return (
+      <LightingProposalView
+        data={data}
+        document={wizardDocument}
+        justApproved={justApproved}
+        justDeclined={justDeclined}
+        busy={busy}
+        actionError={approveMutation.isError || declineMutation.isError}
+        onApprove={() => approveMutation.mutate()}
+        onDecline={(reason) => declineMutation.mutate(reason)}
+      />
+    );
+  }
+
   return (
-    <div
-      className={`min-h-screen bg-slate-100 py-6 px-4 sm:py-10 ${SHEET_TEXT} ${salesWizardFontVars}`}
-    >
+    <div className={`min-h-screen bg-slate-100 py-6 px-4 sm:py-10 ${SHEET_TEXT}`}>
       <style>{PRINT_CSS}</style>
 
       <div className="mx-auto max-w-3xl space-y-4">
@@ -225,19 +238,13 @@ export default function PublicProposalPage({
               ) : null}
             </div>
 
-            {data.intro && !wizardDocument ? (
+            {data.intro ? (
               <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">
                 {data.intro}
               </p>
             ) : null}
 
-            {wizardDocument ? (
-              <LightingProposalBody
-                document={wizardDocument}
-                branding={branding}
-              />
-            ) : (
-            /* Line items (plain quotes without a wizard snapshot) */
+            {/* Line items (plain quotes without a wizard snapshot) */}
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
@@ -288,7 +295,6 @@ export default function PublicProposalPage({
                 </tbody>
               </table>
             </div>
-            )}
 
             {/* Totals */}
             <div className="flex justify-end">
@@ -319,27 +325,11 @@ export default function PublicProposalPage({
                   className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-base font-bold"
                   style={{ color: brand }}
                 >
-                  <dt>{wizardDocument ? "Total (financed)" : "Total"}</dt>
+                  <dt>Total</dt>
                   <dd className="tabular-nums">
                     {formatCurrency(data.total, data.currency)}
                   </dd>
                 </div>
-                {wizardDocument &&
-                wizardDocument.selected_cash_total > 0 &&
-                wizardDocument.selected_cash_total < data.total ? (
-                  <div
-                    className="flex justify-between text-sm font-semibold"
-                    style={{ color: accent }}
-                  >
-                    <dt>Cash/check price</dt>
-                    <dd className="tabular-nums">
-                      {formatCurrency(
-                        wizardDocument.selected_cash_total,
-                        data.currency,
-                      )}
-                    </dd>
-                  </div>
-                ) : null}
               </dl>
             </div>
 
@@ -380,7 +370,7 @@ export default function PublicProposalPage({
                     <div className="flex gap-2">
                       <Button
                         variant="destructive"
-                        onClick={() => declineMutation.mutate()}
+                        onClick={() => declineMutation.mutate(declineReason)}
                         disabled={busy}
                       >
                         {declineMutation.isPending ? (

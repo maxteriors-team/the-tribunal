@@ -109,14 +109,14 @@ export function StoryStep({ wizard }: StoryStepProps) {
           <div className="sales-story-card">
             <div className="sales-story-card-label">Layer 1</div>
             <div className="sales-story-card-text">
-              <strong>Architecture:</strong> peaks, columns, stone, trees, and
+              <strong>Architecture:</strong>{" "}peaks, columns, stone, trees, and
               focal points.
             </div>
           </div>
           <div className="sales-story-card">
             <div className="sales-story-card-label">Layer 2</div>
             <div className="sales-story-card-text">
-              <strong>Experience:</strong> paths, entry flow, patio glow, and
+              <strong>Experience:</strong>{" "}paths, entry flow, patio glow, and
               night aiming.
             </div>
           </div>
@@ -180,7 +180,7 @@ export function StoryStep({ wizard }: StoryStepProps) {
             return (
               <div className="sales-story-package" key={key}>
                 <span>
-                  {view?.name ?? cfg?.name ?? key} &middot; Cash/check
+                  {view?.name ?? cfg?.name ?? key}{" "}&middot; Cash/check
                 </span>
                 <strong>
                   {hasValue ? fmt(view?.pricing.cash_total) : "—"}

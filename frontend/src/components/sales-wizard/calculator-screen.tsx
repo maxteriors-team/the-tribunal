@@ -120,7 +120,7 @@ export function CalculatorScreen({
             <div className="calc-wordmark-line" />
           </div>
           <div className="calc-title">
-            <em>Sales</em> Wizard
+            <em>Sales</em>{" "}Wizard
           </div>
           <div className="calc-rule" />
           <div className="calc-sub">
@@ -149,7 +149,7 @@ export function CalculatorScreen({
             <div className="wizard-step-heading">
               <div className="wizard-kicker">Step 1 of 5</div>
               <div className="wizard-title">
-                <em>Client</em> Details
+                <em>Client</em>{" "}Details
               </div>
               <div className="wizard-copy">
                 Capture the client, property, and rep info once. These fields
@@ -189,7 +189,7 @@ export function CalculatorScreen({
             <div className="wizard-step-heading">
               <div className="wizard-kicker">Step 2 of 5</div>
               <div className="wizard-title">
-                <em>Design</em> Packages
+                <em>Design</em>{" "}Packages
               </div>
               <div className="wizard-copy">
                 Build Good / Better / Best options with fixture counts. Add any
@@ -212,7 +212,7 @@ export function CalculatorScreen({
             <div className="wizard-step-heading">
               <div className="wizard-kicker">Step 3 of 5</div>
               <div className="wizard-title">
-                <em>Sales</em> Story
+                <em>Sales</em>{" "}Story
               </div>
               <div className="wizard-copy">
                 Use this as the in-home slideshow: set the agenda, teach the
@@ -236,7 +236,7 @@ export function CalculatorScreen({
             <div className="wizard-step-heading">
               <div className="wizard-kicker">Step 4 of 5</div>
               <div className="wizard-title">
-                <em>Enhance</em> the Proposal
+                <em>Enhance</em>{" "}the Proposal
               </div>
               <div className="wizard-copy">
                 Add annual care, bistro string lighting, or a night-mode
@@ -261,7 +261,7 @@ export function CalculatorScreen({
             <div className="wizard-step-heading">
               <div className="wizard-kicker">Step 5 of 5</div>
               <div className="wizard-title">
-                <em>Review</em> &amp; Send
+                <em>Review</em>{" "}&amp; Send
               </div>
               <div className="wizard-copy">
                 Confirm the package totals, preview the client-facing
@@ -358,10 +358,10 @@ export function CalculatorScreen({
                   It&rsquo;s grossed into every fixture price and add-on
                   automatically, so a financed job&rsquo;s net survives the
                   dealer fee &mdash; for add-ons, enter the amount{" "}
-                  <em>we keep</em> and the tool does the rest.
+                  <em>we keep</em>{" "}and the tool does the rest.
                 </li>
                 <li>
-                  <strong>Financed customers pay 0% APR.</strong> The monthly
+                  <strong>Financed customers pay 0% APR.</strong>{" "}The monthly
                   is just the total &divide; the chosen term &mdash; no
                   interest. We absorb the fee, not them.
                 </li>
@@ -380,7 +380,7 @@ export function CalculatorScreen({
                   another discount on top; that gives the margin away twice.
                 </li>
                 <li>
-                  <strong>Financing cap applies.</strong> Above the cap, no
+                  <strong>Financing cap applies.</strong>{" "}Above the cap, no
                   monthly figure is shown &mdash; split the financed portion
                   and take the rest as deposit.
                 </li>

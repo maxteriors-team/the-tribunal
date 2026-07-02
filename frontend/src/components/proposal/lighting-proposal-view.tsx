@@ -1,33 +1,53 @@
 "use client";
 
 /**
- * Screen 2 — the client-facing presentation, rendered entirely from the
- * server-computed ProposalDocument (cash/check-led package cards, financing
- * with a 0% APR term picker, Care Plan + bistro upsells, night preview).
+ * Client-facing view for wizard-built proposals: the same dark/gold
+ * presentation the rep shows in the sales wizard (`presentation-screen.tsx`),
+ * rendered standalone from the saved `proposal_document` snapshot — with the
+ * operator controls swapped for the client's Approve / Decline actions.
+ * Plain quotes never reach this component; they keep the light sheet.
  */
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 
-import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
+import { fmt } from "@/components/sales-wizard/document";
+import type { WizardDocument } from "@/components/sales-wizard/document";
+import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
+import { formatDate } from "@/lib/utils/date";
+import type { PublicProposal } from "@/types/proposal";
 
-interface PresentationScreenProps {
-  wizard: UseSalesWizardReturn;
-  brandName: string;
-  onBack: () => void;
+import "@/components/sales-wizard/theme.css";
+
+interface LightingProposalViewProps {
+  data: PublicProposal;
+  document: WizardDocument;
+  justApproved: boolean;
+  justDeclined: boolean;
+  busy: boolean;
+  actionError: boolean;
+  onApprove: () => void;
+  onDecline: (reason: string) => void;
 }
 
-export function PresentationScreen({
-  wizard,
-  brandName,
-  onBack,
-}: PresentationScreenProps) {
-  const doc = wizard.document;
-  const financing = doc?.financing ?? null;
-  const [term, setTerm] = useState<number>(financing?.default_term ?? 24);
+export function LightingProposalView({
+  data,
+  document: doc,
+  justApproved,
+  justDeclined,
+  busy,
+  actionError,
+  onApprove,
+  onDecline,
+}: LightingProposalViewProps) {
+  const { branding } = data;
+  const brandName = branding.business_name;
 
-  const client = doc?.client ?? null;
-  const first = client?.first_name?.trim() || "";
-  const last = client?.last_name?.trim() || "";
+  const financing = doc.financing;
+  const [term, setTerm] = useState<number>(financing?.default_term ?? 24);
+  const [showDecline, setShowDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
+
+  const first = doc.client?.first_name?.trim() || "";
+  const last = doc.client?.last_name?.trim() || "";
   const fullName = [first, last].filter(Boolean).join(" ");
   const residence = last
     ? `The ${last} Residence`
@@ -37,116 +57,91 @@ export function PresentationScreen({
 
   // Lowest-priced package with real money drives the "as low as" figure.
   const lowestTier = useMemo(() => {
-    const priced = (doc?.tiers ?? []).filter((t) => t.pricing.base > 0);
+    const priced = doc.tiers.filter((t) => t.pricing.base > 0);
     if (!priced.length) return null;
     return priced.reduce((min, t) =>
       t.pricing.financed_total < min.pricing.financed_total ? t : min,
     );
   }, [doc]);
-
   const monthlyAt = (termMonths: number): number =>
-    lowestTier?.pricing.monthly_by_term?.[String(termMonths)] ?? 0;
+    lowestTier?.pricing.monthly_by_term?.[String(termMonths)] ??
+    lowestTier?.pricing.monthly_payment ??
+    0;
   const lowMonthly = monthlyAt(term);
   const terms = financing?.terms ?? [];
 
-  const cashEnabled = wizard.pricing?.cash_discount?.enabled ?? true;
+  const cashEnabled = doc.tiers.some(
+    (t) => t.pricing.base > 0 && t.pricing.cash_total < t.pricing.financed_total,
+  );
   const priceLabel = cashEnabled
     ? "Cash/check \u00b7 Installed all-inclusive"
     : "Installed \u00b7 All-inclusive";
 
-  const carePlan = doc?.care_plan ?? null;
-  const careSelected =
-    carePlan?.options.find((o) => o.key === carePlan.selected) ??
-    carePlan?.options.find((o) => o.popular) ??
-    carePlan?.options[0] ??
-    null;
+  const carePlan = doc.care_plan;
+  const careSelected = carePlan
+    ? (carePlan.options.find((o) => o.key === carePlan.selected) ??
+      carePlan.options.find((o) => o.popular) ??
+      carePlan.options[0] ??
+      null)
+    : null;
 
-  const bistro = doc?.bistro ?? null;
-  const bistroConfig =
-    bistro?.product === "classic"
-      ? wizard.pricing?.bistro?.classic
-      : wizard.pricing?.bistro?.color;
-  const bistroTierConfig = wizard.pricing?.bistro?.tiers?.find(
-    (t) => t.key === bistro?.tier,
-  );
+  const bistro = doc.bistro;
+  const bistroTierName = bistro?.tier
+    ? bistro.tier.charAt(0).toUpperCase() + bistro.tier.slice(1)
+    : "Custom";
 
   const nightImage =
-    typeof doc?.night_preview?.image === "string"
+    typeof doc.night_preview?.image === "string"
       ? doc.night_preview.image
       : null;
 
-  const shareLink = wizard.savedQuote?.public_token
-    ? `${window.location.origin}/p/quotes/${wizard.savedQuote.public_token}`
-    : null;
-
-  const handleSave = async () => {
-    if (shareLink) {
-      try {
-        await navigator.clipboard.writeText(shareLink);
-        toast.success("Client link copied");
-      } catch {
-        toast.error("Could not copy — use the review step’s link box");
-      }
-      return;
-    }
-    try {
-      const quote = await wizard.save();
-      const link = quote.public_token
-        ? `${window.location.origin}/p/quotes/${quote.public_token}`
-        : null;
-      if (link) {
-        try {
-          await navigator.clipboard.writeText(link);
-          toast.success("Saved — client link copied to clipboard");
-        } catch {
-          toast.success("Saved — copy the client link from the review step");
-        }
-      } else {
-        toast.success("Proposal saved");
-      }
-    } catch {
-      toast.error("Could not save the proposal. Please try again.");
-    }
-  };
-
-  if (!doc) {
-    return (
-      <div className="screen active" id="screen-present">
-        <div className="present-body">
-          <div className="wizard-review-intro">Preparing the proposal…</div>
-        </div>
-      </div>
-    );
-  }
+  const decided = data.is_decided || justApproved || justDeclined;
+  const contactLine = [branding.business_phone, branding.business_email]
+    .filter(Boolean)
+    .join(" \u00b7 ");
 
   return (
-    <div className="screen active" id="screen-present">
-      <div className="present-nav">
-        <div className="present-nav-brand">{brandName}</div>
+    <div className={`sales-wizard ${salesWizardFontVars}`}>
+      <div className="present-nav no-print">
+        <div className="present-nav-brand">
+          {`${brandName} · Proposal ${data.number}`}
+        </div>
         <div className="present-nav-actions">
-          <button
-            type="button"
-            className="send-email-nav-btn"
-            disabled={wizard.isSaving}
-            onClick={() => void handleSave()}
-          >
-            {wizard.isSaving ? "Saving…" : "\u2605 Save & Copy Link"}
-          </button>
           <button
             type="button"
             className="send-email-nav-btn"
             onClick={() => window.print()}
           >
-            &#9113; Print / PDF
-          </button>
-          <button type="button" className="back-btn" onClick={onBack}>
-            &#8592; Edit
+            &#9113; Save as PDF
           </button>
         </div>
       </div>
 
       <div className="present-body">
+        {justApproved ? (
+          <div className="pp-banner ok">
+            &#10003;&nbsp; You approved this proposal. Thank you — we&rsquo;ll
+            be in touch shortly to schedule your installation.
+          </div>
+        ) : justDeclined ? (
+          <div className="pp-banner no">
+            You declined this proposal. Thanks for letting us know.
+          </div>
+        ) : data.is_expired ? (
+          <div className="pp-banner">
+            This proposal has expired. Please contact us for an updated quote.
+          </div>
+        ) : null}
+
         <div className="present-hero">
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- workspace-uploaded logo URL
+            <img
+              src={branding.logo_url}
+              alt={brandName}
+              className="pp-logo"
+            />
+          ) : null}
           <div className="present-eyebrow">{brandName}</div>
           <div className="present-hi">
             Hi, <strong>{first || "there"}</strong>{" "}&#8212; your custom
@@ -191,12 +186,16 @@ export function PresentationScreen({
 
         <div className="pkg-grid">
           {doc.tiers.map((tier) => {
-            const cfg = wizard.tierConfig(tier.key);
             const hasValue = tier.pricing.base > 0;
-            const lead = hasValue ? fmt(tier.pricing.cash_total) : "Custom Quote";
-            const monthly = tier.pricing.monthly_payment;
+            const lead = hasValue
+              ? fmt(tier.pricing.cash_total)
+              : "Custom Quote";
+            const isSelected = hasValue && tier.key === doc.selected_tier;
             return (
-              <div className={`pkg-card ${tier.key}`} key={tier.key}>
+              <div
+                className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}`}
+                key={tier.key}
+              >
                 {tier.popular ? (
                   <div className="pkg-popular-bar">&#9670; Most Popular</div>
                 ) : null}
@@ -211,16 +210,16 @@ export function PresentationScreen({
                   <div className="pkg-price-wrap">
                     <div className="pkg-price">{lead}</div>
                     <div className="pkg-price-label">{priceLabel}</div>
-                    {hasValue && monthly > 0 ? (
+                    {hasValue && tier.pricing.monthly_payment > 0 ? (
                       <div className="pkg-monthly">
                         Financing options shown below
                       </div>
                     ) : null}
                   </div>
-                  {cfg?.warranty ? (
+                  {tier.warranty ? (
                     <div className="pkg-warranty">
                       <span className="pkg-warranty-dot" />
-                      {cfg.warranty}
+                      {tier.warranty}
                     </div>
                   ) : null}
                   <div className="pkg-points">
@@ -232,6 +231,11 @@ export function PresentationScreen({
                     ))}
                   </div>
                 </div>
+                {isSelected ? (
+                  <div className="pkg-selected-bar">
+                    &#9733; Your Selected Package
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -301,15 +305,15 @@ export function PresentationScreen({
                 <div className="pcare-eyebrow">Elevate Your Outdoor Living</div>
                 <div className="pcare-name">
                   <em>
-                    {(bistroConfig?.name ?? "Bistro Lights").replace(
-                      / Bistro Lights$/,
-                      "",
-                    )}
+                    {bistro.product === "color" ? "Color Changing" : "Classic"}
                   </em>{" "}
                   Bistro Lighting
                 </div>
                 <div className="pcare-price">
-                  {fmt(bistro.total)} <span>cash/check one-time</span>
+                  {fmt(bistro.total)}{" "}
+                  <span>
+                    {cashEnabled ? "cash/check one-time" : "one-time"}
+                  </span>
                 </div>
                 <div className="pcare-points">
                   {[
@@ -332,7 +336,7 @@ export function PresentationScreen({
                   className="pcare-savings-amount"
                   style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
                 >
-                  {bistroTierConfig?.name ?? "Custom"}{" "}Install
+                  {bistroTierName}{" "}Install
                 </div>
                 <div className="pcare-savings-unit">
                   {Math.round(bistro.feet)}{" "}linear ft &middot; patio &amp;
@@ -509,12 +513,12 @@ export function PresentationScreen({
               </div>
             ) : null}
             <div className="fin-body">
-              Cash/check prices are shown first above. If monthly payments fit
-              better, financing is available on the full all-inclusive project
-              total through {financing.provider}.
+              {cashEnabled
+                ? `Cash/check prices are shown first above. If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`
+                : `If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`}
             </div>
             <div className="fin-points">
-              {(financing.points ?? []).map((point, i) => (
+              {financing.points.map((point, i) => (
                 <div className="fin-point" key={i}>
                   &#10003;&nbsp; {point}
                 </div>
@@ -526,33 +530,115 @@ export function PresentationScreen({
           </div>
         ) : null}
 
-        <div className="cta-section">
-          <div className="cta-eyebrow">Ready to Move Forward</div>
-          <div className="cta-heading">
-            {first ? `Let\u2019s light your home, ${first}.` : "Let\u2019s light your home."}
+        {data.notes ? (
+          <div className="pp-terms">
+            <div className="section-heading">Notes</div>
+            <p>{data.notes}</p>
           </div>
-          <div className="cta-sub">
-            Questions? Want to adjust the design? We&rsquo;re right here.
+        ) : null}
+        {data.terms ? (
+          <div className="pp-terms">
+            <div className="section-heading">Terms</div>
+            <p>{data.terms}</p>
           </div>
-          <div className="cta-buttons">
-            <button
-              type="button"
-              className="cta-btn-primary"
-              disabled={wizard.isSaving}
-              onClick={() => void handleSave()}
-            >
-              &#9733;&nbsp;{" "}
-              {shareLink ? "Copy Client Link" : "Save & Get Client Link"}
-            </button>
-          </div>
+        ) : null}
+
+        <div className="cta-section no-print">
+          {decided ? (
+            <>
+              <div className="cta-eyebrow">
+                {justApproved || data.status === "approved"
+                  ? "Approved"
+                  : "Response Recorded"}
+              </div>
+              <div className="cta-heading">
+                {justApproved || data.status === "approved"
+                  ? `Thank you${first ? `, ${first}` : ""}.`
+                  : "Thanks for letting us know."}
+              </div>
+              <div className="cta-sub">
+                {contactLine
+                  ? `Questions? Reach us anytime — ${contactLine}`
+                  : "Questions? We\u2019re right here."}
+              </div>
+            </>
+          ) : showDecline ? (
+            <>
+              <div className="cta-eyebrow">Before You Go</div>
+              <div className="cta-heading">Mind telling us why?</div>
+              <div className="pp-decline">
+                <textarea
+                  rows={3}
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  placeholder="Optional: let us know why (helps us improve)…"
+                />
+                <div className="pp-decline-row">
+                  <button
+                    type="button"
+                    className="cta-btn-danger"
+                    disabled={busy}
+                    onClick={() => onDecline(declineReason)}
+                  >
+                    {busy ? "Sending…" : "Confirm Decline"}
+                  </button>
+                  <button
+                    type="button"
+                    className="cta-btn-secondary"
+                    disabled={busy}
+                    onClick={() => setShowDecline(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="cta-eyebrow">Ready to Move Forward</div>
+              <div className="cta-heading">
+                {first
+                  ? `Let\u2019s light your home, ${first}.`
+                  : "Let\u2019s light your home."}
+              </div>
+              <div className="cta-sub">
+                {contactLine
+                  ? `Questions? Want to adjust the design? ${contactLine}`
+                  : "Questions? Want to adjust the design? We\u2019re right here."}
+              </div>
+              <div className="cta-buttons">
+                <button
+                  type="button"
+                  className="cta-btn-primary"
+                  disabled={busy}
+                  onClick={onApprove}
+                >
+                  {busy ? "Approving…" : <>&#10003;&nbsp; Approve Proposal</>}
+                </button>
+                <button
+                  type="button"
+                  className="cta-btn-secondary"
+                  disabled={busy}
+                  onClick={() => setShowDecline(true)}
+                >
+                  Decline
+                </button>
+              </div>
+            </>
+          )}
+          {actionError ? (
+            <div className="pp-error">
+              Something went wrong. Please refresh and try again.
+            </div>
+          ) : null}
         </div>
 
         <div className="rep-sig">
           <div className="rep-sig-brand">{brandName}</div>
           <div className="rep-sig-rep">
-            {client?.rep_name ? (
+            {doc.client?.rep_name ? (
               <>
-                Prepared personally by <strong>{client.rep_name}</strong>{" "}
+                Prepared personally by <strong>{doc.client.rep_name}</strong>{" "}
                 &middot; {brandName}
               </>
             ) : (
@@ -560,6 +646,33 @@ export function PresentationScreen({
             )}
           </div>
         </div>
+
+        <div className="pp-meta">
+          {[
+            `Proposal ${data.number}`,
+            data.issue_date ? `Issued ${formatDate(data.issue_date)}` : null,
+            data.expiry_date
+              ? `Valid until ${formatDate(data.expiry_date)}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" \u00b7 ")}
+          {branding.business_address ? (
+            <>
+              <br />
+              {branding.business_address}
+            </>
+          ) : null}
+          {contactLine ? (
+            <>
+              <br />
+              {contactLine}
+            </>
+          ) : null}
+        </div>
+        {branding.footer ? (
+          <div className="pp-footer-note">{branding.footer}</div>
+        ) : null}
       </div>
     </div>
   );

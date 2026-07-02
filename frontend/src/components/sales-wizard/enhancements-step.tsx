@@ -278,7 +278,7 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
                 </div>
                 {bistroDoc.min_applied ? (
                   <div className="bistro-min-note">
-                    Minimum job charge of {fmt(bistroDoc.minimum)} applied
+                    Minimum job charge of {fmt(bistroDoc.minimum)}{" "}applied
                   </div>
                 ) : null}
               </>
