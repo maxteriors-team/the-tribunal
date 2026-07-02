@@ -1,0 +1,119 @@
+<!-- ============================================================
+  Maxteriors — Quote Request form (10DLC-compliant SMS opt-in)
+  Paste into WordPress: edit the Contact page → add a
+  "Custom HTML" block → paste this entire file → Update.
+
+  Submits to The Tribunal CRM public lead API (origin-locked to
+  maxteriorslighting.com; key is public by design). Leads land in
+  /contacts and trigger speed-to-lead automation.
+
+  Compliance block covers T-Mobile 806 requirements: opt-in path,
+  HELP, STOP, frequency, "msg & data rates", privacy policy link.
+  ============================================================ -->
+<div id="mx-quote-form" style="max-width:560px;margin:0 auto;font-family:inherit;">
+  <form id="mxQuoteForm" novalidate>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <label style="display:block;">
+        <span style="font-size:14px;font-weight:600;">First name *</span>
+        <input name="first_name" required maxlength="100" autocomplete="given-name"
+               style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
+      </label>
+      <label style="display:block;">
+        <span style="font-size:14px;font-weight:600;">Last name</span>
+        <input name="last_name" maxlength="100" autocomplete="family-name"
+               style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
+      </label>
+    </div>
+    <label style="display:block;margin-top:12px;">
+      <span style="font-size:14px;font-weight:600;">Mobile phone *</span>
+      <input name="phone_number" required type="tel" minlength="10" maxlength="20" autocomplete="tel"
+             placeholder="(248) 555-0000"
+             style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
+    </label>
+    <label style="display:block;margin-top:12px;">
+      <span style="font-size:14px;font-weight:600;">Email</span>
+      <input name="email" type="email" autocomplete="email"
+             style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
+    </label>
+    <label style="display:block;margin-top:12px;">
+      <span style="font-size:14px;font-weight:600;">Tell us about your project</span>
+      <textarea name="notes" rows="3" maxlength="2000"
+                placeholder="Home style, areas to light, timeline…"
+                style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>
+    </label>
+
+    <!-- SMS consent (required, unticked): T-Mobile 806 compliance block -->
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;line-height:1.5;color:#333;">
+      <input type="checkbox" id="mxSmsConsent" required style="margin-top:3px;flex-shrink:0;">
+      <span>
+        I agree to receive text messages from <strong>Maxteriors</strong> about my
+        lighting inquiry, quotes, and appointment updates at the mobile number
+        provided. Message frequency varies. Message &amp; data rates may apply.
+        Reply <strong>STOP</strong> to opt out or <strong>HELP</strong> for help.
+        Consent is not a condition of purchase. See our
+        <a href="https://maxteriorslighting.com/privacy-policy" target="_blank" rel="noopener">Privacy&nbsp;Policy</a>
+        and
+        <a href="https://maxteriorslighting.com/terms" target="_blank" rel="noopener">Terms</a>.
+      </span>
+    </label>
+
+    <button type="submit" id="mxQuoteBtn"
+            style="margin-top:16px;width:100%;padding:13px;border:none;border-radius:6px;background:#d4a017;color:#111;font-size:15px;font-weight:700;cursor:pointer;">
+      Request My Free Quote
+    </button>
+    <p id="mxQuoteMsg" role="status" style="margin-top:10px;font-size:14px;display:none;"></p>
+  </form>
+</div>
+<script>
+(function () {
+  var form = document.getElementById("mxQuoteForm");
+  var btn = document.getElementById("mxQuoteBtn");
+  var msg = document.getElementById("mxQuoteMsg");
+  var API = "https://the-tribunal-api-production.up.railway.app/api/v1/p/leads/ls_iNnCHsoV";
+
+  function show(text, ok) {
+    msg.style.display = "block";
+    msg.style.color = ok ? "#1a7f37" : "#b42318";
+    msg.textContent = text;
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+    var f = new FormData(form);
+    var payload = {
+      first_name: f.get("first_name"),
+      last_name: f.get("last_name") || null,
+      email: f.get("email") || null,
+      phone_number: f.get("phone_number"),
+      notes: (f.get("notes") || "") + "\n[SMS consent checkbox checked at " + new Date().toISOString() + "]",
+      source_detail: "website-quote-form",
+      landing_page: location.href.slice(0, 2048),
+      referrer: document.referrer ? document.referrer.slice(0, 2048) : null
+    };
+    fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.ok && res.d.success) {
+          form.reset();
+          show("Thanks! We received your request and will text you shortly to schedule your free consultation.", true);
+        } else {
+          show((res.d && (res.d.message || res.d.detail)) || "Something went wrong — please call us at 248-877-4672.", false);
+        }
+      })
+      .catch(function () {
+        show("Connection problem — please try again or call 248-877-4672.", false);
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = "Request My Free Quote";
+      });
+  });
+})();
+</script>
