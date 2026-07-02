@@ -36,6 +36,26 @@
              style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
     </label>
     <label style="display:block;margin-top:12px;">
+      <span style="font-size:14px;font-weight:600;">Property address *</span>
+      <input name="address" required maxlength="300" autocomplete="street-address"
+             placeholder="123 Oak Lane, Bloomfield Hills, MI 48009"
+             style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;">
+    </label>
+    <label style="display:block;margin-top:12px;">
+      <span style="font-size:14px;font-weight:600;">How did you hear about us?</span>
+      <select name="heard_about"
+              style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;background:#fff;">
+        <option value="">Select one…</option>
+        <option>Google search</option>
+        <option>Facebook / Instagram</option>
+        <option>Saw your work in my neighborhood</option>
+        <option>Referral from a friend or neighbor</option>
+        <option>Yard sign / truck</option>
+        <option>Nextdoor</option>
+        <option>Other</option>
+      </select>
+    </label>
+    <label style="display:block;margin-top:12px;">
       <span style="font-size:14px;font-weight:600;">Tell us about your project</span>
       <textarea name="notes" rows="3" maxlength="2000"
                 placeholder="Home style, areas to light, timeline…"
@@ -46,7 +66,7 @@
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;line-height:1.5;color:#333;">
       <input type="checkbox" id="mxSmsConsent" required style="margin-top:3px;flex-shrink:0;">
       <span>
-        I agree to receive text messages from <strong>Maxteriors</strong> about my
+        I agree to receive text messages from <strong>MAXTERIORS LLC</strong> about my
         lighting inquiry, quotes, and appointment updates at the mobile number
         provided. Message frequency varies. Message &amp; data rates may apply.
         Reply <strong>STOP</strong> to opt out or <strong>HELP</strong> for help.
@@ -83,13 +103,19 @@
     btn.disabled = true;
     btn.textContent = "Sending…";
     var f = new FormData(form);
+    var heard = f.get("heard_about") || "";
+    var noteParts = [];
+    if (f.get("address")) noteParts.push("Property address: " + f.get("address"));
+    if (heard) noteParts.push("How they heard about us: " + heard);
+    if (f.get("notes")) noteParts.push("Project: " + f.get("notes"));
+    noteParts.push("[SMS consent checkbox checked at " + new Date().toISOString() + "]");
     var payload = {
       first_name: f.get("first_name"),
       last_name: f.get("last_name") || null,
       email: f.get("email") || null,
       phone_number: f.get("phone_number"),
-      notes: (f.get("notes") || "") + "\n[SMS consent checkbox checked at " + new Date().toISOString() + "]",
-      source_detail: "website-quote-form",
+      notes: noteParts.join("\n"),
+      source_detail: heard ? "website-quote-form: " + heard.slice(0, 170) : "website-quote-form",
       landing_page: location.href.slice(0, 2048),
       referrer: document.referrer ? document.referrer.slice(0, 2048) : null
     };
