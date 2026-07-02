@@ -302,7 +302,7 @@ db.backup.prod: ## pg_dump a remote/prod Postgres (read-only) into backend/backu
 		out="$(BACKUP_DIR)/prod-$$stamp.dump"; \
 		url="$$(echo '$(DATABASE_URL)' | sed -E 's#\+asyncpg##; s#\+psycopg2##')"; \
 		echo "▶ pg_dump (read-only, custom format) of prod → $$out"; \
-		docker run --rm -i postgres:17 pg_dump -Fc "$$url" > "$$out"; \
+		docker run --rm -i postgres:18 pg_dump -Fc "$$url" > "$$out"; \
 		if [ ! -s "$$out" ]; then echo "✗ dump is empty — check DATABASE_URL / network"; rm -f "$$out"; exit 1; fi; \
 		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1)) — verify before pushing/migrating"
 
