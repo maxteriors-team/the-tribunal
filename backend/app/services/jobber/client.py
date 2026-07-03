@@ -49,6 +49,7 @@ def _throttle_wait_seconds(extensions: Any) -> float:
     except (KeyError, TypeError, ValueError):
         return _THROTTLE_DEFAULT_WAIT
 
+
 # Page size for the ``users`` connection. Jobber rate-limits by query *cost*
 # (a leaky bucket), so modest pages with cursor pagination stay well under the
 # per-account point budget. 50 mirrors Jobber's own app-template default.

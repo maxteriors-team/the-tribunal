@@ -301,11 +301,7 @@ def _assigned_user_ids(node: dict[str, Any]) -> list[str]:
         nodes = connection.get("nodes") if isinstance(connection, dict) else connection
         if not isinstance(nodes, list):
             return []
-        return [
-            cleaned
-            for u in nodes
-            if isinstance(u, dict) and (cleaned := _clean(u.get("id")))
-        ]
+        return [cleaned for u in nodes if isinstance(u, dict) and (cleaned := _clean(u.get("id")))]
 
     seen: dict[str, None] = {}
     for uid in _ids(node.get("assignedUsers")):

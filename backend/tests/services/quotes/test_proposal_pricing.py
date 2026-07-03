@@ -30,8 +30,8 @@ from app.services.quotes import proposal_pricing as pp
 
 def _landscape_config(**overrides) -> PricingSettings:
     """A PricingSettings mirroring the landscape wizard's shared knobs."""
-    base = dict(
-        financing=FinancingConfig(
+    base = {
+        "financing": FinancingConfig(
             enabled=True,
             max_amount=25000,
             terms=[6, 12, 24],
@@ -39,9 +39,9 @@ def _landscape_config(**overrides) -> PricingSettings:
             apr=0.0,
             fee_buffer=0.11,
         ),
-        cash_discount=CashDiscountConfig(enabled=True, card_reserve_rate=0.03),
-        commission=CommissionConfig(enabled=True, rate=0.12, in_price=False),
-        care_plan=CarePlanConfig(
+        "cash_discount": CashDiscountConfig(enabled=True, card_reserve_rate=0.03),
+        "commission": CommissionConfig(enabled=True, rate=0.12, in_price=False),
+        "care_plan": CarePlanConfig(
             free_fixtures=10,
             tiers=[
                 CarePlanTier(
@@ -71,12 +71,12 @@ def _landscape_config(**overrides) -> PricingSettings:
                 ),
             ],
         ),
-        savings=SavingsConfig(
+        "savings": SavingsConfig(
             per_visit_value=179,
             avoided_repair_per_fixture=28,
             assumed_repair_spend_per_fixture=40,
         ),
-        bistro=BistroConfig(
+        "bistro": BistroConfig(
             enabled=True,
             minimum=2307,
             tiers=[
@@ -87,7 +87,7 @@ def _landscape_config(**overrides) -> PricingSettings:
             color=BistroProduct(name="Color", hardware=577, strand_lengths=[50, 40, 20, 10, 4, 2]),
             classic=BistroProduct(name="Classic", hardware=35, min_footage=200, bulb_spacing_ft=2),
         ),
-    )
+    }
     base.update(overrides)
     return PricingSettings(**base)
 
