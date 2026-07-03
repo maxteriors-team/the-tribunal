@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
 from app.services.ai.crm_assistant._appointment_tools import AppointmentAssistantTools
+from app.services.ai.crm_assistant._automation_tools import AutomationAssistantTools
 from app.services.ai.crm_assistant._campaign_tools import CampaignAssistantTools
 from app.services.ai.crm_assistant._contact_tools import ContactAssistantTools
 from app.services.ai.crm_assistant._conversation_tools import ConversationAssistantTools
@@ -38,6 +39,7 @@ class CRMToolExecutor:
         modules = (
             ContactAssistantTools(self.context),
             CampaignAssistantTools(self.context),
+            AutomationAssistantTools(self.context),
             AgentAssistantTools(self.context),
             ConversationAssistantTools(self.context),
             AppointmentAssistantTools(self.context),

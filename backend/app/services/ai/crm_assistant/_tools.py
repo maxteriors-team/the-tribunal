@@ -7,6 +7,7 @@ Mirrors the prompt-hint style in ezcoder's tools/prompt-hints.ts.
 from copy import deepcopy
 from typing import Any
 
+from app.schemas.automation import AUTOMATION_TRIGGER_TYPES
 from app.services.ai.crm_assistant._tool_metadata import get_tool_policy
 
 CONFIRMED_PARAM = {
@@ -190,6 +191,100 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "campaign_id": {"type": "string", "description": "Campaign UUID"},
                 },
                 "required": ["campaign_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_automations",
+            "description": "List workflow automations (trigger \u2192 actions) in the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "active_only": {"type": "boolean", "description": "Only active automations"},
+                    "limit": {"type": "integer", "description": "Max results (default 10)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_automation",
+            "description": (
+                "Create a workflow automation: when a trigger fires, run actions in order. "
+                "Action types: send_sms {message}, send_email {subject, message}, "
+                "make_call {agent_id}, enroll_campaign {campaign_id}, apply_tag {tag}, "
+                "wait {hours}. Templates may use {first_name} etc. "
+                "Requires explicit confirmation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "trigger_type": {
+                        "type": "string",
+                        "enum": list(AUTOMATION_TRIGGER_TYPES),
+                        "description": "Event that fires the automation",
+                    },
+                    "trigger_config": {
+                        "type": "object",
+                        "description": (
+                            "Trigger details, e.g. {tag} for contact_tagged, "
+                            "{inactivity_days} for never_booked"
+                        ),
+                    },
+                    "actions": {
+                        "type": "array",
+                        "description": "Actions run in order when the trigger fires",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string"},
+                                "config": {"type": "object"},
+                            },
+                            "required": ["type"],
+                        },
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Activate immediately (default true)",
+                    },
+                },
+                "required": ["name", "trigger_type", "actions"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enable_automation",
+            "description": (
+                "Enable an automation so its trigger starts firing (can send messages); "
+                "requires explicit confirmation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "automation_id": {"type": "string", "description": "Automation UUID"},
+                },
+                "required": ["automation_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "disable_automation",
+            "description": "Disable an automation so it stops firing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "automation_id": {"type": "string", "description": "Automation UUID"},
+                },
+                "required": ["automation_id"],
             },
         },
     },

@@ -204,6 +204,35 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
     ),
+    "create_automation": CRMToolMetadata(
+        name="create_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I can create this automation.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Create automation {name}",
+    ),
+    "enable_automation": CRMToolMetadata(
+        name="enable_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I can enable this automation.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Enable automation {automation_id}",
+    ),
+    "disable_automation": CRMToolMetadata(
+        name="disable_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
     "create_agent": CRMToolMetadata(
         name="create_agent",
         handler=_missing_handler,
