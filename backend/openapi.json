@@ -4779,39 +4779,6 @@
         "title": "Body_import_contacts_csv_api_v1_workspaces__workspace_id__contacts_import_post",
         "type": "object"
       },
-      "Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post": {
-        "properties": {
-          "contact_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contact Ids"
-          },
-          "import_all": {
-            "default": false,
-            "title": "Import All",
-            "type": "boolean"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "workspace_id"
-        ],
-        "title": "Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post",
-        "type": "object"
-      },
       "Body_login_api_v1_auth_login_post": {
         "properties": {
           "client_id": {
@@ -4883,19 +4850,6 @@
           "file"
         ],
         "title": "Body_preview_import_csv_api_v1_workspaces__workspace_id__contacts_import_preview_post",
-        "type": "object"
-      },
-      "Body_verify_fub_api_v1_realtor_verify_fub_post": {
-        "properties": {
-          "api_key": {
-            "title": "Api Key",
-            "type": "string"
-          }
-        },
-        "required": [
-          "api_key"
-        ],
-        "title": "Body_verify_fub_api_v1_realtor_verify_fub_post",
         "type": "object"
       },
       "BookableStaffCreate": {
@@ -12987,192 +12941,6 @@
         "title": "EnrollContactsRequest",
         "type": "object"
       },
-      "FUBContact": {
-        "description": "A contact from Follow Up Boss.",
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "first_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Name"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "last_activity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Activity"
-          },
-          "last_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Name"
-          },
-          "phone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          },
-          "stage": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stage"
-          },
-          "tags": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Tags",
-            "type": "array"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "FUBContact",
-        "type": "object"
-      },
-      "FUBImportResponse": {
-        "description": "Result of importing FUB contacts.",
-        "properties": {
-          "failed": {
-            "title": "Failed",
-            "type": "integer"
-          },
-          "imported": {
-            "title": "Imported",
-            "type": "integer"
-          },
-          "skipped": {
-            "title": "Skipped",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "imported",
-          "skipped",
-          "failed"
-        ],
-        "title": "FUBImportResponse",
-        "type": "object"
-      },
-      "FUBPeopleResponse": {
-        "description": "Paginated list of FUB contacts.",
-        "properties": {
-          "contacts": {
-            "items": {
-              "$ref": "#/components/schemas/FUBContact"
-            },
-            "title": "Contacts",
-            "type": "array"
-          },
-          "has_more": {
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "contacts",
-          "total",
-          "has_more"
-        ],
-        "title": "FUBPeopleResponse",
-        "type": "object"
-      },
-      "FUBVerifyResponse": {
-        "description": "Result of verifying a FUB API key.",
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "valid": {
-            "title": "Valid",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "valid"
-        ],
-        "title": "FUBVerifyResponse",
-        "type": "object"
-      },
       "FilterDefinition": {
         "description": "Definition of a filter set.",
         "properties": {
@@ -14947,7 +14715,6 @@
               "telnyx",
               "openai",
               "resend",
-              "followupboss",
               "meta_ad_library",
               "google_ads_transparency"
             ],
@@ -30649,19 +30416,6 @@
             "description": "Cal.com event type ID",
             "title": "Calcom Event Type Id",
             "type": "integer"
-          },
-          "fub_api_key": {
-            "anyOf": [
-              {
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional Follow Up Boss API key",
-            "title": "Fub Api Key"
           }
         },
         "required": [
@@ -40230,125 +39984,6 @@
         ]
       }
     },
-    "/api/v1/realtor/fub-contacts": {
-      "get": {
-        "description": "Fetch contacts from Follow Up Boss using stored credentials.",
-        "operationId": "get_fub_contacts_api_v1_realtor_fub_contacts_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FUBPeopleResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Fub Contacts",
-        "tags": [
-          "Follow Up Boss"
-        ]
-      }
-    },
-    "/api/v1/realtor/import-fub-contacts": {
-      "post": {
-        "description": "Import contacts from Follow Up Boss into the CRM.",
-        "operationId": "import_fub_contacts_api_v1_realtor_import_fub_contacts_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FUBImportResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Import Fub Contacts",
-        "tags": [
-          "Follow Up Boss"
-        ]
-      }
-    },
     "/api/v1/realtor/onboard": {
       "post": {
         "description": "Complete realtor onboarding in a single call.",
@@ -40491,53 +40126,6 @@
         "summary": "Verify Calcom",
         "tags": [
           "Realtor Onboarding"
-        ]
-      }
-    },
-    "/api/v1/realtor/verify-fub": {
-      "post": {
-        "description": "Verify a Follow Up Boss API key by calling the /me endpoint.",
-        "operationId": "verify_fub_api_v1_realtor_verify_fub_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_verify_fub_api_v1_realtor_verify_fub_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FUBVerifyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Verify Fub",
-        "tags": [
-          "Follow Up Boss"
         ]
       }
     },

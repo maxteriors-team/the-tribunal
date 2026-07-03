@@ -19,20 +19,13 @@ export interface ReviewStepProps {
 
 export function ReviewStep({ showPhoneWarning = false }: ReviewStepProps) {
   const form = useFormContext<OnboardingFormValues>();
-  const {
-    fubConnected,
-    fubName,
-    fubImportCount,
-    calcomConnected,
-    calcomUsername,
-    csvFile,
-    csvRowCount,
-  } = useOnboardingExtras();
+  const { calcomConnected, calcomUsername, csvFile, csvRowCount } =
+    useOnboardingExtras();
 
   const bookingUrl = form.watch("calcom_booking_url");
   const areaCode = form.watch("area_code");
 
-  const totalLeads = (fubImportCount ?? 0) + (csvRowCount ?? 0);
+  const totalLeads = csvRowCount ?? 0;
 
   return (
     <div className="space-y-6">
@@ -67,24 +60,6 @@ export function ReviewStep({ showPhoneWarning = false }: ReviewStepProps) {
       <Card>
         <CardContent className="pt-4 pb-4 divide-y divide-border">
           <div className="flex items-center gap-3 py-3">
-            {fubConnected ? (
-              <CheckCircle2 className="size-5 text-green-500 shrink-0" />
-            ) : (
-              <AlertCircle className="size-5 text-amber-500 shrink-0" />
-            )}
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {fubConnected
-                  ? "Follow Up Boss connected"
-                  : "Follow Up Boss not connected"}
-              </p>
-              {fubName && (
-                <p className="text-xs text-muted-foreground">{fubName}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 py-3">
             {calcomConnected ? (
               <CheckCircle2 className="size-5 text-green-500 shrink-0" />
             ) : (
@@ -118,9 +93,6 @@ export function ReviewStep({ showPhoneWarning = false }: ReviewStepProps) {
                   : "No leads imported yet"}
               </p>
               <div className="text-xs text-muted-foreground space-y-0.5">
-                {fubImportCount !== null && fubImportCount > 0 && (
-                  <p>{formatNumber(fubImportCount)} from Follow Up Boss</p>
-                )}
                 {csvFile && csvRowCount !== null && (
                   <p>
                     ~{formatNumber(csvRowCount)} from {csvFile.name}

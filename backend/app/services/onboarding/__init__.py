@@ -3,7 +3,6 @@
 from app.services.onboarding.credentials import (
     get_workspace_calcom_api_key,
     store_calcom_credentials,
-    store_followupboss_credentials,
     upsert_workspace_integration_credentials,
 )
 from app.services.onboarding.external_checks import (
@@ -39,7 +38,6 @@ __all__ = [
     "parse_calcom_booking_url",
     "resolve_calcom_event_type_id",
     "store_calcom_credentials",
-    "store_followupboss_credentials",
     "upsert_workspace_integration_credentials",
     "verify_calcom_api_key",
 ]

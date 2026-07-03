@@ -141,7 +141,6 @@ async def realtor_onboard(
                 calcom_api_key=request.calcom_api_key,
                 calcom_event_type_id=request.calcom_event_type_id,
                 area_code=request.area_code,
-                fub_api_key=request.fub_api_key,
             ),
         )
     except OnboardingServiceError as exc:

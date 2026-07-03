@@ -305,7 +305,7 @@ def _validate_startup_config() -> None:
         value=settings.encryption_key,
         failure_detail=(
             "Used to encrypt tenant third-party credentials (Telnyx, OpenAI, "
-            "FUB, Stripe). Leaving this default would expose every tenant's "
+            "Stripe). Leaving this default would expose every tenant's "
             "credentials if the database were dumped."
         ),
     )

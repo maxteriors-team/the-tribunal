@@ -9,7 +9,6 @@ import {
   Key,
   Loader2,
   Send as SendIcon,
-  Users,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -39,8 +38,7 @@ type IntegrationType =
   | "telnyx"
   | "openai"
   | "resend"
-  | "lob"
-  | "followupboss";
+  | "lob";
 
 function getIntegrationIcon(type: string) {
   switch (type) {
@@ -52,8 +50,6 @@ function getIntegrationIcon(type: string) {
       return Mail;
     case "lob":
       return SendIcon;
-    case "followupboss":
-      return Users;
     default:
       return Webhook;
   }
@@ -69,8 +65,6 @@ function getIntegrationColor(type: string) {
       return "text-black bg-neutral-100";
     case "lob":
       return "text-amber-600 bg-amber-100";
-    case "followupboss":
-      return "text-blue-600 bg-blue-100";
     default:
       return "text-primary bg-primary/10";
   }

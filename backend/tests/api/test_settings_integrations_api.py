@@ -81,18 +81,15 @@ async def auth_client(mock_db: AsyncMock) -> AsyncIterator[AsyncClient]:
         yield ac
 
 
-async def test_integrations_list_includes_followupboss(auth_client: AsyncClient) -> None:
+async def test_integrations_list_excludes_followupboss(auth_client: AsyncClient) -> None:
+    """FUB was removed from the catalog — a home-service CRM has no realtor lead sync."""
     resp = await auth_client.get(f"/api/v1/workspaces/{WS_ID}/integrations")
     assert resp.status_code == 200
 
     integrations = resp.json()["integrations"]
     by_type = {i["integration_type"]: i for i in integrations}
 
-    assert "followupboss" in by_type, "Follow Up Boss must be a known integration"
-    fub = by_type["followupboss"]
-    assert fub["display_name"] == "Follow Up Boss"
-    assert fub["description"] == "Lead CRM sync"
-    assert fub["is_connected"] is False
+    assert "followupboss" not in by_type
 
 
 def _credentials_app(mock_db: AsyncMock) -> FastAPI:

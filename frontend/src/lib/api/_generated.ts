@@ -765,46 +765,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/realtor/fub-contacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Fub Contacts
-         * @description Fetch contacts from Follow Up Boss using stored credentials.
-         */
-        get: operations["get_fub_contacts_api_v1_realtor_fub_contacts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/import-fub-contacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import Fub Contacts
-         * @description Import contacts from Follow Up Boss into the CRM.
-         */
-        post: operations["import_fub_contacts_api_v1_realtor_import_fub_contacts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/realtor/onboard": {
         parameters: {
             query?: never;
@@ -859,26 +819,6 @@ export interface paths {
         get: operations["verify_calcom_api_v1_realtor_verify_calcom_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/verify-fub": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Verify Fub
-         * @description Verify a Follow Up Boss API key by calling the /me endpoint.
-         */
-        post: operations["verify_fub_api_v1_realtor_verify_fub_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9856,21 +9796,6 @@ export interface components {
              */
             source: string;
         };
-        /** Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post */
-        Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post: {
-            /** Contact Ids */
-            contact_ids?: number[] | null;
-            /**
-             * Import All
-             * @default false
-             */
-            import_all: boolean;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
         /** Body_login_api_v1_auth_login_post */
         Body_login_api_v1_auth_login_post: {
             /** Client Id */
@@ -9899,11 +9824,6 @@ export interface components {
         Body_preview_import_csv_api_v1_workspaces__workspace_id__contacts_import_preview_post: {
             /** File */
             file: string;
-        };
-        /** Body_verify_fub_api_v1_realtor_verify_fub_post */
-        Body_verify_fub_api_v1_realtor_verify_fub_post: {
-            /** Api Key */
-            api_key: string;
         };
         /**
          * BookableStaffCreate
@@ -12853,69 +12773,6 @@ export interface components {
             contact_ids: number[];
         };
         /**
-         * FUBContact
-         * @description A contact from Follow Up Boss.
-         */
-        FUBContact: {
-            /** Email */
-            email?: string | null;
-            /** First Name */
-            first_name?: string | null;
-            /** Id */
-            id: number;
-            /** Last Activity */
-            last_activity?: string | null;
-            /** Last Name */
-            last_name?: string | null;
-            /** Phone */
-            phone?: string | null;
-            /** Source */
-            source?: string | null;
-            /** Stage */
-            stage?: string | null;
-            /**
-             * Tags
-             * @default []
-             */
-            tags: string[];
-        };
-        /**
-         * FUBImportResponse
-         * @description Result of importing FUB contacts.
-         */
-        FUBImportResponse: {
-            /** Failed */
-            failed: number;
-            /** Imported */
-            imported: number;
-            /** Skipped */
-            skipped: number;
-        };
-        /**
-         * FUBPeopleResponse
-         * @description Paginated list of FUB contacts.
-         */
-        FUBPeopleResponse: {
-            /** Contacts */
-            contacts: components["schemas"]["FUBContact"][];
-            /** Has More */
-            has_more: boolean;
-            /** Total */
-            total: number;
-        };
-        /**
-         * FUBVerifyResponse
-         * @description Result of verifying a FUB API key.
-         */
-        FUBVerifyResponse: {
-            /** Email */
-            email?: string | null;
-            /** Name */
-            name?: string | null;
-            /** Valid */
-            valid: boolean;
-        };
-        /**
          * FilterDefinition
          * @description Definition of a filter set.
          */
@@ -13677,7 +13534,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "followupboss" | "meta_ad_library" | "google_ads_transparency";
+            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency";
             /**
              * Is Active
              * @default true
@@ -19322,11 +19179,6 @@ export interface components {
              * @description Cal.com event type ID
              */
             calcom_event_type_id: number;
-            /**
-             * Fub Api Key
-             * @description Optional Follow Up Boss API key
-             */
-            fub_api_key?: string | null;
         };
         /**
          * RealtorOnboardResponse
@@ -23515,72 +23367,6 @@ export interface operations {
             };
         };
     };
-    get_fub_contacts_api_v1_realtor_fub_contacts_get: {
-        parameters: {
-            query: {
-                workspace_id: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FUBPeopleResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    import_fub_contacts_api_v1_realtor_import_fub_contacts_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Body_import_fub_contacts_api_v1_realtor_import_fub_contacts_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FUBImportResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     realtor_onboard_api_v1_realtor_onboard_post: {
         parameters: {
             query?: never;
@@ -23666,39 +23452,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VerifyCalcomResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    verify_fub_api_v1_realtor_verify_fub_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Body_verify_fub_api_v1_realtor_verify_fub_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FUBVerifyResponse"];
                 };
             };
             /** @description Validation Error */

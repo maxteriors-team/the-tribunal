@@ -1,26 +1,15 @@
 "use client";
 
-import {
-  CheckCircle2,
-  Database,
-  FileSpreadsheet,
-  Loader2,
-  Phone,
-  Users,
-} from "lucide-react";
-import { useCallback, useId, useState } from "react";
+import { CheckCircle2, FileSpreadsheet, Phone } from "lucide-react";
+import { useCallback, useId } from "react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
 
 import { FileDropzone } from "@/components/shared/file-dropzone";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { importFubContacts } from "@/lib/api/realtor";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
-import { useWorkspace } from "@/providers/workspace-provider";
 
 import type { OnboardingFormValues } from "../_state";
 
@@ -28,19 +17,9 @@ import { useOnboardingExtras } from "./onboarding-context";
 
 export function LeadsStep() {
   const form = useFormContext<OnboardingFormValues>();
-  const { currentWorkspaceId } = useWorkspace();
-  const {
-    csvFile,
-    csvRowCount,
-    setCsvFile,
-    fubConnected,
-    fubImportCount,
-    setFubImportCount,
-    leadsError,
-    setLeadsError,
-  } = useOnboardingExtras();
+  const { csvFile, csvRowCount, setCsvFile, leadsError } =
+    useOnboardingExtras();
 
-  const [fubImporting, setFubImporting] = useState(false);
   const areaCodeId = useId();
 
   const processFile = useCallback(
@@ -57,26 +36,6 @@ export function LeadsStep() {
     [setCsvFile]
   );
 
-  const handleFubImport = useCallback(async () => {
-    if (!currentWorkspaceId) {
-      toast.error("No workspace found. Please log in again.");
-      return;
-    }
-    setFubImporting(true);
-    try {
-      const result = await importFubContacts(currentWorkspaceId, true);
-      setFubImportCount(result.imported);
-      setLeadsError(null);
-      toast.success(
-        `Imported ${formatNumber(result.imported)} leads from Follow Up Boss`
-      );
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to import leads."));
-    } finally {
-      setFubImporting(false);
-    }
-  }, [currentWorkspaceId, setFubImportCount, setLeadsError]);
-
   const areaCode = form.watch("area_code");
 
   return (
@@ -88,59 +47,19 @@ export function LeadsStep() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card
-          className={`relative overflow-hidden ${!fubConnected ? "opacity-50" : ""}`}
-        >
-          <CardContent className="p-5 flex flex-col items-center text-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
-              <Database className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Pull from Follow Up Boss</p>
-              {fubImportCount !== null && (
-                <p className="text-xs text-green-600 mt-1">
-                  {formatNumber(fubImportCount)} lead
-                  {fubImportCount !== 1 ? "s" : ""} imported
-                </p>
-              )}
-              {!fubConnected && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Connect Follow Up Boss in Step 1 first
-                </p>
-              )}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!fubConnected || fubImporting}
-              onClick={handleFubImport}
-            >
-              {fubImporting ? (
-                <Loader2 className="size-4 mr-2 animate-spin" />
-              ) : (
-                <Users className="size-4 mr-2" />
-              )}
-              Import All Leads
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden">
-          <CardContent className="p-5 flex flex-col items-center text-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
-              <FileSpreadsheet className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm">Upload CSV</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Drag and drop or click to browse
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="relative overflow-hidden">
+        <CardContent className="p-5 flex flex-col items-center text-center gap-3">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
+            <FileSpreadsheet className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm">Upload CSV</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Drag and drop or click to browse
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <FileDropzone
         accept=".csv"

@@ -62,7 +62,6 @@ from app.api.v1 import (
     voice_campaigns,
     workspaces,
 )
-from app.api.v1.integrations import followupboss as fub_integration
 from app.api.v1.integrations import openai_oauth as openai_oauth_integration
 from app.api.v1.onboarding import realtor_setup
 
@@ -404,11 +403,6 @@ api_router.include_router(
     realtor_setup.router,
     prefix="/realtor",
     tags=["Realtor Onboarding"],
-)
-api_router.include_router(
-    fub_integration.router,
-    prefix="/realtor",
-    tags=["Follow Up Boss"],
 )
 api_router.include_router(
     realtor_setup.workspace_router,

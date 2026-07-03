@@ -18,11 +18,6 @@ class RealtorOnboardRequest(BaseModel):
         pattern=r"^\d{3}$",
         description="Optional 3-digit US area code for phone number provisioning",
     )
-    fub_api_key: str | None = Field(
-        None,
-        min_length=1,
-        description="Optional Follow Up Boss API key",
-    )
 
 
 class RealtorOnboardResponse(BaseModel):

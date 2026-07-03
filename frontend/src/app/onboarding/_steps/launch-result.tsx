@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatNumber } from "@/lib/utils/number";
 
 export interface OnboardingLaunchSummary {
-  source: "csv" | "fub";
+  source: "csv";
   imported: number;
   skipped: number;
   failed: number;

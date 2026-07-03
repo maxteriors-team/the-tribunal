@@ -16,7 +16,6 @@ from app.models.workspace import WorkspaceIntegration
 logger = structlog.get_logger()
 
 CALCOM_INTEGRATION_TYPE = "calcom"
-FOLLOWUPBOSS_INTEGRATION_TYPE = "followupboss"
 
 
 async def upsert_workspace_integration_credentials(
@@ -61,20 +60,6 @@ async def store_calcom_credentials(
         db=db,
         workspace_id=workspace_id,
         integration_type=CALCOM_INTEGRATION_TYPE,
-        credentials={"api_key": api_key},
-    )
-
-
-async def store_followupboss_credentials(
-    db: AsyncSession,
-    workspace_id: uuid.UUID,
-    api_key: str,
-) -> WorkspaceIntegration:
-    """Store or update the Follow Up Boss API key for a workspace."""
-    return await upsert_workspace_integration_credentials(
-        db=db,
-        workspace_id=workspace_id,
-        integration_type=FOLLOWUPBOSS_INTEGRATION_TYPE,
         credentials={"api_key": api_key},
     )
 

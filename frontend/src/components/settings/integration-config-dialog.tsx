@@ -40,8 +40,7 @@ type IntegrationType =
   | "telnyx"
   | "openai"
   | "resend"
-  | "lob"
-  | "followupboss";
+  | "lob";
 
 interface IntegrationConfig {
   name: string;
@@ -184,20 +183,6 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
         label: "API Key",
         placeholder: "test_...",
         description: "Find in Lob Dashboard > Settings > API Keys",
-        required: true,
-        type: "password",
-      },
-    ],
-  },
-  followupboss: {
-    name: "Follow Up Boss",
-    description: "Sync leads from your Follow Up Boss CRM",
-    fields: [
-      {
-        key: "api_key",
-        label: "API Key",
-        placeholder: "fub_api_...",
-        description: "Find this in Follow Up Boss under Admin > API",
         required: true,
         type: "password",
       },

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { Calendar, Database, Rocket, Upload } from "lucide-react";
+import { Calendar, Rocket, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
@@ -29,7 +29,6 @@ import {
   type OnboardingStepId,
 } from "./_state";
 import { CalcomStep } from "./_steps/calcom-step";
-import { FubStep } from "./_steps/fub-step";
 import {
   LaunchResultView,
   type OnboardingLaunchSummary,
@@ -42,7 +41,6 @@ import {
 import { ReviewStep } from "./_steps/review-step";
 
 const STEPS = [
-  { id: "fub", label: "Connect CRM", icon: Database },
   { id: "calcom", label: "Calendar", icon: Calendar },
   { id: "leads", label: "Import Leads", icon: Upload },
   { id: "review", label: "Review & Launch", icon: Rocket },
@@ -61,7 +59,7 @@ function OnboardingFlow() {
   });
 
   const [currentStepId, setCurrentStepId] =
-    useState<OnboardingStepId>("fub");
+    useState<OnboardingStepId>("calcom");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [launchSummary, setLaunchSummary] =
     useState<OnboardingLaunchSummary | null>(null);
@@ -98,7 +96,7 @@ function OnboardingFlow() {
   /**
    * Validate the step the user is about to leave. Returns true when the
    * user may advance. Form fields go through RHF/zod; the leads step has
-   * a non-form invariant (csv OR fub import) we check by hand.
+   * a non-form invariant (csv upload) we check by hand.
    */
   const canLeaveStep = useCallback(
     async (stepId: OnboardingStepId): Promise<boolean> => {
@@ -108,10 +106,8 @@ function OnboardingFlow() {
         if (!ok) return false;
       }
       if (stepId === "leads") {
-        if (!extras.csvFile && extras.fubImportCount === null) {
-          extras.setLeadsError(
-            "Import leads from Follow Up Boss or upload a CSV file."
-          );
+        if (!extras.csvFile) {
+          extras.setLeadsError("Upload a CSV file of your customers.");
           return false;
         }
         extras.setLeadsError(null);
@@ -148,7 +144,7 @@ function OnboardingFlow() {
       toast.error("No workspace found. Please log in again.");
       return;
     }
-    if (!extras.csvFile && extras.fubImportCount === null) {
+    if (!extras.csvFile) {
       toast.error("Please import leads first.");
       return;
     }
@@ -194,32 +190,21 @@ function OnboardingFlow() {
         return;
       }
 
-      let summary: OnboardingLaunchSummary;
-      if (extras.csvFile) {
-        const result = await createCampaignFromCsv(
-          currentWorkspaceId,
-          extras.csvFile,
-          {
-            skipDuplicates: true,
-            areaCode: values.area_code || undefined,
-          }
-        );
-        summary = {
-          source: "csv",
-          imported: result.contacts_imported,
-          skipped: result.contacts_skipped,
-          failed: result.contacts_failed,
-          estimated: extras.csvRowCount,
-        };
-      } else {
-        summary = {
-          source: "fub",
-          imported: extras.fubImportCount ?? 0,
-          skipped: 0,
-          failed: 0,
-          estimated: extras.fubImportCount,
-        };
-      }
+      const result = await createCampaignFromCsv(
+        currentWorkspaceId,
+        extras.csvFile,
+        {
+          skipDuplicates: true,
+          areaCode: values.area_code || undefined,
+        }
+      );
+      const summary: OnboardingLaunchSummary = {
+        source: "csv",
+        imported: result.contacts_imported,
+        skipped: result.contacts_skipped,
+        failed: result.contacts_failed,
+        estimated: extras.csvRowCount,
+      };
 
       // Show the real import result instead of a blind "all good" toast +
       // redirect, so silent data loss (e.g. failed rows) is visible (RF-007).
@@ -260,7 +245,6 @@ function OnboardingFlow() {
     currentWorkspaceId,
     extras.csvFile,
     extras.csvRowCount,
-    extras.fubImportCount,
     form,
     queryClient,
     showPhoneWarning,
@@ -307,7 +291,6 @@ function OnboardingFlow() {
             submittingLabel="Launching..."
             submitIcon={Rocket}
           >
-            {currentStepId === "fub" && <FubStep />}
             {currentStepId === "calcom" && <CalcomStep />}
             {currentStepId === "leads" && <LeadsStep />}
             {currentStepId === "review" && (

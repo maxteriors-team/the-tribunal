@@ -1,8 +1,7 @@
 """Integration endpoint package.
 
 Exposes the credential-management router as ``router`` for backward
-compatibility with existing imports, plus per-provider sub-routers
-(e.g. Follow Up Boss) as submodules.
+compatibility with existing imports.
 """
 
 from app.api.v1.integrations.credentials import router

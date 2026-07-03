@@ -183,7 +183,6 @@ async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phon
         _ExecuteResult(membership),
         _ExecuteResult(workspace),
         _ExecuteResult(None),
-        _ExecuteResult(None),
     ]
     available_number = PhoneNumberInfo(id="", phone_number="+15555550123")
     purchased_number = PhoneNumberInfo(id="telnyx-123", phone_number="+15555550123")
@@ -196,7 +195,6 @@ async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phon
             calcom_api_key="cal_key",
             calcom_event_type_id=123,
             area_code="512",
-            fub_api_key="fub_key",
         ),
         telnyx_api_key="telnyx_key",
         telnyx_service_factory=lambda api_key: telnyx,
@@ -210,7 +208,7 @@ async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phon
     assert telnyx.search_calls == [{"country": "US", "area_code": "512", "limit": 5}]
     assert telnyx.purchase_calls == ["+15555550123"]
     assert telnyx.closed is True
-    assert db.add.call_count == 4
+    assert db.add.call_count == 3
     added_types = [type(call.args[0]) for call in db.add.call_args_list]
     assert Agent in added_types
     assert PhoneNumber in added_types

@@ -1,7 +1,7 @@
 """Auto-create a default realtor drip campaign for freshly imported contacts.
 
-Extracted from ``app/api/v1/realtor.py`` so both the CSV upload flow and the
-Follow Up Boss import flow can share the same helper.
+Extracted from ``app/api/v1/realtor.py`` so the CSV upload flow (and any
+future import flows) can share the same helper.
 """
 
 import uuid

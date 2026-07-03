@@ -23,10 +23,7 @@ from app.services.agents.realtor_template import (
     get_realtor_campaign_defaults,
 )
 from app.services.contacts import ContactImportService, ImportResult
-from app.services.onboarding.credentials import (
-    store_calcom_credentials,
-    store_followupboss_credentials,
-)
+from app.services.onboarding.credentials import store_calcom_credentials
 from app.services.onboarding.exceptions import OnboardingValidationError, OnboardingWorkspaceError
 from app.services.reactivation.drip_bootstrap import auto_create_drip_for_imports
 from app.services.telephony.telnyx import PhoneNumberInfo, TelnyxSMSService
@@ -43,7 +40,6 @@ class RealtorOnboardingInput:
     calcom_api_key: str
     calcom_event_type_id: int
     area_code: str | None = None
-    fub_api_key: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -160,14 +156,6 @@ async def complete_realtor_onboarding(
         workspace_id=str(workspace_id),
         user_id=current_user_id,
     )
-
-    if request.fub_api_key:
-        await store_followupboss_credentials(db, workspace_id, request.fub_api_key)
-        logger.info(
-            "fub_integration_stored",
-            workspace_id=str(workspace_id),
-            user_id=current_user_id,
-        )
 
     phone = await provision_realtor_phone_number(
         db=db,

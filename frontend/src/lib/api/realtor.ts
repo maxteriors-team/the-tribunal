@@ -48,55 +48,7 @@ export interface RealtorStats {
   appointments_booked: number;
 }
 
-export interface VerifyFubResponse {
-  valid: boolean;
-  name?: string;
-}
-
-export interface FubContact {
-  id: number;
-  name: string;
-  email?: string;
-  phone?: string;
-}
-
-export interface FubContactsResponse {
-  contacts: FubContact[];
-  total: number;
-}
-
-export interface ImportFubContactsResponse {
-  imported: number;
-  message: string;
-}
-
 // ---- API Functions ----
-
-export function verifyFub(apiKey: string): Promise<VerifyFubResponse> {
-  return apiPost<VerifyFubResponse>("/api/v1/realtor/verify-fub", { api_key: apiKey });
-}
-
-export function getFubContacts(
-  workspaceId: string,
-  limit = 100,
-  offset = 0
-): Promise<FubContactsResponse> {
-  return apiGet<FubContactsResponse>("/api/v1/realtor/fub-contacts", {
-    params: { workspace_id: workspaceId, limit, offset },
-  });
-}
-
-export function importFubContacts(
-  workspaceId: string,
-  importAll: boolean,
-  contactIds?: number[]
-): Promise<ImportFubContactsResponse> {
-  return apiPost<ImportFubContactsResponse>("/api/v1/realtor/import-fub-contacts", {
-    workspace_id: workspaceId,
-    import_all: importAll,
-    contact_ids: contactIds,
-  });
-}
 
 export function getRealtorStats(workspaceId: string): Promise<RealtorStats> {
   return apiGet<RealtorStats>(`/api/v1/workspaces/${workspaceId}/realtor/stats`);

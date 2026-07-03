@@ -111,11 +111,6 @@ KNOWN_INTEGRATIONS = [
         "display_name": "Lob",
         "description": "Physical card & postcard mailing",
     },
-    {
-        "integration_type": "followupboss",
-        "display_name": "Follow Up Boss",
-        "description": "Lead CRM sync",
-    },
 ]
 
 
