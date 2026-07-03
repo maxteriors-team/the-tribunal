@@ -18,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.redirects import router as redirects_router
@@ -167,6 +168,90 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+# Path prefix served to arbitrary third-party customer websites. Kept as a
+# module constant so the middleware below and its tests agree on the scope.
+PUBLIC_LEAD_FORM_PATH_PREFIX = "/api/v1/p/leads/"
+
+
+class PublicLeadFormCORSMiddleware:
+    """Reflect any Origin — without credentials — on the public lead-form API.
+
+    ``/api/v1/p/leads/*`` is the one surface embedded on customers' own
+    websites (quote funnels, WordPress forms), so the browser origin is a
+    customer domain we can't enumerate in ``settings.cors_origins``. The
+    app-wide ``CORSMiddleware`` only trusts the CRM frontend, which made
+    third-party preflights fail with 400 before the endpoint's real gate —
+    the per-lead-source ``allowed_domains`` check — ever ran.
+
+    Reflecting arbitrary origins is safe *for this path only* because:
+
+    * ``Access-Control-Allow-Credentials`` is never sent, so cookie-authed
+      responses stay unreadable cross-origin — this grants strictly less
+      than adding a domain to ``settings.cors_origins`` (which is
+      credentialed) would.
+    * Write enforcement is server-side: submissions from origins outside the
+      lead source's ``allowed_domains`` get a 403 regardless of CORS, and
+      non-browser clients (curl) never honored CORS anyway.
+    * Responses carry no secrets — a submit acknowledgement, the
+      speed-to-lead proof numbers, or an error envelope.
+
+    Runs outermost (added after ``CORSMiddleware``) so it can answer
+    preflights the stricter app-wide policy would reject; everything outside
+    the lead-form prefix falls through untouched.
+    """
+
+    _PREFLIGHT_HEADERS = {
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not scope["path"].startswith(PUBLIC_LEAD_FORM_PATH_PREFIX):
+            await self.app(scope, receive, send)
+            return
+
+        origin = Headers(scope=scope).get("origin")
+        if not origin:
+            # Same-origin or non-browser traffic — CORS doesn't apply.
+            await self.app(scope, receive, send)
+            return
+
+        request_headers = Headers(scope=scope)
+        if scope["method"] == "OPTIONS" and "access-control-request-method" in request_headers:
+            # Answer the preflight ourselves; the inner CORSMiddleware would
+            # 400 any origin that isn't the CRM frontend.
+            response = PlainTextResponse(
+                "OK",
+                status_code=200,
+                headers={"Access-Control-Allow-Origin": origin, **self._PREFLIGHT_HEADERS},
+            )
+            await response(scope, receive, send)
+            return
+
+        async def send_with_cors(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", [])
+                headers = MutableHeaders(scope=message)
+                # The inner CORSMiddleware already stamped allowlisted origins
+                # (e.g. the CRM frontend itself); don't double-stamp those.
+                if "access-control-allow-origin" not in headers:
+                    headers["Access-Control-Allow-Origin"] = origin
+                    headers.append("Vary", "Origin")
+                    # The inner middleware adds this on *every* response when
+                    # configured with allow_credentials=True — even for origins
+                    # it rejected. Reflected origin + allow-credentials is the
+                    # one combination this middleware must never emit.
+                    del headers["Access-Control-Allow-Credentials"]
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
 
 
 # Minimum key material size in bytes. A 256-bit (32-byte) key is the recommended
@@ -501,6 +586,11 @@ else:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=_ALLOWED_REQUEST_HEADERS,
     )
+
+# Public lead-form CORS — added after (= outermost of) CORSMiddleware so
+# third-party customer sites pass preflight on /api/v1/p/leads/* without being
+# granted the credentialed app-wide CORS policy. See the class docstring.
+app.add_middleware(PublicLeadFormCORSMiddleware)
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
