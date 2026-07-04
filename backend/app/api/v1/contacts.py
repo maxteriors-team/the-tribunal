@@ -179,6 +179,20 @@ async def create_contact(
     attribution_fields = contact_in.model_dump(
         include=set(LeadAttributionFields.model_fields), exclude_none=True
     )
+    # Mailing address + avatar are accepted by the schema but aren't named
+    # params on the service; forward them like attribution_fields, or they'd
+    # be silently dropped on create (update never dropped them).
+    profile_fields = contact_in.model_dump(
+        include={
+            "avatar_url",
+            "address_line1",
+            "address_line2",
+            "address_city",
+            "address_state",
+            "address_zip",
+        },
+        exclude_none=True,
+    )
     return await service.create_contact(
         workspace_id=workspace_id,
         first_name=contact_in.first_name,
@@ -192,6 +206,7 @@ async def create_contact(
         source=contact_in.source,
         important_dates=contact_in.important_dates,
         attribution_fields=attribution_fields,
+        profile_fields=profile_fields,
     )
 
 
