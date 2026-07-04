@@ -158,6 +158,12 @@ describe("queryKeys factory composition", () => {
       "timeline",
       { limit: 25 },
     ]);
+    expect(queryKeys.contacts.companycamPhotos("ws_1", 7)).toEqual([
+      "contacts",
+      "ws_1",
+      7,
+      "companycam-photos",
+    ]);
   });
 
   it("nests job costing sub-resources under the job detail key", () => {
