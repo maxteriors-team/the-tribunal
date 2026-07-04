@@ -111,6 +111,11 @@ KNOWN_INTEGRATIONS = [
         "display_name": "Lob",
         "description": "Physical card & postcard mailing",
     },
+    {
+        "integration_type": "companycam",
+        "display_name": "CompanyCam",
+        "description": "Job photos attached to your contacts",
+    },
 ]
 
 

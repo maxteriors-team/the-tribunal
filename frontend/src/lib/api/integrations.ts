@@ -11,7 +11,8 @@ export interface IntegrationWithMaskedCredentials {
     | "openai"
     | "sendgrid"
     | "resend"
-    | "lob";
+    | "lob"
+    | "companycam";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -25,7 +26,8 @@ export interface CreateIntegrationRequest {
     | "openai"
     | "sendgrid"
     | "resend"
-    | "lob";
+    | "lob"
+    | "companycam";
   credentials: Record<string, string>;
   is_active?: boolean;
 }

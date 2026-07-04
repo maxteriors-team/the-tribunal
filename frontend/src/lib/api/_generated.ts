@@ -3088,6 +3088,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/companycam-photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact Companycam Photos
+         * @description Return CompanyCam projects + recent photos matched to a contact.
+         */
+        get: operations["get_contact_companycam_photos_api_v1_workspaces__workspace_id__contacts__contact_id__companycam_photos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/engagement-summary": {
         parameters: {
             query?: never;
@@ -11433,6 +11453,40 @@ export interface components {
             rate: number;
         };
         /**
+         * CompanyCamPhoto
+         * @description One photo, reduced to what the sidebar gallery renders.
+         */
+        CompanyCamPhoto: {
+            /** Captured At */
+            captured_at?: number | null;
+            /** Creator Name */
+            creator_name?: string | null;
+            /** Id */
+            id: string;
+            /** Thumbnail Url */
+            thumbnail_url: string;
+            /** Web Url */
+            web_url: string;
+        };
+        /**
+         * CompanyCamProjectPhotos
+         * @description A matched CompanyCam project and its recent photos.
+         */
+        CompanyCamProjectPhotos: {
+            /** Address */
+            address?: string | null;
+            /** Photo Count */
+            photo_count: number;
+            /** Photos */
+            photos: components["schemas"]["CompanyCamPhoto"][];
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Project Url */
+            project_url: string;
+        };
+        /**
          * ContactAgentAssignRequest
          * @description Request schema for assigning an AI agent to a contact conversation.
          */
@@ -11454,6 +11508,16 @@ export interface components {
              * Format: uuid
              */
             conversation_id: string;
+        };
+        /**
+         * ContactCompanyCamPhotosResponse
+         * @description All CompanyCam projects matched to one CRM contact.
+         */
+        ContactCompanyCamPhotosResponse: {
+            /** Connected */
+            connected: boolean;
+            /** Projects */
+            projects: components["schemas"]["CompanyCamProjectPhotos"][];
         };
         /**
          * ContactCreate
@@ -13534,7 +13598,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency";
+            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency" | "companycam";
             /**
              * Is Active
              * @default true
@@ -28341,6 +28405,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIToggleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contact_companycam_photos_api_v1_workspaces__workspace_id__contacts__contact_id__companycam_photos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactCompanyCamPhotosResponse"];
                 };
             };
             /** @description Validation Error */

@@ -5,6 +5,7 @@ import {
   Phone,
   Mail,
   Calendar,
+  Camera,
   Webhook,
   Key,
   Loader2,
@@ -38,7 +39,8 @@ type IntegrationType =
   | "telnyx"
   | "openai"
   | "resend"
-  | "lob";
+  | "lob"
+  | "companycam";
 
 function getIntegrationIcon(type: string) {
   switch (type) {
@@ -50,6 +52,8 @@ function getIntegrationIcon(type: string) {
       return Mail;
     case "lob":
       return SendIcon;
+    case "companycam":
+      return Camera;
     default:
       return Webhook;
   }
@@ -65,6 +69,8 @@ function getIntegrationColor(type: string) {
       return "text-black bg-neutral-100";
     case "lob":
       return "text-amber-600 bg-amber-100";
+    case "companycam":
+      return "text-sky-600 bg-sky-100";
     default:
       return "text-primary bg-primary/10";
   }

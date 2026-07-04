@@ -242,6 +242,8 @@ export const queryKeys = {
       [...contacts.all(workspaceId), "search", term] as const,
     aiState: (workspaceId: string, contactId: number | string) =>
       [...contacts.detail(workspaceId, contactId), "ai-state"] as const,
+    companycamPhotos: (workspaceId: string, contactId: number | string) =>
+      [...contacts.detail(workspaceId, contactId), "companycam-photos"] as const,
     timeline: (
       workspaceId: string,
       contactId: number | string | null | undefined,

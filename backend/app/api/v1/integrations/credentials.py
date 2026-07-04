@@ -370,6 +370,34 @@ async def _test_resend(client: httpx.AsyncClient, api_key: str) -> IntegrationTe
     )
 
 
+async def _test_companycam(client: httpx.AsyncClient, api_key: str) -> IntegrationTestResult:
+    """Test CompanyCam API connection."""
+    response = await client.get(
+        "https://api.companycam.com/v2/users/current",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            name = " ".join(
+                p for p in (data.get("first_name"), data.get("last_name")) if p
+            )
+            return IntegrationTestResult(
+                success=True,
+                message="Successfully connected to CompanyCam",
+                details={"user": name or data.get("email_address")},
+            )
+        except (ValueError, TypeError):
+            return IntegrationTestResult(
+                success=False,
+                message="CompanyCam returned invalid JSON response",
+            )
+    return IntegrationTestResult(
+        success=False,
+        message=f"CompanyCam API returned status {response.status_code}",
+    )
+
+
 async def _test_meta_ad_library(
     client: httpx.AsyncClient,
     credentials: dict[str, Any],
@@ -446,6 +474,7 @@ _INTEGRATION_TESTERS = {
     "openai": _test_openai,
     "resend": _test_resend,
     "google_ads_transparency": _test_google_ads_transparency,
+    "companycam": _test_companycam,
 }
 
 # Integration types handled by a bespoke branch in ``test_integration`` because

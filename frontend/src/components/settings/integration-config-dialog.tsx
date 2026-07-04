@@ -40,7 +40,8 @@ type IntegrationType =
   | "telnyx"
   | "openai"
   | "resend"
-  | "lob";
+  | "lob"
+  | "companycam";
 
 interface IntegrationConfig {
   name: string;
@@ -183,6 +184,20 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
         label: "API Key",
         placeholder: "test_...",
         description: "Find in Lob Dashboard > Settings > API Keys",
+        required: true,
+        type: "password",
+      },
+    ],
+  },
+  companycam: {
+    name: "CompanyCam",
+    description: "Show job-site photos on the matching contact",
+    fields: [
+      {
+        key: "api_key",
+        label: "Access Token",
+        placeholder: "Paste your CompanyCam access token",
+        description: "CompanyCam web app > Company Settings > Integrations > Custom",
         required: true,
         type: "password",
       },

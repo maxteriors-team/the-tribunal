@@ -13,6 +13,7 @@ IntegrationType = Literal[
     "resend",
     "meta_ad_library",
     "google_ads_transparency",
+    "companycam",
 ]
 
 

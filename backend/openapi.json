@@ -8876,6 +8876,100 @@
         "title": "CommissionConfig",
         "type": "object"
       },
+      "CompanyCamPhoto": {
+        "description": "One photo, reduced to what the sidebar gallery renders.",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "creator_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creator Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "web_url": {
+            "title": "Web Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "thumbnail_url",
+          "web_url"
+        ],
+        "title": "CompanyCamPhoto",
+        "type": "object"
+      },
+      "CompanyCamProjectPhotos": {
+        "description": "A matched CompanyCam project and its recent photos.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "photo_count": {
+            "title": "Photo Count",
+            "type": "integer"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyCamPhoto"
+            },
+            "title": "Photos",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "project_url": {
+            "title": "Project Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "project_url",
+          "photo_count",
+          "photos"
+        ],
+        "title": "CompanyCamProjectPhotos",
+        "type": "object"
+      },
       "ContactAgentAssignRequest": {
         "description": "Request schema for assigning an AI agent to a contact conversation.",
         "properties": {
@@ -8929,6 +9023,28 @@
           "conversation_id"
         ],
         "title": "ContactAgentAssignResponse",
+        "type": "object"
+      },
+      "ContactCompanyCamPhotosResponse": {
+        "description": "All CompanyCam projects matched to one CRM contact.",
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyCamProjectPhotos"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connected",
+          "projects"
+        ],
+        "title": "ContactCompanyCamPhotosResponse",
         "type": "object"
       },
       "ContactCreate": {
@@ -14716,7 +14832,8 @@
               "openai",
               "resend",
               "meta_ad_library",
-              "google_ads_transparency"
+              "google_ads_transparency",
+              "companycam"
             ],
             "title": "Integration Type",
             "type": "string"
@@ -49586,6 +49703,64 @@
         "summary": "Toggle Contact Ai",
         "tags": [
           "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/companycam-photos": {
+      "get": {
+        "description": "Return CompanyCam projects + recent photos matched to a contact.",
+        "operationId": "get_contact_companycam_photos_api_v1_workspaces__workspace_id__contacts__contact_id__companycam_photos_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactCompanyCamPhotosResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Contact Companycam Photos",
+        "tags": [
+          "Integrations"
         ]
       }
     },
