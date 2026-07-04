@@ -41,7 +41,7 @@ The Tribunal is a proprietary AI-powered CRM command center for capturing leads,
 ## Runtime and deployment facts
 
 - Backend local services are defined in `backend/docker-compose.yml` using PostgreSQL 17 and Redis 7 with `aicrm` database/container names.
-- Frontend uses Node `20.18.0` from `frontend/.nvmrc`, `npm@10.9.0`, and deploys from `frontend/` on Vercel with `npm ci` + `npm run build`.
+- Frontend uses Node `24.18.0` from `frontend/.nvmrc`, `npm@10.9.0`, and deploys from `frontend/` on Vercel with `npm ci` + `npm run build`.
 - Backend deploys on Railway via `backend/railway.toml`; pre-deploy runs `alembic upgrade head`, start command runs `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*`, and healthcheck is `/readyz`.
 - Production contains live CRM/contact data. Test migrations locally first and back up data before schema changes that touch contact/lead tables.
 - Production URLs: backend `https://the-tribunal-api-production.up.railway.app` (Railway project `the-tribunal`, service `the-tribunal-api`), frontend `https://the-tribunal-two.vercel.app` (Vercel project `the-tribunal`, team `maxteriors`).

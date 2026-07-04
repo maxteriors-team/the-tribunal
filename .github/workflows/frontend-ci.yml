@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           nvmrc_version="$(tr -d '[:space:]' < frontend/.nvmrc)"
           nvmrc_major="${nvmrc_version%%.*}"
-          workflow_major="20"
+          workflow_major="24"
           echo "frontend/.nvmrc declares Node ${nvmrc_version} (major ${nvmrc_major})"
           echo "Workflow pins Node major ${workflow_major}"
           if [ "${nvmrc_major}" != "${workflow_major}" ]; then
@@ -49,7 +49,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -73,7 +73,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
