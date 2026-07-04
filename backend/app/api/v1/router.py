@@ -17,6 +17,7 @@ from app.api.v1 import (
     campaign_reports,
     campaigns,
     catalog,
+    contact_attachments,
     contacts,
     conversations,
     crm_assistant,
@@ -82,6 +83,11 @@ api_router.include_router(
 api_router.include_router(
     contacts.router,
     prefix="/workspaces/{workspace_id}/contacts",
+    tags=["Contacts"],
+)
+api_router.include_router(
+    contact_attachments.router,
+    prefix="/workspaces/{workspace_id}",
     tags=["Contacts"],
 )
 api_router.include_router(

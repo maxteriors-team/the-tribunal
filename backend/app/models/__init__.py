@@ -21,6 +21,7 @@ from app.models.campaign_number_pool import CampaignNumberPool
 from app.models.campaign_report import CampaignReport
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
+from app.models.contact_attachment import ContactAttachment
 from app.models.conversation import Conversation, Message
 from app.models.demo_request import DemoRequest
 from app.models.device_token import DeviceToken
@@ -147,6 +148,7 @@ __all__ = [
     "WorkspaceIntegration",
     "WorkspaceInvitation",
     "Contact",
+    "ContactAttachment",
     "Conversation",
     "Message",
     "DemoRequest",

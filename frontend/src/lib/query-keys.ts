@@ -244,6 +244,8 @@ export const queryKeys = {
       [...contacts.detail(workspaceId, contactId), "ai-state"] as const,
     companycamPhotos: (workspaceId: string, contactId: number | string) =>
       [...contacts.detail(workspaceId, contactId), "companycam-photos"] as const,
+    attachments: (workspaceId: string, contactId: number | string) =>
+      [...contacts.detail(workspaceId, contactId), "attachments"] as const,
     timeline: (
       workspaceId: string,
       contactId: number | string | null | undefined,

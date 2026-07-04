@@ -3088,6 +3088,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Contact Attachments
+         * @description List attachment metadata for a contact, newest first. Never loads bytes.
+         */
+        get: operations["list_contact_attachments_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_get"];
+        put?: never;
+        /**
+         * Upload Contact Attachment
+         * @description Attach an uploaded file to a contact (max 15 MB).
+         */
+        post: operations["upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Contact Attachment
+         * @description Remove an attachment from a contact.
+         */
+        delete: operations["delete_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/attachments/{attachment_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Contact Attachment
+         * @description Serve the attachment bytes (inline for safe types, download otherwise).
+         */
+        get: operations["download_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/companycam-photos": {
         parameters: {
             query?: never;
@@ -9845,6 +9909,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post */
+        Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /**
          * BookableStaffCreate
          * @description Schema for creating a bookable staff member.
@@ -11508,6 +11577,38 @@ export interface components {
              * Format: uuid
              */
             conversation_id: string;
+        };
+        /**
+         * ContactAttachmentListResponse
+         * @description All attachments on one contact, newest first.
+         */
+        ContactAttachmentListResponse: {
+            /** Attachments */
+            attachments: components["schemas"]["ContactAttachmentResponse"][];
+        };
+        /**
+         * ContactAttachmentResponse
+         * @description Attachment metadata — bytes are served by the download endpoint.
+         */
+        ContactAttachmentResponse: {
+            /** Contact Id */
+            contact_id: number;
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /**
          * ContactCompanyCamPhotosResponse
@@ -28405,6 +28506,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIToggleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contact_attachments_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAttachmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAttachmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments__attachment_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -164,6 +164,12 @@ describe("queryKeys factory composition", () => {
       7,
       "companycam-photos",
     ]);
+    expect(queryKeys.contacts.attachments("ws_1", 7)).toEqual([
+      "contacts",
+      "ws_1",
+      7,
+      "attachments",
+    ]);
   });
 
   it("nests job costing sub-resources under the job detail key", () => {
