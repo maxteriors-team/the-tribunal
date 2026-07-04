@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone, Mail, Building2 } from "lucide-react";
+import { Phone, Mail, Building2, MapPin } from "lucide-react";
 
 import { InfoRow } from "@/components/contacts/contact-sidebar/info-row";
 import { TagBadge } from "@/components/tags/tag-badge";
@@ -24,6 +24,17 @@ export function ContactInfoSection({ contact }: ContactInfoSectionProps) {
 
   const hasTagObjects = !!contact.tag_objects && contact.tag_objects.length > 0;
   const hasStringTags = !hasTagObjects && tags.length > 0;
+
+  // "line1, line2, City, ST 12345" — skip whatever's missing.
+  const cityStateZip = [
+    contact.address_city,
+    [contact.address_state, contact.address_zip].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const address = [contact.address_line1, contact.address_line2, cityStateZip]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <>
@@ -49,6 +60,19 @@ export function ContactInfoSection({ contact }: ContactInfoSectionProps) {
           icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
           label="Company"
           value={contact.company_name}
+        />
+        <InfoRow
+          icon={<MapPin className="h-4 w-4 text-muted-foreground" />}
+          label="Address"
+          value={address || null}
+          onClick={() =>
+            address &&
+            window.open(
+              `https://maps.google.com/?q=${encodeURIComponent(address)}`,
+              "_blank",
+              "noopener,noreferrer"
+            )
+          }
         />
       </div>
 
