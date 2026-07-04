@@ -143,7 +143,9 @@ async def upload_contact_attachment(
     """Attach an uploaded file to a contact (max 15 MB)."""
     await _get_contact(db, workspace.id, contact_id)
 
-    data = await file.read()
+    # Capped read: buffer at most limit+1 bytes no matter how large the
+    # client's upload is — one extra byte is enough to detect "too big".
+    data = await file.read(MAX_ATTACHMENT_BYTES + 1)
     if len(data) == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
