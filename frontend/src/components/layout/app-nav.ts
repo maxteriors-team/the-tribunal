@@ -141,7 +141,7 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
-    title: "Sales Wizard",
+    title: "LL Design",
     url: "/sales-wizard",
     icon: Wand2,
     sidebar: true,
