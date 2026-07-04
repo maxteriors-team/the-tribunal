@@ -344,6 +344,10 @@ class LeadSubmitRequest(BaseModel):
     email: EmailStr | None = None
     phone_number: str = Field(..., min_length=10, max_length=20)
     company_name: str | None = Field(None, max_length=255)
+    # Free-form property/mailing address as typed on the customer's website
+    # ("14040 Pernell Dr, Sterling Heights, MI 48313"). Parsed server-side
+    # into the contact's structured address columns; never dropped.
+    address: str | None = Field(None, max_length=500)
     notes: str | None = None
     source_detail: str | None = Field(None, max_length=200)
     lead_source_campaign_id: uuid.UUID | None = None

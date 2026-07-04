@@ -24,6 +24,7 @@ from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
 from app.schemas.speed_to_lead import SpeedToLeadProofResponse
+from app.services.contacts.address_parsing import parse_us_address
 from app.services.idempotency import derive_outbound_key
 from app.services.lead_sources.attribution_service import (
     WebAttributionInput,
@@ -391,6 +392,75 @@ async def get_lead_form_proof(
     )
 
 
+def _upsert_contact_from_lead(
+    db: DB,
+    lead_source: LeadSource,
+    body: LeadSubmitRequest,
+    existing_contact: Contact | None,
+) -> Contact:
+    """Fold a public submission into the deduped contact, or create one."""
+    if existing_contact:
+        # Update existing contact with new info. Keep email/email_hash in sync.
+        existing_contact.first_name = body.first_name or existing_contact.first_name
+        existing_contact.last_name = body.last_name or existing_contact.last_name
+        if body.email:
+            existing_contact.email = body.email
+            existing_contact.email_hash = hash_value(body.email)
+        existing_contact.company_name = body.company_name or existing_contact.company_name
+        _apply_address(existing_contact, body.address)
+        if body.notes:
+            existing_notes = existing_contact.notes or ""
+            existing_contact.notes = f"{existing_notes}\n---\n{body.notes}".strip()
+        if body.source_detail:
+            existing_notes = existing_contact.notes or ""
+            existing_contact.notes = f"{existing_notes}\n[source: {body.source_detail}]".strip()
+        return existing_contact
+
+    notes = body.notes or ""
+    if body.source_detail:
+        source_tag = f"[source: {body.source_detail}]"
+        notes = f"{notes}\n{source_tag}".strip() if notes else source_tag
+    contact = Contact(
+        workspace_id=lead_source.workspace_id,
+        first_name=body.first_name,
+        last_name=body.last_name,
+        phone_number=body.phone_number,
+        phone_hash=hash_phone(body.phone_number),
+        email=body.email,
+        email_hash=hash_value_or_none(body.email),
+        company_name=body.company_name,
+        notes=notes or None,
+        source="lead_form",
+        status="new",
+    )
+    _apply_address(contact, body.address)
+    db.add(contact)
+    return contact
+
+
+def _apply_address(contact: Contact, raw_address: str | None) -> None:
+    """Fill the contact's structured address columns from a free-form string.
+
+    A newer submission overwrites the stored address (a returning lead often
+    re-quotes with a corrected or different property), but a submission with
+    no address never erases one we already have. Parsed parts that are
+    missing (e.g. hand-typed street only) leave their columns untouched
+    rather than blanking a previously complete address.
+    """
+    if not raw_address:
+        return
+    parsed = parse_us_address(raw_address)
+    if parsed is None:
+        return
+    contact.address_line1 = parsed.line1
+    if parsed.city:
+        contact.address_city = parsed.city
+    if parsed.state:
+        contact.address_state = parsed.state
+    if parsed.zip_code:
+        contact.address_zip = parsed.zip_code
+
+
 async def _resolve_owned_campaign_id(
     db: DB, lead_source: LeadSource, campaign_id: uuid.UUID | None
 ) -> uuid.UUID | None:
@@ -460,41 +530,7 @@ async def submit_lead(
     existing_contact = existing_result.scalar_one_or_none()
 
     is_new_lead = existing_contact is None
-
-    if existing_contact:
-        # Update existing contact with new info. Keep email/email_hash in sync.
-        existing_contact.first_name = body.first_name or existing_contact.first_name
-        existing_contact.last_name = body.last_name or existing_contact.last_name
-        if body.email:
-            existing_contact.email = body.email
-            existing_contact.email_hash = hash_value(body.email)
-        existing_contact.company_name = body.company_name or existing_contact.company_name
-        if body.notes:
-            existing_notes = existing_contact.notes or ""
-            existing_contact.notes = f"{existing_notes}\n---\n{body.notes}".strip()
-        if body.source_detail:
-            existing_notes = existing_contact.notes or ""
-            existing_contact.notes = f"{existing_notes}\n[source: {body.source_detail}]".strip()
-        contact = existing_contact
-    else:
-        notes = body.notes or ""
-        if body.source_detail:
-            source_tag = f"[source: {body.source_detail}]"
-            notes = f"{notes}\n{source_tag}".strip() if notes else source_tag
-        contact = Contact(
-            workspace_id=lead_source.workspace_id,
-            first_name=body.first_name,
-            last_name=body.last_name,
-            phone_number=body.phone_number,
-            phone_hash=hash_phone(body.phone_number),
-            email=body.email,
-            email_hash=hash_value_or_none(body.email),
-            company_name=body.company_name,
-            notes=notes or None,
-            source="lead_form",
-            status="new",
-        )
-        db.add(contact)
+    contact = _upsert_contact_from_lead(db, lead_source, body, existing_contact)
 
     # Persist first/latest-touch attribution + tracking signals so web leads
     # feed the lead-source ROI ranking instead of landing in the unknown queue.
