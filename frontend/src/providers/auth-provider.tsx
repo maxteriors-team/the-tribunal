@@ -26,11 +26,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PUBLIC_PATHS = ["/login", "/register"];
+// Customer-facing Stripe Checkout return pages. Public like PUBLIC_PATHS, but
+// deliberately not in that list: signed-in operators testing a payment should
+// see the page too, not get bounced to "/".
+const CUSTOMER_PATHS = ["/payment-complete", "/payment-cancelled"];
 const PUBLIC_PATH_PREFIXES = ["/invite/", "/p/"];
 
 function isPublicPathname(pathname: string): boolean {
   return (
     PUBLIC_PATHS.includes(pathname) ||
+    CUSTOMER_PATHS.includes(pathname) ||
     PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
 }
