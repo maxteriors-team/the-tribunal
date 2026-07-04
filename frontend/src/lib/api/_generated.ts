@@ -22091,6 +22091,8 @@ export interface components {
          * @description Public-facing lead submission request.
          */
         app__schemas__lead_source__LeadSubmitRequest: {
+            /** Address */
+            address?: string | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /** Company Name */

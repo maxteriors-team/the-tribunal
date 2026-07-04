@@ -37976,6 +37976,18 @@
       "app__schemas__lead_source__LeadSubmitRequest": {
         "description": "Public-facing lead submission request.",
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
           "attribution_confidence": {
             "anyOf": [
               {
