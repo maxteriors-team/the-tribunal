@@ -379,9 +379,7 @@ async def _test_companycam(client: httpx.AsyncClient, api_key: str) -> Integrati
     if response.status_code == 200:
         try:
             data = response.json()
-            name = " ".join(
-                p for p in (data.get("first_name"), data.get("last_name")) if p
-            )
+            name = " ".join(p for p in (data.get("first_name"), data.get("last_name")) if p)
             return IntegrationTestResult(
                 success=True,
                 message="Successfully connected to CompanyCam",
