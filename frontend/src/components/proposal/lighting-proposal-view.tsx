@@ -70,9 +70,14 @@ export function LightingProposalView({
   const lowMonthly = monthlyAt(term);
   const terms = financing?.terms ?? [];
 
-  const cashEnabled = doc.tiers.some(
-    (t) => t.pricing.base > 0 && t.pricing.cash_total < t.pricing.financed_total,
-  );
+  const cashEnabled =
+    doc.tiers.some(
+      (t) =>
+        t.pricing.base > 0 && t.pricing.cash_total < t.pricing.financed_total,
+    ) ||
+    doc.category_sections.some((s) => s.cash_total < s.financed_total) ||
+    (doc.grand_cash_total > 0 &&
+      doc.grand_cash_total < doc.grand_financed_total);
   const priceLabel = cashEnabled
     ? "Cash/check \u00b7 Installed all-inclusive"
     : "Installed \u00b7 All-inclusive";
@@ -349,6 +354,84 @@ export function LightingProposalView({
               </div>
             </div>
           </div>
+        ) : null}
+
+        {doc.category_sections.length ? (
+          <>
+            {doc.category_sections.map((sec) => (
+              <div className="pcare-section" key={sec.key}>
+                <div className="pcare-inner">
+                  <div className="pcare-left">
+                    <div className="pcare-eyebrow">Your Quote</div>
+                    <div className="pcare-name">{sec.label}</div>
+                    <div className="pcare-price">
+                      {fmt(cashEnabled ? sec.cash_total : sec.financed_total)}{" "}
+                      <span>
+                        {cashEnabled ? "cash/check one-time" : "one-time"}
+                      </span>
+                    </div>
+                    <div className="pcare-points">
+                      {(sec.lines ?? []).map((line, i) => (
+                        <div className="pcare-point" key={i}>
+                          <span className="pcare-point-mark">&#9670;</span>
+                          <div>
+                            {line.label}
+                            {line.line_total > 0
+                              ? ` \u2014 ${fmt(line.line_total)}`
+                              : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pcare-right">
+                    <div className="pcare-savings-label">Installed</div>
+                    <div
+                      className="pcare-savings-amount"
+                      style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
+                    >
+                      {fmt(sec.financed_total)}
+                    </div>
+                    <div className="pcare-savings-unit">
+                      All-inclusive · professionally installed
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {doc.grand_financed_total > 0 ? (
+              <div
+                className="grand-panel"
+                style={{ maxWidth: 460, margin: "18px auto 0" }}
+              >
+                <div className="grand-panel-title">All-In Project Total</div>
+                <div className="grand-rows">
+                  <div className="grand-row lead">
+                    <span>{cashEnabled ? "Cash / Check" : "Total"}</span>
+                    <strong>
+                      {fmt(
+                        cashEnabled
+                          ? doc.grand_cash_total
+                          : doc.grand_financed_total,
+                      )}
+                    </strong>
+                  </div>
+                  {cashEnabled ? (
+                    <div className="grand-row">
+                      <span>Financed total</span>
+                      <strong>{fmt(doc.grand_financed_total)}</strong>
+                    </div>
+                  ) : null}
+                  {doc.grand_monthly_payment > 0 ? (
+                    <div className="grand-row muted">
+                      <span>As low as</span>
+                      <strong>{fmt(doc.grand_monthly_payment)}/mo</strong>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         <div className="wg-section">

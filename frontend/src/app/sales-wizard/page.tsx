@@ -17,7 +17,7 @@ export default function SalesWizardRoute() {
         ) : (
           <SalesWizard
             workspaceId={currentWorkspaceId}
-            brandName={currentWorkspace?.workspace.name ?? "Sales Wizard"}
+            brandName={currentWorkspace?.workspace.name ?? "LL Design"}
           />
         )}
       </div>

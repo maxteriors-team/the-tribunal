@@ -22,9 +22,12 @@ from app.models.workspace import Workspace
 from app.schemas.proposal_wizard import (
     ProposalWizardPayload,
     WizardBistroSelection,
+    WizardCategoryCount,
     WizardCharge,
+    WizardChristmasSelection,
     WizardClient,
     WizardFixtureQty,
+    WizardPermanentSelection,
 )
 from app.services.quotes import QuoteService
 
@@ -108,6 +111,22 @@ PRICING = {
             "min_footage": 200,
             "bulb_spacing_ft": 2,
         },
+    },
+    "permanent": {
+        "enabled": True,
+        "per_ft": 30,
+        "controller_base": 300,
+        "per_channel": 50,
+        "included_channels": 2,
+    },
+    "christmas": {
+        "enabled": True,
+        "roofline_per_ft": 6,
+        "tree_rates": [{"key": "medium", "name": "Medium tree", "price": 260}],
+        "bush_rates": [{"key": "small", "name": "Small bush", "price": 35}],
+        "wreath_rates": [{"key": "standard", "name": "Wreath", "price": 85}],
+        "takedown_rate": 0.25,
+        "storage_price": 200,
     },
 }
 
@@ -308,6 +327,83 @@ async def test_deliver_quote_emails_snapshot_client(monkeypatch) -> None:
         refreshed = await svc.get_quote(ws.id, uuid.UUID(str(saved.id)))
         assert refreshed.status == "sent"
         assert refreshed.public_token
+
+
+async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> None:
+    """A quote mixing landscape + permanent + christmas prices every line and the
+    saved quote total equals the document's server-derived grand total."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = ProposalWizardPayload(
+            client=WizardClient(first_name="Sam", last_name="Rivera", rep_name="Max"),
+            categories=["landscape", "permanent", "christmas"],
+            quantities=[
+                WizardFixtureQty(item_id="tx-luxor", quantity=1),
+                WizardFixtureQty(item_id="up-zdc", quantity=10),
+            ],
+            permanent=WizardPermanentSelection(feet=100, channels=5),
+            christmas=WizardChristmasSelection(
+                roofline_feet=150,
+                trees=[WizardCategoryCount(key="medium", quantity=2)],
+                bushes=[WizardCategoryCount(key="small", quantity=4)],
+                wreaths=[WizardCategoryCount(key="standard", quantity=2)],
+                takedown=True,
+                storage=False,
+            ),
+        )
+
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        assert doc.categories == ["landscape", "permanent", "christmas"]
+        assert [s.key for s in doc.category_sections] == ["permanent", "christmas"]
+        perm = doc.category_sections[0]
+        chris = doc.category_sections[1]
+        # roofline 100*30=3000->3371; controller 300->337; extra zones 3*50=150->169.
+        assert perm.financed_total == 3877.0
+        # roofline 900->1011; trees 2*260=520->584; bushes 140->157; wreaths 170->191;
+        # takedown 0.25*1730=432.5->486.
+        assert chris.financed_total == 2429.0
+        # Grand total = landscape selected tier + both category sections.
+        assert doc.grand_financed_total == doc.selected_financed_total + 3877.0 + 2429.0
+
+        quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        names = [line.name for line in quote.line_items]
+        assert "Permanent Holiday Lighting" in names
+        assert "Christmas Lighting" in names
+        # Server-recomputed quote total matches the document's grand total exactly.
+        assert quote.total == doc.grand_financed_total
+        assert quote.proposal_document["categories"] == [
+            "landscape",
+            "permanent",
+            "christmas",
+        ]
+
+
+async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
+    """A single-category Christmas quote prices without any landscape tier cards."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = ProposalWizardPayload(
+            client=WizardClient(first_name="Dana", last_name="Cole"),
+            categories=["christmas"],
+            christmas=WizardChristmasSelection(
+                roofline_feet=200,
+                trees=[WizardCategoryCount(key="medium", quantity=1)],
+            ),
+        )
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        assert doc.tiers == []
+        assert doc.care_plan is None
+        assert doc.selected_financed_total == 0
+        assert [s.key for s in doc.category_sections] == ["christmas"]
+        assert doc.grand_financed_total == doc.category_sections[0].financed_total
+
+        quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert [line.name for line in quote.line_items] == ["Christmas Lighting"]
+        assert quote.total == doc.grand_financed_total
 
 
 async def test_deliver_quote_validates_missing_destination_and_channel() -> None:

@@ -387,6 +387,39 @@ PRICING: dict = {
             "bulb_spacing_ft": 2,
         },
     },
+    # Permanent holiday lighting — placeholder rates the operator tunes later.
+    "permanent": {
+        "enabled": True,
+        "per_ft": 32,
+        "controller_base": 299,
+        "per_channel": 45,
+        "included_channels": 1,
+        "minimum": 0,
+        "label": "Permanent Holiday Lighting",
+    },
+    # Seasonal Christmas lighting — placeholder rates the operator tunes later.
+    "christmas": {
+        "enabled": True,
+        "roofline_per_ft": 6,
+        "tree_rates": [
+            {"key": "small", "name": "Small tree (up to 8 ft)", "price": 120},
+            {"key": "medium", "name": "Medium tree (8\u201315 ft)", "price": 260},
+            {"key": "large", "name": "Large tree (15\u201325 ft)", "price": 520},
+        ],
+        "bush_rates": [
+            {"key": "small", "name": "Small bush / shrub", "price": 35},
+            {"key": "large", "name": "Large bush / shrub", "price": 65},
+        ],
+        "wreath_rates": [
+            {"key": "standard", "name": "Wreath (up to 36 in)", "price": 85},
+            {"key": "large", "name": "Large wreath (over 36 in)", "price": 150},
+        ],
+        "takedown_enabled": True,
+        "takedown_rate": 0.25,
+        "storage_price": 0,
+        "minimum": 0,
+        "label": "Christmas Lighting",
+    },
 }
 
 

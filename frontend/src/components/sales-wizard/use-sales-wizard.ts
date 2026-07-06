@@ -27,6 +27,15 @@ import { normalizeDocument, type WizardDocument, type WizardTierView } from "./d
 export { fmt, fmt2 } from "./document";
 export type { WizardDocument, WizardTierView } from "./document";
 
+// ─── Product lines the unified builder can quote (canonical order) ──────────
+export const CATEGORY_KEYS = [
+  "landscape",
+  "permanent",
+  "bistro",
+  "christmas",
+] as const;
+export type CategoryKey = (typeof CATEGORY_KEYS)[number];
+
 // ─── Draft state shapes (inputs stay strings so typing feels native) ────────
 export interface ChargeDraft {
   description: string;
@@ -37,6 +46,39 @@ export interface BistroDraft {
   product: "color" | "classic";
   tier: string;
   feet: string;
+}
+
+export interface PermanentDraft {
+  feet: string;
+  channels: string;
+}
+
+export type ChristmasGroup = "trees" | "bushes" | "wreaths";
+
+export interface ChristmasDraft {
+  roofline_feet: string;
+  trees: Record<string, number>;
+  bushes: Record<string, number>;
+  wreaths: Record<string, number>;
+  takedown: boolean;
+  storage: boolean;
+}
+
+const EMPTY_CHRISTMAS: ChristmasDraft = {
+  roofline_feet: "",
+  trees: {},
+  bushes: {},
+  wreaths: {},
+  takedown: false,
+  storage: false,
+};
+
+function countsToList(
+  counts: Record<string, number>,
+): { key: string; quantity: number }[] {
+  return Object.entries(counts)
+    .filter(([, q]) => q > 0)
+    .map(([key, quantity]) => ({ key, quantity }));
 }
 
 export interface NightLight {
@@ -106,6 +148,10 @@ export interface UseSalesWizardReturn {
   catalog: CatalogItemResponse[] | undefined;
   isLoadingConfig: boolean;
   configError: boolean;
+  // Product-line selection (which categories this quote includes)
+  categories: CategoryKey[];
+  hasCategory: (key: CategoryKey) => boolean;
+  toggleCategory: (key: CategoryKey) => void;
   // Selection state
   client: ClientDraft;
   setClientField: (key: keyof ClientDraft, value: string) => void;
@@ -124,6 +170,11 @@ export interface UseSalesWizardReturn {
   setCareCountManual: (count: number | null) => void;
   bistro: BistroDraft;
   setBistro: (patch: Partial<BistroDraft>) => void;
+  permanent: PermanentDraft;
+  setPermanent: (patch: Partial<PermanentDraft>) => void;
+  christmas: ChristmasDraft;
+  setChristmas: (patch: Partial<ChristmasDraft>) => void;
+  setChristmasCount: (group: ChristmasGroup, key: string, qty: number) => void;
   night: NightPreviewState;
   setNight: (patch: Partial<NightPreviewState>) => void;
   // Server-computed document (live preview)
@@ -169,6 +220,14 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     tier: "",
     feet: "",
   });
+  const [categories, setCategories] = useState<CategoryKey[]>(["landscape"]);
+  const [permanent, setPermanentState] = useState<PermanentDraft>({
+    feet: "",
+    channels: "",
+  });
+  const [christmas, setChristmasState] = useState<ChristmasDraft>(
+    () => EMPTY_CHRISTMAS,
+  );
   const [night, setNightState] = useState<NightPreviewState>({
     image: null,
     lights: [],
@@ -245,6 +304,33 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
   const setBistro = useCallback((patch: Partial<BistroDraft>) => {
     setBistroState((prev) => ({ ...prev, ...patch }));
   }, []);
+  const hasCategory = useCallback(
+    (key: CategoryKey) => categories.includes(key),
+    [categories],
+  );
+  const toggleCategory = useCallback((key: CategoryKey) => {
+    setCategories((prev) =>
+      prev.includes(key)
+        ? prev.filter((c) => c !== key)
+        : CATEGORY_KEYS.filter((c) => c === key || prev.includes(c)),
+    );
+  }, []);
+  const setPermanent = useCallback((patch: Partial<PermanentDraft>) => {
+    setPermanentState((prev) => ({ ...prev, ...patch }));
+  }, []);
+  const setChristmas = useCallback((patch: Partial<ChristmasDraft>) => {
+    setChristmasState((prev) => ({ ...prev, ...patch }));
+  }, []);
+  const setChristmasCount = useCallback(
+    (group: ChristmasGroup, key: string, qty: number) => {
+      const clamped = Math.max(0, Math.min(999, Math.floor(qty)));
+      setChristmasState((prev) => ({
+        ...prev,
+        [group]: { ...prev[group], [key]: clamped },
+      }));
+    },
+    [],
+  );
   const setNight = useCallback((patch: Partial<NightPreviewState>) => {
     setNightState((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -264,6 +350,10 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
       }))
       .filter((c) => c.net_amount > 0);
     const feet = Number.parseFloat(bistro.feet) || 0;
+    const hasBistro = categories.includes("bistro");
+    const hasPermanent = categories.includes("permanent");
+    const hasChristmas = categories.includes("christmas");
+    const permFeet = Number.parseFloat(permanent.feet) || 0;
     return {
       client: toWizardClient(client),
       quantities: qtyList,
@@ -271,10 +361,27 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
       selected_tier: activeTier || null,
       care_plan_tier: carePlanTier,
       care_count_manual: careCountManual,
+      categories,
       bistro:
-        feet > 0
+        hasBistro && feet > 0
           ? { product: bistro.product, tier: bistro.tier, feet }
           : null,
+      permanent: hasPermanent
+        ? {
+            feet: permFeet,
+            channels: Number.parseInt(permanent.channels, 10) || 0,
+          }
+        : null,
+      christmas: hasChristmas
+        ? {
+            roofline_feet: Number.parseFloat(christmas.roofline_feet) || 0,
+            trees: countsToList(christmas.trees),
+            bushes: countsToList(christmas.bushes),
+            wreaths: countsToList(christmas.wreaths),
+            takedown: christmas.takedown,
+            storage: christmas.storage,
+          }
+        : null,
       night_preview: night.image
         ? { image: night.image, lights: night.lights, dusk: night.dusk }
         : null,
@@ -286,7 +393,10 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     activeTier,
     carePlanTier,
     careCountManual,
+    categories,
     bistro,
+    permanent,
+    christmas,
     night,
   ]);
 
@@ -383,6 +493,9 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     setCharge,
     addCharge,
     removeCharge,
+    categories,
+    hasCategory,
+    toggleCategory,
     activeTier,
     setActiveTier,
     carePlanTier,
@@ -391,6 +504,11 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     setCareCountManual,
     bistro,
     setBistro,
+    permanent,
+    setPermanent,
+    christmas,
+    setChristmas,
+    setChristmasCount,
     night,
     setNight,
     document,

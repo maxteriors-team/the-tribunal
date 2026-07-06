@@ -91,9 +91,13 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
     bistro.product === "classic" ? bistroConfig?.classic : bistroConfig?.color;
   const bistroDoc = document?.bistro ?? null;
 
+  const showCare = wizard.hasCategory("landscape");
+  const showBistro = wizard.hasCategory("bistro");
+
   return (
     <>
-      {/* ── Care Plan ── */}
+      {/* ── Care Plan (landscape) ── */}
+      {showCare ? (
       <div className="care-block">
         <div className="care-head">
           <div>
@@ -164,9 +168,10 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
           </div>
         ) : null}
       </div>
+      ) : null}
 
-      {/* ── Bistro string lighting ── */}
-      {bistroConfig?.enabled && bistroConfig.tiers?.length ? (
+      {/* ── Bistro string lighting (bistro line) ── */}
+      {showBistro && bistroConfig?.enabled && bistroConfig.tiers?.length ? (
         <div className="bistro-block">
           <div className="care-head">
             <div>
@@ -287,9 +292,15 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
         </div>
       ) : null}
 
-      <button type="button" className="night-launch-btn" onClick={onOpenNight}>
-        &#9789;&nbsp; Night Mode &#8212; Show It Lit at Night
-      </button>
+      {showCare ? (
+        <button
+          type="button"
+          className="night-launch-btn"
+          onClick={onOpenNight}
+        >
+          &#9789;&nbsp; Night Mode &#8212; Show It Lit at Night
+        </button>
+      ) : null}
     </>
   );
 }

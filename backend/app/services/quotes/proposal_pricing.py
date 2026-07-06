@@ -27,7 +27,11 @@ from app.schemas.pricing import (
     BistroPricing,
     CarePlanPricing,
     CarePlanTier,
+    CategoryLine,
+    ChristmasPricing,
+    PermanentPricing,
     PricingSettings,
+    SizeRate,
     TierPricing,
 )
 
@@ -375,5 +379,197 @@ def price_bistro(
         total=float(total),
         min_applied=raw_total < gross_minimum,
         ordered_ft=float(ordered_ft),
+        lines=lines,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Permanent holiday lighting (per-linear-ft roofline + controller/channels)
+# --------------------------------------------------------------------------- #
+def _category_line(
+    label: str,
+    quantity: float | Decimal,
+    line_total: Decimal,
+    *,
+    detail: str | None = None,
+) -> CategoryLine:
+    """A grossed display line; unit price is total/qty (cents) for presentation."""
+    q = _d(quantity)
+    unit = _round_cent(line_total / q) if q > 0 else line_total
+    return CategoryLine(
+        label=label,
+        detail=detail,
+        quantity=float(q),
+        unit_price=float(unit),
+        line_total=float(line_total),
+    )
+
+
+def price_permanent(
+    config: PricingSettings,
+    *,
+    feet: float,
+    channels: int = 0,
+) -> PermanentPricing:
+    """Price a permanent-roofline job: grossed per-ft footage + controller + zones.
+
+    Each component is grossed up individually (like bistro) so every displayed
+    line total is authoritative and the lines sum exactly to ``raw_total``.
+    """
+    p = config.permanent
+    per_ft = _d(p.per_ft)
+    ft = max(0.0, feet or 0.0)
+    ch = max(0, int(channels or 0))
+    extra = max(0, ch - int(p.included_channels))
+    gross_minimum = gross_up_price(_d(p.minimum), config)
+
+    if ft <= 0:
+        return PermanentPricing(
+            feet=0,
+            channels=ch,
+            per_ft=float(per_ft),
+            roofline_cost=0,
+            controller_cost=0,
+            channels_cost=0,
+            minimum=float(gross_minimum),
+            raw_total=0,
+            total=0,
+            min_applied=False,
+            lines=[],
+        )
+
+    roofline_cost = gross_up_price(_d(ft) * per_ft, config)
+    controller_cost = gross_up_price(_d(p.controller_base), config)
+    channels_cost = gross_up_price(_d(extra) * _d(p.per_channel), config)
+
+    lines: list[CategoryLine] = [
+        _category_line(
+            f"{ft:g} ft permanent roofline",
+            ft,
+            roofline_cost,
+            detail="Permanent LED track, installed",
+        )
+    ]
+    if controller_cost > 0:
+        lines.append(
+            _category_line(
+                "Controller & app control",
+                1,
+                controller_cost,
+                detail=f"Includes {p.included_channels} zone(s)" if p.included_channels else None,
+            )
+        )
+    if extra > 0 and channels_cost > 0:
+        lines.append(_category_line(f"{extra} additional zone(s)", extra, channels_cost))
+
+    raw_total = roofline_cost + controller_cost + channels_cost
+    total = max(raw_total, gross_minimum) if raw_total > 0 else _ZERO
+    return PermanentPricing(
+        feet=ft,
+        channels=ch,
+        per_ft=float(per_ft),
+        roofline_cost=float(roofline_cost),
+        controller_cost=float(controller_cost),
+        channels_cost=float(channels_cost),
+        minimum=float(gross_minimum),
+        raw_total=float(raw_total),
+        total=float(total),
+        min_applied=raw_total < gross_minimum,
+        lines=lines,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Christmas (seasonal) — roofline + trees/bushes/wreaths + takedown/storage
+# --------------------------------------------------------------------------- #
+def _price_size_group(
+    rates: list[SizeRate],
+    counts: dict[str, float],
+    config: PricingSettings,
+) -> tuple[Decimal, Decimal, list[CategoryLine]]:
+    """Gross each selected size line; return (net_subtotal, grossed_subtotal, lines)."""
+    by_key = {r.key: r for r in rates}
+    net = _ZERO
+    gross = _ZERO
+    lines: list[CategoryLine] = []
+    for key, qty in counts.items():
+        rate = by_key.get(key)
+        q = max(0.0, float(qty or 0))
+        if rate is None or q <= 0:
+            continue
+        net += _d(q) * _d(rate.price)
+        line_total = gross_up_price(_d(q) * _d(rate.price), config)
+        gross += line_total
+        lines.append(_category_line(rate.name, q, line_total))
+    return net, gross, lines
+
+
+def price_christmas(
+    config: PricingSettings,
+    *,
+    roofline_feet: float = 0,
+    trees: dict[str, float] | None = None,
+    bushes: dict[str, float] | None = None,
+    wreaths: dict[str, float] | None = None,
+    takedown: bool = False,
+    storage: bool = False,
+) -> ChristmasPricing:
+    """Price a seasonal Christmas job.
+
+    Roofline, each tree/bush/wreath size, takedown, and storage are grossed up
+    individually so the display lines sum exactly to ``raw_total``. Takedown is a
+    fraction of the *net* install subtotal (roofline + decor) then grossed.
+    """
+    c = config.christmas
+    ft = max(0.0, roofline_feet or 0.0)
+    gross_minimum = gross_up_price(_d(c.minimum), config)
+
+    lines: list[CategoryLine] = []
+    roofline_net = _d(ft) * _d(c.roofline_per_ft)
+    roofline_cost = gross_up_price(roofline_net, config) if ft > 0 else _ZERO
+    if roofline_cost > 0:
+        lines.append(
+            _category_line(
+                f"{ft:g} ft roofline",
+                ft,
+                roofline_cost,
+                detail="Seasonal C9/mini install",
+            )
+        )
+
+    trees_net, trees_cost, tree_lines = _price_size_group(c.tree_rates, trees or {}, config)
+    bushes_net, bushes_cost, bush_lines = _price_size_group(c.bush_rates, bushes or {}, config)
+    wreaths_net, wreaths_cost, wreath_lines = _price_size_group(
+        c.wreath_rates, wreaths or {}, config
+    )
+    lines.extend(tree_lines)
+    lines.extend(bush_lines)
+    lines.extend(wreath_lines)
+
+    install_net = roofline_net + trees_net + bushes_net + wreaths_net
+    takedown_net = install_net * _d(c.takedown_rate) if (takedown and c.takedown_enabled) else _ZERO
+    takedown_cost = gross_up_price(takedown_net, config)
+    if takedown_cost > 0:
+        lines.append(_category_line("Post-season takedown", 1, takedown_cost))
+    storage_cost = gross_up_price(_d(c.storage_price), config) if storage else _ZERO
+    if storage_cost > 0:
+        lines.append(_category_line("Off-season storage", 1, storage_cost))
+
+    raw_total = (
+        roofline_cost + trees_cost + bushes_cost + wreaths_cost + takedown_cost + storage_cost
+    )
+    total = max(raw_total, gross_minimum) if raw_total > 0 else _ZERO
+    return ChristmasPricing(
+        roofline_feet=ft,
+        roofline_cost=float(roofline_cost),
+        trees_cost=float(trees_cost),
+        bushes_cost=float(bushes_cost),
+        wreaths_cost=float(wreaths_cost),
+        takedown_cost=float(takedown_cost),
+        storage_cost=float(storage_cost),
+        minimum=float(gross_minimum),
+        raw_total=float(raw_total),
+        total=float(total),
+        min_applied=raw_total < gross_minimum,
         lines=lines,
     )

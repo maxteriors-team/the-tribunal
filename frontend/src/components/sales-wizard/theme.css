@@ -664,3 +664,23 @@
     .pkg-card.better .pkg-price { font-size: 46px; }
   }
 }
+
+/* ═══ UNIFIED QUOTE BUILDER (category picker, seasonal sections, grand total) ═══ */
+.sales-wizard .cat-picker { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.sales-wizard .cat-chip { position: relative; text-align: left; }
+.sales-wizard .cat-chip-check { position: absolute; top: 12px; right: 14px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bdr-g); color: var(--t4); font-size: 13px; font-weight: 700; transition: all 0.2s; }
+.sales-wizard .cat-chip.selected .cat-chip-check { background: var(--gold); border-color: var(--gold); color: #0a0a0a; }
+
+.sales-wizard .xmas-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0 4px; }
+.sales-wizard .xmas-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); cursor: pointer; }
+.sales-wizard .xmas-toggle input { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; }
+
+.sales-wizard .grand-panel { margin-top: 16px; border: 1px solid var(--bdr-g); background: linear-gradient(135deg, rgba(212, 175, 90, 0.08), rgba(212, 175, 90, 0.01)); padding: 18px 20px; }
+.sales-wizard .grand-panel-title { font-size: 9px; font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold-d); margin-bottom: 12px; }
+.sales-wizard .grand-rows { display: flex; flex-direction: column; gap: 8px; }
+.sales-wizard .grand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sales-wizard .grand-row span { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t3); }
+.sales-wizard .grand-row strong { font-family: var(--font-cormorant), serif; font-weight: 300; color: var(--t1); font-size: 22px; }
+.sales-wizard .grand-row.lead strong { color: var(--gold); font-size: 34px; }
+.sales-wizard .grand-row.muted span, .sales-wizard .grand-row.muted strong { color: var(--t4); font-size: 11px; font-family: var(--font-montserrat), sans-serif; }
+.sales-wizard .grand-row.muted strong { font-weight: 700; }

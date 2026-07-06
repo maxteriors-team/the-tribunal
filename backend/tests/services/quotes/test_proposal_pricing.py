@@ -19,10 +19,13 @@ from app.schemas.pricing import (
     CarePlanConfig,
     CarePlanTier,
     CashDiscountConfig,
+    ChristmasConfig,
     CommissionConfig,
     FinancingConfig,
+    PermanentConfig,
     PricingSettings,
     SavingsConfig,
+    SizeRate,
     TaxConfig,
 )
 from app.services.quotes import proposal_pricing as pp
@@ -273,3 +276,121 @@ def test_tax_exclusive_and_inclusive():
     incl = _landscape_config(tax=TaxConfig(enabled=True, rate=0.06, method="Inclusive"))
     # 1000 - 1000/1.06 = 56.60
     assert pp.tax_amount(1000, incl) == Decimal("56.60")
+
+
+# --------------------------------------------------------------------------- #
+# Permanent holiday lighting
+# --------------------------------------------------------------------------- #
+def _permanent_config(**overrides) -> PricingSettings:
+    return _landscape_config(
+        permanent=PermanentConfig(
+            enabled=True,
+            per_ft=30,
+            controller_base=300,
+            per_channel=50,
+            included_channels=2,
+            **overrides,
+        )
+    )
+
+
+def test_permanent_grosses_roofline_controller_and_extra_zones():
+    cfg = _permanent_config()
+    r = pp.price_permanent(cfg, feet=100, channels=5)
+    # roofline 100*30=3000 -> round(3000/0.89)=3371; controller round(300/0.89)=337;
+    # extra zones = 5-2 = 3 -> 3*50=150 -> round(150/0.89)=169.
+    assert r.roofline_cost == 3371
+    assert r.controller_cost == 337
+    assert r.channels_cost == 169
+    assert r.raw_total == 3877
+    assert r.total == 3877
+    assert r.min_applied is False
+    # Display lines sum exactly to raw_total.
+    assert sum(line.line_total for line in r.lines) == 3877
+
+
+def test_permanent_applies_minimum():
+    cfg = _permanent_config(minimum=5000)
+    r = pp.price_permanent(cfg, feet=100, channels=2)
+    # raw 3371+337 = 3708 < gross min round(5000/0.89)=5618.
+    assert r.raw_total == 3708
+    assert r.total == 5618
+    assert r.min_applied is True
+
+
+def test_permanent_zero_feet_is_empty():
+    cfg = _permanent_config()
+    r = pp.price_permanent(cfg, feet=0, channels=4)
+    assert r.total == 0
+    assert r.lines == []
+
+
+# --------------------------------------------------------------------------- #
+# Christmas (seasonal)
+# --------------------------------------------------------------------------- #
+def _christmas_config(**overrides) -> PricingSettings:
+    return _landscape_config(
+        christmas=ChristmasConfig(
+            enabled=True,
+            roofline_per_ft=6,
+            tree_rates=[
+                SizeRate(key="small", name="Small tree", price=120),
+                SizeRate(key="medium", name="Medium tree", price=260),
+                SizeRate(key="large", name="Large tree", price=520),
+            ],
+            bush_rates=[
+                SizeRate(key="small", name="Small bush", price=35),
+                SizeRate(key="large", name="Large bush", price=65),
+            ],
+            wreath_rates=[SizeRate(key="standard", name="Wreath", price=85)],
+            takedown_rate=0.25,
+            storage_price=200,
+            **overrides,
+        )
+    )
+
+
+def test_christmas_prices_roofline_decor_takedown_and_storage():
+    cfg = _christmas_config()
+    r = pp.price_christmas(
+        cfg,
+        roofline_feet=150,
+        trees={"medium": 2, "large": 1},
+        bushes={"small": 4},
+        wreaths={"standard": 2},
+        takedown=True,
+        storage=True,
+    )
+    # roofline 900 -> 1011; trees 2*260 & 1*520 each 520 -> 584 each = 1168;
+    # bushes 4*35=140 -> 157; wreaths 2*85=170 -> 191;
+    # takedown 0.25*(900+1040+140+170=2250)=562.5 -> 632; storage 200 -> 225.
+    assert r.roofline_cost == 1011
+    assert r.trees_cost == 1168
+    assert r.bushes_cost == 157
+    assert r.wreaths_cost == 191
+    assert r.takedown_cost == 632
+    assert r.storage_cost == 225
+    assert r.raw_total == 3384
+    assert r.total == 3384
+    assert sum(line.line_total for line in r.lines) == 3384
+
+
+def test_christmas_ignores_unknown_and_zero_counts():
+    cfg = _christmas_config()
+    r = pp.price_christmas(
+        cfg,
+        roofline_feet=0,
+        trees={"medium": 0, "nope": 5},
+        takedown=False,
+        storage=False,
+    )
+    assert r.total == 0
+    assert r.lines == []
+
+
+def test_christmas_takedown_requires_config_enabled():
+    cfg = _christmas_config(takedown_enabled=False)
+    r = pp.price_christmas(cfg, trees={"small": 1}, takedown=True)
+    # 120 -> gross 135; no takedown line because config disables it.
+    assert r.takedown_cost == 0
+    assert r.total == 135

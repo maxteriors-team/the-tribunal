@@ -16,8 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.pricing import (
     BistroPricing,
     CarePlanPricing,
+    CategoryLine,
     TierPricing,
 )
+
+# Product lines the unified builder can quote, in canonical display order.
+CATEGORY_ORDER = ("landscape", "permanent", "bistro", "christmas")
 
 
 # --------------------------------------------------------------------------- #
@@ -60,6 +64,31 @@ class WizardBistroSelection(BaseModel):
     feet: float = Field(default=0, ge=0)
 
 
+class WizardPermanentSelection(BaseModel):
+    """Permanent-holiday-lighting selection: roofline footage + zone count."""
+
+    feet: float = Field(default=0, ge=0)
+    channels: int = Field(default=0, ge=0)
+
+
+class WizardCategoryCount(BaseModel):
+    """A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty)."""
+
+    key: str = Field(min_length=1, max_length=60)
+    quantity: float = Field(default=0, ge=0)
+
+
+class WizardChristmasSelection(BaseModel):
+    """Seasonal Christmas selection: roofline + decor counts + takedown/storage."""
+
+    roofline_feet: float = Field(default=0, ge=0)
+    trees: list[WizardCategoryCount] = Field(default_factory=list)
+    bushes: list[WizardCategoryCount] = Field(default_factory=list)
+    wreaths: list[WizardCategoryCount] = Field(default_factory=list)
+    takedown: bool = False
+    storage: bool = False
+
+
 class ProposalWizardPayload(BaseModel):
     """Everything the wizard submits on save/preview (selection only, no money)."""
 
@@ -74,6 +103,11 @@ class ProposalWizardPayload(BaseModel):
     care_plan_tier: str | None = None
     care_count_manual: int | None = Field(default=None, ge=0)
     bistro: WizardBistroSelection | None = None
+    # Which product lines this quote includes. Empty => legacy landscape(+bistro)
+    # inference so existing payloads keep working.
+    categories: list[str] = Field(default_factory=list)
+    permanent: WizardPermanentSelection | None = None
+    christmas: WizardChristmasSelection | None = None
     # Opaque night-preview snapshot (image ref, light markers, dusk level).
     night_preview: dict[str, Any] | None = None
     title: str | None = Field(default=None, max_length=200)
@@ -141,6 +175,24 @@ class ProposalFinancing(BaseModel):
     disclaimer: str | None = None
 
 
+class ProposalCategorySection(BaseModel):
+    """One priced product-line section (permanent / christmas) in a quote.
+
+    Landscape keeps its rich tier cards and bistro its bespoke block; these
+    sections carry the *new* per-linear-ft / decor lines so the client page can
+    render any mix of product lines uniformly.
+    """
+
+    key: str
+    label: str
+    lines: list[CategoryLine] = Field(default_factory=list)
+    financed_total: float = 0
+    cash_total: float = 0
+    cash_savings: float = 0
+    monthly_payment: float = 0
+    min_applied: bool = False
+
+
 class FulfillmentPart(BaseModel):
     """Aggregated internal SKU line for the fulfillment sheet (never client-facing)."""
 
@@ -165,10 +217,17 @@ class ProposalDocument(BaseModel):
     bistro: BistroPricing | None = None
     financing: ProposalFinancing | None = None
     night_preview: dict[str, Any] | None = None
+    # Product lines included in this quote (canonical order) + their new sections.
+    categories: list[str] = Field(default_factory=list)
+    category_sections: list[ProposalCategorySection] = Field(default_factory=list)
     # Selected tier's headline figures, surfaced for quick reads.
     selected_financed_total: float = 0
     selected_cash_total: float = 0
     selected_monthly_payment: float = 0
+    # Combined all-in figures across every included product line.
+    grand_financed_total: float = 0
+    grand_cash_total: float = 0
+    grand_monthly_payment: float = 0
     # Internal fulfillment sheet for the selected tier (staff-only).
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
     notes: str | None = None

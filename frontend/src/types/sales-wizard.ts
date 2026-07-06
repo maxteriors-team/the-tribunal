@@ -10,12 +10,18 @@ type Schemas = components["schemas"];
 export type PricingSettings = Schemas["PricingSettings"];
 export type TierConfig = Schemas["TierConfig"];
 export type CatalogItemResponse = Schemas["CatalogItemResponse"];
+export type PermanentConfig = Schemas["PermanentConfig"];
+export type ChristmasConfig = Schemas["ChristmasConfig"];
+export type SizeRate = Schemas["SizeRate"];
 
 export type ProposalWizardPayload = Schemas["ProposalWizardPayload"];
 export type WizardClient = Schemas["WizardClient"];
 export type WizardCharge = Schemas["WizardCharge"];
 export type WizardFixtureQty = Schemas["WizardFixtureQty"];
 export type WizardBistroSelection = Schemas["WizardBistroSelection"];
+export type WizardPermanentSelection = Schemas["WizardPermanentSelection"];
+export type WizardChristmasSelection = Schemas["WizardChristmasSelection"];
+export type WizardCategoryCount = Schemas["WizardCategoryCount"];
 
 export type ProposalDocument = Schemas["ProposalDocument"];
 export type ProposalTierView = Schemas["ProposalTierView"];
@@ -23,6 +29,8 @@ export type ProposalLine = Schemas["ProposalLine"];
 export type ProposalCharge = Schemas["ProposalCharge"];
 export type ProposalCarePlan = Schemas["ProposalCarePlan"];
 export type ProposalFinancing = Schemas["ProposalFinancing"];
+export type ProposalCategorySection = Schemas["ProposalCategorySection"];
+export type CategoryLine = Schemas["CategoryLine"];
 export type TierPricing = Schemas["TierPricing"];
 export type CarePlanPricing = Schemas["CarePlanPricing"];
 export type BistroPricing = Schemas["BistroPricing"];

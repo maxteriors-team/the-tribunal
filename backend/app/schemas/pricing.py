@@ -169,6 +169,81 @@ class BistroConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Permanent holiday lighting (per-linear-foot roofline + controller/channels)
+# --------------------------------------------------------------------------- #
+class PermanentConfig(BaseModel):
+    """Permanent LED roofline priced per linear foot plus a controller/hub.
+
+    Placeholder rates ship so a workspace prices before customization; the
+    operator tunes ``per_ft`` / controller / channel rates in Settings → Pricing
+    (the operator's standalone tool was not provided, so these are sane defaults).
+    All values are *net*; the engine grosses them up like every other price.
+    """
+
+    enabled: bool = False
+    per_ft: float = Field(default=32, ge=0)  # installed roofline, net $/linear ft
+    controller_base: float = Field(default=299, ge=0)  # base controller/hub
+    per_channel: float = Field(default=45, ge=0)  # each zone/channel over included
+    included_channels: int = Field(default=1, ge=0)
+    minimum: float = Field(default=0, ge=0)
+    label: str = "Permanent Holiday Lighting"
+
+
+# --------------------------------------------------------------------------- #
+# Christmas (seasonal) — roofline + trees/bushes/wreaths by size + takedown
+# --------------------------------------------------------------------------- #
+class SizeRate(BaseModel):
+    """A size/wrap option (e.g. a tree size) with its own net install price."""
+
+    key: str = Field(min_length=1, max_length=60)
+    name: str
+    price: float = Field(default=0, ge=0)
+
+
+def _default_tree_rates() -> list[SizeRate]:
+    return [
+        SizeRate(key="small", name="Small tree (up to 8 ft)", price=120),
+        SizeRate(key="medium", name="Medium tree (8–15 ft)", price=260),
+        SizeRate(key="large", name="Large tree (15–25 ft)", price=520),
+    ]
+
+
+def _default_bush_rates() -> list[SizeRate]:
+    return [
+        SizeRate(key="small", name="Small bush / shrub", price=35),
+        SizeRate(key="large", name="Large bush / shrub", price=65),
+    ]
+
+
+def _default_wreath_rates() -> list[SizeRate]:
+    return [
+        SizeRate(key="standard", name="Wreath (up to 36 in)", price=85),
+        SizeRate(key="large", name="Large wreath (over 36 in)", price=150),
+    ]
+
+
+class ChristmasConfig(BaseModel):
+    """Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.
+
+    Rates are *net* placeholders (operator's tool not provided) tuned later in
+    Settings → Pricing. ``takedown_rate`` is a fraction of the install subtotal
+    added when the client opts into post-season takedown; ``storage_price`` is a
+    flat fee for off-season storage.
+    """
+
+    enabled: bool = False
+    roofline_per_ft: float = Field(default=6, ge=0)  # net $/linear ft installed
+    tree_rates: list[SizeRate] = Field(default_factory=_default_tree_rates)
+    bush_rates: list[SizeRate] = Field(default_factory=_default_bush_rates)
+    wreath_rates: list[SizeRate] = Field(default_factory=_default_wreath_rates)
+    takedown_enabled: bool = True
+    takedown_rate: float = Field(default=0.25, ge=0, le=1)  # of install subtotal
+    storage_price: float = Field(default=0, ge=0)  # flat off-season storage fee
+    minimum: float = Field(default=0, ge=0)
+    label: str = "Christmas Lighting"
+
+
+# --------------------------------------------------------------------------- #
 # Top-level pricing config
 # --------------------------------------------------------------------------- #
 class PricingSettings(BaseModel):
@@ -190,6 +265,8 @@ class PricingSettings(BaseModel):
     care_plan: CarePlanConfig = Field(default_factory=CarePlanConfig)
     savings: SavingsConfig = Field(default_factory=SavingsConfig)
     bistro: BistroConfig = Field(default_factory=BistroConfig)
+    permanent: PermanentConfig = Field(default_factory=PermanentConfig)
+    christmas: ChristmasConfig = Field(default_factory=ChristmasConfig)
 
 
 # --------------------------------------------------------------------------- #
@@ -253,6 +330,53 @@ class BistroPricing(BaseModel):
     lines: list[BistroLine] = Field(default_factory=list)
 
 
+class CategoryLine(BaseModel):
+    """One grossed-up line in a permanent/christmas breakdown (display only).
+
+    ``line_total`` is the authoritative grossed component cost; ``unit_price`` is
+    a per-unit display figure and may not exactly divide the total after rounding.
+    """
+
+    label: str
+    detail: str | None = None
+    quantity: float = 1
+    unit_price: float = 0
+    line_total: float = 0
+
+
+class PermanentPricing(BaseModel):
+    """Computed permanent-holiday-lighting price + component breakdown."""
+
+    feet: float
+    channels: int
+    per_ft: float
+    roofline_cost: float
+    controller_cost: float
+    channels_cost: float
+    minimum: float
+    raw_total: float
+    total: float
+    min_applied: bool
+    lines: list[CategoryLine] = Field(default_factory=list)
+
+
+class ChristmasPricing(BaseModel):
+    """Computed seasonal-Christmas price + component breakdown."""
+
+    roofline_feet: float
+    roofline_cost: float
+    trees_cost: float
+    bushes_cost: float
+    wreaths_cost: float
+    takedown_cost: float
+    storage_cost: float
+    minimum: float
+    raw_total: float
+    total: float
+    min_applied: bool
+    lines: list[CategoryLine] = Field(default_factory=list)
+
+
 class PricingSettingsUpdate(BaseModel):
     """Partial update of the pricing config (shallow top-level merge).
 
@@ -270,3 +394,5 @@ class PricingSettingsUpdate(BaseModel):
     care_plan: CarePlanConfig | None = None
     savings: SavingsConfig | None = None
     bistro: BistroConfig | None = None
+    permanent: PermanentConfig | None = None
+    christmas: ChristmasConfig | None = None

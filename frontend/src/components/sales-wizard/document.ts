@@ -9,6 +9,8 @@
 import type {
   BistroPricing,
   CarePlanPricing,
+  CategoryLine,
+  ProposalCategorySection,
   ProposalCharge,
   ProposalDocument,
   ProposalLine,
@@ -54,6 +56,11 @@ export interface WizardBistroView extends Omit<BistroPricing, "lines"> {
   lines: NonNullable<BistroPricing["lines"]>;
 }
 
+export interface WizardCategorySection
+  extends Omit<ProposalCategorySection, "lines"> {
+  lines: CategoryLine[];
+}
+
 export interface WizardDocument {
   client: WizardClient | null;
   tier_order: string[];
@@ -65,9 +72,14 @@ export interface WizardDocument {
   bistro: WizardBistroView | null;
   financing: WizardFinancingView | null;
   night_preview: Record<string, unknown> | null;
+  categories: string[];
+  category_sections: WizardCategorySection[];
   selected_financed_total: number;
   selected_cash_total: number;
   selected_monthly_payment: number;
+  grand_financed_total: number;
+  grand_cash_total: number;
+  grand_monthly_payment: number;
 }
 
 export function normalizeDocument(doc: ProposalDocument): WizardDocument {
@@ -117,9 +129,19 @@ export function normalizeDocument(doc: ProposalDocument): WizardDocument {
     night_preview:
       (doc.night_preview as Record<string, unknown> | null | undefined) ??
       null,
+    categories: doc.categories ?? [],
+    category_sections: (doc.category_sections ?? []).map(
+      (section: ProposalCategorySection) => ({
+        ...section,
+        lines: section.lines ?? [],
+      }),
+    ),
     selected_financed_total: doc.selected_financed_total ?? 0,
     selected_cash_total: doc.selected_cash_total ?? 0,
     selected_monthly_payment: doc.selected_monthly_payment ?? 0,
+    grand_financed_total: doc.grand_financed_total ?? 0,
+    grand_cash_total: doc.grand_cash_total ?? 0,
+    grand_monthly_payment: doc.grand_monthly_payment ?? 0,
   };
 }
 
@@ -132,7 +154,13 @@ export function parseProposalDocument(
 ): WizardDocument | null {
   if (!raw || typeof raw !== "object") return null;
   const doc = raw as unknown as ProposalDocument;
-  if (!Array.isArray(doc.tiers) || !doc.tiers.length) return null;
+  // A wizard/builder snapshot has at least one priced product line: landscape
+  // tiers, a permanent/christmas section, or bistro. Plain quotes have none.
+  const hasTiers = Array.isArray(doc.tiers) && doc.tiers.length > 0;
+  const hasSections =
+    Array.isArray(doc.category_sections) && doc.category_sections.length > 0;
+  const hasBistro = Boolean(doc.bistro && (doc.bistro.total ?? 0) > 0);
+  if (!hasTiers && !hasSections && !hasBistro) return null;
   return normalizeDocument(doc);
 }
 

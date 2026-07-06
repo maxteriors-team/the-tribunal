@@ -12,16 +12,19 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from app.schemas.pricing import PricingSettings
+from app.schemas.pricing import ChristmasPricing, PermanentPricing, PricingSettings
 from app.schemas.proposal_wizard import (
+    CATEGORY_ORDER,
     FulfillmentPart,
     ProposalCarePlan,
+    ProposalCategorySection,
     ProposalCharge,
     ProposalDocument,
     ProposalFinancing,
     ProposalLine,
     ProposalTierView,
     ProposalWizardPayload,
+    WizardCategoryCount,
 )
 from app.schemas.quote import QuoteLineItemCreate
 from app.services.quotes import proposal_pricing as pp
@@ -40,6 +43,47 @@ class CatalogEntry:
 
 def _d(value: float | int | Decimal) -> Decimal:
     return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _active_categories(payload: ProposalWizardPayload) -> list[str]:
+    """Resolve the product lines this quote includes, in canonical order.
+
+    Explicit ``payload.categories`` wins. When empty (legacy wizard payloads),
+    infer landscape, plus bistro when a bistro selection with footage is present,
+    so pre-existing quotes and callers keep their exact behavior.
+    """
+    if payload.categories:
+        selected = {c for c in payload.categories if c in CATEGORY_ORDER}
+    else:
+        selected = {"landscape"}
+        if payload.bistro is not None and payload.bistro.feet > 0:
+            selected.add("bistro")
+    return [c for c in CATEGORY_ORDER if c in selected]
+
+
+def _counts(items: list[WizardCategoryCount]) -> dict[str, float]:
+    """Fold size-keyed count rows into a ``{key: qty}`` map (last write wins)."""
+    return {i.key: float(i.quantity) for i in items}
+
+
+def _category_section(
+    key: str,
+    label: str,
+    pricing: PermanentPricing | ChristmasPricing,
+    config: PricingSettings,
+) -> ProposalCategorySection:
+    """Wrap a category pricing result with financed/cash/monthly figures."""
+    total = _d(pricing.total)
+    return ProposalCategorySection(
+        key=key,
+        label=label,
+        lines=list(pricing.lines),
+        financed_total=float(total),
+        cash_total=float(pp.cash_price(total, config)) if total > 0 else 0.0,
+        cash_savings=float(pp.cash_savings(total, config)) if total > 0 else 0.0,
+        monthly_payment=float(pp.monthly_payment(total, config)) if total > 0 else 0.0,
+        min_applied=pricing.min_applied,
+    )
 
 
 def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document assembly
@@ -63,7 +107,10 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
     additional_total = sum((_d(c.amount) for c in charges), Decimal("0"))
 
-    tier_order = config.tier_order or [t.key for t in config.tiers]
+    categories = _active_categories(payload)
+    has_landscape = "landscape" in categories
+
+    tier_order = (config.tier_order or [t.key for t in config.tiers]) if has_landscape else []
     tiers_by_key = {t.key: t for t in config.tiers}
 
     tier_views: list[ProposalTierView] = []
@@ -133,7 +180,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
         )
     care_plan = None
-    if config.care_plan.tiers:
+    if has_landscape and config.care_plan.tiers:
         care_plan = ProposalCarePlan(
             fixture_count=care_count,
             free_fixtures=config.care_plan.free_fixtures,
@@ -141,15 +188,49 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             selected=payload.care_plan_tier,
         )
 
-    # Bistro string lighting (optional add-on).
+    # Bistro string lighting (its own bespoke block, kept as-is).
     bistro = None
-    if payload.bistro is not None and payload.bistro.feet > 0 and config.bistro.enabled:
+    if (
+        "bistro" in categories
+        and payload.bistro is not None
+        and payload.bistro.feet > 0
+        and config.bistro.enabled
+    ):
         bistro = pp.price_bistro(
             config,
             product=payload.bistro.product,
             tier_key=payload.bistro.tier,
             feet=payload.bistro.feet,
         )
+
+    # New per-linear-ft / decor product lines rendered as uniform sections.
+    category_sections: list[ProposalCategorySection] = []
+    permanent_pricing = None
+    if "permanent" in categories and payload.permanent is not None:
+        permanent_pricing = pp.price_permanent(
+            config,
+            feet=payload.permanent.feet,
+            channels=payload.permanent.channels,
+        )
+        if permanent_pricing.total > 0:
+            category_sections.append(
+                _category_section("permanent", config.permanent.label, permanent_pricing, config)
+            )
+    christmas_pricing = None
+    if "christmas" in categories and payload.christmas is not None:
+        christmas_pricing = pp.price_christmas(
+            config,
+            roofline_feet=payload.christmas.roofline_feet,
+            trees=_counts(payload.christmas.trees),
+            bushes=_counts(payload.christmas.bushes),
+            wreaths=_counts(payload.christmas.wreaths),
+            takedown=payload.christmas.takedown,
+            storage=payload.christmas.storage,
+        )
+        if christmas_pricing.total > 0:
+            category_sections.append(
+                _category_section("christmas", config.christmas.label, christmas_pricing, config)
+            )
 
     financing = ProposalFinancing(
         enabled=config.financing.enabled,
@@ -212,6 +293,29 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                 discount=0,
             )
         )
+    # One canonical line per new category section (permanent / christmas).
+    for section in category_sections:
+        detail_bits = [line.label for line in section.lines]
+        line_items.append(
+            QuoteLineItemCreate(
+                name=section.label,
+                description=" · ".join(detail_bits) if detail_bits else None,
+                quantity=1,
+                unit_price=section.financed_total,
+                discount=0,
+            )
+        )
+
+    # Grand totals are derived from the emitted line items so the document's
+    # display figures can never drift from the server-recomputed quote total.
+    grand_financed = sum(
+        (_d(li.unit_price) * _d(li.quantity) - _d(li.discount) for li in line_items),
+        Decimal("0"),
+    )
+    grand_cash = pp.cash_price(grand_financed, config) if grand_financed > 0 else Decimal("0")
+    grand_monthly = (
+        pp.monthly_payment(grand_financed, config) if grand_financed > 0 else Decimal("0")
+    )
 
     document = ProposalDocument(
         version=1,
@@ -225,9 +329,14 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         bistro=bistro,
         financing=financing,
         night_preview=payload.night_preview,
+        categories=categories,
+        category_sections=category_sections,
         selected_financed_total=selected_financed,
         selected_cash_total=selected_cash,
         selected_monthly_payment=selected_monthly,
+        grand_financed_total=float(grand_financed),
+        grand_cash_total=float(grand_cash),
+        grand_monthly_payment=float(grand_monthly),
         fulfillment=list(fulfillment.values()),
         notes=payload.notes,
         terms=payload.terms,
