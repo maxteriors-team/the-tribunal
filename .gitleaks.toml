@@ -30,3 +30,15 @@ paths = [
     '''backend/tests/contract/.*''',
     '''backend/tests/fixtures/webhooks/.*''',
 ]
+
+[[allowlists]]
+description = "EZ Pixel publishable project key. The `pk_live_` prefix marks a browser-side publishable analytics key: it is shipped in the client bundle by design (see frontend/ez-pixel.client.tsx, read from EZCODER_PIXEL_KEY on the server in frontend/instrumentation.ts) and only authorizes anonymous event ingestion to the pixel worker — it grants no account, data, or API access. Not a credential; nothing to rotate."
+regexes = [
+    '''pk_live_c300992585576c6cf817ab7d6ae29792''',
+]
+
+[[allowlists]]
+description = "Mac iMessage relay docstring smoke-test. `local-token` is a literal placeholder passed as MAC_RELAY_TOKEN in the example curl command in the module docstring; it is not a real credential. Scoped to the exact placeholder value (not the file path) so any real token later added to this token-handling script is still flagged. Value-matching also covers both the current scripts/ops/ path and the pre-refactor scripts/ path in history."
+regexes = [
+    '''^local-token$''',
+]

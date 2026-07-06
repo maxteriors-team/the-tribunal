@@ -118,8 +118,18 @@ jobs:
             echo '```'
           } > pip-audit-issue.md
 
+      - name: Write findings to job summary
+        if: steps.severity_check.outputs.has_vulns == 'true'
+        # Mirror the report into the run summary so findings stay visible even
+        # when repo Issues are disabled (the issue step below is best-effort).
+        run: cat pip-audit-issue.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Open issue for vulnerabilities
         if: steps.severity_check.outputs.has_vulns == 'true'
+        # Best-effort: repos with Issues disabled return 410 here. Don't let that
+        # mask the real gate — the job still fails at the explicit step below, and
+        # the findings are in the job summary + uploaded artifact regardless.
+        continue-on-error: true
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Security: backend pip-audit detected vulnerabilities"
@@ -231,8 +241,18 @@ jobs:
             echo '```'
           } > npm-audit-issue.md
 
+      - name: Write findings to job summary
+        if: steps.severity_check.outputs.has_vulns == 'true'
+        # Mirror the report into the run summary so findings stay visible even
+        # when repo Issues are disabled (the issue step below is best-effort).
+        run: cat npm-audit-issue.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Open issue for vulnerabilities
         if: steps.severity_check.outputs.has_vulns == 'true'
+        # Best-effort: repos with Issues disabled return 410 here. Don't let that
+        # mask the real gate — the job still fails at the explicit step below, and
+        # the findings are in the job summary + uploaded artifact regardless.
+        continue-on-error: true
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Security: frontend npm audit detected high-severity vulnerabilities"
@@ -311,8 +331,18 @@ jobs:
             echo "3. Open a follow-up to remove the secret from git history if it is still reachable on \`main\`."
           } > gitleaks-issue.md
 
+      - name: Write findings to job summary
+        if: steps.gitleaks.outcome == 'failure'
+        # Mirror the report into the run summary so findings stay visible even
+        # when repo Issues are disabled (the issue step below is best-effort).
+        run: cat gitleaks-issue.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Open issue for leaked secrets
         if: steps.gitleaks.outcome == 'failure'
+        # Best-effort: repos with Issues disabled return 410 here. Don't let that
+        # mask the real gate — the job still fails at the explicit step below, and
+        # the findings are in the job summary + uploaded artifact regardless.
+        continue-on-error: true
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Security: gitleaks detected secrets in repository history"

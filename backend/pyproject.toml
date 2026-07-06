@@ -25,8 +25,10 @@ dependencies = [
     # runtime requirement: lower bound only — fastapi pins the effective upper. Kept explicit so a future
     # fastapi downgrade cannot silently drag in pre-CVE-2025-54121 starlette. Real floor is fastapi's.
     # CVE fix: starlette 1.0.1 patches GHSA-86qp-5c8j-p5mr / PYSEC-2026-161 (BadHost: missing Host-header
-    # validation poisons request.url.path, bypassing path-based security checks). Do not lower below 1.0.1.
-    "starlette>=1.0.1",
+    # validation poisons request.url.path, bypassing path-based security checks); 1.3.1 patches
+    # PYSEC-2026-248 and PYSEC-2026-249. fastapi requires only starlette>=0.46.0 (no upper cap), so this
+    # is compatible. Do not lower below 1.3.1.
+    "starlette>=1.3.1",
     # WebSocket client (Grok realtime, audio streaming)
     # feature floor: websockets 14 introduced the new asyncio API used in app/websockets/voice_bridge.py.
     "websockets>=14.0",
@@ -55,7 +57,8 @@ dependencies = [
     # breaking change floor: 2.12 changed model_fields_set behaviour for extras; our schemas assume 2.13+.
     "pydantic>=2.13.4",
     # runtime requirement: pydantic-settings 2.14 aligns with pydantic 2.13's CoreSchema changes.
-    "pydantic-settings>=2.14.1",
+    # CVE fix: 2.14.2 patches GHSA-4xgf-cpjx-pc3j; do not lower below 2.14.2.
+    "pydantic-settings>=2.14.2",
     # security hardening: 2.2 added stricter IDN/RFC 6531 validation used by app/schemas/contact.py.
     "email-validator>=2.2.0",
     # Authentication & Encryption
@@ -67,9 +70,10 @@ dependencies = [
     "argon2-cffi>=23.1.0",
     # baseline: bcrypt 4.x rewrote to Rust; 4.0 is the floor that ships pre-built wheels for 3.12/3.13.
     "bcrypt>=4.0.0",
-    # CVE fix: python-multipart 0.0.28 is the latest 0.x patch carrying the CVE-2024-24762 ReDoS fix
-    # (originally landed in 0.0.7). Newer 1.x is gated by upstream FastAPI; do not lower.
-    "python-multipart>=0.0.28",
+    # CVE fix: python-multipart 0.0.31 patches CVE-2026-53538/53539/53540 (multipart parsing DoS)
+    # on top of the CVE-2024-24762 ReDoS fix (0.0.7). Still 0.x, so within the range upstream
+    # FastAPI gates. Do not lower below 0.0.31.
+    "python-multipart>=0.0.31",
     # HTTP Client
     # feature floor: httpx 0.28 made the `proxies=` → `proxy=` rename and is the floor openai 2.x assumes.
     "httpx>=0.28.0",
@@ -103,9 +107,9 @@ dependencies = [
     "scikit-learn>=1.5.0",
     # CVE fix: cryptography >=46.0.7 patches CVE-2026-39892 (non-contiguous buffer overflow); >=46.0.6
     # patches CVE-2026-34073 (X.509 name-constraint bypass); >=46.0.0 patches CVE-2026-26007 (ECC
-    # subgroup attack via SECT curves). 48.0.0 is the current stable that bundles all three plus
-    # OpenSSL 3.5.x. Do not lower below 46.0.7 under any circumstance.
-    "cryptography>=48.0.0",
+    # subgroup attack via SECT curves); >=48.0.1 patches GHSA-537c-gmf6-5ccf. 48.0.1 bundles all four
+    # plus OpenSSL 3.5.x. Do not lower below 48.0.1 under any circumstance.
+    "cryptography>=48.0.1",
     # runtime requirement: stdlib `audioop` was removed in Python 3.13; this is the PyPI backport.
     "audioop-lts>=0.2.1 ; python_full_version >= '3.13'",
     # feature floor: stripe 15.1 carries the 2025-09 API version pinned in app/services/billing/.
@@ -139,7 +143,8 @@ dependencies = [
     "tiktoken>=0.8.0",
     # feature floor: pypdf 5.1 is the maintained pure-Python PDF parser used for text extraction
     # in app/services/knowledge/text_extraction.py (supersedes the unmaintained PyPDF2 line).
-    "pypdf>=5.1.0",
+    # CVE fix: 6.13.3 patches GHSA-jm82-fx9c-mx94 (quadratic blowup on crafted PDFs); do not lower below 6.13.3.
+    "pypdf>=6.13.3",
     # feature floor: python-docx 1.1 carries the typing + lxml fixes used for .docx text extraction
     # in app/services/knowledge/text_extraction.py.
     "python-docx>=1.1.2",
