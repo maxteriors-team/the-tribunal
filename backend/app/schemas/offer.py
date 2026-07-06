@@ -279,13 +279,23 @@ class PublicOfferResponse(BaseModel):
     require_phone: bool = False
     require_name: bool = False
 
+    # Shown in the SMS-consent disclosure (TCR requires the brand name in the CTA)
+    business_name: str | None = None
+
 
 class OptInRequest(BaseModel):
-    """Request schema for opt-in submission."""
+    """Request schema for opt-in submission.
+
+    ``sms_consent`` mirrors the form's optional, unchecked-by-default checkbox
+    (TCR/10DLC requirement — error 803 is issued when consent is bundled into
+    form submission). Submitting without it must always succeed; it only
+    controls whether the contact is recorded as SMS-opted-in.
+    """
 
     email: str | None = Field(default=None, max_length=255)
     phone_number: str | None = Field(default=None, max_length=50)
     name: str | None = Field(default=None, max_length=255)
+    sms_consent: bool = False
 
 
 class OptInResponse(BaseModel):

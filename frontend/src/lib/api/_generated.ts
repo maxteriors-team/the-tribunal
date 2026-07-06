@@ -11425,6 +11425,34 @@ export interface components {
             unit_price?: number | null;
         };
         /**
+         * CategoryLine
+         * @description One grossed-up line in a permanent/christmas breakdown (display only).
+         *
+         *     ``line_total`` is the authoritative grossed component cost; ``unit_price`` is
+         *     a per-unit display figure and may not exactly divide the total after rounding.
+         */
+        CategoryLine: {
+            /** Detail */
+            detail?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Line Total
+             * @default 0
+             */
+            line_total: number;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Unit Price
+             * @default 0
+             */
+            unit_price: number;
+        };
+        /**
          * ChangePasswordRequest
          * @description Schema for changing password.
          */
@@ -11478,6 +11506,58 @@ export interface components {
         CheckoutResponse: {
             /** Checkout Url */
             checkout_url: string;
+        };
+        /**
+         * ChristmasConfig
+         * @description Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.
+         *
+         *     Rates are *net* placeholders (operator's tool not provided) tuned later in
+         *     Settings → Pricing. ``takedown_rate`` is a fraction of the install subtotal
+         *     added when the client opts into post-season takedown; ``storage_price`` is a
+         *     flat fee for off-season storage.
+         */
+        ChristmasConfig: {
+            /** Bush Rates */
+            bush_rates?: components["schemas"]["SizeRate"][];
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Label
+             * @default Christmas Lighting
+             */
+            label: string;
+            /**
+             * Minimum
+             * @default 0
+             */
+            minimum: number;
+            /**
+             * Roofline Per Ft
+             * @default 6
+             */
+            roofline_per_ft: number;
+            /**
+             * Storage Price
+             * @default 0
+             */
+            storage_price: number;
+            /**
+             * Takedown Enabled
+             * @default true
+             */
+            takedown_enabled: boolean;
+            /**
+             * Takedown Rate
+             * @default 0.25
+             */
+            takedown_rate: number;
+            /** Tree Rates */
+            tree_rates?: components["schemas"]["SizeRate"][];
+            /** Wreath Rates */
+            wreath_rates?: components["schemas"]["SizeRate"][];
         };
         /**
          * ClockInRequest
@@ -16681,6 +16761,11 @@ export interface components {
         /**
          * OptInRequest
          * @description Request schema for opt-in submission.
+         *
+         *     ``sms_consent`` mirrors the form's optional, unchecked-by-default checkbox
+         *     (TCR/10DLC requirement — error 803 is issued when consent is bundled into
+         *     form submission). Submitting without it must always succeed; it only
+         *     controls whether the contact is recorded as SMS-opted-in.
          */
         OptInRequest: {
             /** Email */
@@ -16689,6 +16774,11 @@ export interface components {
             name?: string | null;
             /** Phone Number */
             phone_number?: string | null;
+            /**
+             * Sms Consent
+             * @default false
+             */
+            sms_consent: boolean;
         };
         /**
          * OptInResponse
@@ -17583,6 +17673,52 @@ export interface components {
             total: number;
         };
         /**
+         * PermanentConfig
+         * @description Permanent LED roofline priced per linear foot plus a controller/hub.
+         *
+         *     Placeholder rates ship so a workspace prices before customization; the
+         *     operator tunes ``per_ft`` / controller / channel rates in Settings → Pricing
+         *     (the operator's standalone tool was not provided, so these are sane defaults).
+         *     All values are *net*; the engine grosses them up like every other price.
+         */
+        PermanentConfig: {
+            /**
+             * Controller Base
+             * @default 299
+             */
+            controller_base: number;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Included Channels
+             * @default 1
+             */
+            included_channels: number;
+            /**
+             * Label
+             * @default Permanent Holiday Lighting
+             */
+            label: string;
+            /**
+             * Minimum
+             * @default 0
+             */
+            minimum: number;
+            /**
+             * Per Channel
+             * @default 45
+             */
+            per_channel: number;
+            /**
+             * Per Ft
+             * @default 32
+             */
+            per_ft: number;
+        };
+        /**
          * PersonResult
          * @description One person row in a people-search result, with attached signals.
          */
@@ -17866,8 +18002,10 @@ export interface components {
             bistro?: components["schemas"]["BistroConfig"];
             care_plan?: components["schemas"]["CarePlanConfig"];
             cash_discount?: components["schemas"]["CashDiscountConfig"];
+            christmas?: components["schemas"]["ChristmasConfig"];
             commission?: components["schemas"]["CommissionConfig"];
             financing?: components["schemas"]["FinancingConfig"];
+            permanent?: components["schemas"]["PermanentConfig"];
             savings?: components["schemas"]["SavingsConfig"];
             tax?: components["schemas"]["TaxConfig"];
             /** Tier Order */
@@ -17887,8 +18025,10 @@ export interface components {
             bistro?: components["schemas"]["BistroConfig"] | null;
             care_plan?: components["schemas"]["CarePlanConfig"] | null;
             cash_discount?: components["schemas"]["CashDiscountConfig"] | null;
+            christmas?: components["schemas"]["ChristmasConfig"] | null;
             commission?: components["schemas"]["CommissionConfig"] | null;
             financing?: components["schemas"]["FinancingConfig"] | null;
+            permanent?: components["schemas"]["PermanentConfig"] | null;
             savings?: components["schemas"]["SavingsConfig"] | null;
             tax?: components["schemas"]["TaxConfig"] | null;
             /** Tier Order */
@@ -18087,6 +18227,47 @@ export interface components {
             selected?: string | null;
         };
         /**
+         * ProposalCategorySection
+         * @description One priced product-line section (permanent / christmas) in a quote.
+         *
+         *     Landscape keeps its rich tier cards and bistro its bespoke block; these
+         *     sections carry the *new* per-linear-ft / decor lines so the client page can
+         *     render any mix of product lines uniformly.
+         */
+        ProposalCategorySection: {
+            /**
+             * Cash Savings
+             * @default 0
+             */
+            cash_savings: number;
+            /**
+             * Cash Total
+             * @default 0
+             */
+            cash_total: number;
+            /**
+             * Financed Total
+             * @default 0
+             */
+            financed_total: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Lines */
+            lines?: components["schemas"]["CategoryLine"][];
+            /**
+             * Min Applied
+             * @default false
+             */
+            min_applied: boolean;
+            /**
+             * Monthly Payment
+             * @default 0
+             */
+            monthly_payment: number;
+        };
+        /**
          * ProposalCharge
          * @description A grossed-up add-on charge included in every tier's price.
          */
@@ -18105,10 +18286,29 @@ export interface components {
             additional_charges?: components["schemas"]["ProposalCharge"][];
             bistro?: components["schemas"]["BistroPricing"] | null;
             care_plan?: components["schemas"]["ProposalCarePlan"] | null;
+            /** Categories */
+            categories?: string[];
+            /** Category Sections */
+            category_sections?: components["schemas"]["ProposalCategorySection"][];
             client?: components["schemas"]["WizardClient"] | null;
             financing?: components["schemas"]["ProposalFinancing"] | null;
             /** Fulfillment */
             fulfillment?: components["schemas"]["FulfillmentPart"][];
+            /**
+             * Grand Cash Total
+             * @default 0
+             */
+            grand_cash_total: number;
+            /**
+             * Grand Financed Total
+             * @default 0
+             */
+            grand_financed_total: number;
+            /**
+             * Grand Monthly Payment
+             * @default 0
+             */
+            grand_monthly_payment: number;
             /** Headline Tier */
             headline_tier?: string | null;
             /** Night Preview */
@@ -18299,6 +18499,9 @@ export interface components {
             care_count_manual?: number | null;
             /** Care Plan Tier */
             care_plan_tier?: string | null;
+            /** Categories */
+            categories?: string[];
+            christmas?: components["schemas"]["WizardChristmasSelection"] | null;
             client?: components["schemas"]["WizardClient"] | null;
             /** Contact Id */
             contact_id?: number | null;
@@ -18310,6 +18513,7 @@ export interface components {
             notes?: string | null;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            permanent?: components["schemas"]["WizardPermanentSelection"] | null;
             /** Quantities */
             quantities?: components["schemas"]["WizardFixtureQty"][];
             /** Selected Tier */
@@ -18494,6 +18698,8 @@ export interface components {
          * @description Public offer response - no sensitive data.
          */
         PublicOfferResponse: {
+            /** Business Name */
+            business_name?: string | null;
             /** Cta Subtext */
             cta_subtext?: string | null;
             /** Cta Text */
@@ -20539,6 +20745,21 @@ export interface components {
             state?: string | null;
         };
         /**
+         * SizeRate
+         * @description A size/wrap option (e.g. a tree size) with its own net install price.
+         */
+        SizeRate: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Price
+             * @default 0
+             */
+            price: number;
+        };
+        /**
          * SourceROIRow
          * @description One ranked lead-source ROI row for dashboard reporting.
          */
@@ -22003,6 +22224,19 @@ export interface components {
             tier: string;
         };
         /**
+         * WizardCategoryCount
+         * @description A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty).
+         */
+        WizardCategoryCount: {
+            /** Key */
+            key: string;
+            /**
+             * Quantity
+             * @default 0
+             */
+            quantity: number;
+        };
+        /**
          * WizardCharge
          * @description A custom add-on charge. The rep enters the *net* they want to keep; the
          *     server grosses it up by the finance buffer like every other price.
@@ -22015,6 +22249,33 @@ export interface components {
              * @default 0
              */
             net_amount: number;
+        };
+        /**
+         * WizardChristmasSelection
+         * @description Seasonal Christmas selection: roofline + decor counts + takedown/storage.
+         */
+        WizardChristmasSelection: {
+            /** Bushes */
+            bushes?: components["schemas"]["WizardCategoryCount"][];
+            /**
+             * Roofline Feet
+             * @default 0
+             */
+            roofline_feet: number;
+            /**
+             * Storage
+             * @default false
+             */
+            storage: boolean;
+            /**
+             * Takedown
+             * @default false
+             */
+            takedown: boolean;
+            /** Trees */
+            trees?: components["schemas"]["WizardCategoryCount"][];
+            /** Wreaths */
+            wreaths?: components["schemas"]["WizardCategoryCount"][];
         };
         /**
          * WizardClient
@@ -22052,6 +22313,22 @@ export interface components {
              * @default 0
              */
             quantity: number;
+        };
+        /**
+         * WizardPermanentSelection
+         * @description Permanent-holiday-lighting selection: roofline footage + zone count.
+         */
+        WizardPermanentSelection: {
+            /**
+             * Channels
+             * @default 0
+             */
+            channels: number;
+            /**
+             * Feet
+             * @default 0
+             */
+            feet: number;
         };
         /**
          * WorkspaceCreate

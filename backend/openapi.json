@@ -8714,6 +8714,46 @@
         "title": "CatalogItemUpdate",
         "type": "object"
       },
+      "CategoryLine": {
+        "description": "One grossed-up line in a permanent/christmas breakdown (display only).\n\n``line_total`` is the authoritative grossed component cost; ``unit_price`` is\na per-unit display figure and may not exactly divide the total after rounding.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "line_total": {
+            "default": 0,
+            "title": "Line Total",
+            "type": "number"
+          },
+          "quantity": {
+            "default": 1,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "unit_price": {
+            "default": 0,
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "CategoryLine",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "description": "Schema for changing password.",
         "properties": {
@@ -8822,6 +8862,74 @@
           "checkout_url"
         ],
         "title": "CheckoutResponse",
+        "type": "object"
+      },
+      "ChristmasConfig": {
+        "description": "Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.\n\nRates are *net* placeholders (operator's tool not provided) tuned later in\nSettings → Pricing. ``takedown_rate`` is a fraction of the install subtotal\nadded when the client opts into post-season takedown; ``storage_price`` is a\nflat fee for off-season storage.",
+        "properties": {
+          "bush_rates": {
+            "items": {
+              "$ref": "#/components/schemas/SizeRate"
+            },
+            "title": "Bush Rates",
+            "type": "array"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label": {
+            "default": "Christmas Lighting",
+            "title": "Label",
+            "type": "string"
+          },
+          "minimum": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "number"
+          },
+          "roofline_per_ft": {
+            "default": 6,
+            "minimum": 0.0,
+            "title": "Roofline Per Ft",
+            "type": "number"
+          },
+          "storage_price": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Storage Price",
+            "type": "number"
+          },
+          "takedown_enabled": {
+            "default": true,
+            "title": "Takedown Enabled",
+            "type": "boolean"
+          },
+          "takedown_rate": {
+            "default": 0.25,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Takedown Rate",
+            "type": "number"
+          },
+          "tree_rates": {
+            "items": {
+              "$ref": "#/components/schemas/SizeRate"
+            },
+            "title": "Tree Rates",
+            "type": "array"
+          },
+          "wreath_rates": {
+            "items": {
+              "$ref": "#/components/schemas/SizeRate"
+            },
+            "title": "Wreath Rates",
+            "type": "array"
+          }
+        },
+        "title": "ChristmasConfig",
         "type": "object"
       },
       "ClockInRequest": {
@@ -23225,7 +23333,7 @@
         "type": "object"
       },
       "OptInRequest": {
-        "description": "Request schema for opt-in submission.",
+        "description": "Request schema for opt-in submission.\n\n``sms_consent`` mirrors the form's optional, unchecked-by-default checkbox\n(TCR/10DLC requirement — error 803 is issued when consent is bundled into\nform submission). Submitting without it must always succeed; it only\ncontrols whether the contact is recorded as SMS-opted-in.",
         "properties": {
           "email": {
             "anyOf": [
@@ -23262,6 +23370,11 @@
               }
             ],
             "title": "Phone Number"
+          },
+          "sms_consent": {
+            "default": false,
+            "title": "Sms Consent",
+            "type": "boolean"
           }
         },
         "title": "OptInRequest",
@@ -25601,6 +25714,53 @@
         "title": "PeopleSearchResponse",
         "type": "object"
       },
+      "PermanentConfig": {
+        "description": "Permanent LED roofline priced per linear foot plus a controller/hub.\n\nPlaceholder rates ship so a workspace prices before customization; the\noperator tunes ``per_ft`` / controller / channel rates in Settings → Pricing\n(the operator's standalone tool was not provided, so these are sane defaults).\nAll values are *net*; the engine grosses them up like every other price.",
+        "properties": {
+          "controller_base": {
+            "default": 299,
+            "minimum": 0.0,
+            "title": "Controller Base",
+            "type": "number"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "included_channels": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Included Channels",
+            "type": "integer"
+          },
+          "label": {
+            "default": "Permanent Holiday Lighting",
+            "title": "Label",
+            "type": "string"
+          },
+          "minimum": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "number"
+          },
+          "per_channel": {
+            "default": 45,
+            "minimum": 0.0,
+            "title": "Per Channel",
+            "type": "number"
+          },
+          "per_ft": {
+            "default": 32,
+            "minimum": 0.0,
+            "title": "Per Ft",
+            "type": "number"
+          }
+        },
+        "title": "PermanentConfig",
+        "type": "object"
+      },
       "PersonResult": {
         "description": "One person row in a people-search result, with attached signals.",
         "properties": {
@@ -26374,11 +26534,17 @@
           "cash_discount": {
             "$ref": "#/components/schemas/CashDiscountConfig"
           },
+          "christmas": {
+            "$ref": "#/components/schemas/ChristmasConfig"
+          },
           "commission": {
             "$ref": "#/components/schemas/CommissionConfig"
           },
           "financing": {
             "$ref": "#/components/schemas/FinancingConfig"
+          },
+          "permanent": {
+            "$ref": "#/components/schemas/PermanentConfig"
           },
           "savings": {
             "$ref": "#/components/schemas/SavingsConfig"
@@ -26437,6 +26603,16 @@
               }
             ]
           },
+          "christmas": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChristmasConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "commission": {
             "anyOf": [
               {
@@ -26451,6 +26627,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/FinancingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permanent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PermanentConfig"
               },
               {
                 "type": "null"
@@ -27082,6 +27268,57 @@
         "title": "ProposalCarePlan",
         "type": "object"
       },
+      "ProposalCategorySection": {
+        "description": "One priced product-line section (permanent / christmas) in a quote.\n\nLandscape keeps its rich tier cards and bistro its bespoke block; these\nsections carry the *new* per-linear-ft / decor lines so the client page can\nrender any mix of product lines uniformly.",
+        "properties": {
+          "cash_savings": {
+            "default": 0,
+            "title": "Cash Savings",
+            "type": "number"
+          },
+          "cash_total": {
+            "default": 0,
+            "title": "Cash Total",
+            "type": "number"
+          },
+          "financed_total": {
+            "default": 0,
+            "title": "Financed Total",
+            "type": "number"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "min_applied": {
+            "default": false,
+            "title": "Min Applied",
+            "type": "boolean"
+          },
+          "monthly_payment": {
+            "default": 0,
+            "title": "Monthly Payment",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ProposalCategorySection",
+        "type": "object"
+      },
       "ProposalCharge": {
         "description": "A grossed-up add-on charge included in every tier's price.",
         "properties": {
@@ -27131,6 +27368,20 @@
               }
             ]
           },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "category_sections": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalCategorySection"
+            },
+            "title": "Category Sections",
+            "type": "array"
+          },
           "client": {
             "anyOf": [
               {
@@ -27157,6 +27408,21 @@
             },
             "title": "Fulfillment",
             "type": "array"
+          },
+          "grand_cash_total": {
+            "default": 0,
+            "title": "Grand Cash Total",
+            "type": "number"
+          },
+          "grand_financed_total": {
+            "default": 0,
+            "title": "Grand Financed Total",
+            "type": "number"
+          },
+          "grand_monthly_payment": {
+            "default": 0,
+            "title": "Grand Monthly Payment",
+            "type": "number"
           },
           "headline_tier": {
             "anyOf": [
@@ -27740,6 +28006,23 @@
             ],
             "title": "Care Plan Tier"
           },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "christmas": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardChristmasSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "client": {
             "anyOf": [
               {
@@ -27795,6 +28078,16 @@
               }
             ],
             "title": "Opportunity Id"
+          },
+          "permanent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardPermanentSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "quantities": {
             "items": {
@@ -28298,6 +28591,17 @@
       "PublicOfferResponse": {
         "description": "Public offer response - no sensitive data.",
         "properties": {
+          "business_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Name"
+          },
           "cta_subtext": {
             "anyOf": [
               {
@@ -33774,6 +34078,33 @@
         "title": "ServiceLocationUpdate",
         "type": "object"
       },
+      "SizeRate": {
+        "description": "A size/wrap option (e.g. a tree size) with its own net install price.",
+        "properties": {
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "SizeRate",
+        "type": "object"
+      },
       "SourceROIRow": {
         "description": "One ranked lead-source ROI row for dashboard reporting.",
         "properties": {
@@ -37535,6 +37866,28 @@
         "title": "WizardBistroSelection",
         "type": "object"
       },
+      "WizardCategoryCount": {
+        "description": "A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty).",
+        "properties": {
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "WizardCategoryCount",
+        "type": "object"
+      },
       "WizardCharge": {
         "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.",
         "properties": {
@@ -37558,6 +37911,50 @@
           }
         },
         "title": "WizardCharge",
+        "type": "object"
+      },
+      "WizardChristmasSelection": {
+        "description": "Seasonal Christmas selection: roofline + decor counts + takedown/storage.",
+        "properties": {
+          "bushes": {
+            "items": {
+              "$ref": "#/components/schemas/WizardCategoryCount"
+            },
+            "title": "Bushes",
+            "type": "array"
+          },
+          "roofline_feet": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Roofline Feet",
+            "type": "number"
+          },
+          "storage": {
+            "default": false,
+            "title": "Storage",
+            "type": "boolean"
+          },
+          "takedown": {
+            "default": false,
+            "title": "Takedown",
+            "type": "boolean"
+          },
+          "trees": {
+            "items": {
+              "$ref": "#/components/schemas/WizardCategoryCount"
+            },
+            "title": "Trees",
+            "type": "array"
+          },
+          "wreaths": {
+            "items": {
+              "$ref": "#/components/schemas/WizardCategoryCount"
+            },
+            "title": "Wreaths",
+            "type": "array"
+          }
+        },
+        "title": "WizardChristmasSelection",
         "type": "object"
       },
       "WizardClient": {
@@ -37695,6 +38092,25 @@
           "item_id"
         ],
         "title": "WizardFixtureQty",
+        "type": "object"
+      },
+      "WizardPermanentSelection": {
+        "description": "Permanent-holiday-lighting selection: roofline footage + zone count.",
+        "properties": {
+          "channels": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "feet": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Feet",
+            "type": "number"
+          }
+        },
+        "title": "WizardPermanentSelection",
         "type": "object"
       },
       "WorkspaceCreate": {

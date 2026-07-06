@@ -1,6 +1,7 @@
 """Offer management endpoints."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -343,7 +344,10 @@ async def get_public_offer(
     """Get a public offer by its slug."""
     result = await db.execute(
         select(Offer)
-        .options(selectinload(Offer.offer_lead_magnets).selectinload(OfferLeadMagnet.lead_magnet))
+        .options(
+            selectinload(Offer.offer_lead_magnets).selectinload(OfferLeadMagnet.lead_magnet),
+            selectinload(Offer.workspace),
+        )
         .where(
             Offer.public_slug == slug,
             Offer.is_public.is_(True),
@@ -407,6 +411,7 @@ async def get_public_offer(
         require_email=offer.require_email,
         require_phone=offer.require_phone,
         require_name=offer.require_name,
+        business_name=offer.workspace.name if offer.workspace else None,
     )
 
 
@@ -485,6 +490,17 @@ async def submit_offer_optin(
         )
         db.add(contact)
         await db.flush()
+
+    # Record SMS consent ONLY when the optional checkbox was explicitly
+    # ticked (TCR/10DLC: consent must never be bundled into form submission).
+    # An unchecked box never downgrades an existing opted_in status.
+    if optin.sms_consent and optin.phone_number:
+        contact.sms_consent_status = "opted_in"
+        contact.sms_consent_source = f"offer:{slug}"
+        contact.sms_consent_collected_at = datetime.now(UTC)
+        contact.sms_consent_notes = (
+            f"Checked optional SMS-consent checkbox on offer page '{offer.name}'"
+        )
 
     # Create lead magnet lead record for each attached lead magnet
     lead_magnet_lead_id: uuid.UUID | None = None

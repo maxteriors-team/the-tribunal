@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
@@ -35,6 +36,9 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  // 10DLC/TCR: SMS consent must be a separate, OPTIONAL, unchecked-by-default
+  // checkbox. It is never required to submit the form (TCR error 803).
+  const [smsConsent, setSmsConsent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const { data: offer, isPending, error } = useQuery({
@@ -57,6 +61,7 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
       email: email || undefined,
       phone_number: phone || undefined,
       name: name || undefined,
+      sms_consent: smsConsent,
     });
   };
 
@@ -301,6 +306,31 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
                         onChange={(e) => setPhone(e.target.value)}
                         required
                       />
+                    </div>
+                  )}
+
+                  {offer.require_phone && (
+                    <div className="flex items-start gap-2.5 rounded-md border p-3">
+                      <Checkbox
+                        id="sms-consent"
+                        checked={smsConsent}
+                        onCheckedChange={(checked) =>
+                          setSmsConsent(checked === true)
+                        }
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor="sms-consent"
+                        className="text-xs font-normal leading-relaxed text-muted-foreground cursor-pointer"
+                      >
+                        I agree to receive text messages from{" "}
+                        {offer.business_name || "this business"} about my
+                        inquiry, including follow-ups, offers, and appointment
+                        reminders. Message frequency varies. Message & data
+                        rates may apply. Reply STOP to opt out or HELP for
+                        help. Consent is not a condition of purchase.
+                        (Optional)
+                      </Label>
                     </div>
                   )}
 

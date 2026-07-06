@@ -24,12 +24,15 @@ export interface PublicOffer {
   require_email: boolean;
   require_phone: boolean;
   require_name: boolean;
+  business_name?: string;
 }
 
 export interface OptInRequest {
   email?: string;
   phone_number?: string;
   name?: string;
+  /** Optional, unchecked-by-default SMS consent checkbox (10DLC/TCR). */
+  sms_consent?: boolean;
 }
 
 export interface OptInResponse {
