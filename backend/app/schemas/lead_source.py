@@ -361,6 +361,10 @@ class LeadSubmitRequest(BaseModel):
     fbclid: str | None = Field(default=None, max_length=255)
     landing_page: str | None = Field(default=None, max_length=2048)
     referrer: str | None = Field(default=None, max_length=2048)
+    # 10DLC/TCR: mirrors the website form's optional, unchecked-by-default SMS
+    # consent checkbox. Submissions without it must always succeed (error 803
+    # is issued when consent is bundled into form submission).
+    sms_consent: bool = False
 
     @field_validator("phone_number")
     @classmethod

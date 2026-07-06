@@ -38725,6 +38725,11 @@
             ],
             "title": "Referrer"
           },
+          "sms_consent": {
+            "default": false,
+            "title": "Sms Consent",
+            "type": "boolean"
+          },
           "source_detail": {
             "anyOf": [
               {

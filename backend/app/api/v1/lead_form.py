@@ -532,6 +532,16 @@ async def submit_lead(
     is_new_lead = existing_contact is None
     contact = _upsert_contact_from_lead(db, lead_source, body, existing_contact)
 
+    # Record SMS consent ONLY when the website form's optional checkbox was
+    # explicitly ticked (10DLC/TCR: consent must never be bundled into form
+    # submission). An unchecked box never downgrades existing consent.
+    if body.sms_consent:
+        contact.sms_consent_status = "opted_in"
+        contact.sms_consent_source = f"lead_form:{lead_source.name or public_key}"
+        contact.sms_consent_collected_at = datetime.now(UTC)
+        page = f" on {body.landing_page}" if body.landing_page else ""
+        contact.sms_consent_notes = f"Checked optional SMS-consent checkbox{page}"
+
     # Persist first/latest-touch attribution + tracking signals so web leads
     # feed the lead-source ROI ranking instead of landing in the unknown queue.
     # Confidence is intentionally NOT taken from the request: this is a public

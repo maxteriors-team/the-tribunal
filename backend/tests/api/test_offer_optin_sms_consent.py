@@ -17,6 +17,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api.deps import get_db
 from app.api.v1 import offers as offers_module
 from app.models.contact import Contact
+from app.schemas.lead_source import LeadSubmitRequest
 from app.schemas.offer import OptInRequest
 
 WS_ID = uuid.uuid4()
@@ -25,6 +26,17 @@ WS_ID = uuid.uuid4()
 def test_optin_request_defaults_consent_to_false() -> None:
     request = OptInRequest(phone_number="+15551234567")
     assert request.sms_consent is False
+
+
+def test_lead_submit_request_defaults_consent_to_false() -> None:
+    """Website lead form (10DLC CTA): omitting the checkbox must parse as False."""
+    request = LeadSubmitRequest(first_name="Meg", phone_number="5551234567")
+    assert request.sms_consent is False
+
+
+def test_lead_submit_request_accepts_explicit_consent() -> None:
+    request = LeadSubmitRequest(first_name="Meg", phone_number="5551234567", sms_consent=True)
+    assert request.sms_consent is True
 
 
 @asynccontextmanager

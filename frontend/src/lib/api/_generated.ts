@@ -22559,6 +22559,11 @@ export interface components {
             phone_number: string;
             /** Referrer */
             referrer?: string | null;
+            /**
+             * Sms Consent
+             * @default false
+             */
+            sms_consent: boolean;
             /** Source Detail */
             source_detail?: string | null;
             /** Utm Campaign */
