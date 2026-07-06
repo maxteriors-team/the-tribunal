@@ -33,7 +33,6 @@ import {
   Star,
   UserSearch,
   Users,
-  Wand2,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -139,14 +138,6 @@ export const workspaceNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
     requires: "billing:read",
-  },
-  {
-    title: "LL Design",
-    url: "/sales-wizard",
-    icon: Wand2,
-    sidebar: true,
-    commandPalette: true,
-    requires: "billing:write",
   },
   {
     title: "Invoices",

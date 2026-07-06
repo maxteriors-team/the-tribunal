@@ -27,17 +27,17 @@ const CATEGORY_META: CategoryMeta[] = [
   },
   {
     key: "permanent",
-    label: "Permanent Holiday Lights",
+    label: "Holiday Lights — Permanent",
     blurb: "Year-round LED roofline track, priced per linear foot + controller.",
   },
   {
     key: "bistro",
-    label: "Bistro / String Lights",
-    blurb: "Patio & pergola festoon lighting, priced per linear foot.",
+    label: "Bistro Lights",
+    blurb: "Patio & pergola festoon string lighting, priced per linear foot.",
   },
   {
     key: "christmas",
-    label: "Christmas Lighting",
+    label: "Holiday Lights — Temporary",
     blurb: "Seasonal roofline, trees, bushes & wreaths — with optional takedown.",
   },
 ];

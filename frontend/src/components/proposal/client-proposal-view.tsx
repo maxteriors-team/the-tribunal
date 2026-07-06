@@ -1,25 +1,31 @@
 "use client";
 
 /**
- * Client-facing view for wizard-built proposals: the same dark/gold
- * presentation the rep shows in the sales wizard (`presentation-screen.tsx`),
- * rendered standalone from the saved `proposal_document` snapshot — with the
- * operator controls swapped for the client's Approve / Decline actions.
- * Plain quotes never reach this component; they keep the light sheet.
+ * Client-facing proposal view (dark/gold premium presentation).
+ *
+ * Renders the saved `proposal_document` snapshot for any product line the quote
+ * builder produces — landscape packages, permanent holiday, bistro/string, and
+ * seasonal Christmas — from one generalized layout. Operator controls are
+ * swapped for the client's Approve / Decline actions. Plain line-item quotes
+ * never reach this component; the page renders them with its simple light sheet.
+ *
+ * Self-contained: styling + fonts + document helpers all live in this module
+ * (`./proposal-theme.css`, `./proposal-fonts`, `./document`), independent of the
+ * disposable sales-wizard builder.
  */
 import { useMemo, useState } from "react";
 
-import { fmt } from "@/components/sales-wizard/document";
-import type { WizardDocument } from "@/components/sales-wizard/document";
-import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
 import { formatDate } from "@/lib/utils/date";
 import type { PublicProposal } from "@/types/proposal";
 
-import "@/components/sales-wizard/theme.css";
+import { fmt, type ProposalDoc } from "./document";
+import { proposalFontVars } from "./proposal-fonts";
 
-interface LightingProposalViewProps {
+import "./proposal-theme.css";
+
+interface ClientProposalViewProps {
   data: PublicProposal;
-  document: WizardDocument;
+  document: ProposalDoc;
   justApproved: boolean;
   justDeclined: boolean;
   busy: boolean;
@@ -28,7 +34,7 @@ interface LightingProposalViewProps {
   onDecline: (reason: string) => void;
 }
 
-export function LightingProposalView({
+export function ClientProposalView({
   data,
   document: doc,
   justApproved,
@@ -37,7 +43,7 @@ export function LightingProposalView({
   actionError,
   onApprove,
   onDecline,
-}: LightingProposalViewProps) {
+}: ClientProposalViewProps) {
   const { branding } = data;
   const brandName = branding.business_name;
 
@@ -53,9 +59,11 @@ export function LightingProposalView({
     ? `The ${last} Residence`
     : fullName
       ? `The ${fullName} Residence`
-      : "Your Residence";
+      : "Your Project";
 
-  // Lowest-priced package with real money drives the "as low as" figure.
+  const hasTiers = doc.tiers.some((t) => t.pricing.base > 0);
+
+  // Lowest-priced package with real money drives the tier "as low as" figure.
   const lowestTier = useMemo(() => {
     const priced = doc.tiers.filter((t) => t.pricing.base > 0);
     if (!priced.length) return null;
@@ -67,8 +75,11 @@ export function LightingProposalView({
     lowestTier?.pricing.monthly_by_term?.[String(termMonths)] ??
     lowestTier?.pricing.monthly_payment ??
     0;
-  const lowMonthly = monthlyAt(term);
+  // Financing headline figure: tier-based when the quote has packages, else the
+  // whole-project monthly for a category-only quote (permanent/christmas/bistro).
+  const lowMonthly = hasTiers ? monthlyAt(term) : doc.grand_monthly_payment;
   const terms = financing?.terms ?? [];
+  const showTermToggle = hasTiers && lowMonthly > 0 && terms.length > 1;
 
   const cashEnabled =
     doc.tiers.some(
@@ -106,7 +117,7 @@ export function LightingProposalView({
     .join(" \u00b7 ");
 
   return (
-    <div className={`sales-wizard ${salesWizardFontVars}`}>
+    <div className={`proposal-view ${proposalFontVars}`}>
       <div className="present-nav no-print">
         <div className="present-nav-brand">
           {`${brandName} · Proposal ${data.number}`}
@@ -125,8 +136,8 @@ export function LightingProposalView({
       <div className="present-body">
         {justApproved ? (
           <div className="pp-banner ok">
-            &#10003;&nbsp; You approved this proposal. Thank you — we&rsquo;ll
-            be in touch shortly to schedule your installation.
+            &#10003;&nbsp; You approved this proposal. Thank you — we&rsquo;ll be
+            in touch shortly to schedule your project.
           </div>
         ) : justDeclined ? (
           <div className="pp-banner no">
@@ -141,16 +152,12 @@ export function LightingProposalView({
         <div className="present-hero">
           {branding.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element -- workspace-uploaded logo URL
-            <img
-              src={branding.logo_url}
-              alt={brandName}
-              className="pp-logo"
-            />
+            <img src={branding.logo_url} alt={brandName} className="pp-logo" />
           ) : null}
           <div className="present-eyebrow">{brandName}</div>
           <div className="present-hi">
             Hi, <strong>{first || "there"}</strong>{" "}&#8212; your custom
-            lighting proposal
+            proposal
           </div>
           <div className="present-name">{residence}</div>
           <div className="present-ornament">
@@ -159,21 +166,19 @@ export function LightingProposalView({
             <div className="present-ornament-line r" />
           </div>
           <div className="present-tagline">
-            {first ? `${first}, we` : "We"}{" "}walked your property and designed
-            this with one goal &#8212; to make your home look like it belongs
-            on a magazine cover. Every fixture placed intentionally. Every
-            shadow considered.
+            {first ? `${first}, we` : "We"}{" "}designed this around your home and
+            the way you want it to feel &#8212; every detail chosen with
+            intention, nothing left to chance.
           </div>
         </div>
 
         <div className="value-bar">
-          <div className="value-bar-eyebrow">Our Design Philosophy</div>
+          <div className="value-bar-eyebrow">Our Approach</div>
           <div className="value-bar-text">
             Your home is already beautiful.{" "}
-            <em>We&rsquo;re here to reveal it after dark.</em>{" "}Every fixture is
-            a brush stroke &#8212; the trees, the architecture, the path to
-            your door &#8212; all composed into something your neighbors will
-            talk about.
+            <em>We&rsquo;re here to make it unforgettable.</em>{" "}Every detail is
+            deliberate &#8212; chosen for your home, your style, and the way you
+            live.
           </div>
         </div>
 
@@ -181,70 +186,72 @@ export function LightingProposalView({
           <div className="pnight-section">
             <div className="pnight-frame">
               {/* eslint-disable-next-line @next/next/no-img-element -- canvas-composited data URL */}
-              <img src={nightImage} alt="Your home at night" />
-              <div className="pnight-cap">
-                Your home, after dark &#8212; design preview
-              </div>
+              <img src={nightImage} alt="Your home, design preview" />
+              <div className="pnight-cap">Your home &#8212; design preview</div>
             </div>
           </div>
         ) : null}
 
-        <div className="pkg-grid">
-          {doc.tiers.map((tier) => {
-            const hasValue = tier.pricing.base > 0;
-            const lead = hasValue
-              ? fmt(tier.pricing.cash_total)
-              : "Custom Quote";
-            const isSelected = hasValue && tier.key === doc.selected_tier;
-            return (
-              <div
-                className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}`}
-                key={tier.key}
-              >
-                {tier.popular ? (
-                  <div className="pkg-popular-bar">&#9670; Most Popular</div>
-                ) : null}
-                <div className="pkg-card-topbar" />
-                <div className="pkg-card-inner">
-                  <div className="pkg-tier-label">{tier.label}</div>
-                  {tier.value_tag ? (
-                    <div className="pkg-value-tag">{tier.value_tag}</div>
+        {hasTiers ? (
+          <div className="pkg-grid">
+            {doc.tiers.map((tier) => {
+              const hasValue = tier.pricing.base > 0;
+              const lead = hasValue
+                ? fmt(tier.pricing.cash_total)
+                : "Custom Quote";
+              const isSelected = hasValue && tier.key === doc.selected_tier;
+              return (
+                <div
+                  className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}`}
+                  key={tier.key}
+                >
+                  {tier.popular ? (
+                    <div className="pkg-popular-bar">&#9670; Most Popular</div>
                   ) : null}
-                  <div className="pkg-name">{tier.name ?? tier.label}</div>
-                  <div className="pkg-experience">{tier.experience ?? ""}</div>
-                  <div className="pkg-price-wrap">
-                    <div className="pkg-price">{lead}</div>
-                    <div className="pkg-price-label">{priceLabel}</div>
-                    {hasValue && tier.pricing.monthly_payment > 0 ? (
-                      <div className="pkg-monthly">
-                        Financing options shown below
+                  <div className="pkg-card-topbar" />
+                  <div className="pkg-card-inner">
+                    <div className="pkg-tier-label">{tier.label}</div>
+                    {tier.value_tag ? (
+                      <div className="pkg-value-tag">{tier.value_tag}</div>
+                    ) : null}
+                    <div className="pkg-name">{tier.name ?? tier.label}</div>
+                    <div className="pkg-experience">
+                      {tier.experience ?? ""}
+                    </div>
+                    <div className="pkg-price-wrap">
+                      <div className="pkg-price">{lead}</div>
+                      <div className="pkg-price-label">{priceLabel}</div>
+                      {hasValue && tier.pricing.monthly_payment > 0 ? (
+                        <div className="pkg-monthly">
+                          Financing options shown below
+                        </div>
+                      ) : null}
+                    </div>
+                    {tier.warranty ? (
+                      <div className="pkg-warranty">
+                        <span className="pkg-warranty-dot" />
+                        {tier.warranty}
                       </div>
                     ) : null}
+                    <div className="pkg-points">
+                      {tier.points.map((point, i) => (
+                        <div className="pkg-point" key={i}>
+                          <span className="pkg-point-marker">&#8212;</span>
+                          <div>{point}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  {tier.warranty ? (
-                    <div className="pkg-warranty">
-                      <span className="pkg-warranty-dot" />
-                      {tier.warranty}
+                  {isSelected ? (
+                    <div className="pkg-selected-bar">
+                      &#9733; Your Selected Package
                     </div>
                   ) : null}
-                  <div className="pkg-points">
-                    {tier.points.map((point, i) => (
-                      <div className="pkg-point" key={i}>
-                        <span className="pkg-point-marker">&#8212;</span>
-                        <div>{point}</div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
-                {isSelected ? (
-                  <div className="pkg-selected-bar">
-                    &#9733; Your Selected Package
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         {doc.additional_charges.length ? (
           <div className="addon-bar">
@@ -276,8 +283,8 @@ export function LightingProposalView({
                     `${careSelected.visits} professional maintenance visit${careSelected.visits > 1 ? "s" : ""} every year`,
                     careSelected.repair_discount > 0
                       ? `${Math.round(careSelected.repair_discount * 100)}% off any repairs or replacements`
-                      : "Cleaning, re-aiming & full system health check",
-                    `Keeps your ${carePlan.fixture_count}-fixture system looking like the night we installed it`,
+                      : "Cleaning, tuning & a full system health check",
+                    `Keeps your ${carePlan.fixture_count}-fixture system looking like the day we installed it`,
                   ].map((point, i) => (
                     <div className="pcare-point" key={i}>
                       <span className="pcare-point-mark">&#9670;</span>
@@ -316,9 +323,7 @@ export function LightingProposalView({
                 </div>
                 <div className="pcare-price">
                   {fmt(bistro.total)}{" "}
-                  <span>
-                    {cashEnabled ? "cash/check one-time" : "one-time"}
-                  </span>
+                  <span>{cashEnabled ? "cash/check one-time" : "one-time"}</span>
                 </div>
                 <div className="pcare-points">
                   {[
@@ -435,32 +440,32 @@ export function LightingProposalView({
         ) : null}
 
         <div className="wg-section">
-          <div className="section-heading">The White Glove Experience</div>
+          <div className="section-heading">The {brandName} Experience</div>
           <div className="wg-grid">
             {[
               [
                 "A designer, not a salesperson",
-                "Your lighting designer walks every foot of your property, flags every fixture location by hand, and composes the design around your home\u2019s architecture — not a template.",
+                "Your project is designed around your home and how you live in it — never a template. We walk the property, listen, and compose the plan by hand.",
               ],
               [
                 "We treat your home like ours",
-                "Shoe covers indoors. Lawns left exactly as we found them — every wire buried, every bed raked, every footprint gone before we pull out of the driveway.",
+                "Shoe covers indoors, drop cloths where they matter, and your property left exactly as we found it — every footprint gone before we pull away.",
               ],
               [
-                "Night aiming, in person",
-                "We return after dark to aim and tune every fixture by eye. Your system isn\u2019t finished when it\u2019s installed — it\u2019s finished when it\u2019s beautiful.",
+                "Craftsmanship you can see",
+                "Premium materials, clean lines, and meticulous install work. The details you notice up close are the ones we obsess over.",
               ],
               [
                 "The reveal walkthrough",
-                "Your first look is a guided nighttime walkthrough with your designer. We don\u2019t leave until you\u2019ve seen every scene and love every one.",
+                "We don\u2019t call it finished until you\u2019ve seen it and love it. Your first look is a guided walkthrough with the person who designed it.",
               ],
               [
                 "One call, handled",
-                "A question, a tweak, a fixture nudged by a mower — you call your designer directly. No ticket queues, no call centers.",
+                "A question, a tweak, something that needs attention — you reach us directly. No ticket queues, no call centers.",
               ],
               [
-                "Here in ten years",
-                "Premium fixtures, trained designers, and a growing local company that stands behind every system it installs — for the long run.",
+                "Here for the long run",
+                "A growing local company that stands behind every project it delivers — this year and years from now.",
               ],
             ].map(([title, desc]) => (
               <div className="wg-item" key={title}>
@@ -485,9 +490,9 @@ export function LightingProposalView({
               <em>Satisfaction</em>{" "}Guaranteed
             </div>
             <div className="guarantee-body">
-              We don&rsquo;t consider the job done until you&rsquo;re
-              completely happy with your lighting. If anything isn&rsquo;t
-              right after installation,{" "}
+              We don&rsquo;t consider the job done until you&rsquo;re completely
+              happy with your project. If anything isn&rsquo;t right after
+              installation,{" "}
               <strong>
                 we come back and make it right &#8212; no questions asked.
               </strong>{" "}
@@ -497,15 +502,15 @@ export function LightingProposalView({
         </div>
 
         <div className="included-section">
-          <div className="section-heading">Every Package Includes</div>
+          <div className="section-heading">Every Project Includes</div>
           <div className="included-grid">
             {[
-              "Professional wire burying & secure connections",
-              "Night aiming — every fixture aimed after dark",
-              "Custom lighting design for your property",
-              "Expert system setup & commissioning",
-              "1-year labor warranty on all work",
-              "All fixtures installed & ready to enjoy",
+              "Custom design tailored to your property",
+              "Professional installation by our own crew",
+              "Premium, commercial-grade materials",
+              "Meticulous cleanup — left better than we found it",
+              "1-year workmanship warranty on all work",
+              "A completion walkthrough before we call it done",
             ].map((item) => (
               <div className="included-item" key={item}>
                 <span className="included-check">&#9670;</span> {item}
@@ -521,23 +526,23 @@ export function LightingProposalView({
               <div className="step-num">I</div>
               <div className="step-title">You Choose</div>
               <div className="step-desc">
-                Pick the package that fits your vision and your home.
+                Pick the option that fits your vision and your home.
               </div>
             </div>
             <div className="step-card">
               <div className="step-num">II</div>
               <div className="step-title">We Install</div>
               <div className="step-desc">
-                Our team installs every fixture, buries every wire, aims every
-                light &#8212; usually in one day.
+                Our team handles everything — expertly, cleanly, and on
+                schedule.
               </div>
             </div>
             <div className="step-card">
               <div className="step-num">III</div>
               <div className="step-title">You Enjoy</div>
               <div className="step-desc">
-                Step outside that night to a home that looks like nothing else
-                on the street.
+                Step outside to a home that looks like nothing else on the
+                street.
               </div>
             </div>
           </div>
@@ -546,12 +551,12 @@ export function LightingProposalView({
         <div className="trust-section">
           <div className="trust-heading">Why {brandName}</div>
           <div className="trust-body">
-            We&rsquo;ve designed and installed lighting systems across hundreds
-            of homes in this area. Our reps aren&rsquo;t salespeople &#8212;
-            they&rsquo;re <strong>lighting designers</strong>. When we walk
-            your property, we&rsquo;re thinking about beam angles, focal
-            points, and the story your home tells at night. The fixtures are
-            just the medium. <strong>The result is the artwork.</strong>
+            We&rsquo;ve designed and installed projects across hundreds of homes
+            in this area. Our team aren&rsquo;t salespeople &#8212;
+            they&rsquo;re <strong>designers and craftspeople</strong>. When we
+            walk your property, we&rsquo;re thinking about proportion, detail,
+            and the story your home tells.{" "}
+            <strong>The result is the artwork.</strong>
           </div>
         </div>
 
@@ -560,7 +565,7 @@ export function LightingProposalView({
             <div className="fin-eyebrow">Payment Options</div>
             <div className="fin-headline">
               {financing.headline ??
-                "Own the night now — 0% APR financing available."}
+                "Move forward now — 0% APR financing available."}
             </div>
             {lowMonthly > 0 ? (
               <>
@@ -568,12 +573,19 @@ export function LightingProposalView({
                   as low as <strong>{fmt(lowMonthly)}</strong>
                   <span className="fin-figure-mo">/month</span>
                 </div>
-                <div className="fin-figure-sub">
-                  over {term}{" "}months &middot; 0% APR &middot; no interest, ever
-                </div>
+                {showTermToggle ? (
+                  <div className="fin-figure-sub">
+                    over {term}{" "}months &middot; 0% APR &middot; no interest,
+                    ever
+                  </div>
+                ) : (
+                  <div className="fin-figure-sub">
+                    0% APR &middot; no interest, ever
+                  </div>
+                )}
               </>
             ) : null}
-            {lowMonthly > 0 && terms.length > 1 ? (
+            {showTermToggle ? (
               <div className="fin-terms">
                 <div className="fin-terms-label">
                   Choose your term — every plan is 0% APR
@@ -587,9 +599,7 @@ export function LightingProposalView({
                       onClick={() => setTerm(t)}
                     >
                       <span className="fin-term-term">{t}{" "}Months</span>
-                      <span className="fin-term-mo">
-                        {fmt(monthlyAt(t))}/mo
-                      </span>
+                      <span className="fin-term-mo">{fmt(monthlyAt(t))}/mo</span>
                     </button>
                   ))}
                 </div>
@@ -681,8 +691,8 @@ export function LightingProposalView({
               <div className="cta-eyebrow">Ready to Move Forward</div>
               <div className="cta-heading">
                 {first
-                  ? `Let\u2019s light your home, ${first}.`
-                  : "Let\u2019s light your home."}
+                  ? `Let\u2019s bring your project to life, ${first}.`
+                  : "Let\u2019s bring your project to life."}
               </div>
               <div className="cta-sub">
                 {contactLine

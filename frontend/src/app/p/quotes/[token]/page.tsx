@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Printer, XCircle } from "lucide-react";
 import { use, useState } from "react";
 
-import { LightingProposalView } from "@/components/proposal/lighting-proposal-view";
-import { parseProposalDocument } from "@/components/sales-wizard/document";
+import { ClientProposalView } from "@/components/proposal/client-proposal-view";
+import { parseProposalDocument } from "@/components/proposal/document";
 import { Button } from "@/components/ui/button";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
@@ -103,15 +103,15 @@ export default function PublicProposalPage({
   const busy = approveMutation.isPending || declineMutation.isPending;
   const justApproved = approveMutation.isSuccess || data.status === "approved";
   const justDeclined = declineMutation.isSuccess || data.status === "declined";
-  // Wizard-built proposals render the same dark/gold presentation the rep
-  // shows in the sales wizard; plain quotes keep the light sheet below.
-  const wizardDocument = parseProposalDocument(data.proposal_document);
+  // Builder proposals (landscape, permanent, bistro, christmas) render the
+  // dark/gold client presentation; plain line-item quotes keep the light sheet.
+  const proposalDocument = parseProposalDocument(data.proposal_document);
 
-  if (wizardDocument) {
+  if (proposalDocument) {
     return (
-      <LightingProposalView
+      <ClientProposalView
         data={data}
-        document={wizardDocument}
+        document={proposalDocument}
         justApproved={justApproved}
         justDeclined={justDeclined}
         busy={busy}
