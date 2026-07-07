@@ -79,9 +79,11 @@ CALCOM_TEST_SIGNING_KEY = "".join(["contract-test", "-", "calcom-hmac-key"])
 def sign_calcom(body: bytes, secret: str = CALCOM_TEST_SIGNING_KEY) -> dict[str, str]:
     """Return Cal.com signature headers for ``body``.
 
-    Cal.com signs with HMAC-SHA256 over the raw body and sends
-    ``x-cal-signature-256`` plus ``x-cal-timestamp``. Production rejects
-    timestamps older than 5 minutes, so we always use ``now()``.
+    Cal.com signs with HMAC-SHA256 over the raw body and, in production, sends
+    only ``x-cal-signature-256`` (no timestamp header). We additionally attach a
+    fresh ``x-cal-timestamp`` so the verifier's best-effort staleness window
+    (applied only when the header is present) is exercised; the verifier does
+    not require it.
     """
     sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return {

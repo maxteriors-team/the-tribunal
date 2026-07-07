@@ -1,9 +1,12 @@
-"""Tests for Cal.com webhook replay protection in ``verify_calcom_webhook``.
+"""Tests for Cal.com webhook verification in ``verify_calcom_webhook``.
 
-The verifier must reject requests that omit the ``x-cal-timestamp`` header in
-production. A missing header previously short-circuited the staleness check,
-silently disabling replay protection. The dev escape hatch is
-``settings.skip_webhook_verification``; everything else must be rejected.
+Cal.com signs the raw body only (HMAC-SHA256) and does NOT send an
+``x-cal-timestamp`` header, so verification must hinge on the signature and must
+NOT require a timestamp — requiring one 403s every real Cal.com webhook. When a
+timestamp header happens to be present we still apply a best-effort staleness
+window. Replay protection proper is handled by the Redis idempotency dedupe in
+``app/api/webhooks/calcom.py``. The dev escape hatch is
+``settings.skip_webhook_verification``.
 """
 
 import hashlib
@@ -27,8 +30,7 @@ def _sign(body: bytes, secret: str = _SECRET) -> str:
 def _make_request(headers: dict[str, str], body: bytes = b"{}") -> Request:
     """Build a minimal ASGI ``Request`` carrying ``headers`` and ``body``."""
     encoded_headers = [
-        (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in headers.items()
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()
     ]
     scope = {
         "type": "http",
@@ -56,22 +58,21 @@ def _configure_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestMissingTimestampHeader:
-    """``x-cal-timestamp`` is required so replay protection cannot be bypassed."""
+    """Cal.com does not send ``x-cal-timestamp``; its absence must NOT 403."""
 
-    async def test_missing_timestamp_rejected(self) -> None:
+    async def test_missing_timestamp_accepted_with_valid_signature(self) -> None:
+        # Real Cal.com webhooks carry only x-cal-signature-256. A valid
+        # signature and no timestamp must pass — this is the exact shape of
+        # production traffic that a hard timestamp requirement was rejecting.
         body = b'{"event":"BOOKING_CREATED"}'
         request = _make_request(
             {"x-cal-signature-256": _sign(body)},
             body=body,
         )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await verify_calcom_webhook(request)
+        assert await verify_calcom_webhook(request) is True
 
-        assert exc_info.value.status_code == 403
-        assert "timestamp" in exc_info.value.detail.lower()
-
-    async def test_empty_timestamp_rejected(self) -> None:
+    async def test_empty_timestamp_accepted_with_valid_signature(self) -> None:
         body = b'{"event":"BOOKING_CREATED"}'
         request = _make_request(
             {
@@ -81,15 +82,32 @@ class TestMissingTimestampHeader:
             body=body,
         )
 
+        assert await verify_calcom_webhook(request) is True
+
+    async def test_missing_signature_still_rejected(self) -> None:
+        """The signature is the real auth and remains mandatory."""
+        request = _make_request({}, body=b'{"event":"BOOKING_CREATED"}')
+
         with pytest.raises(HTTPException) as exc_info:
             await verify_calcom_webhook(request)
 
         assert exc_info.value.status_code == 403
-        assert "timestamp" in exc_info.value.detail.lower()
+        assert "signature" in exc_info.value.detail.lower()
 
-    async def test_skip_flag_bypasses_missing_timestamp(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_invalid_signature_rejected_without_timestamp(self) -> None:
+        body = b'{"event":"BOOKING_CREATED"}'
+        request = _make_request(
+            {"x-cal-signature-256": "deadbeef" * 8},
+            body=body,
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_calcom_webhook(request)
+
+        assert exc_info.value.status_code == 403
+        assert "signature" in exc_info.value.detail.lower()
+
+    async def test_skip_flag_bypasses_verification(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Dev escape hatch still wins: no timestamp, no signature, still accepts."""
         monkeypatch.setattr(settings, "skip_webhook_verification", True)
         request = _make_request({}, body=b"{}")
