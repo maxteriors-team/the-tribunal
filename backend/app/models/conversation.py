@@ -61,6 +61,32 @@ class MessageStatus(StrEnum):
     COMPLETED = "completed"
 
 
+# Monotonic ordering of outbound delivery statuses, used to de-dupe and reorder
+# provider delivery webhooks (Telnyx SMS, Resend email). Providers can redeliver
+# or reorder webhooks, so a late ``sent`` must never downgrade a message that
+# already reached a terminal status — a regression would also double-count
+# campaign delivery stats. ``DELIVERED`` and ``FAILED`` are both terminal (equal
+# rank) so neither overrides the other. Statuses absent from the map (received,
+# voice-call states) rank 0 and never block a forward transition.
+_MESSAGE_STATUS_RANK: dict[MessageStatus, int] = {
+    MessageStatus.QUEUED: 0,
+    MessageStatus.SENDING: 1,
+    MessageStatus.SENT: 2,
+    MessageStatus.DELIVERED: 3,
+    MessageStatus.FAILED: 3,
+}
+
+
+def advances_message_status(current: MessageStatus, candidate: MessageStatus) -> bool:
+    """Return True if ``candidate`` is a strictly-forward delivery transition.
+
+    Used to guard provider webhook status updates against duplicate/out-of-order
+    delivery: only advance the stored status when the incoming status ranks
+    higher than the current one.
+    """
+    return _MESSAGE_STATUS_RANK.get(candidate, 0) > _MESSAGE_STATUS_RANK.get(current, 0)
+
+
 class MessageChannel(StrEnum):
     """Message channel."""
 

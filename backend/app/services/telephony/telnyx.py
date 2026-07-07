@@ -19,7 +19,13 @@ from app.core.metrics import (
     telnyx_api_latency_ms,
 )
 from app.models.contact import Contact
-from app.models.conversation import Conversation, Message, MessageChannel, MessageStatus
+from app.models.conversation import (
+    Conversation,
+    Message,
+    MessageChannel,
+    MessageStatus,
+    advances_message_status,
+)
 from app.services.idempotency import (
     find_message_by_idempotency_key,
     idempotency_headers,
@@ -42,6 +48,18 @@ TELNYX_RETRY_POLICY = ProviderRetryPolicy(
     initial_backoff_seconds=1.0,
     max_backoff_seconds=10.0,
 )
+
+# Telnyx SMS delivery-status strings (``to[].status``) mapped to our model.
+# Anything not listed here is treated as an unknown no-op by
+# ``update_message_status`` rather than raising.
+_TELNYX_STATUS_MAP: dict[str, MessageStatus] = {
+    "queued": MessageStatus.QUEUED,
+    "sending": MessageStatus.SENDING,
+    "sent": MessageStatus.SENT,
+    "delivered": MessageStatus.DELIVERED,
+    "delivery_failed": MessageStatus.FAILED,
+    "sending_failed": MessageStatus.FAILED,
+}
 
 
 @dataclass
@@ -477,17 +495,28 @@ class TelnyxSMSService:
         # whether this webhook represents a real state transition.
         previous_status = message.status
 
-        # Map Telnyx status to our status
-        status_map: dict[str, MessageStatus] = {
-            "queued": MessageStatus.QUEUED,
-            "sending": MessageStatus.SENDING,
-            "sent": MessageStatus.SENT,
-            "delivered": MessageStatus.DELIVERED,
-            "delivery_failed": MessageStatus.FAILED,
-            "sending_failed": MessageStatus.FAILED,
-        }
+        # Map the Telnyx delivery status to ours. Telnyx sends statuses we don't
+        # model 1:1 (``delivery_failed``/``sending_failed``) and ones we don't
+        # track at all (``expired``, ``delivery_unconfirmed``). An unknown status
+        # must be a no-op, never a crash: this runs inside the webhook handler,
+        # and any raised exception there returns HTTP 500, so Telnyx would retry
+        # the delivery-status webhook forever.
+        mapped_status = _TELNYX_STATUS_MAP.get(status)
+        if mapped_status is None:
+            self.logger.warning(
+                "unknown_telnyx_delivery_status",
+                provider_message_id=provider_message_id,
+                status=status,
+            )
+            return message, previous_status
 
-        message.status = status_map.get(status, MessageStatus(status))
+        # Ignore duplicate/out-of-order webhooks that would move the message
+        # backwards (e.g. a late ``sent`` after ``delivered``). Regressing the
+        # status would also double-count campaign delivery stats downstream.
+        if not advances_message_status(message.status, mapped_status):
+            return message, previous_status
+
+        message.status = mapped_status
 
         # Store error info if provided
         if error_code:

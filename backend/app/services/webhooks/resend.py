@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.campaign import Campaign
-from app.models.conversation import Conversation, Message, MessageStatus
+from app.models.conversation import (
+    Conversation,
+    Message,
+    MessageStatus,
+    advances_message_status,
+)
 from app.models.email_event import EmailEvent, EmailEventType
 from app.services.webhooks.pipeline import (
     WebhookDispatchResult,
@@ -154,8 +159,15 @@ async def dispatch_resend_event(
     )
     db.add(event_row)
 
+    # Resend can redeliver or reorder events for the same email; only advance
+    # the stored status so a late ``email.sent`` never downgrades a message that
+    # already reached DELIVERED/FAILED (bounced).
     new_status = _MESSAGE_STATUS_UPDATES.get(mapped)
-    if message is not None and new_status is not None:
+    if (
+        message is not None
+        and new_status is not None
+        and advances_message_status(message.status, new_status)
+    ):
         message.status = new_status
         if mapped is EmailEventType.DELIVERED:
             message.delivered_at = event_row.occurred_at
