@@ -9,6 +9,7 @@ replay tooling.
 """
 
 import asyncio
+import contextlib
 import random
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -111,6 +112,13 @@ class RetryableWorker:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     break
+                # A failed statement leaves an AsyncSession in a pending-rollback
+                # state. If a caller passed its session into ``fn`` (the common
+                # worker pattern), reusing it on the next attempt would raise
+                # ``PendingRollbackError`` instead of actually retrying — turning
+                # the retry into a no-op for exactly the transient DB errors it
+                # exists to handle. Reset any session so the retry starts clean.
+                await self._rollback_sessions(args, kwargs)
                 delay = self.backoff_base_seconds * (2**attempt) + random.uniform(
                     0, self.backoff_base_seconds
                 )
@@ -127,6 +135,18 @@ class RetryableWorker:
 
         await self._dead_letter(fn, args, kwargs, last_exc, item_key=item_key)
         return None
+
+    @staticmethod
+    async def _rollback_sessions(args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        """Roll back any ``AsyncSession`` passed to a retried function.
+
+        Best-effort: a rollback failure is swallowed so it can't mask the
+        original error or abort the backoff loop.
+        """
+        for candidate in (*args, *kwargs.values()):
+            if isinstance(candidate, AsyncSession) and candidate.in_transaction():
+                with contextlib.suppress(Exception):
+                    await candidate.rollback()
 
     def _resolve_worker_name(self) -> str:
         """Pick the ``worker_name`` value written to the DLQ row."""

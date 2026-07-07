@@ -16,9 +16,10 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.failed_job import (
     FAILED_JOB_STATUS_ABANDONED,
@@ -330,6 +331,71 @@ async def test_record_dead_letter_bumps_attempts_on_repeat() -> None:
     assert updated.error == "second-error"
     # Re-failure resurrects an abandoned row back into the triage queue.
     assert updated.status == FAILED_JOB_STATUS_PENDING
+
+
+# ---------------------------------------------------------------------------
+# Passed-in AsyncSession is rolled back between attempts
+# ---------------------------------------------------------------------------
+
+
+def _fake_session(*, in_transaction: bool = True) -> Any:
+    """MagicMock that passes ``isinstance(x, AsyncSession)`` with async rollback."""
+    session = MagicMock(spec=AsyncSession)
+    session.in_transaction = MagicMock(return_value=in_transaction)
+    session.rollback = AsyncMock()
+    return session
+
+
+async def test_passed_session_rolled_back_between_retries() -> None:
+    """A DB error leaves the session pending-rollback; the retry must reset it
+    or it would raise PendingRollbackError instead of actually retrying."""
+    recorder = _Recorder()
+    worker = _make_worker(max_retries=3, recorder=recorder)
+    session = _fake_session()
+    attempts: list[int] = []
+
+    async def flaky(db: AsyncSession) -> str:
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RuntimeError("db blip")
+        return "ok"
+
+    result = await worker.execute_with_retry(flaky, session, item_key="k")
+
+    assert result == "ok"
+    assert len(attempts) == 3
+    # Rolled back after each of the two failures, before the retry.
+    assert session.rollback.await_count == 2
+    assert recorder.calls == []
+
+
+async def test_session_not_rolled_back_when_not_in_transaction() -> None:
+    worker = _make_worker(max_retries=1, recorder=_Recorder())
+    session = _fake_session(in_transaction=False)
+
+    async def always_fail(db: AsyncSession) -> None:
+        raise RuntimeError("x")
+
+    await worker.execute_with_retry(always_fail, session, item_key="k")
+
+    session.rollback.assert_not_awaited()
+
+
+async def test_rollback_failure_does_not_abort_retry_loop() -> None:
+    worker = _make_worker(max_retries=2, recorder=_Recorder())
+    session = _fake_session()
+    session.rollback = AsyncMock(side_effect=RuntimeError("rollback failed"))
+    attempts: list[int] = []
+
+    async def flaky(db: AsyncSession) -> str:
+        attempts.append(1)
+        if len(attempts) < 2:
+            raise RuntimeError("db blip")
+        return "ok"
+
+    # A failing rollback is swallowed — the retry still proceeds and succeeds.
+    result = await worker.execute_with_retry(flaky, session, item_key="k")
+    assert result == "ok"
 
 
 async def test_execute_with_retry_actually_sleeps_between_attempts() -> None:
