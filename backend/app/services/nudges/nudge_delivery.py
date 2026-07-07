@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+import zoneinfo
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -178,7 +179,17 @@ class NudgeDeliveryService:
         except (ValueError, AttributeError):
             return False
 
-        now = datetime.now(UTC)
+        # Quiet hours are configured as workspace-local wall-clock times, so the
+        # comparison must happen in the workspace timezone. Evaluating in UTC
+        # would fire nudges in the middle of the night for non-UTC workspaces
+        # (e.g. "quiet until 08:00" ends at 08:00 UTC = 03:00 US-Eastern).
+        tz_name = (workspace.settings or {}).get("timezone", "UTC")
+        try:
+            tz = zoneinfo.ZoneInfo(str(tz_name))
+        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
+            tz = zoneinfo.ZoneInfo("UTC")
+
+        now = datetime.now(tz)
         current_minutes = now.hour * 60 + now.minute
         start_minutes = start_hour * 60 + start_min
         end_minutes = end_hour * 60 + end_min

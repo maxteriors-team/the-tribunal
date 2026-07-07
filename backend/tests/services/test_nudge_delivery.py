@@ -240,6 +240,26 @@ class TestQuietHoursRespected:
 
         assert result is False
 
+    def test_quiet_hours_respects_workspace_timezone(self, delivery: NudgeDeliveryService) -> None:
+        """Quiet hours are workspace-local wall-clock times, not UTC.
+
+        At 11:00 UTC (= 07:00 America/New_York, EDT) an Eastern workspace is
+        still inside the default 22:00-08:00 window, even though 11:00 UTC is
+        outside it. Evaluating in UTC would send nudges at ~7am local... or
+        worse, in the small hours for other offsets.
+        """
+        instant = datetime(2026, 3, 28, 11, 0, 0, tzinfo=UTC)
+        ws_utc = _make_workspace()  # no timezone -> defaults to UTC
+        ws_eastern = _make_workspace()
+        ws_eastern.settings["timezone"] = "America/New_York"
+
+        with patch("app.services.nudges.nudge_delivery.datetime") as mock_dt:
+            mock_dt.now.side_effect = lambda tz=None: instant.astimezone(tz) if tz else instant
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            assert delivery._is_quiet_hours(ws_utc) is False
+            assert delivery._is_quiet_hours(ws_eastern) is True
+
 
 class TestNudgeMarkedSent:
     async def test_nudge_marked_sent(self, delivery: NudgeDeliveryService) -> None:
