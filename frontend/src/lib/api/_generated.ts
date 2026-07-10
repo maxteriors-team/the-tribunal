@@ -1961,9 +1961,8 @@ export interface paths {
          * @description Create a new appointment.
          *
          *     Requires workspace membership. Validates contact and agent exist in workspace.
-         *     Initial sync_status is set to 'pending' for Cal.com sync.
-         *     After saving to DB, immediately attempts Cal.com sync if agent has calcom_event_type_id
-         *     and contact has an email. Sync failures do not fail the request.
+         *     The appointment is stored in the CRM, which is the single source of truth for
+         *     scheduling (no external calendar sync).
          */
         post: operations["create_appointment_api_v1_workspaces__workspace_id__appointments_post"];
         delete?: never;
@@ -2044,30 +2043,6 @@ export interface paths {
          *     no phone, no from number).
          */
         post: operations["send_appointment_reminder_api_v1_workspaces__workspace_id__appointments__appointment_id__send_reminder_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/appointments/{appointment_id}/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retry Cal.com sync for a pending appointment
-         * @description Retry syncing an appointment to Cal.com.
-         *
-         *     Loads the appointment and its agent, then attempts to create/update the
-         *     Cal.com booking. Returns the new sync status and booking UID on success,
-         *     or an error message on failure.
-         */
-        post: operations["sync_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -26673,40 +26648,6 @@ export interface operations {
         };
     };
     send_appointment_reminder_api_v1_workspaces__workspace_id__appointments__appointment_id__send_reminder_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                appointment_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    sync_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__sync_post: {
         parameters: {
             query?: never;
             header?: never;

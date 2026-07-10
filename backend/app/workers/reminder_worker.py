@@ -455,27 +455,10 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 f"Reply here if you need to reschedule."
             )
 
-        # Build reschedule link if agent has a Cal.com event type configured
+        # Scheduling is self-contained: there is no external reschedule URL, so
+        # ``{reschedule_link}`` renders empty and templates fall back to the
+        # "reply to reschedule" copy.
         reschedule_link = ""
-        if agent is not None and agent.calcom_event_type_id and settings.calcom_api_key:
-            try:
-                from app.services.calendar.calcom import CalComService
-
-                calcom = CalComService(settings.calcom_api_key)
-                contact_name = (
-                    " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
-                )
-                reschedule_link = calcom.generate_booking_url(
-                    event_type_id=agent.calcom_event_type_id,
-                    contact_email=contact.email or "",
-                    contact_name=contact_name,
-                    contact_phone=contact.phone_number,
-                )
-            except Exception:
-                self.logger.warning(
-                    "Could not generate reschedule link for reminder template",
-                    appointment_id=appointment.id,
-                )
 
         replacements: dict[str, str] = {
             "first_name": contact.first_name or "",

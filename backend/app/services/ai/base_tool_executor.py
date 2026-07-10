@@ -1,8 +1,13 @@
-"""Base tool executor with shared Cal.com booking logic.
+"""Base tool executor with shared local booking logic.
 
-Extracts duplicated booking workflow from VoiceToolExecutor and
+Extracts the duplicated booking workflow from VoiceToolExecutor and
 TextToolExecutor into a single base class. Subclasses inject
 channel-specific behavior via hook method overrides.
+
+Availability and booking are self-contained: they come from the workspace's
+business hours minus existing CRM appointments (see ``BookingService``), with
+no external calendar. Multi-staff round-robin/skill routing still applies to
+assign a staff member to the appointment.
 
 Usage:
     class MyExecutor(BaseToolExecutor):
@@ -14,16 +19,15 @@ from typing import Any
 
 import structlog
 
-from app.core.config import settings
 from app.services.calendar.booking import BookingService
 
 logger = structlog.get_logger()
 
 
 class BaseToolExecutor:
-    """Base class for tool executors with shared Cal.com booking logic.
+    """Base class for tool executors with shared local booking logic.
 
-    Provides the core booking workflow (config validation, service
+    Provides the core booking workflow (staff assignment, service
     instantiation, availability checks, appointment booking) while
     delegating channel-specific formatting and persistence to hook
     methods that subclasses override.
@@ -46,42 +50,23 @@ class BaseToolExecutor:
         """Return the agent's booking assignment strategy (defaults to single)."""
         return getattr(self.agent, "assignment_strategy", "single") or "single"
 
-    def _validate_calcom_config(self) -> dict[str, Any] | None:
-        """Check Cal.com configuration. Returns error dict or None if valid.
-
-        With a multi-staff strategy the agent need not have its own
-        ``calcom_event_type_id`` — the event type is resolved from the assigned
-        staff member at booking time. Only the API key is strictly required up
-        front; a missing event type surfaces after staff resolution.
-        """
-        if not settings.calcom_api_key:
-            return {"success": False, "error": "Cal.com API key not configured"}
-        if self._assignment_strategy() == "single" and (
-            not self.agent or not self.agent.calcom_event_type_id
-        ):
-            return {"success": False, "error": "Cal.com not configured for this agent"}
-        return None
-
-    async def _resolve_event_type_id(
+    async def _resolve_assigned_staff(
         self, required_skill: str | None, *, record: bool = True
-    ) -> int | None:
-        """Resolve which Cal.com event type to book against for this attempt.
+    ) -> None:
+        """Assign a staff member for this booking attempt (multi-staff agents).
 
-        Applies the agent's assignment strategy: for round-robin / skill-based
-        agents it picks a staff member from the pool and uses their event type,
-        recording the choice in ``self.assigned_staff``. Falls back to the
-        agent's own ``calcom_event_type_id`` when no staff is selected.
+        For round-robin / skill-based agents this picks a staff member from the
+        pool and records the choice in ``self.assigned_staff`` (later written to
+        the appointment's ``bookable_staff_id``). Single-strategy agents book
+        against workspace hours with no staff assignment.
 
         ``record`` controls whether the selection consumes a round-robin turn.
         Bookings record (default); availability checks pass ``record=False`` so
-        they only peek the staff member's event type without skewing
-        distribution.
+        they only peek without skewing distribution.
         """
         self.assigned_staff = None
-        strategy = self._assignment_strategy()
-        default_event_type_id = getattr(self.agent, "calcom_event_type_id", None)
-        if strategy == "single":
-            return default_event_type_id
+        if self._assignment_strategy() == "single":
+            return
 
         from app.db.session import AsyncSessionLocal
         from app.services.calendar.staff_assignment import (
@@ -98,19 +83,15 @@ class BaseToolExecutor:
                     commit=True,
                     record=record,
                 )
-                if staff and staff.calcom_event_type_id:
+                if staff:
                     self.assigned_staff = staff_to_assignment_dict(staff)
-                    return staff.calcom_event_type_id
-        except Exception as e:  # pragma: no cover - defensive; fall back to default
+        except Exception as e:  # pragma: no cover - defensive; fall back to no staff
             self.log.warning("staff_assignment_failed", error=str(e))
 
-        return default_event_type_id
-
-    def _create_booking_service(self, event_type_id: int | None = None) -> BookingService:
-        """Create a BookingService for the resolved (or agent default) event type."""
+    def _create_booking_service(self) -> BookingService:
+        """Create a local BookingService scoped to the agent's workspace."""
         return BookingService(
-            api_key=settings.calcom_api_key,
-            event_type_id=event_type_id or self.agent.calcom_event_type_id,
+            workspace_id=self.agent.workspace_id,
             timezone=self.timezone,
         )
 
@@ -122,17 +103,11 @@ class BaseToolExecutor:
         end_date_str: str | None,
         required_skill: str | None = None,
     ) -> dict[str, Any]:
-        """Check Cal.com availability. Delegates formatting to hooks."""
-        error = self._validate_calcom_config()
-        if error:
-            return error
-
+        """Check local availability. Delegates formatting to hooks."""
         # Peek only: an availability check must not consume a round-robin turn.
-        event_type_id = await self._resolve_event_type_id(required_skill, record=False)
-        if not event_type_id:
-            return {"success": False, "error": "No bookable calendar available"}
+        await self._resolve_assigned_staff(required_skill, record=False)
 
-        booking_service = self._create_booking_service(event_type_id)
+        booking_service = self._create_booking_service()
         try:
             result = await booking_service.check_availability(
                 start_date_str=start_date_str,
@@ -164,11 +139,7 @@ class BaseToolExecutor:
         notes: str | None = None,
         required_skill: str | None = None,
     ) -> dict[str, Any]:
-        """Book a Cal.com appointment. Delegates formatting/persistence to hooks."""
-        error = self._validate_calcom_config()
-        if error:
-            return error
-
+        """Book an appointment locally. Delegates formatting/persistence to hooks."""
         if not email:
             return {
                 "success": False,
@@ -176,15 +147,13 @@ class BaseToolExecutor:
                 "message": "Please ask the customer for their email address",
             }
 
-        event_type_id = await self._resolve_event_type_id(required_skill)
-        if not event_type_id:
-            return {"success": False, "error": "No bookable calendar available"}
+        await self._resolve_assigned_staff(required_skill)
 
         contact_name = self.get_contact_name()
         contact_phone = self.get_contact_phone()
         metadata = self.get_booking_metadata(notes)
 
-        booking_service = self._create_booking_service(event_type_id)
+        booking_service = self._create_booking_service()
         try:
             result = await booking_service.book_appointment(
                 date_str=date_str,

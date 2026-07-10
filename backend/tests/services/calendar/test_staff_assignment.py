@@ -104,13 +104,22 @@ def test_pick_round_robin_priority_tiebreak() -> None:
     assert pick_round_robin(staff).name == "Bob"
 
 
-def test_pick_round_robin_skips_inactive_and_no_event_type() -> None:
+def test_pick_round_robin_skips_inactive() -> None:
     staff = [
         FakeStaff("Inactive", is_active=False, assignment_count=0),
-        FakeStaff("NoEvent", calcom_event_type_id=None, assignment_count=0),
         FakeStaff("Valid", assignment_count=4),
     ]
     assert pick_round_robin(staff).name == "Valid"
+
+
+def test_pick_round_robin_eligible_without_event_type() -> None:
+    # Booking is local, so an active staff member with no Cal.com event type is
+    # still eligible (and here wins on fewest assignments).
+    staff = [
+        FakeStaff("NoEvent", calcom_event_type_id=None, assignment_count=0),
+        FakeStaff("Valid", assignment_count=4),
+    ]
+    assert pick_round_robin(staff).name == "NoEvent"
 
 
 def test_pick_round_robin_empty_returns_none() -> None:

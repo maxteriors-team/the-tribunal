@@ -2,8 +2,8 @@
 
 Exercises ``VoiceToolExecutor.execute("book_appointment", ...)`` for a
 round-robin agent and asserts the booking is created against the *selected
-staff member's* Cal.com event type (not the agent's default), and that the
-assigned staff is surfaced in the tool result.
+staff member* (surfaced in the tool result and ``assigned_staff``). Booking is
+local — availability/booking come from the CRM, not an external event type.
 """
 
 from __future__ import annotations
@@ -22,10 +22,10 @@ from app.services.ai.tool_executor import VoiceToolExecutor
 
 
 class _FakeStaff:
-    def __init__(self, name: str, event_type_id: int, count: int = 0) -> None:
+    def __init__(self, name: str, count: int = 0) -> None:
         self.id = uuid.uuid4()
         self.name = name
-        self.calcom_event_type_id = event_type_id
+        self.calcom_event_type_id = None
         self.skills: list[str] = []
         self.is_active = True
         self.priority = 0
@@ -71,18 +71,18 @@ class _FakeSession:
 
 
 class _FakeBookingService:
-    """Captures the event_type_id it was constructed with."""
+    """Captures the workspace it was constructed for; books locally."""
 
-    captured_event_type_id: int | None = None
+    captured_workspace_id: uuid.UUID | None = None
 
-    def __init__(self, *, api_key: str, event_type_id: int, timezone: str) -> None:
-        _FakeBookingService.captured_event_type_id = event_type_id
+    def __init__(self, workspace_id: uuid.UUID, timezone: str = "UTC", **_kwargs: Any) -> None:
+        _FakeBookingService.captured_workspace_id = workspace_id
 
     async def book_appointment(self, **_kwargs: Any) -> SimpleNamespace:
         return SimpleNamespace(
             success=True,
-            booking_uid="uid-routed-1",
-            booking_id=999,
+            booking_uid=None,
+            booking_id=None,
             error=None,
             alternative_slots=[],
         )
@@ -96,23 +96,23 @@ def _round_robin_agent() -> Any:
         id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
         assignment_strategy="round_robin",
-        calcom_event_type_id=1,  # agent default that should NOT be used
+        calcom_event_type_id=None,
     )
 
 
 @pytest.mark.asyncio
-async def test_book_appointment_routes_to_selected_staff_event_type() -> None:
-    _FakeBookingService.captured_event_type_id = None
-    # Bob has fewer assignments -> round-robin should pick Bob (event type 555).
+async def test_book_appointment_routes_to_selected_staff() -> None:
+    _FakeBookingService.captured_workspace_id = None
+    # Bob has fewer assignments -> round-robin should pick Bob.
     pool = [
-        _FakeStaff("Alice", event_type_id=444, count=3),
-        _FakeStaff("Bob", event_type_id=555, count=0),
+        _FakeStaff("Alice", count=3),
+        _FakeStaff("Bob", count=0),
     ]
 
-    executor = VoiceToolExecutor(agent=_round_robin_agent())
+    agent = _round_robin_agent()
+    executor = VoiceToolExecutor(agent=agent)
 
     with (
-        patch.object(base_tool_executor.settings, "calcom_api_key", "test-key"),
         patch.object(
             db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)
         ),
@@ -128,9 +128,8 @@ async def test_book_appointment_routes_to_selected_staff_event_type() -> None:
         )
 
     assert result["success"] is True
-    # Booked against Bob's event type, not the agent's default (1) or Alice's (444).
-    assert _FakeBookingService.captured_event_type_id == 555
+    # Booked locally for the agent's workspace, routed to the selected staff.
+    assert _FakeBookingService.captured_workspace_id == agent.workspace_id
     assert executor.assigned_staff is not None
     assert executor.assigned_staff["name"] == "Bob"
-    assert executor.assigned_staff["calcom_event_type_id"] == 555
     assert "Bob" in result["message"]

@@ -1,8 +1,8 @@
 """Staff assignment strategies for appointment booking.
 
-Decides which bookable staff member (and therefore which Cal.com event type /
-schedule) an AI-driven booking should land on. Two strategies are supported on
-top of the legacy single-event-type behavior:
+Decides which bookable staff member an AI-driven booking should land on.
+Booking is local (CRM-backed); any active staff member is eligible. Two
+strategies are supported on top of the default single-assignee behavior:
 
 - ``round_robin``: distribute bookings evenly across the agent's active staff
   pool, preferring whoever has the fewest assignments (ties broken by who was
@@ -79,7 +79,7 @@ def pick_round_robin[T: StaffLike](staff: list[T]) -> T | None:
     assigned (``last_assigned_at`` ascending, never-assigned first), then highest
     ``priority``, then name for a stable deterministic tie-break.
     """
-    eligible = [s for s in staff if s.is_active and s.calcom_event_type_id]
+    eligible = [s for s in staff if s.is_active]
     if not eligible:
         return None
 
@@ -111,7 +111,7 @@ def select_staff_member[T: StaffLike](
     if strategy == STRATEGY_SINGLE:
         return None
 
-    candidates = [s for s in staff if s.is_active and s.calcom_event_type_id]
+    candidates = [s for s in staff if s.is_active]
 
     if strategy == STRATEGY_SKILL_BASED:
         matched = filter_staff_by_skill(candidates, required_skill)

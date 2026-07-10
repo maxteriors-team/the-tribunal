@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Loader2, RefreshCw } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -75,54 +75,6 @@ export function ReminderBadges({
   }
 
   return null;
-}
-
-interface SyncButtonProps {
-  appointment: Appointment;
-  workspaceId: string;
-  onSynced: () => void;
-}
-
-export function SyncButton({ appointment, workspaceId, onSynced }: SyncButtonProps) {
-  const [isSyncing, setIsSyncing] = useState(false);
-
-  if (appointment.sync_status !== "pending") return null;
-
-  const handleSync = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsSyncing(true);
-    try {
-      const result = await appointmentsApi.syncAppointment(workspaceId, appointment.id);
-      if (result.status === "synced") {
-        toast.success("Synced to Cal.com");
-        onSynced();
-      } else {
-        toast.error(`Sync failed: ${result.error ?? "Unknown error"}`);
-      }
-    } catch {
-      toast.error("Failed to sync appointment");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="text-xs h-7 gap-1"
-      onClick={handleSync}
-      disabled={isSyncing}
-      title="Sync to Cal.com"
-    >
-      {isSyncing ? (
-        <Loader2 className="size-3 animate-spin" />
-      ) : (
-        <RefreshCw className="size-3" />
-      )}
-      Sync
-    </Button>
-  );
 }
 
 interface SendReminderButtonProps {

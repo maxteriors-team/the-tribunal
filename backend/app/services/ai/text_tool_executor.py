@@ -240,11 +240,6 @@ class TextToolExecutor(BaseToolExecutor):
         required_skill: str | None = None,
     ) -> dict[str, Any]:
         """Resolve contact, validate datetime, then delegate to base booking."""
-        # Check config early (before contact lookup)
-        error = self._validate_calcom_config()
-        if error:
-            return error
-
         # Get contact info
         contact = await self._get_contact()
         if not contact:

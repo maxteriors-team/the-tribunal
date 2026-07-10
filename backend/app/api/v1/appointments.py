@@ -74,34 +74,11 @@ async def create_appointment(
     """Create a new appointment.
 
     Requires workspace membership. Validates contact and agent exist in workspace.
-    Initial sync_status is set to 'pending' for Cal.com sync.
-    After saving to DB, immediately attempts Cal.com sync if agent has calcom_event_type_id
-    and contact has an email. Sync failures do not fail the request.
+    The appointment is stored in the CRM, which is the single source of truth for
+    scheduling (no external calendar sync).
     """
     service = AppointmentService(db)
     return await service.create_appointment(workspace_id, appointment_in)
-
-
-@router.post(
-    "/{appointment_id}/sync",
-    response_model=dict,
-    summary="Retry Cal.com sync for a pending appointment",
-)
-async def sync_appointment(
-    workspace_id: uuid.UUID,
-    appointment_id: int,
-    current_user: CurrentUser,
-    db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
-) -> dict[str, Any]:
-    """Retry syncing an appointment to Cal.com.
-
-    Loads the appointment and its agent, then attempts to create/update the
-    Cal.com booking. Returns the new sync status and booking UID on success,
-    or an error message on failure.
-    """
-    service = AppointmentService(db)
-    return await service.sync_to_calcom(workspace_id, appointment_id)
 
 
 @router.get("/stats", response_model=AppointmentStatsResponse)

@@ -45568,7 +45568,7 @@
         ]
       },
       "post": {
-        "description": "Create a new appointment.\n\nRequires workspace membership. Validates contact and agent exist in workspace.\nInitial sync_status is set to 'pending' for Cal.com sync.\nAfter saving to DB, immediately attempts Cal.com sync if agent has calcom_event_type_id\nand contact has an email. Sync failures do not fail the request.",
+        "description": "Create a new appointment.\n\nRequires workspace membership. Validates contact and agent exist in workspace.\nThe appointment is stored in the CRM, which is the single source of truth for\nscheduling (no external calendar sync).",
         "operationId": "create_appointment_api_v1_workspaces__workspace_id__appointments_post",
         "parameters": [
           {
@@ -45902,66 +45902,6 @@
           }
         ],
         "summary": "Manually send an SMS reminder for a scheduled appointment",
-        "tags": [
-          "Appointments"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/appointments/{appointment_id}/sync": {
-      "post": {
-        "description": "Retry syncing an appointment to Cal.com.\n\nLoads the appointment and its agent, then attempts to create/update the\nCal.com booking. Returns the new sync status and booking UID on success,\nor an error message on failure.",
-        "operationId": "sync_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__sync_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "appointment_id",
-            "required": true,
-            "schema": {
-              "title": "Appointment Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Sync Appointment Api V1 Workspaces  Workspace Id  Appointments  Appointment Id  Sync Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Retry Cal.com sync for a pending appointment",
         "tags": [
           "Appointments"
         ]

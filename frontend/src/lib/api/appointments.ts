@@ -87,19 +87,6 @@ export const appointmentsApi = {
   ...baseApi,
 
   /**
-   * Retry Cal.com sync for a pending appointment.
-   * POST /api/v1/workspaces/{workspaceId}/appointments/{appointmentId}/sync
-   */
-  syncAppointment: async (
-    workspaceId: string,
-    appointmentId: number
-  ): Promise<{ status: string; error?: string }> => {
-    return apiPost<{ status: string; error?: string }>(
-      `/api/v1/workspaces/${workspaceId}/appointments/${appointmentId}/sync`
-    );
-  },
-
-  /**
    * Fetch show-up rate analytics for a workspace.
    * GET /api/v1/workspaces/{workspaceId}/appointments/stats
    */

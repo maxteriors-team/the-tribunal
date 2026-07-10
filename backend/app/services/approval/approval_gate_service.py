@@ -139,13 +139,10 @@ class BookAppointmentActionHandler:
         from app.services.calendar.booking import BookingService
 
         payload = action.action_payload
-        api_key: str = payload.get("api_key", "")
-        event_type_id: int = payload.get("event_type_id", 0)
         timezone: str = payload.get("timezone", "America/New_York")
 
         service = BookingService(
-            api_key=api_key,
-            event_type_id=event_type_id,
+            workspace_id=action.workspace_id,
             timezone=timezone,
         )
         booking_result = await service.book_appointment(

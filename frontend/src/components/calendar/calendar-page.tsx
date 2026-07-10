@@ -148,7 +148,7 @@ export function CalendarPage() {
           <Button variant="outline" asChild>
             <Link href="/settings">
               <Settings className="mr-2 size-4" />
-              Cal.com Settings
+              Settings
             </Link>
           </Button>
           <Button onClick={() => setIsScheduleOpen(true)}>
@@ -288,14 +288,6 @@ export function CalendarPage() {
                                       pattern: "h:mm a",
                                     })}
                                   </p>
-                                  {apt.sync_status === "pending" && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-warning border-warning/20 text-[10px] py-0 mt-0.5"
-                                    >
-                                      pending sync
-                                    </Badge>
-                                  )}
                                 </motion.button>
                               ))}
                             </div>
@@ -417,14 +409,6 @@ export function CalendarPage() {
                         {formatDate(apt.scheduled_at, { pattern: "h:mm a" })}
                       </p>
                     </div>
-                    {apt.sync_status === "pending" && (
-                      <Badge
-                        variant="outline"
-                        className="text-warning border-warning/20 text-[10px] py-0 shrink-0"
-                      >
-                        sync
-                      </Badge>
-                    )}
                     <Badge
                       variant="outline"
                       className={appointmentStatusColors[apt.status]}

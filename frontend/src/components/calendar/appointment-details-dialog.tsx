@@ -12,7 +12,6 @@ import { Clock, Trash2 } from "lucide-react";
 import {
   ReminderBadges,
   SendReminderButton,
-  SyncButton,
 } from "@/components/calendar/appointment-actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -95,13 +94,6 @@ export function AppointmentDetailsDialog({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {workspaceId && (
-                    <SyncButton
-                      appointment={apt}
-                      workspaceId={workspaceId}
-                      onSynced={onChanged}
-                    />
-                  )}
                   {workspaceId && apt.status === "scheduled" && (
                     <SendReminderButton
                       appointment={apt}
@@ -128,21 +120,6 @@ export function AppointmentDetailsDialog({
                   <Clock className="size-4 text-muted-foreground" />
                   <span>{apt.duration_minutes} minutes</span>
                 </div>
-                {apt.sync_status === "pending" && (
-                  <div className="flex items-center gap-2 text-warning">
-                    <span className="text-xs">Not synced to Cal.com</span>
-                  </div>
-                )}
-                {apt.sync_status === "synced" && apt.calcom_booking_uid && (
-                  <div className="text-xs text-muted-foreground">
-                    Cal.com UID: {apt.calcom_booking_uid}
-                  </div>
-                )}
-                {apt.sync_error && (
-                  <div className="text-xs text-destructive">
-                    Sync error: {apt.sync_error}
-                  </div>
-                )}
                 {apt.notes && (
                   <div className="text-sm text-muted-foreground">{apt.notes}</div>
                 )}

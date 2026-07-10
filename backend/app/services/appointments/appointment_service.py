@@ -1,7 +1,7 @@
 """Appointment business logic service."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import structlog
@@ -39,7 +39,11 @@ def _calc_show_up_rate(completed: int, no_show: int) -> float:
 
 
 class AppointmentService:
-    """Service for appointment CRUD, stats, and Cal.com sync."""
+    """Service for appointment CRUD and stats.
+
+    The local ``appointments`` table is the single source of truth; there is no
+    external calendar sync.
+    """
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -84,7 +88,7 @@ class AppointmentService:
         workspace_id: uuid.UUID,
         appointment_in: AppointmentCreate,
     ) -> Appointment:
-        """Create a new appointment, with immediate Cal.com sync if configured."""
+        """Create a new appointment in the CRM (the single source of truth)."""
         log = self.log.bind(workspace_id=str(workspace_id), contact_id=appointment_in.contact_id)
 
         # Verify contact exists in workspace
@@ -129,17 +133,6 @@ class AppointmentService:
         await self.db.refresh(appointment)
 
         log.info("appointment_created", appointment_id=appointment.id)
-
-        # Attempt immediate Cal.com sync if agent is configured
-        if agent is not None and agent.calcom_event_type_id:
-            contact_name = f"{contact.first_name} {contact.last_name or ''}".strip()
-            await self._try_calcom_sync(
-                appointment=appointment,
-                contact_email=contact.email,
-                contact_name=contact_name,
-                contact_phone=contact.phone_number,
-                event_type_id=agent.calcom_event_type_id,
-            )
 
         return appointment
 
@@ -308,68 +301,6 @@ class AppointmentService:
             by_campaign=by_campaign,
         )
 
-    async def sync_to_calcom(
-        self,
-        workspace_id: uuid.UUID,
-        appointment_id: int,
-    ) -> dict[str, Any]:
-        """Retry Cal.com sync for an appointment. Returns status/result dict."""
-        appointment = await self.get_appointment(workspace_id, appointment_id)
-
-        contact_result = await self.db.execute(
-            select(Contact).where(Contact.id == appointment.contact_id)
-        )
-        contact = contact_result.scalar_one_or_none()
-        if not contact:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contact not found",
-            )
-
-        # Resolve event_type_id: prefer appointment's own stored value, fall back to agent
-        event_type_id: int | None = appointment.calcom_event_type_id
-        if event_type_id is None and appointment.agent_id is not None:
-            agent_result = await self.db.execute(
-                select(Agent).where(Agent.id == appointment.agent_id)
-            )
-            agent = agent_result.scalar_one_or_none()
-            if agent:
-                event_type_id = agent.calcom_event_type_id
-
-        if not event_type_id:
-            return {
-                "status": "failed",
-                "error": "No Cal.com event type configured for this appointment",
-            }
-
-        if not contact.email:
-            return {"status": "failed", "error": "Contact has no email address"}
-
-        contact_name = f"{contact.first_name} {contact.last_name or ''}".strip()
-
-        # Reset sync_status to pending before retry
-        appointment.sync_status = "pending"
-        appointment.sync_error = None
-
-        await self._try_calcom_sync(
-            appointment=appointment,
-            contact_email=contact.email,
-            contact_name=contact_name,
-            contact_phone=contact.phone_number,
-            event_type_id=event_type_id,
-        )
-
-        if appointment.sync_status == "synced":
-            return {
-                "status": "synced",
-                "calcom_booking_uid": appointment.calcom_booking_uid,
-            }
-
-        return {
-            "status": "failed",
-            "error": appointment.sync_error or "Unknown error",
-        }
-
     async def send_reminder(
         self,
         workspace_id: uuid.UUID,
@@ -411,72 +342,3 @@ class AppointmentService:
             contact=contact,
             agent=agent,
         )
-
-    async def _try_calcom_sync(
-        self,
-        appointment: Appointment,
-        contact_email: str | None,
-        contact_name: str,
-        contact_phone: str | None,
-        event_type_id: int,
-    ) -> None:
-        """Attempt to sync an appointment to Cal.com.
-
-        On success: sets sync_status='synced' and stores booking IDs.
-        On failure: logs error and stores it in sync_error; leaves sync_status='pending'.
-        Never raises.
-        """
-        from app.core.config import settings
-        from app.services.calendar.calcom import CalComError, CalComService
-
-        if not settings.calcom_api_key:
-            self.log.debug("calcom_sync_skipped_no_api_key")
-            return
-
-        if not contact_email:
-            self.log.debug("calcom_sync_skipped_no_email")
-            return
-
-        calcom = CalComService(settings.calcom_api_key)
-        try:
-            booking = await calcom.create_booking(
-                event_type_id=event_type_id,
-                contact_email=contact_email,
-                contact_name=contact_name,
-                start_time=appointment.scheduled_at,
-                duration_minutes=appointment.duration_minutes,
-                phone_number=contact_phone,
-                metadata={"crm_appointment_id": appointment.id},
-            )
-
-            booking_data: dict[str, Any] = booking.get("data", booking)
-            appointment.calcom_booking_uid = booking_data.get("uid")
-            appointment.calcom_booking_id = booking_data.get("id")
-            appointment.calcom_event_type_id = event_type_id
-            appointment.sync_status = "synced"
-            appointment.last_synced_at = datetime.now(UTC)
-            appointment.sync_error = None
-
-            await self.db.commit()
-            await self.db.refresh(appointment)
-
-            self.log.info(
-                "calcom_sync_success",
-                appointment_id=appointment.id,
-                booking_uid=appointment.calcom_booking_uid,
-            )
-
-        except CalComError as exc:
-            self.log.warning("calcom_sync_failed", appointment_id=appointment.id, error=str(exc))
-            appointment.sync_error = str(exc)
-            await self.db.commit()
-        except Exception as exc:  # noqa: BLE001
-            self.log.error(
-                "calcom_sync_unexpected_error",
-                appointment_id=appointment.id,
-                error=str(exc),
-            )
-            appointment.sync_error = str(exc)
-            await self.db.commit()
-        finally:
-            await calcom.close()

@@ -1,32 +1,47 @@
-"""Shared booking service for Cal.com operations.
+"""Self-contained booking service.
 
-Extracts duplicated Cal.com booking logic from VoiceToolExecutor and
-TextToolExecutor into a single, channel-agnostic service. Returns
-structured dataclasses — callers handle channel-specific formatting
-and DB persistence.
+Availability and booking are computed entirely from the CRM: a workspace's
+weekly business hours (``workspace.settings["business_hours"]``, or a sensible
+default) minus its existing ``scheduled`` appointments. There is no external
+calendar call — the local ``appointments`` table is the single source of truth.
+
+Returns structured dataclasses; callers (the AI tool executors) handle
+channel-specific formatting and persist the appointment row themselves.
 
 Usage:
-    service = BookingService(api_key, event_type_id, timezone="America/New_York")
-    result = await service.check_availability("2024-01-15")
-    booking = await service.book_appointment("2024-01-15", "14:00", "a@b.com", "Alice")
+    service = BookingService(workspace_id, timezone="America/New_York")
+    result = await service.check_availability("2026-01-15")
+    booking = await service.book_appointment("2026-01-15", "14:00", "a@b.com", "Alice")
     await service.close()
 """
 
+from __future__ import annotations
+
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.calendar.calcom import CalComService
+from app.db.session import AsyncSessionLocal
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.workspace import Workspace
+from app.services.calendar.availability import (
+    BusyInterval,
+    compute_available_slots,
+    parse_schedule,
+)
 
 logger = structlog.get_logger()
 
 
 @dataclass
 class AvailableSlot:
-    """A single available time slot from Cal.com."""
+    """A single open time slot."""
 
     date: str
     time: str
@@ -35,7 +50,7 @@ class AvailableSlot:
 
 @dataclass
 class AvailabilityResult:
-    """Result of checking Cal.com availability."""
+    """Result of checking availability."""
 
     success: bool
     slots: list[AvailableSlot] = field(default_factory=list)
@@ -44,7 +59,12 @@ class AvailabilityResult:
 
 @dataclass
 class BookingResult:
-    """Result of creating a Cal.com booking."""
+    """Result of creating a booking.
+
+    ``booking_uid``/``booking_id`` are kept for interface compatibility with the
+    executor persistence hooks; for local bookings they are ``None`` (the CRM
+    appointment row is the record).
+    """
 
     success: bool
     booking_uid: str | None = None
@@ -54,30 +74,28 @@ class BookingResult:
 
 
 class BookingService:
-    """Channel-agnostic Cal.com booking operations.
-
-    Handles availability checks and appointment creation via CalComService.
-    Returns structured dataclasses — callers handle formatting and DB work.
+    """Channel-agnostic booking backed by CRM business hours + appointments.
 
     Args:
-        api_key: Cal.com API key
-        event_type_id: Cal.com event type ID
-        timezone: IANA timezone string (default: America/New_York)
-        calcom_service: Optional CalComService instance (for testing)
+        workspace_id: Workspace whose business hours + appointments define
+            availability.
+        timezone: IANA timezone string (default: America/New_York).
+        slot_minutes: Slot granularity for availability generation.
+        session_factory: Optional async-session factory (for testing).
     """
 
     def __init__(
         self,
-        api_key: str,
-        event_type_id: int,
+        workspace_id: uuid.UUID,
         timezone: str = "America/New_York",
-        calcom_service: CalComService | None = None,
+        *,
+        slot_minutes: int = 30,
+        session_factory: Any = None,
     ) -> None:
-        self._api_key = api_key
-        self._event_type_id = event_type_id
+        self._workspace_id = workspace_id
         self._timezone = timezone
-        self._calcom = calcom_service or CalComService(api_key)
-        self._owns_calcom = calcom_service is None
+        self._slot_minutes = slot_minutes
+        self._session_factory = session_factory or AsyncSessionLocal
         self._log = logger.bind(service="booking_service")
 
     async def check_availability(
@@ -87,49 +105,40 @@ class BookingService:
         *,
         max_slots: int = 15,
     ) -> AvailabilityResult:
-        """Check available time slots on Cal.com.
+        """Return open slots between two dates (inclusive), YYYY-MM-DD.
 
-        Args:
-            start_date_str: Start date in YYYY-MM-DD format
-            end_date_str: Optional end date in YYYY-MM-DD format
-            max_slots: Maximum number of slots to return (voice=10, text=15)
-
-        Returns:
-            AvailabilityResult with slots or error
+        Slots come from the workspace's business hours minus existing scheduled
+        appointments in the range.
         """
+        tz = self._get_timezone()
         try:
-            tz = self._get_timezone()
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=tz)
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
             end_date = (
-                datetime.strptime(end_date_str, "%Y-%m-%d").replace(tzinfo=tz)
-                if end_date_str
-                else start_date
+                datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else start_date
             )
         except ValueError as e:
             return AvailabilityResult(success=False, error=f"Invalid date format: {e}")
 
         try:
-            raw_slots = await self._calcom.get_availability(
-                event_type_id=self._event_type_id,
+            async with self._session_factory() as db:
+                schedule_setting = await self._load_business_hours(db)
+                busy = await self._load_busy_intervals(db, start_date, end_date, tz)
+
+            slots = compute_available_slots(
+                schedule=parse_schedule(schedule_setting),
+                tz=tz,
                 start_date=start_date,
                 end_date=end_date,
-                timezone=self._timezone,
+                busy=busy,
+                slot_minutes=self._slot_minutes,
+                max_slots=max_slots,
             )
-
-            self._log.info("availability_fetched", slot_count=len(raw_slots))
-
-            slots = [
-                AvailableSlot(
-                    date=s.get("date", ""),
-                    time=s.get("time", ""),
-                    iso=s.get("iso", ""),
-                )
-                for s in raw_slots[:max_slots]
-            ]
-
-            return AvailabilityResult(success=True, slots=slots)
-
-        except Exception as e:
+            self._log.info("availability_computed", slot_count=len(slots))
+            return AvailabilityResult(
+                success=True,
+                slots=[AvailableSlot(date=s.date, time=s.time, iso=s.iso) for s in slots],
+            )
+        except Exception as e:  # noqa: BLE001 — surface as a structured failure
             self._log.exception("check_availability_error", error=str(e))
             return AvailabilityResult(success=False, error=f"Failed to check availability: {e!s}")
 
@@ -145,105 +154,77 @@ class BookingService:
         *,
         pre_validate: bool = False,
     ) -> BookingResult:
-        """Book an appointment on Cal.com.
+        """Confirm a local booking.
 
-        Args:
-            date_str: Date in YYYY-MM-DD format
-            time_str: Time in HH:MM 24-hour format
-            email: Customer email address
-            contact_name: Customer name
-            duration_minutes: Appointment duration
-            metadata: Optional metadata dict for booking
-            phone_number: Optional phone number (E.164)
-            pre_validate: If True, re-check availability before booking
-                (voice agents use True; text agents use False)
-
-        Returns:
-            BookingResult with booking IDs or error with alternatives
+        No external calendar is contacted — the caller persists the appointment
+        row. When ``pre_validate`` is set (voice agents), the slot is re-checked
+        against current availability and alternatives are returned if it was
+        taken since it was offered.
         """
         try:
-            tz = self._get_timezone()
-            start_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=tz)
+            self._get_timezone()
+            datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
         except ValueError as e:
-            return BookingResult(success=False, error=f"Invalid date format: {e}")
+            return BookingResult(success=False, error=f"Invalid date/time format: {e}")
 
         if pre_validate:
-            # Re-check availability to confirm the slot still exists
-            raw_slots = await self._calcom.get_availability(
-                event_type_id=self._event_type_id,
-                start_date=start_date,
-                end_date=start_date,
-                timezone=self._timezone,
-            )
-
-            matched_slot = next((s for s in raw_slots if s.get("time") == time_str), None)
-
-            if not matched_slot:
-                # Slot gone — return alternatives
-                alternatives = [
-                    AvailableSlot(
-                        date=s.get("date", ""),
-                        time=s.get("time", ""),
-                        iso=s.get("iso", ""),
+            availability = await self.check_availability(date_str, date_str, max_slots=50)
+            if availability.success:
+                still_open = any(s.time == time_str for s in availability.slots)
+                if not still_open:
+                    self._log.warning("booking_slot_unavailable", requested_time=time_str)
+                    return BookingResult(
+                        success=False,
+                        error=f"The {time_str} slot is no longer available.",
+                        alternative_slots=availability.slots[:5],
                     )
-                    for s in raw_slots[:5]
-                ]
-                self._log.warning(
-                    "booking_slot_unavailable",
-                    requested_time=time_str,
-                    available_count=len(raw_slots),
-                )
-                return BookingResult(
-                    success=False,
-                    error=f"The {time_str} slot is no longer available.",
-                    alternative_slots=alternatives,
-                )
 
-            # Use the ISO time from the matched slot
-            start_iso = matched_slot.get("iso", "") or f"{date_str}T{time_str}:00.000Z"
-        else:
-            # Text channel: construct ISO time directly
-            start_iso = f"{date_str}T{time_str}:00.000Z"
-
-        try:
-            booking = await self._calcom.create_booking(
-                event_type_id=self._event_type_id,
-                contact_email=email,
-                contact_name=contact_name,
-                start_time_iso=start_iso,
-                duration_minutes=duration_minutes,
-                metadata=metadata,
-                timezone=self._timezone,
-                phone_number=phone_number,
-            )
-
-            booking_uid = booking.get("uid")
-            booking_id = booking.get("id")
-
-            self._log.info(
-                "booking_created",
-                booking_uid=booking_uid,
-                booking_id=booking_id,
-                email=email,
-            )
-
-            return BookingResult(
-                success=True,
-                booking_uid=booking_uid,
-                booking_id=booking_id,
-            )
-
-        except Exception as e:
-            self._log.exception("book_appointment_error", error=str(e))
-            return BookingResult(success=False, error=f"Failed to book appointment: {e!s}")
+        self._log.info("booking_confirmed_local", date=date_str, time=time_str, email=email)
+        return BookingResult(success=True, booking_uid=None, booking_id=None)
 
     async def close(self) -> None:
-        """Close the underlying CalComService if we own it."""
-        if self._owns_calcom:
-            await self._calcom.close()
+        """No external client to release."""
+        return None
+
+    async def _load_business_hours(self, db: AsyncSession) -> dict[str, Any] | None:
+        """Load the workspace's stored ``business_hours`` setting, if any."""
+        result = await db.execute(
+            select(Workspace.settings).where(Workspace.id == self._workspace_id)
+        )
+        settings_row = result.scalar_one_or_none()
+        if not settings_row:
+            return None
+        business_hours = settings_row.get("business_hours")
+        return business_hours if isinstance(business_hours, dict) else None
+
+    async def _load_busy_intervals(
+        self,
+        db: AsyncSession,
+        start_date: Any,
+        end_date: Any,
+        tz: ZoneInfo,
+    ) -> list[BusyInterval]:
+        """Load scheduled appointments in range as busy intervals."""
+        range_start = datetime.combine(start_date, datetime.min.time(), tzinfo=tz)
+        range_end = datetime.combine(end_date, datetime.max.time(), tzinfo=tz)
+        result = await db.execute(
+            select(Appointment.scheduled_at, Appointment.duration_minutes).where(
+                Appointment.workspace_id == self._workspace_id,
+                Appointment.status == AppointmentStatus.SCHEDULED,
+                Appointment.scheduled_at >= range_start,
+                Appointment.scheduled_at <= range_end,
+            )
+        )
+        intervals: list[BusyInterval] = []
+        for scheduled_at, duration_minutes in result.all():
+            start = scheduled_at.astimezone(tz)
+            intervals.append(
+                BusyInterval(start=start, end=start + timedelta(minutes=duration_minutes or 30))
+            )
+        return intervals
 
     def _get_timezone(self) -> ZoneInfo:
-        """Get ZoneInfo for configured timezone."""
+        """Return ZoneInfo for the configured timezone (default NY)."""
         try:
             return ZoneInfo(self._timezone)
         except ZoneInfoNotFoundError:
