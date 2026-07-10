@@ -89,6 +89,19 @@ class WizardChristmasSelection(BaseModel):
     storage: bool = False
 
 
+class ProposalMockup(BaseModel):
+    """A rep-uploaded design mockup shown in the proposal's visual gallery.
+
+    ``image`` is a self-contained data URL (base64 JPEG/PNG/WebP) stored inline
+    in the snapshot exactly like the night-preview image — this deployment has
+    no object storage. The wizard resizes images client-side before upload, and
+    the length cap is a defensive backstop against an oversized snapshot row.
+    """
+
+    image: str = Field(min_length=1, max_length=3_000_000)
+    caption: str | None = Field(default=None, max_length=160)
+
+
 class ProposalWizardPayload(BaseModel):
     """Everything the wizard submits on save/preview (selection only, no money)."""
 
@@ -110,6 +123,8 @@ class ProposalWizardPayload(BaseModel):
     christmas: WizardChristmasSelection | None = None
     # Opaque night-preview snapshot (image ref, light markers, dusk level).
     night_preview: dict[str, Any] | None = None
+    # Rep-uploaded design mockups rendered in the proposal's visual gallery.
+    mockups: list[ProposalMockup] = Field(default_factory=list, max_length=8)
     title: str | None = Field(default=None, max_length=200)
     notes: str | None = None
     terms: str | None = None
@@ -217,6 +232,8 @@ class ProposalDocument(BaseModel):
     bistro: BistroPricing | None = None
     financing: ProposalFinancing | None = None
     night_preview: dict[str, Any] | None = None
+    # Rep-uploaded design mockups (data-URL images) shown in the visual gallery.
+    mockups: list[ProposalMockup] = Field(default_factory=list)
     # Product lines included in this quote (canonical order) + their new sections.
     categories: list[str] = Field(default_factory=list)
     category_sections: list[ProposalCategorySection] = Field(default_factory=list)

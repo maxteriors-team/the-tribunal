@@ -18311,6 +18311,8 @@ export interface components {
             grand_monthly_payment: number;
             /** Headline Tier */
             headline_tier?: string | null;
+            /** Mockups */
+            mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;
@@ -18390,6 +18392,21 @@ export interface components {
             transformer: boolean;
             /** Unit Price */
             unit_price: number;
+        };
+        /**
+         * ProposalMockup
+         * @description A rep-uploaded design mockup shown in the proposal's visual gallery.
+         *
+         *     ``image`` is a self-contained data URL (base64 JPEG/PNG/WebP) stored inline
+         *     in the snapshot exactly like the night-preview image — this deployment has
+         *     no object storage. The wizard resizes images client-side before upload, and
+         *     the length cap is a defensive backstop against an oversized snapshot row.
+         */
+        ProposalMockup: {
+            /** Caption */
+            caption?: string | null;
+            /** Image */
+            image: string;
         };
         /**
          * ProposalTemplateSettings
@@ -18505,6 +18522,8 @@ export interface components {
             client?: components["schemas"]["WizardClient"] | null;
             /** Contact Id */
             contact_id?: number | null;
+            /** Mockups */
+            mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;

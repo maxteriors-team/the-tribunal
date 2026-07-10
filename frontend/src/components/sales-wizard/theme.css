@@ -584,6 +584,31 @@
   .pnight-frame img { width: 100%; height: auto; display: block; }
   .pnight-cap { line-height: 1.4; padding: 12px 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.20em; text-transform: uppercase; color: var(--gold-d); background: var(--s1); border-top: 1px solid var(--bdr); }
 
+  /* Design-mockups gallery (rep preview; shares class names with client view) */
+  .pmock-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.16s both; }
+  .pmock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--bdr); border: 1px solid var(--bdr-g); }
+  .pmock-grid.single { grid-template-columns: 1fr; }
+  @media (max-width: 620px) { .pmock-grid { grid-template-columns: 1fr; } }
+  .pmock-item { margin: 0; position: relative; background: #05060c; line-height: 0; }
+  .pmock-item img { width: 100%; height: 100%; object-fit: cover; display: block; aspect-ratio: 4 / 3; }
+  .pmock-grid.single .pmock-item img { aspect-ratio: auto; max-height: 640px; }
+  .pmock-cap { line-height: 1.4; padding: 11px 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-d); background: var(--s1); border-top: 1px solid var(--bdr); }
+
+  /* Mockup uploader (calculator — Add-ons step) */
+  .mock-block .mock-count { font-family: var(--font-cormorant), serif; font-size: 20px; font-weight: 300; color: var(--gold); }
+  .mock-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 12px; }
+  @media (max-width: 560px) { .mock-grid { grid-template-columns: 1fr 1fr; } }
+  .mock-tile { position: relative; background: var(--s2); border: 1px solid var(--bdr); }
+  .mock-tile img { width: 100%; height: 110px; object-fit: cover; display: block; }
+  .mock-del { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .mock-del:hover { background: #e0726a; }
+  .mock-cap-input { width: 100%; background: var(--black); border: none; border-top: 1px solid var(--bdr); color: var(--t2); font-family: var(--font-montserrat), sans-serif; font-size: 11px; padding: 7px 8px; outline: none; }
+  .mock-cap-input:focus { color: var(--t1); }
+  .mock-cap-input::placeholder { color: var(--t4); }
+  .mock-add { width: 100%; margin-top: 4px; padding: 13px; background: none; border: 1px dashed var(--bdr-g); color: var(--t3); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .mock-add:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .mock-add:disabled { opacity: 0.5; cursor: not-allowed; }
+
   /* ═══ PUBLIC CLIENT VIEW (/p/quotes/[token]) ═══
    * The shared presentation sections above render the document; these bits
    * cover what only the client link needs: status banners, the approve /

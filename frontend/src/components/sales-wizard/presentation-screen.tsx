@@ -177,6 +177,25 @@ export function PresentationScreen({
           </div>
         </div>
 
+        {wizard.mockups.length ? (
+          <div className="pmock-section">
+            <div className="section-heading">The Vision for Your Home</div>
+            <div
+              className={`pmock-grid${wizard.mockups.length === 1 ? " single" : ""}`}
+            >
+              {wizard.mockups.map((m, i) => (
+                <figure className="pmock-item" key={i}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- in-memory data URL */}
+                  <img src={m.image} alt={m.caption || `Design mockup ${i + 1}`} />
+                  {m.caption ? (
+                    <figcaption className="pmock-cap">{m.caption}</figcaption>
+                  ) : null}
+                </figure>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {nightImage ? (
           <div className="pnight-section">
             <div className="pnight-frame">

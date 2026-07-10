@@ -27435,6 +27435,13 @@
             ],
             "title": "Headline Tier"
           },
+          "mockups": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalMockup"
+            },
+            "title": "Mockups",
+            "type": "array"
+          },
           "night_preview": {
             "anyOf": [
               {
@@ -27632,6 +27639,34 @@
           "line_total"
         ],
         "title": "ProposalLine",
+        "type": "object"
+      },
+      "ProposalMockup": {
+        "description": "A rep-uploaded design mockup shown in the proposal's visual gallery.\n\n``image`` is a self-contained data URL (base64 JPEG/PNG/WebP) stored inline\nin the snapshot exactly like the night-preview image — this deployment has\nno object storage. The wizard resizes images client-side before upload, and\nthe length cap is a defensive backstop against an oversized snapshot row.",
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "image": {
+            "maxLength": 3000000,
+            "minLength": 1,
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "ProposalMockup",
         "type": "object"
       },
       "ProposalTemplateSettings": {
@@ -28043,6 +28078,14 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "mockups": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalMockup"
+            },
+            "maxItems": 8,
+            "title": "Mockups",
+            "type": "array"
           },
           "night_preview": {
             "anyOf": [
