@@ -136,7 +136,6 @@ dependencies = [
     # baseline: pybreaker 1.4 is the first release with typed async support used in our circuit-breaker
     # wrapper around outbound Telnyx calls.
     "pybreaker>=1.4.1",
-    "ez-pixel>=0.1.0",
     # Knowledge ingestion (RAG): token-aware chunking + document text extraction.
     # feature floor: tiktoken 0.8 is the first release shipping the cl100k_base wheels for
     # Python 3.12/3.13 used by the token-aware splitter in app/services/knowledge/chunking.py.
