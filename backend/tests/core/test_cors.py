@@ -1,10 +1,12 @@
-"""Tests for CORS origin allow-list.
+"""Tests for the CORS origin allow-list.
 
-The production CORS regex must allow Vercel preview deployments under the
-project's own team (`ngrout70-6776s-projects`) but reject any other
-`*.vercel.app` origin. A previous version of the regex accepted any
-`*.vercel.app` subdomain, which let any attacker who deployed to Vercel hit
-the cookie-auth API.
+Credentialed CORS (``allow_credentials=True``) is pinned to an **exact**
+allow-list of origins (``settings.cors_origins`` + ``frontend_url``). It must
+never fall back to an ``allow_origin_regex`` that matches ``*.vercel.app`` or a
+team-slug pattern: any tenant able to deploy a matching origin could then drive
+cookie-authenticated requests against this API. A previous build shipped a
+regex scoped to a foreign Vercel team (``ngrout70-6776s-projects``); these tests
+lock in that such origins are now rejected.
 """
 
 from collections.abc import AsyncIterator
@@ -17,30 +19,26 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app as production_app
 
 
-def _build_pattern_from_settings() -> str:
-    """Rebuild the CORS regex the same way ``app.main`` does, in isolation.
+def _build_allow_origins_from_settings() -> list[str]:
+    """Rebuild the exact allow-list the same way ``app.main`` does, in isolation.
 
-    Mirrors the construction in ``backend/app/main.py`` so the test exercises
-    the actual regex shape without depending on import-time middleware order.
+    Mirrors the construction in ``backend/app/main.py`` so the test exercises the
+    real allow-list shape without depending on import-time middleware order.
     """
-    import re
-
     from app.core.config import settings
 
     origins = set(settings.cors_origins)
     if settings.frontend_url:
         origins.add(settings.frontend_url)
-    escaped = [re.escape(o) for o in origins]
-    vercel_team_pattern = r"https://[a-z0-9-]+-ngrout70-6776s-projects\.vercel\.app"
-    return "^(?:" + "|".join(escaped) + "|" + vercel_team_pattern + ")$"
+    return list(origins)
 
 
 def _make_cors_app() -> FastAPI:
-    """Build a minimal app with the production CORS regex attached."""
+    """Build a minimal app with the production CORS allow-list attached."""
     app = FastAPI()
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=_build_pattern_from_settings(),
+        allow_origins=_build_allow_origins_from_settings(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         # Mirror the production allow-list. Auth flows through httpOnly
@@ -60,7 +58,7 @@ def _make_cors_app() -> FastAPI:
 
 @pytest.fixture
 async def cors_client() -> AsyncIterator[AsyncClient]:
-    """HTTP client bound to a minimal app wired with the production CORS regex."""
+    """HTTP client bound to a minimal app wired with the production CORS allow-list."""
     app = _make_cors_app()
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -75,7 +73,7 @@ async def _preflight(
     """Send a CORS preflight and return the echoed ``access-control-allow-origin``.
 
     Returns ``None`` when the middleware refuses to echo the origin (the
-    origin itself is rejected by the allow-list / regex).
+    origin itself is rejected by the allow-list).
 
     ``request_headers`` is the value of ``Access-Control-Request-Headers``.
     Starlette echoes the origin even when a requested header isn't in
@@ -114,50 +112,39 @@ async def _preflight_status(client: AsyncClient, origin: str, *, request_headers
     return response.status_code
 
 
-class TestVercelCorsAllowList:
-    """The CORS regex only trusts the project's own Vercel team."""
+class TestCorsAllowList:
+    """Credentialed CORS trusts only the exact configured origins."""
 
-    async def test_team_preview_origin_is_allowed(self, cors_client: AsyncClient) -> None:
-        """A preview under ``ngrout70-6776s-projects`` is echoed back."""
-        origin = "https://aicrm-abc123-ngrout70-6776s-projects.vercel.app"
-        echoed = await _preflight(cors_client, origin)
-        assert echoed == origin
-
-    async def test_foreign_vercel_origin_is_rejected(self, cors_client: AsyncClient) -> None:
-        """A ``*.vercel.app`` origin outside the team is NOT echoed back.
-
-        This is the regression case: the old regex
-        ``https://[a-z0-9-]+\\.vercel\\.app`` matched any tenant's deployment.
-        """
-        origin = "https://evil-attacker.vercel.app"
-        echoed = await _preflight(cors_client, origin)
-        assert echoed is None, (
-            f"Foreign Vercel origin {origin} must not be allowed by CORS; "
-            f"got Access-Control-Allow-Origin={echoed!r}"
-        )
-
-    async def test_foreign_team_preview_is_rejected(self, cors_client: AsyncClient) -> None:
-        """A preview under a different team slug is NOT echoed back."""
-        origin = "https://aicrm-abc123-someoneelses-projects.vercel.app"
-        echoed = await _preflight(cors_client, origin)
-        assert echoed is None
-
-    async def test_team_slug_as_root_subdomain_is_rejected(self, cors_client: AsyncClient) -> None:
-        """An origin spoofing the team slug as the only subdomain is rejected.
-
-        ``https://ngrout70-6776s-projects.vercel.app`` is NOT a real Vercel
-        preview URL — real previews always have ``<project>-<hash>-`` in
-        front of the team slug.
-        """
-        origin = "https://ngrout70-6776s-projects.vercel.app"
-        echoed = await _preflight(cors_client, origin)
-        assert echoed is None
-
-    async def test_localhost_origin_still_allowed(self, cors_client: AsyncClient) -> None:
+    async def test_configured_origin_is_allowed(self, cors_client: AsyncClient) -> None:
         """The default ``http://localhost:3000`` origin remains allowed."""
         origin = "http://localhost:3000"
         echoed = await _preflight(cors_client, origin)
         assert echoed == origin
+
+    async def test_foreign_team_preview_is_rejected(self, cors_client: AsyncClient) -> None:
+        """The removed foreign-team implant origin is NOT echoed back.
+
+        Regression guard for the stripped ``ngrout70-6776s-projects`` regex:
+        a preview under that (foreign) team must no longer be trusted.
+        """
+        origin = "https://aicrm-abc123-ngrout70-6776s-projects.vercel.app"
+        echoed = await _preflight(cors_client, origin)
+        assert echoed is None, (
+            f"Foreign Vercel team origin {origin} must not be allowed by CORS; "
+            f"got Access-Control-Allow-Origin={echoed!r}"
+        )
+
+    async def test_arbitrary_vercel_origin_is_rejected(self, cors_client: AsyncClient) -> None:
+        """Any ``*.vercel.app`` origin not in the allow-list is rejected."""
+        origin = "https://evil-attacker.vercel.app"
+        echoed = await _preflight(cors_client, origin)
+        assert echoed is None
+
+    async def test_unconfigured_origin_is_rejected(self, cors_client: AsyncClient) -> None:
+        """An origin that isn't in ``CORS_ORIGINS`` is rejected outright."""
+        origin = "https://not-configured.example.com"
+        echoed = await _preflight(cors_client, origin)
+        assert echoed is None
 
 
 class TestCorsAllowedHeaders:
@@ -199,30 +186,30 @@ class TestCorsAllowedHeaders:
         assert status == 400
 
 
-class TestProductionAppCorsRegex:
-    """Sanity check that the live ``app.main`` app uses the locked-down regex."""
+class TestProductionAppCorsWiring:
+    """Sanity check that the live ``app.main`` app uses the locked-down allow-list."""
 
-    def test_app_regex_does_not_match_foreign_vercel(self) -> None:
-        """No middleware on the real app accepts a foreign ``*.vercel.app``."""
-        import re
-
-        # Find the CORSMiddleware instance attached to the production app.
+    def test_app_uses_exact_allow_list_without_regex(self) -> None:
+        """The real app must use ``allow_origins`` (exact list), never a regex."""
         cors_layers = [
             m
             for m in production_app.user_middleware
             if getattr(m.cls, "__name__", None) == CORSMiddleware.__name__
         ]
         assert cors_layers, "Production app must register CORSMiddleware"
-        pattern_obj = cors_layers[0].kwargs.get("allow_origin_regex")
-        assert isinstance(pattern_obj, str) and pattern_obj, (
-            "Production CORSMiddleware must use allow_origin_regex (str), not a "
-            "wildcard allow_origins list"
-        )
+        kwargs = cors_layers[0].kwargs
 
-        compiled = re.compile(pattern_obj)
-        assert compiled.match("https://aicrm-abc123-ngrout70-6776s-projects.vercel.app")
-        assert not compiled.match("https://evil-attacker.vercel.app")
-        assert not compiled.match("https://aicrm-abc123-someoneelses-projects.vercel.app")
+        assert kwargs.get("allow_origin_regex") is None, (
+            "Production CORSMiddleware must not use allow_origin_regex with "
+            "credentialed CORS; use an exact allow_origins list."
+        )
+        allow_origins = kwargs.get("allow_origins")
+        assert isinstance(allow_origins, list) and allow_origins, (
+            "Production CORSMiddleware must use a non-empty allow_origins list"
+        )
+        # The stripped foreign-team implant must not reappear in any form.
+        assert not any("ngrout70" in origin for origin in allow_origins)
+        assert not any("vercel.app" in origin for origin in allow_origins if "*" in origin)
 
     def test_app_allow_headers_is_minimal(self) -> None:
         """The production app must not re-introduce ``Authorization`` etc.

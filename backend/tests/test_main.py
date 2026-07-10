@@ -352,14 +352,15 @@ class TestSecurityHeadersMiddleware:
 
 
 class TestProductionCorsWiring:
-    """The real ``app.main:app`` has CORS attached with the team-scoped regex.
+    """The real ``app.main:app`` has CORS attached with an exact allow-list.
 
-    The full Vercel-team regression suite lives in ``tests/core/test_cors.py``;
-    here we add a request-level smoke test that hits the *actual* app object
-    via ASGITransport to confirm the middleware fires on a preflight.
+    The full regression suite lives in ``tests/core/test_cors.py``; here we
+    confirm the middleware is wired to a static ``allow_origins`` list — never a
+    broad origin regex — so credentialed CORS can't be driven from an arbitrary
+    ``*.vercel.app`` tenant.
     """
 
-    def test_cors_middleware_is_registered_with_regex(self) -> None:
+    def test_cors_middleware_uses_exact_allow_list_not_regex(self) -> None:
         cors_layers = [
             m
             for m in production_app.user_middleware
@@ -367,29 +368,31 @@ class TestProductionCorsWiring:
         ]
         assert cors_layers, "Production app must register CORSMiddleware"
         kwargs = cors_layers[0].kwargs
-        # Production wiring uses an origin regex; allow_credentials must be True
-        # for the cookie-based auth flow to work.
-        assert isinstance(kwargs.get("allow_origin_regex"), str)
+        # Credentialed CORS must be pinned to an explicit allow-list. A regex
+        # (allow_origin_regex) paired with allow_credentials=True is the exact
+        # foot-gun that let a foreign Vercel team reach cookie-auth endpoints.
+        assert kwargs.get("allow_origin_regex") is None, (
+            "Production CORSMiddleware must not use allow_origin_regex with "
+            "credentialed CORS; use an exact allow_origins list."
+        )
+        assert isinstance(kwargs.get("allow_origins"), list)
         assert kwargs.get("allow_credentials") is True
 
-    def test_cors_regex_matches_team_preview_and_rejects_foreigners(self) -> None:
-        import re
-
+    def test_cors_allow_list_excludes_foreign_vercel_origins(self) -> None:
         cors_layers = [
             m
             for m in production_app.user_middleware
             if getattr(m.cls, "__name__", None) == CORSMiddleware.__name__
         ]
-        pattern = cors_layers[0].kwargs["allow_origin_regex"]
-        assert isinstance(pattern, str)
-        compiled = re.compile(pattern)
+        allow_origins = cors_layers[0].kwargs["allow_origins"]
+        assert isinstance(allow_origins, list)
 
-        # Allowed: a preview under our Vercel team.
-        assert compiled.match("https://aicrm-xyz-ngrout70-6776s-projects.vercel.app")
-        # Rejected: any other Vercel tenant.
-        assert not compiled.match("https://evil.vercel.app")
-        # Rejected: a preview under a different team slug entirely.
-        assert not compiled.match("https://aicrm-xyz-other-team-projects.vercel.app")
+        # No entry may smuggle a foreign Vercel team back into the allow-list.
+        assert not any("ngrout70" in origin for origin in allow_origins), (
+            f"Foreign Vercel team must not appear in CORS allow-list: {allow_origins!r}"
+        )
+        # The configured localhost dev origin remains present.
+        assert "http://localhost:3000" in allow_origins
 
 
 # --------------------------------------------------------------------------- #

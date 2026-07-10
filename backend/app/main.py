@@ -2,7 +2,6 @@
 
 import math
 import os
-import re
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -523,7 +522,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # route code runs, so every log line during the request is correlated.
 app.add_middleware(RequestIDMiddleware)
 
-# CORS middleware — allow configured origins plus Vercel preview deployments
+# CORS middleware — allow only the explicitly configured origins.
 _cors_origins = set(settings.cors_origins)
 if settings.frontend_url:
     _cors_origins.add(settings.frontend_url)
@@ -562,30 +561,18 @@ _cors_origins_list = list(_cors_origins)
 #     frontend sets ``X-Requested-With``.
 _ALLOWED_REQUEST_HEADERS = ["Content-Type"]
 
-if settings.cors_allow_vercel_previews:
-    # Build regex: exact origins OR Vercel preview deployments under this team only.
-    # Lock to the project's team slug to prevent any other Vercel tenant from
-    # hitting cookie-auth endpoints with allow_credentials=True. Vercel preview
-    # URLs are of the form `<project>-<hash>-<team-slug>.vercel.app` for the
-    # `ngrout70-6776s-projects` team.
-    escaped = [re.escape(o) for o in _cors_origins_list]
-    vercel_team_pattern = r"https://[a-z0-9-]+-ngrout70-6776s-projects\.vercel\.app"
-    pattern = "^(?:" + "|".join(escaped) + "|" + vercel_team_pattern + ")$"
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=pattern,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=_ALLOWED_REQUEST_HEADERS,
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_cors_origins_list,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=_ALLOWED_REQUEST_HEADERS,
-    )
+# Exact-match allow-list only. Credentialed CORS (allow_credentials=True) must
+# never be paired with a broad ``*.vercel.app`` / team-slug regex: any tenant
+# who can deploy a matching origin could then drive cookie-authenticated
+# requests against this API. Preview/staging origins that genuinely need access
+# are added explicitly to ``CORS_ORIGINS``.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=_ALLOWED_REQUEST_HEADERS,
+)
 
 # Public lead-form CORS — added after (= outermost of) CORSMiddleware so
 # third-party customer sites pass preflight on /api/v1/p/leads/* without being
