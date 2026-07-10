@@ -24,6 +24,7 @@ type TierPricing = Schemas["TierPricing"];
 type CarePlanPricing = Schemas["CarePlanPricing"];
 type BistroPricing = Schemas["BistroPricing"];
 type WizardClient = Schemas["WizardClient"];
+type ProposalMockup = Schemas["ProposalMockup"];
 
 export interface ProposalTier {
   key: string;
@@ -79,6 +80,7 @@ export interface ProposalDoc {
   bistro: ProposalBistroView | null;
   financing: ProposalFinancingView | null;
   night_preview: Record<string, unknown> | null;
+  mockups: ProposalMockup[];
   categories: string[];
   category_sections: ProposalCategoryView[];
   selected_financed_total: number;
@@ -135,6 +137,9 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
       : null,
     night_preview:
       (doc.night_preview as Record<string, unknown> | null | undefined) ?? null,
+    mockups: (doc.mockups ?? []).filter(
+      (m): m is ProposalMockup => Boolean(m?.image),
+    ),
     categories: doc.categories ?? [],
     category_sections: (doc.category_sections ?? []).map(
       (section: ProposalCategorySection) => ({

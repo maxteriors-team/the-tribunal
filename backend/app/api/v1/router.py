@@ -64,6 +64,7 @@ from app.api.v1 import (
     workspaces,
 )
 from app.api.v1.integrations import companycam as companycam_integration
+from app.api.v1.integrations import google_calendar as google_calendar_integration
 from app.api.v1.integrations import openai_oauth as openai_oauth_integration
 from app.api.v1.onboarding import realtor_setup
 
@@ -249,6 +250,16 @@ api_router.include_router(
 api_router.include_router(
     openai_oauth_integration.public_router,
     prefix="/integrations/openai/oauth",
+    tags=["Integrations"],
+)
+api_router.include_router(
+    google_calendar_integration.router,
+    prefix="/workspaces/{workspace_id}/integrations",
+    tags=["Integrations"],
+)
+api_router.include_router(
+    google_calendar_integration.public_router,
+    prefix="/integrations/google-calendar",
     tags=["Integrations"],
 )
 api_router.include_router(

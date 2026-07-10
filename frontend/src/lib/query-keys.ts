@@ -303,6 +303,8 @@ export const queryKeys = {
     ...integrations,
     openAIOAuth: (workspaceId: string) =>
       [...integrations.all(workspaceId), "openai-oauth"] as const,
+    googleCalendar: (workspaceId: string) =>
+      [...integrations.all(workspaceId), "google-calendar"] as const,
   },
   invitations: {
     ...invitations,

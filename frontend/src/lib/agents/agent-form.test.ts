@@ -36,6 +36,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     text_response_delay_ms: 40_000,
     text_max_context_messages: 12,
     calcom_event_type_id: 42,
+    schedule_config: null,
     assignment_strategy: "single",
     enabled_tools: ["calendar"],
     tool_settings: { calendar: ["book"] },

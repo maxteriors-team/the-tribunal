@@ -32,6 +32,15 @@ from app.workers.email_campaign_worker import _registry as email_campaign_regist
 from app.workers.enrichment_worker import _registry as enrichment_registry
 from app.workers.experiment_evaluation_worker import _registry as experiment_evaluation_registry
 from app.workers.followup_worker import _registry as followup_registry
+from app.workers.google_appointment_status_worker import (
+    _registry as google_appointment_status_registry,
+)
+from app.workers.google_calendar_sync_worker import (
+    _registry as google_calendar_sync_registry,
+)
+from app.workers.google_calendar_watch_worker import (
+    _registry as google_calendar_watch_registry,
+)
 from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
@@ -275,6 +284,27 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="outbound_auto_draft_worker",
         registry=outbound_auto_draft_registry,
         dependencies=("postgres",),
+    ),
+    WorkerSpec(
+        name="google_calendar_sync_worker",
+        registry=google_calendar_sync_registry,
+        dependencies=("postgres", "google_calendar"),
+        enabled=lambda s: s.google_calendar_sync_worker_enabled,
+        enabled_setting="google_calendar_sync_worker_enabled",
+    ),
+    WorkerSpec(
+        name="google_calendar_watch_worker",
+        registry=google_calendar_watch_registry,
+        dependencies=("postgres", "google_calendar"),
+        enabled=lambda s: s.google_calendar_watch_renewal_worker_enabled,
+        enabled_setting="google_calendar_watch_renewal_worker_enabled",
+    ),
+    WorkerSpec(
+        name="google_appointment_status_worker",
+        registry=google_appointment_status_registry,
+        dependencies=("postgres",),
+        enabled=lambda s: s.google_appointment_status_worker_enabled,
+        enabled_setting="google_appointment_status_worker_enabled",
     ),
 )
 

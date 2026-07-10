@@ -329,6 +329,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         bistro=bistro,
         financing=financing,
         night_preview=payload.night_preview,
+        mockups=payload.mockups,
         categories=categories,
         category_sections=category_sections,
         selected_financed_total=selected_financed,

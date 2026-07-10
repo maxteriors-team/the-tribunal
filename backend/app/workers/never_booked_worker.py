@@ -23,7 +23,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.models.contact import Contact
@@ -185,7 +184,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
             return
 
         template = agent.never_booked_template or _DEFAULT_NEVER_BOOKED_TEMPLATE
-        body = self._render_template(template, contact, agent)
+        body = await self._render_template(template, contact, agent)
 
         sms_service = get_text_message_provider()
         try:
@@ -216,10 +215,10 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
             name=tag,
         )
 
-    def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
+    async def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
         """Render a template with {first_name} and {booking_link} placeholders."""
         first_name = contact.first_name or "there"
-        booking_link = self._build_booking_link(contact, agent)
+        booking_link = await self._build_booking_link(contact, agent)
 
         replacements: dict[str, str] = {
             "first_name": first_name,
@@ -240,20 +239,17 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
                 )
         return message
 
-    def _build_booking_link(self, contact: Contact, agent: Agent) -> str:
-        """Generate a Cal.com booking URL if agent has an event type configured."""
-        if not agent.calcom_event_type_id or not settings.calcom_api_key:
-            return ""
+    async def _build_booking_link(self, contact: Contact, agent: Agent) -> str:
+        """Generate a provider-neutral booking URL (Google when connected, else Cal.com)."""
         try:
-            from app.services.calendar.calcom import CalComService
+            from app.services.calendar.factory import reschedule_link_for_agent
 
-            calcom = CalComService(settings.calcom_api_key)
             contact_name = (
                 " ".join(filter(None, [contact.first_name, contact.last_name]))
                 or contact.first_name
             )
-            return calcom.generate_booking_url(
-                event_type_id=agent.calcom_event_type_id,
+            return await reschedule_link_for_agent(
+                agent,
                 contact_email=contact.email or "",
                 contact_name=contact_name,
                 contact_phone=contact.phone_number,

@@ -1,5 +1,25 @@
 // Agent types
 
+/** Weekday keys used by the Google availability slot engine. */
+export type ScheduleWeekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+/** A single working-hours window, e.g. ["09:00", "17:00"]. */
+export type ScheduleWindow = [string, string];
+
+/**
+ * Provider-neutral weekly availability config for the Google slot engine.
+ * All fields optional; the backend applies sensible defaults.
+ */
+export interface AgentScheduleConfig {
+  timezone?: string;
+  slot_duration_minutes?: number;
+  buffer_before_minutes?: number;
+  buffer_after_minutes?: number;
+  min_notice_minutes?: number;
+  max_horizon_days?: number;
+  weekly_hours?: Partial<Record<ScheduleWeekday, ScheduleWindow[]>>;
+}
+
 export interface Agent {
   id: string;
   workspace_id: string;
@@ -15,6 +35,7 @@ export interface Agent {
   text_response_delay_ms: number;
   text_max_context_messages: number;
   calcom_event_type_id: number | null;
+  schedule_config: AgentScheduleConfig | null;
   assignment_strategy: string;
   enabled_tools: string[];
   tool_settings: Record<string, string[]>;

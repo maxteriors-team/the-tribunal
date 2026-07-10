@@ -6,11 +6,106 @@
  * per-foot *display* rates on the complexity buttons are derived from config
  * (same gross-up the server applies), never totals.
  */
-import { fmt, fmt2, type UseSalesWizardReturn } from "./use-sales-wizard";
+import { useRef, useState } from "react";
+
+import {
+  fmt,
+  fmt2,
+  MAX_MOCKUPS,
+  type UseSalesWizardReturn,
+} from "./use-sales-wizard";
 
 interface EnhancementsStepProps {
   wizard: UseSalesWizardReturn;
   onOpenNight: () => void;
+}
+
+/**
+ * Design-mockup gallery uploader. Images are downscaled in the browser and held
+ * as data URLs; they ride into the saved snapshot on save and render as a
+ * gallery on both the rep preview and the client proposal.
+ */
+function MockupsBlock({ wizard }: { wizard: UseSalesWizardReturn }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const mockups = wizard.mockups;
+  const atCap = mockups.length >= MAX_MOCKUPS;
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !files.length) return;
+    setBusy(true);
+    try {
+      await wizard.addMockupFiles(files);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="care-block mock-block">
+      <div className="care-head">
+        <div>
+          <div className="care-head-label">Add Design Mockups</div>
+          <div className="care-head-title">Visual Mockups</div>
+        </div>
+        <div className="mock-count">
+          {mockups.length} / {MAX_MOCKUPS}
+        </div>
+      </div>
+      <div className="bistro-subtitle">
+        Upload renderings or photos of this project. They appear as a gallery on
+        the client proposal &#8212; your most persuasive, visual page.
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={onPick}
+      />
+      {mockups.length ? (
+        <div className="mock-grid">
+          {mockups.map((m, i) => (
+            <div className="mock-tile" key={i}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- in-memory data URL */}
+              <img src={m.image} alt={`Mockup ${i + 1}`} />
+              <button
+                type="button"
+                className="mock-del"
+                onClick={() => wizard.removeMockup(i)}
+                aria-label="Remove mockup"
+              >
+                &times;
+              </button>
+              <input
+                className="mock-cap-input"
+                type="text"
+                maxLength={160}
+                placeholder="Caption (optional)"
+                value={m.caption}
+                onChange={(e) => wizard.setMockupCaption(i, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="mock-add"
+        disabled={atCap || busy}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy
+          ? "Processing\u2026"
+          : atCap
+            ? `Maximum ${MAX_MOCKUPS} images added`
+            : "\uFF0B Add Mockup Images"}
+      </button>
+    </div>
+  );
 }
 
 /** Combined back-end buffer used for display-only per-unit rates. */
@@ -96,6 +191,9 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
 
   return (
     <>
+      {/* ── Design mockups (all quotes) ── */}
+      <MockupsBlock wizard={wizard} />
+
       {/* ── Care Plan (landscape) ── */}
       {showCare ? (
       <div className="care-block">

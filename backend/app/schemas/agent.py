@@ -69,6 +69,7 @@ class AgentCreate(BaseModel):
     )
     text_max_context_messages: int = 20
     calcom_event_type_id: int | None = None
+    schedule_config: dict[str, Any] | None = None
     assignment_strategy: str = "single"
     enabled_tools: list[str] = []
     tool_settings: dict[str, list[str]] = {}
@@ -151,6 +152,7 @@ class AgentUpdate(BaseModel):
     )
     text_max_context_messages: int | None = None
     calcom_event_type_id: int | None = None
+    schedule_config: dict[str, Any] | None = None
     assignment_strategy: str | None = None
     is_active: bool | None = None
     enabled_tools: list[str] | None = None
@@ -236,6 +238,7 @@ class AgentResponse(BaseModel):
     text_response_delay_ms: int
     text_max_context_messages: int
     calcom_event_type_id: int | None
+    schedule_config: dict[str, Any] | None = None
     assignment_strategy: str = "single"
     enabled_tools: list[str]
     tool_settings: dict[str, list[str]]

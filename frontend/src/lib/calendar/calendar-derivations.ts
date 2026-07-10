@@ -5,7 +5,14 @@
  * the small formatting helpers unit-testable without rendering the component.
  */
 
-import { addDays, isSameDay, startOfWeek, endOfWeek } from "@/lib/utils/date";
+import {
+  addDays,
+  isSameDay,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+} from "@/lib/utils/date";
 import type { Appointment, Contact } from "@/types";
 
 export type StatusFilter = "" | "scheduled" | "no_show" | "completed" | "cancelled";
@@ -61,6 +68,44 @@ export function getWeekRange(date: Date): WeekRange {
     weekStartIso: weekStart.toISOString(),
     weekEndIso: weekEnd.toISOString(),
     weekDays: Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
+  };
+}
+
+export interface MonthRange {
+  /** First day of the active month (drives the header label + outside-day dimming). */
+  monthDate: Date;
+  /** Sunday on or before the 1st — the top-left cell of the grid. */
+  gridStart: Date;
+  /** Saturday on or after the month end — the bottom-right cell of the grid. */
+  gridEnd: Date;
+  gridStartIso: string;
+  gridEndIso: string;
+  /** Whole weeks (Sun→Sat rows) covering the month, 4–6 rows. */
+  weeks: Date[][];
+}
+
+/**
+ * Sunday-based month grid (matches Jobber's Schedule): the visible cells span
+ * from the Sunday on/before the 1st to the Saturday on/after the month's end,
+ * so every row is a full week. Bounds are returned as ISO for the range fetch.
+ */
+export function getMonthRange(date: Date): MonthRange {
+  const monthDate = startOfMonth(date);
+  const gridStart = startOfWeek(monthDate, { weekStartsOn: 0 });
+  const gridEnd = endOfWeek(endOfMonth(date), { weekStartsOn: 0 });
+  const weeks: Date[][] = [];
+  let cursor = gridStart;
+  while (cursor <= gridEnd) {
+    weeks.push(Array.from({ length: 7 }, (_, index) => addDays(cursor, index)));
+    cursor = addDays(cursor, 7);
+  }
+  return {
+    monthDate,
+    gridStart,
+    gridEnd,
+    gridStartIso: gridStart.toISOString(),
+    gridEndIso: gridEnd.toISOString(),
+    weeks,
   };
 }
 

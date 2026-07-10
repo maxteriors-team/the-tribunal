@@ -198,7 +198,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             )
 
         # Build SMS body
-        body = self._render_reminder_body(
+        body = await self._render_reminder_body(
             template=agent.reminder_template if agent is not None else None,
             contact=contact,
             appointment=appt,
@@ -413,7 +413,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
     # Template rendering
     # ------------------------------------------------------------------
 
-    def _render_reminder_body(
+    async def _render_reminder_body(
         self,
         template: str | None,
         contact: Contact,
@@ -455,18 +455,17 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                 f"Reply here if you need to reschedule."
             )
 
-        # Build reschedule link if agent has a Cal.com event type configured
+        # Build a provider-neutral reschedule link (Google when connected, else Cal.com)
         reschedule_link = ""
-        if agent is not None and agent.calcom_event_type_id and settings.calcom_api_key:
+        if agent is not None:
             try:
-                from app.services.calendar.calcom import CalComService
+                from app.services.calendar.factory import reschedule_link_for_agent
 
-                calcom = CalComService(settings.calcom_api_key)
                 contact_name = (
                     " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
                 )
-                reschedule_link = calcom.generate_booking_url(
-                    event_type_id=agent.calcom_event_type_id,
+                reschedule_link = await reschedule_link_for_agent(
+                    agent,
                     contact_email=contact.email or "",
                     contact_name=contact_name,
                     contact_phone=contact.phone_number,

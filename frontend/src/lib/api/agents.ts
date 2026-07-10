@@ -1,6 +1,6 @@
 import { apiGet, apiPut } from "@/lib/api";
 import { createApiClient, type FullApiClient } from "@/lib/api/create-api-client";
-import type { Agent } from "@/types/agent";
+import type { Agent, AgentScheduleConfig } from "@/types/agent";
 
 export type { Agent };
 
@@ -64,6 +64,7 @@ export interface UpdateAgentRequest {
   text_response_delay_ms?: number;
   text_max_context_messages?: number;
   calcom_event_type_id?: number;
+  schedule_config?: AgentScheduleConfig | null;
   assignment_strategy?: string;
   is_active?: boolean;
   enabled_tools?: string[];

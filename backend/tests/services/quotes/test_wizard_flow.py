@@ -20,6 +20,7 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.workspace import Workspace
 from app.schemas.proposal_wizard import (
+    ProposalMockup,
     ProposalWizardPayload,
     WizardBistroSelection,
     WizardCategoryCount,
@@ -274,6 +275,39 @@ async def test_public_read_carries_the_snapshot() -> None:
         # The public page leads with cash/check; both figures ride the snapshot.
         assert tiers[0]["pricing"]["cash_total"] == 12551.0
         assert tiers[0]["pricing"]["financed_total"] == 13692.0
+
+
+async def test_mockups_persist_into_snapshot_and_public_read() -> None:
+    """Rep-uploaded design mockups ride the payload into the saved snapshot and
+    survive onto the public proposal read (the client-facing gallery source)."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = _payload()
+        payload.mockups = [
+            ProposalMockup(image="data:image/jpeg;base64,AAAA", caption="Front elevation"),
+            ProposalMockup(image="data:image/jpeg;base64,BBBB", caption=None),
+        ]
+
+        # Live preview echoes the mockups back for the rep presentation screen.
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        assert [m.image for m in doc.mockups] == [
+            "data:image/jpeg;base64,AAAA",
+            "data:image/jpeg;base64,BBBB",
+        ]
+        assert doc.mockups[0].caption == "Front elevation"
+
+        # Saved snapshot + public read carry the same gallery for the client link.
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+        public = await svc.get_public_proposal(sent.public_token)
+        mockups = public.proposal_document["mockups"]
+        assert [m["image"] for m in mockups] == [
+            "data:image/jpeg;base64,AAAA",
+            "data:image/jpeg;base64,BBBB",
+        ]
+        assert mockups[0]["caption"] == "Front elevation"
 
 
 async def test_wizard_defaults_selected_tier_to_headline_and_respects_pick() -> None:

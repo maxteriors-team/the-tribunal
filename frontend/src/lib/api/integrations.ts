@@ -71,6 +71,21 @@ export interface OpenAIOAuthDevicePollResponse {
   status: OpenAIOAuthStatus;
 }
 
+export interface GoogleCalendarStatus {
+  connected: boolean;
+  google_calendar_id?: string | null;
+  token_expiry?: string | null;
+  scopes?: string | null;
+  saved_at?: string | null;
+  client_configured: boolean;
+}
+
+export interface GoogleCalendarConnectResponse {
+  authorization_url: string;
+  redirect_uri: string;
+  expires_at: number;
+}
+
 // Base API client using the factory for standard CRUD operations
 const baseIntegrationsApi = createApiClient<
   IntegrationWithMaskedCredentials,
@@ -142,6 +157,26 @@ export const integrationsApi = {
   disconnectOpenAIOAuth: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
     return apiDelete<OpenAIOAuthStatus>(
       `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth`
+    );
+  },
+
+  getGoogleCalendarStatus: async (workspaceId: string): Promise<GoogleCalendarStatus> => {
+    return apiGet<GoogleCalendarStatus>(
+      `/api/v1/workspaces/${workspaceId}/integrations/google-calendar/status`
+    );
+  },
+
+  connectGoogleCalendar: async (
+    workspaceId: string
+  ): Promise<GoogleCalendarConnectResponse> => {
+    return apiPost<GoogleCalendarConnectResponse>(
+      `/api/v1/workspaces/${workspaceId}/integrations/google-calendar/connect`
+    );
+  },
+
+  disconnectGoogleCalendar: async (workspaceId: string): Promise<GoogleCalendarStatus> => {
+    return apiDelete<GoogleCalendarStatus>(
+      `/api/v1/workspaces/${workspaceId}/integrations/google-calendar`
     );
   },
 };

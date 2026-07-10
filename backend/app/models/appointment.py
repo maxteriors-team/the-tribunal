@@ -111,6 +111,15 @@ class Appointment(Base):
     service_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Calendar provider (provider-neutral). ``calendar_provider`` records which
+    # backend booked this appointment ("calcom" | "google"); ``external_event_id``
+    # is that backend's canonical event id. The ``calcom_*`` columns below are
+    # retained for existing Cal.com bookings until Cal.com is fully removed.
+    calendar_provider: Mapped[str] = mapped_column(
+        String(50), default="calcom", server_default="calcom", nullable=False
+    )
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
     # Cal.com sync
     calcom_booking_uid: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True

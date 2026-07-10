@@ -19,7 +19,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
-from app.services.calendar.calcom import CalComService
+from app.services.calendar.calcom import CalComCalendarProvider, CalComService
+from app.services.calendar.provider import CalendarProvider
 
 logger = structlog.get_logger()
 
@@ -44,26 +45,31 @@ class AvailabilityResult:
 
 @dataclass
 class BookingResult:
-    """Result of creating a Cal.com booking."""
+    """Result of creating a booking (provider-neutral)."""
 
     success: bool
     booking_uid: str | None = None
     booking_id: int | None = None
+    external_event_id: str | None = None
+    provider: str | None = None
     error: str | None = None
     alternative_slots: list[AvailableSlot] = field(default_factory=list)
 
 
 class BookingService:
-    """Channel-agnostic Cal.com booking operations.
+    """Channel-agnostic booking operations over a :class:`CalendarProvider`.
 
-    Handles availability checks and appointment creation via CalComService.
+    Handles availability checks and appointment creation via a calendar
+    provider (Cal.com today, Google Calendar during/after the migration).
     Returns structured dataclasses — callers handle formatting and DB work.
 
     Args:
-        api_key: Cal.com API key
-        event_type_id: Cal.com event type ID
+        api_key: Cal.com API key (used only when building the default Cal.com provider)
+        event_type_id: Cal.com event type ID (used only for the default Cal.com provider)
         timezone: IANA timezone string (default: America/New_York)
-        calcom_service: Optional CalComService instance (for testing)
+        calcom_service: Optional CalComService instance (for testing the Cal.com path)
+        provider: Optional pre-built CalendarProvider; when given it takes
+            precedence and ``api_key``/``event_type_id`` are ignored.
     """
 
     def __init__(
@@ -72,12 +78,24 @@ class BookingService:
         event_type_id: int,
         timezone: str = "America/New_York",
         calcom_service: CalComService | None = None,
+        provider: CalendarProvider | None = None,
     ) -> None:
         self._api_key = api_key
         self._event_type_id = event_type_id
         self._timezone = timezone
-        self._calcom = calcom_service or CalComService(api_key)
-        self._owns_calcom = calcom_service is None
+        if provider is not None:
+            self._provider: CalendarProvider = provider
+            self._owns_provider = False
+        elif calcom_service is not None:
+            self._provider = CalComCalendarProvider(
+                calcom_service, event_type_id, owns_service=False
+            )
+            self._owns_provider = True
+        else:
+            self._provider = CalComCalendarProvider(
+                CalComService(api_key), event_type_id, owns_service=True
+            )
+            self._owns_provider = True
         self._log = logger.bind(service="booking_service")
 
     async def check_availability(
@@ -109,8 +127,7 @@ class BookingService:
             return AvailabilityResult(success=False, error=f"Invalid date format: {e}")
 
         try:
-            raw_slots = await self._calcom.get_availability(
-                event_type_id=self._event_type_id,
+            raw_slots = await self._provider.get_availability(
                 start_date=start_date,
                 end_date=end_date,
                 timezone=self._timezone,
@@ -169,8 +186,7 @@ class BookingService:
 
         if pre_validate:
             # Re-check availability to confirm the slot still exists
-            raw_slots = await self._calcom.get_availability(
-                event_type_id=self._event_type_id,
+            raw_slots = await self._provider.get_availability(
                 start_date=start_date,
                 end_date=start_date,
                 timezone=self._timezone,
@@ -206,31 +222,31 @@ class BookingService:
             start_iso = f"{date_str}T{time_str}:00.000Z"
 
         try:
-            booking = await self._calcom.create_booking(
-                event_type_id=self._event_type_id,
+            booking = await self._provider.create_booking(
+                start_time_iso=start_iso,
                 contact_email=email,
                 contact_name=contact_name,
-                start_time_iso=start_iso,
                 duration_minutes=duration_minutes,
                 metadata=metadata,
                 timezone=self._timezone,
                 phone_number=phone_number,
             )
 
-            booking_uid = booking.get("uid")
-            booking_id = booking.get("id")
-
             self._log.info(
                 "booking_created",
-                booking_uid=booking_uid,
-                booking_id=booking_id,
+                booking_uid=booking.booking_uid,
+                booking_id=booking.booking_id,
+                external_event_id=booking.external_event_id,
+                provider=booking.provider,
                 email=email,
             )
 
             return BookingResult(
                 success=True,
-                booking_uid=booking_uid,
-                booking_id=booking_id,
+                booking_uid=booking.booking_uid,
+                booking_id=booking.booking_id,
+                external_event_id=booking.external_event_id,
+                provider=booking.provider,
             )
 
         except Exception as e:
@@ -238,9 +254,9 @@ class BookingService:
             return BookingResult(success=False, error=f"Failed to book appointment: {e!s}")
 
     async def close(self) -> None:
-        """Close the underlying CalComService if we own it."""
-        if self._owns_calcom:
-            await self._calcom.close()
+        """Close the underlying calendar provider if we own it."""
+        if self._owns_provider:
+            await self._provider.close()
 
     def _get_timezone(self) -> ZoneInfo:
         """Get ZoneInfo for configured timezone."""

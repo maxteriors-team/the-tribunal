@@ -206,7 +206,7 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
             log.warning("Could not resolve from number, will retry next tick")
             return
 
-        body = self._render_template(template, contact, agent)
+        body = await self._render_template(template, contact, agent)
 
         sms_service = TelnyxSMSService(telnyx_key)
         try:
@@ -267,10 +267,10 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
             )
         )
 
-    def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
+    async def _render_template(self, template: str, contact: Contact, agent: Agent) -> str:
         """Render a re-engagement template with placeholders."""
         first_name = contact.first_name or "there"
-        reschedule_link = self._build_reschedule_link(contact, agent)
+        reschedule_link = await self._build_reschedule_link(contact, agent)
 
         replacements: dict[str, str] = {
             "first_name": first_name,
@@ -291,20 +291,17 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
                 )
         return message
 
-    def _build_reschedule_link(self, contact: Contact, agent: Agent) -> str:
-        """Generate a Cal.com booking URL if agent has an event type configured."""
-        if not agent.calcom_event_type_id or not settings.calcom_api_key:
-            return ""
+    async def _build_reschedule_link(self, contact: Contact, agent: Agent) -> str:
+        """Generate a provider-neutral reschedule URL (Google when connected, else Cal.com)."""
         try:
-            from app.services.calendar.calcom import CalComService
+            from app.services.calendar.factory import reschedule_link_for_agent
 
-            calcom = CalComService(settings.calcom_api_key)
             contact_name = (
                 " ".join(filter(None, [contact.first_name, contact.last_name]))
                 or contact.first_name
             )
-            return calcom.generate_booking_url(
-                event_type_id=agent.calcom_event_type_id,
+            return await reschedule_link_for_agent(
+                agent,
                 contact_email=contact.email or "",
                 contact_name=contact_name,
                 contact_phone=contact.phone_number,

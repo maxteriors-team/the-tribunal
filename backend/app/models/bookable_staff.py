@@ -15,7 +15,7 @@ Selection is driven by the owning agent's ``assignment_strategy`` (see
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     BigInteger,
@@ -26,7 +26,7 @@ from sqlalchemy import (
     Integer,
     String,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.dialects.postgresql import TEXT as PG_TEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -79,6 +79,10 @@ class BookableStaff(Base):
 
     # Each staff member books against their own Cal.com event type / schedule.
     calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Provider-neutral weekly availability config for the Google slot engine.
+    # Same shape as ``Agent.schedule_config``; overrides the agent's config for
+    # this staff member when present.
+    schedule_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Skill tags used for skill-based routing (case-insensitive matching).
     skills: Mapped[list[str]] = mapped_column(ARRAY(PG_TEXT), default=list, nullable=False)

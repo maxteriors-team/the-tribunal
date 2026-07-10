@@ -86,6 +86,19 @@ class Agent(Base):
 
     # Cal.com integration
     calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Provider-neutral weekly availability config used by the Google Calendar
+    # slot engine (Cal.com stores this server-side; Google gives only free/busy).
+    # Shape (all keys optional, sensible defaults applied by the engine):
+    #   {
+    #     "timezone": "America/New_York",
+    #     "slot_duration_minutes": 30,
+    #     "buffer_before_minutes": 0,
+    #     "buffer_after_minutes": 0,
+    #     "min_notice_minutes": 120,
+    #     "max_horizon_days": 30,
+    #     "weekly_hours": {"mon": [["09:00", "17:00"]], ..., "sun": []}
+    #   }
+    schedule_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # How the booking tool picks which Cal.com event type / staff member to book.
     #   "single"       -> always use calcom_event_type_id (legacy default)
     #   "round_robin"  -> distribute across the agent's active bookable_staff pool

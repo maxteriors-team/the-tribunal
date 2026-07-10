@@ -13,6 +13,7 @@ from typing import Any, cast
 import httpx
 import structlog
 
+from app.services.calendar.provider import ProviderBooking
 from app.services.providers.http import (
     AsyncProviderHTTPClient,
     HTTPMethod,
@@ -26,6 +27,8 @@ from app.services.providers.http import (
 )
 
 logger = structlog.get_logger()
+
+CALENDAR_PROVIDER_CALCOM = "calcom"
 
 # Retry configuration
 MAX_RETRIES = 3
@@ -459,3 +462,106 @@ class CalComService:
             msg = f"Unsupported Cal.com HTTP method: {method}"
             raise CalComError(msg)
         return cast(HTTPMethod, normalized)
+
+
+class CalComCalendarProvider:
+    """Adapt :class:`CalComService` to the ``CalendarProvider`` protocol.
+
+    Binds a ``CalComService`` to a single ``event_type_id`` so the rest of the
+    booking code can stay provider-neutral. Thin wrapper — it keeps the exact
+    request/response behavior of the underlying service.
+    """
+
+    provider_name: str = CALENDAR_PROVIDER_CALCOM
+
+    def __init__(
+        self,
+        service: CalComService,
+        event_type_id: int,
+        *,
+        owns_service: bool = False,
+    ) -> None:
+        self._service = service
+        self._event_type_id = event_type_id
+        self._owns_service = owns_service
+
+    async def get_availability(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        timezone: str = "America/New_York",
+    ) -> list[dict[str, Any]]:
+        return await self._service.get_availability(
+            event_type_id=self._event_type_id,
+            start_date=start_date,
+            end_date=end_date,
+            timezone=timezone,
+        )
+
+    async def create_booking(
+        self,
+        *,
+        start_time_iso: str,
+        contact_email: str,
+        contact_name: str,
+        duration_minutes: int = 30,
+        timezone: str = "America/New_York",
+        metadata: dict[str, Any] | None = None,
+        phone_number: str | None = None,
+    ) -> ProviderBooking:
+        booking = await self._service.create_booking(
+            event_type_id=self._event_type_id,
+            contact_email=contact_email,
+            contact_name=contact_name,
+            start_time_iso=start_time_iso,
+            duration_minutes=duration_minutes,
+            metadata=metadata,
+            timezone=timezone,
+            phone_number=phone_number,
+        )
+        booking_uid = booking.get("uid")
+        return ProviderBooking(
+            provider=self.provider_name,
+            external_event_id=booking_uid,
+            booking_uid=booking_uid,
+            booking_id=booking.get("id"),
+            raw=booking,
+        )
+
+    async def cancel_booking(
+        self,
+        external_event_id: str,
+        *,
+        reason: str = "Cancelled by customer",
+    ) -> bool:
+        return await self._service.cancel_booking(external_event_id, reason=reason)
+
+    async def reschedule_booking(
+        self,
+        external_event_id: str,
+        *,
+        start_time_iso: str,
+        duration_minutes: int = 30,
+        timezone: str = "America/New_York",
+    ) -> ProviderBooking:
+        # Cal.com reschedules are handled via its hosted flow / webhooks today;
+        # a direct-API reschedule is not part of the current integration.
+        raise CalComError("Cal.com reschedule is handled via the hosted booking flow")
+
+    def reschedule_link(
+        self,
+        *,
+        contact_email: str,
+        contact_name: str,
+        contact_phone: str | None = None,
+    ) -> str:
+        return self._service.generate_booking_url(
+            event_type_id=self._event_type_id,
+            contact_email=contact_email,
+            contact_name=contact_name,
+            contact_phone=contact_phone,
+        )
+
+    async def close(self) -> None:
+        if self._owns_service:
+            await self._service.close()

@@ -4,6 +4,7 @@ import { type UseFormReturn, useWatch } from "react-hook-form";
 import type { EditAgentFormValues } from "@/components/agents/agent-edit-schema";
 import { PostMeetingSmsSection } from "@/components/agents/tabs/advanced/post-meeting-sms-section";
 import { RemindersSection } from "@/components/agents/tabs/advanced/reminders-section";
+import { ScheduleConfigSection } from "@/components/agents/tabs/advanced/schedule-config-section";
 import { StaffRoutingSection } from "@/components/agents/tabs/advanced/staff-routing-section";
 import { TextSettingsSection } from "@/components/agents/tabs/advanced/text-settings-section";
 import { TransferSection } from "@/components/agents/tabs/advanced/transfer-section";
@@ -79,6 +80,8 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
       </Card>
 
       <StaffRoutingSection control={control} workspaceId={agent.workspace_id} agentId={agent.id} />
+
+      <ScheduleConfigSection agent={agent} />
 
       <RemindersSection control={control} />
 

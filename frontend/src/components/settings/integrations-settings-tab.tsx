@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { GoogleCalendarCard } from "@/components/settings/google-calendar-card";
 import { IntegrationConfigDialog } from "@/components/settings/integration-config-dialog";
 import { OpenAIChatGPTCard } from "@/components/settings/openai-chatgpt-card";
 import { PhoneNumbersTable } from "@/components/settings/phone-numbers-table";
@@ -117,6 +118,8 @@ export function IntegrationsSettingsTab() {
       <PhoneNumbersTable variant="section" />
 
       <OpenAIChatGPTCard />
+
+      <GoogleCalendarCard />
 
       <div className="grid gap-4 md:grid-cols-2">
         {integrationsLoading ? (

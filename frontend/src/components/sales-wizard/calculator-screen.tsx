@@ -76,7 +76,6 @@ export function CalculatorScreen({
   const hasLandscape = wizard.hasCategory("landscape");
   const hasSeasonal =
     wizard.hasCategory("permanent") || wizard.hasCategory("christmas");
-  const hasAddons = hasLandscape || wizard.hasCategory("bistro");
 
   // Steps are driven by which product lines the quote covers, so the rep only
   // walks the sections that apply to this quote.
@@ -88,10 +87,12 @@ export function CalculatorScreen({
     if (hasLandscape) list.push({ id: "design", label: "Design" });
     if (hasSeasonal) list.push({ id: "seasonal", label: "Seasonal" });
     if (hasLandscape) list.push({ id: "story", label: "Story" });
-    if (hasAddons) list.push({ id: "enhancements", label: "Add-ons" });
+    // Add-ons: mockups apply to every quote (care/bistro gate internally), so
+    // this step is always available.
+    list.push({ id: "enhancements", label: "Add-ons" });
     list.push({ id: "review", label: "Review" });
     return list;
-  }, [hasLandscape, hasSeasonal, hasAddons]);
+  }, [hasLandscape, hasSeasonal]);
 
   const [stepState, setStep] = useState<WizardStepId>("client");
   const step = steps.some((s) => s.id === stepState) ? stepState : "client";
@@ -359,32 +360,30 @@ export function CalculatorScreen({
             </section>
           ) : null}
 
-          {/* ── Enhancements (care / bistro / night) ── */}
-          {hasAddons ? (
-            <section className={`wizard-step${step === "enhancements" ? " active" : ""}`}>
-              <div className="wizard-step-heading">
-                <div className="wizard-kicker">{stepOf("enhancements")}</div>
-                <div className="wizard-title">
-                  <em>Enhance</em>{" "}the Proposal
-                </div>
-                <div className="wizard-copy">
-                  Add annual care, bistro string lighting, or a night-mode
-                  preview. Leave any optional section blank and it stays out of
-                  the client proposal.
-                </div>
+          {/* ── Enhancements (mockups always · care / bistro / night) ── */}
+          <section className={`wizard-step${step === "enhancements" ? " active" : ""}`}>
+            <div className="wizard-step-heading">
+              <div className="wizard-kicker">{stepOf("enhancements")}</div>
+              <div className="wizard-title">
+                <em>Enhance</em>{" "}the Proposal
               </div>
-              <EnhancementsStep wizard={wizard} onOpenNight={onOpenNight} />
-              {hasLandscape ? <MiniTotals wizard={wizard} /> : null}
-              <div className="wizard-nav">
-                <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
-                  Back
-                </button>
-                <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                  Next: Review
-                </button>
+              <div className="wizard-copy">
+                Upload design mockups, then add annual care, bistro string
+                lighting, or a night-mode preview. Leave any optional section
+                blank and it stays out of the client proposal.
               </div>
-            </section>
-          ) : null}
+            </div>
+            <EnhancementsStep wizard={wizard} onOpenNight={onOpenNight} />
+            {hasLandscape ? <MiniTotals wizard={wizard} /> : null}
+            <div className="wizard-nav">
+              <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
+                Back
+              </button>
+              <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
+                Next: Review
+              </button>
+            </div>
+          </section>
 
           {/* ── Review ── */}
           <section className={`wizard-step${step === "review" ? " active" : ""}`}>

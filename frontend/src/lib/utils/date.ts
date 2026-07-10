@@ -6,9 +6,13 @@ import {
   format,
   formatDistanceToNow,
   addDays as dfAddDays,
+  addMonths as dfAddMonths,
   startOfWeek as dfStartOfWeek,
   endOfWeek as dfEndOfWeek,
+  startOfMonth as dfStartOfMonth,
+  endOfMonth as dfEndOfMonth,
   isSameDay as dfIsSameDay,
+  isSameMonth as dfIsSameMonth,
   isToday as dfIsToday,
   isYesterday as dfIsYesterday,
 } from "date-fns";
@@ -57,6 +61,26 @@ export function formatLongDate(date: DateInput): string {
 /** Add (or subtract, with negatives) calendar days. */
 export function addDays(date: DateInput, days: number): Date {
   return dfAddDays(toDate(date), days);
+}
+
+/** Add (or subtract, with negatives) calendar months. */
+export function addMonths(date: DateInput, months: number): Date {
+  return dfAddMonths(toDate(date), months);
+}
+
+/** First day of the month containing `date`. */
+export function startOfMonth(date: DateInput): Date {
+  return dfStartOfMonth(toDate(date));
+}
+
+/** Last day of the month containing `date`. */
+export function endOfMonth(date: DateInput): Date {
+  return dfEndOfMonth(toDate(date));
+}
+
+/** True if both inputs fall in the same calendar month + year. */
+export function isSameMonth(a: DateInput, b: DateInput): boolean {
+  return dfIsSameMonth(toDate(a), toDate(b));
 }
 
 export interface WeekOptions {

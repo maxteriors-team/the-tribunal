@@ -240,6 +240,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/google-calendar/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google Calendar Callback
+         * @description Hosted OAuth callback: exchange the code, persist tokens, bounce to the UI.
+         */
+        get: operations["google_calendar_callback_api_v1_integrations_google_calendar_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/openai/oauth/callback": {
         parameters: {
             query?: never;
@@ -3866,6 +3886,66 @@ export interface paths {
          * @description Create a new integration for the workspace.
          */
         post: operations["create_integration_api_v1_workspaces__workspace_id__integrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect Google Calendar Endpoint
+         * @description Disconnect (deactivate + revoke) the workspace's Google Calendar.
+         */
+        delete: operations["disconnect_google_calendar_endpoint_api_v1_workspaces__workspace_id__integrations_google_calendar_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Google Calendar
+         * @description Return a Google consent URL for the workspace admin to connect a calendar.
+         */
+        post: operations["connect_google_calendar_api_v1_workspaces__workspace_id__integrations_google_calendar_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google Calendar Status
+         * @description Return the workspace's Google Calendar connection status.
+         */
+        get: operations["google_calendar_status_api_v1_workspaces__workspace_id__integrations_google_calendar_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7847,6 +7927,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/google-calendar/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Calendar Notification
+         * @description Receive an events.watch push and trigger a background sync.
+         */
+        post: operations["google_calendar_notification_webhooks_google_calendar_notifications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/mac-relay/messages": {
         parameters: {
             query?: never;
@@ -8842,6 +8942,10 @@ export interface components {
             reminder_offsets: number[];
             /** Reminder Template */
             reminder_template?: string | null;
+            /** Schedule Config */
+            schedule_config?: {
+                [key: string]: unknown;
+            } | null;
             /** System Prompt */
             system_prompt: string;
             /**
@@ -8993,6 +9097,10 @@ export interface components {
             reminder_offsets: number[];
             /** Reminder Template */
             reminder_template: string | null;
+            /** Schedule Config */
+            schedule_config?: {
+                [key: string]: unknown;
+            } | null;
             /** System Prompt */
             system_prompt: string;
             /** Temperature */
@@ -9124,6 +9232,10 @@ export interface components {
             reminder_offsets?: number[] | null;
             /** Reminder Template */
             reminder_template?: string | null;
+            /** Schedule Config */
+            schedule_config?: {
+                [key: string]: unknown;
+            } | null;
             /** System Prompt */
             system_prompt?: string | null;
             /** Temperature */
@@ -13374,6 +13486,39 @@ export interface components {
             name: string;
             /** Value */
             value: number;
+        };
+        /**
+         * GoogleCalendarConnectResponse
+         * @description Consent-screen redirect instructions for the browser.
+         */
+        GoogleCalendarConnectResponse: {
+            /** Authorization Url */
+            authorization_url: string;
+            /** Expires At */
+            expires_at: number;
+            /** Redirect Uri */
+            redirect_uri: string;
+        };
+        /**
+         * GoogleCalendarStatusResponse
+         * @description Safe Google Calendar connection status.
+         */
+        GoogleCalendarStatusResponse: {
+            /**
+             * Client Configured
+             * @default false
+             */
+            client_configured: boolean;
+            /** Connected */
+            connected: boolean;
+            /** Google Calendar Id */
+            google_calendar_id?: string | null;
+            /** Saved At */
+            saved_at?: string | null;
+            /** Scopes */
+            scopes?: string | null;
+            /** Token Expiry */
+            token_expiry?: string | null;
         };
         /**
          * GuaranteeProgressResponse
@@ -18311,6 +18456,8 @@ export interface components {
             grand_monthly_payment: number;
             /** Headline Tier */
             headline_tier?: string | null;
+            /** Mockups */
+            mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;
@@ -18390,6 +18537,21 @@ export interface components {
             transformer: boolean;
             /** Unit Price */
             unit_price: number;
+        };
+        /**
+         * ProposalMockup
+         * @description A rep-uploaded design mockup shown in the proposal's visual gallery.
+         *
+         *     ``image`` is a self-contained data URL (base64 JPEG/PNG/WebP) stored inline
+         *     in the snapshot exactly like the night-preview image — this deployment has
+         *     no object storage. The wizard resizes images client-side before upload, and
+         *     the length cap is a defensive backstop against an oversized snapshot row.
+         */
+        ProposalMockup: {
+            /** Caption */
+            caption?: string | null;
+            /** Image */
+            image: string;
         };
         /**
          * ProposalTemplateSettings
@@ -18505,6 +18667,8 @@ export interface components {
             client?: components["schemas"]["WizardClient"] | null;
             /** Contact Id */
             contact_id?: number | null;
+            /** Mockups */
+            mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;
@@ -22872,6 +23036,39 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_calendar_callback_api_v1_integrations_google_calendar_callback_get: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -30235,6 +30432,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationWithMaskedCredentials"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disconnect_google_calendar_endpoint_api_v1_workspaces__workspace_id__integrations_google_calendar_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_google_calendar_api_v1_workspaces__workspace_id__integrations_google_calendar_connect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarConnectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_calendar_status_api_v1_workspaces__workspace_id__integrations_google_calendar_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarStatusResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38871,6 +39161,28 @@ export interface operations {
         };
     };
     calcom_booking_webhook_webhooks_calcom_booking_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    google_calendar_notification_webhooks_google_calendar_notifications_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -72,6 +72,36 @@ class Settings(BaseSettings):
     calcom_api_key: str = ""
     calcom_webhook_secret: str = ""
 
+    # Google Calendar (per-workspace OAuth2). The client id/secret come from a
+    # Google Cloud project with the Calendar API enabled; the redirect URI must
+    # match one registered on the OAuth 2.0 client (e.g.
+    # https://<backend>/api/v1/integrations/google-calendar/callback and a
+    # localhost variant for dev). Tokens are stored per-workspace, encrypted at
+    # rest via app.core.encryption — never persisted here and never logged.
+    # ``google_oauth_scopes`` is space-delimited; the default is least-privilege
+    # (create/read/update our own events + free/busy).
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    google_oauth_redirect_uri: str = ""
+    google_oauth_scopes: str = "https://www.googleapis.com/auth/calendar.events"
+    # Google Calendar status sync. The polling worker pulls incremental changes
+    # (events.list syncToken) so cancellations/reschedules made in Google flow
+    # back into appointments — no public webhook required (dev-friendly). The
+    # watch-renewal worker (re-)registers events.watch push channels when a
+    # public backend URL is configured; channels expire <= 7 days.
+    google_calendar_sync_worker_enabled: bool = True
+    google_calendar_sync_poll_interval: int = 300
+    google_calendar_watch_renewal_worker_enabled: bool = True
+    google_calendar_watch_renewal_poll_interval: int = 3600
+    # Google has no MEETING_ENDED signal, so a time-based worker completes
+    # Google-booked appointments once their end time (+ grace) has passed. This
+    # drives campaign guarantee tracking + review requests, replacing Cal.com's
+    # webhook-driven completion. No-shows are flagged by a human/agent; the
+    # existing no-show re-engagement worker handles them unchanged.
+    google_appointment_status_worker_enabled: bool = True
+    google_appointment_status_poll_interval: int = 900
+    google_appointment_grace_minutes: int = 15
+
     # Jobber (field-service sync). The access token is a short-lived OAuth2
     # token; the CLI also accepts it via --token / JOBBER_ACCESS_TOKEN so the
     # value need not be persisted in app config. Pin the GraphQL schema version

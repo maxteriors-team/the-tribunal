@@ -20,7 +20,7 @@ active pool, picks a member, and records the round-robin counters.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 from sqlalchemy import select
@@ -53,11 +53,24 @@ class StaffLike(Protocol):
     assignment_count: int
     last_assigned_at: datetime | None
     calcom_event_type_id: int | None
+    schedule_config: dict[str, Any] | None
     name: str
 
 
 def _normalize(value: str | None) -> str:
     return (value or "").strip().casefold()
+
+
+def staff_is_bookable(staff: StaffLike) -> bool:
+    """Return whether a staff member has a bookable calendar binding.
+
+    Bookable when the member has a Cal.com event type (legacy path) OR a
+    provider-neutral ``schedule_config`` (Google path). This keeps round-robin /
+    skill routing working during the Cal.com → Google migration.
+    """
+    if staff.calcom_event_type_id:
+        return True
+    return bool(getattr(staff, "schedule_config", None))
 
 
 def filter_staff_by_skill[T: StaffLike](staff: list[T], skill: str | None) -> list[T]:
@@ -79,7 +92,7 @@ def pick_round_robin[T: StaffLike](staff: list[T]) -> T | None:
     assigned (``last_assigned_at`` ascending, never-assigned first), then highest
     ``priority``, then name for a stable deterministic tie-break.
     """
-    eligible = [s for s in staff if s.is_active and s.calcom_event_type_id]
+    eligible = [s for s in staff if s.is_active and staff_is_bookable(s)]
     if not eligible:
         return None
 
@@ -111,7 +124,7 @@ def select_staff_member[T: StaffLike](
     if strategy == STRATEGY_SINGLE:
         return None
 
-    candidates = [s for s in staff if s.is_active and s.calcom_event_type_id]
+    candidates = [s for s in staff if s.is_active and staff_is_bookable(s)]
 
     if strategy == STRATEGY_SKILL_BASED:
         matched = filter_staff_by_skill(candidates, required_skill)
@@ -207,6 +220,7 @@ def staff_to_assignment_dict(staff: BookableStaff) -> dict[str, object]:
         "id": str(staff.id),
         "name": staff.name,
         "calcom_event_type_id": staff.calcom_event_type_id,
+        "schedule_config": staff.schedule_config,
         "skills": list(staff.skills or []),
     }
 
@@ -220,5 +234,6 @@ __all__ = [
     "pick_round_robin",
     "resolve_staff_for_booking",
     "select_staff_member",
+    "staff_is_bookable",
     "staff_to_assignment_dict",
 ]

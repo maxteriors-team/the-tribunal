@@ -23,6 +23,7 @@ import type {
 } from "@/types/sales-wizard";
 
 import { normalizeDocument, type WizardDocument, type WizardTierView } from "./document";
+import { fileToResizedDataUrl } from "./image-resize";
 
 export { fmt, fmt2 } from "./document";
 export type { WizardDocument, WizardTierView } from "./document";
@@ -47,6 +48,15 @@ export interface BistroDraft {
   tier: string;
   feet: string;
 }
+
+/** A rep-uploaded design mockup (downscaled data URL + optional caption). */
+export interface MockupDraft {
+  image: string;
+  caption: string;
+}
+
+/** Hard cap on gallery images, mirrored by the backend payload validation. */
+export const MAX_MOCKUPS = 8;
 
 export interface PermanentDraft {
   feet: string;
@@ -170,6 +180,10 @@ export interface UseSalesWizardReturn {
   setCareCountManual: (count: number | null) => void;
   bistro: BistroDraft;
   setBistro: (patch: Partial<BistroDraft>) => void;
+  mockups: MockupDraft[];
+  addMockupFiles: (files: FileList | File[]) => Promise<number>;
+  removeMockup: (index: number) => void;
+  setMockupCaption: (index: number, caption: string) => void;
   permanent: PermanentDraft;
   setPermanent: (patch: Partial<PermanentDraft>) => void;
   christmas: ChristmasDraft;
@@ -220,6 +234,7 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     tier: "",
     feet: "",
   });
+  const [mockups, setMockups] = useState<MockupDraft[]>([]);
   const [categories, setCategories] = useState<CategoryKey[]>(["landscape"]);
   const [permanent, setPermanentState] = useState<PermanentDraft>({
     feet: "",
@@ -304,6 +319,42 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
   const setBistro = useCallback((patch: Partial<BistroDraft>) => {
     setBistroState((prev) => ({ ...prev, ...patch }));
   }, []);
+  // Resize each picked file in the browser, then append (respecting the cap).
+  // Returns how many were actually added so the UI can report skips/failures.
+  const addMockupFiles = useCallback(
+    async (files: FileList | File[]): Promise<number> => {
+      const picked = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (!picked.length) return 0;
+      const resized: string[] = [];
+      for (const file of picked) {
+        try {
+          resized.push(await fileToResizedDataUrl(file));
+        } catch {
+          // Skip unreadable files; the rest still upload.
+        }
+      }
+      if (!resized.length) return 0;
+      let added = 0;
+      setMockups((prev) => {
+        const room = Math.max(0, MAX_MOCKUPS - prev.length);
+        const next = resized
+          .slice(0, room)
+          .map((image) => ({ image, caption: "" }));
+        added = next.length;
+        return next.length ? [...prev, ...next] : prev;
+      });
+      return added;
+    },
+    [],
+  );
+  const removeMockup = useCallback((index: number) => {
+    setMockups((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+  const setMockupCaption = useCallback((index: number, caption: string) => {
+    setMockups((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, caption } : m)),
+    );
+  }, []);
   const hasCategory = useCallback(
     (key: CategoryKey) => categories.includes(key),
     [categories],
@@ -385,6 +436,9 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
       night_preview: night.image
         ? { image: night.image, lights: night.lights, dusk: night.dusk }
         : null,
+      mockups: mockups
+        .filter((m) => m.image)
+        .map((m) => ({ image: m.image, caption: m.caption.trim() || null })),
     };
   }, [
     client,
@@ -398,6 +452,7 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     permanent,
     christmas,
     night,
+    mockups,
   ]);
 
   // ── Debounced live preview ──
@@ -409,8 +464,10 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     const generation = ++generationRef.current;
     const timer = setTimeout(() => {
       setIsPreviewing(true);
+      // Mockups never affect pricing; stripping them keeps the debounced live
+      // preview light. They ride along only on save, into the saved snapshot.
       salesWizardApi
-        .preview(workspaceId, payload)
+        .preview(workspaceId, { ...payload, mockups: [] })
         .then((doc) => {
           if (generationRef.current === generation)
             setDocument(normalizeDocument(doc));
@@ -504,6 +561,10 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     setCareCountManual,
     bistro,
     setBistro,
+    mockups,
+    addMockupFiles,
+    removeMockup,
+    setMockupCaption,
     permanent,
     setPermanent,
     christmas,

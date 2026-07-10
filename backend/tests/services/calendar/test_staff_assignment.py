@@ -24,6 +24,7 @@ from app.services.calendar.staff_assignment import (
     pick_round_robin,
     resolve_staff_for_booking,
     select_staff_member,
+    staff_is_bookable,
 )
 
 
@@ -33,6 +34,7 @@ class FakeStaff:
 
     name: str
     calcom_event_type_id: int | None = 100
+    schedule_config: dict[str, object] | None = None
     skills: list[str] = field(default_factory=list)
     is_active: bool = True
     priority: int = 0
@@ -63,6 +65,31 @@ def test_filter_by_skill_none_returns_all() -> None:
 def test_filter_by_skill_no_match_is_empty() -> None:
     staff = [FakeStaff("Alice", skills=["spanish"])]
     assert filter_staff_by_skill(staff, "german") == []
+
+
+# ── Bookability (Cal.com event type OR Google schedule config) ───────────
+
+
+def test_staff_bookable_with_calcom_event_type() -> None:
+    assert staff_is_bookable(FakeStaff("Alice", calcom_event_type_id=100)) is True
+
+
+def test_staff_bookable_with_google_schedule_config() -> None:
+    google_staff = FakeStaff(
+        "Gina", calcom_event_type_id=None, schedule_config={"timezone": "America/New_York"}
+    )
+    assert staff_is_bookable(google_staff) is True
+
+
+def test_staff_not_bookable_without_binding() -> None:
+    assert staff_is_bookable(FakeStaff("Nolan", calcom_event_type_id=None)) is False
+
+
+def test_round_robin_picks_google_only_staff() -> None:
+    google_staff = FakeStaff(
+        "Gina", calcom_event_type_id=None, schedule_config={"timezone": "UTC"}
+    )
+    assert pick_round_robin([google_staff]).name == "Gina"
 
 
 # ── Round-robin selection ────────────────────────────────────────────

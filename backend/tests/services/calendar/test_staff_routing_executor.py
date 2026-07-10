@@ -26,6 +26,7 @@ class _FakeStaff:
         self.id = uuid.uuid4()
         self.name = name
         self.calcom_event_type_id = event_type_id
+        self.schedule_config: dict[str, Any] | None = None
         self.skills: list[str] = []
         self.is_active = True
         self.priority = 0
@@ -75,7 +76,14 @@ class _FakeBookingService:
 
     captured_event_type_id: int | None = None
 
-    def __init__(self, *, api_key: str, event_type_id: int, timezone: str) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        event_type_id: int,
+        timezone: str,
+        provider: Any | None = None,
+    ) -> None:
         _FakeBookingService.captured_event_type_id = event_type_id
 
     async def book_appointment(self, **_kwargs: Any) -> SimpleNamespace:

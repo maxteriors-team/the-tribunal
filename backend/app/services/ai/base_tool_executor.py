@@ -16,6 +16,8 @@ import structlog
 
 from app.core.config import settings
 from app.services.calendar.booking import BookingService
+from app.services.calendar.factory import get_calendar_provider
+from app.services.calendar.google.oauth import google_oauth_configured
 
 logger = structlog.get_logger()
 
@@ -39,12 +41,35 @@ class BaseToolExecutor:
         # Staff member chosen by round-robin / skill-based routing for the most
         # recent booking attempt (None when the single-event-type path is used).
         self.assigned_staff: dict[str, Any] | None = None
+        # Schedule config of the assigned staff member (Google slot engine input).
+        self.assigned_schedule_config: dict[str, Any] | None = None
+        # Cached per-instance "is this workspace on Google Calendar?" lookup.
+        self._google_connected: bool | None = None
 
     # ── Config validation ───────────────────────────────────────────
 
     def _assignment_strategy(self) -> str:
         """Return the agent's booking assignment strategy (defaults to single)."""
         return getattr(self.agent, "assignment_strategy", "single") or "single"
+
+    async def _workspace_has_google(self) -> bool:
+        """Return whether this agent's workspace has a live Google Calendar connection."""
+        if self._google_connected is not None:
+            return self._google_connected
+        workspace_id = getattr(self.agent, "workspace_id", None)
+        if workspace_id is None or not google_oauth_configured():
+            self._google_connected = False
+            return False
+        from app.db.session import AsyncSessionLocal
+        from app.services.calendar.google.oauth import get_connection
+
+        try:
+            async with AsyncSessionLocal() as db:
+                self._google_connected = await get_connection(db, workspace_id) is not None
+        except Exception as e:  # pragma: no cover - defensive; treat as not connected
+            self.log.warning("google_connection_check_failed", error=str(e))
+            self._google_connected = False
+        return self._google_connected
 
     def _validate_calcom_config(self) -> dict[str, Any] | None:
         """Check Cal.com configuration. Returns error dict or None if valid.
@@ -62,6 +87,16 @@ class BaseToolExecutor:
             return {"success": False, "error": "Cal.com not configured for this agent"}
         return None
 
+    async def _validate_booking_config(self) -> dict[str, Any] | None:
+        """Provider-neutral booking config check.
+
+        When the workspace is on Google Calendar the Cal.com key/event-type are
+        not required; otherwise the legacy Cal.com validation applies.
+        """
+        if await self._workspace_has_google():
+            return None
+        return self._validate_calcom_config()
+
     async def _resolve_event_type_id(
         self, required_skill: str | None, *, record: bool = True
     ) -> int | None:
@@ -78,6 +113,7 @@ class BaseToolExecutor:
         distribution.
         """
         self.assigned_staff = None
+        self.assigned_schedule_config = None
         strategy = self._assignment_strategy()
         default_event_type_id = getattr(self.agent, "calcom_event_type_id", None)
         if strategy == "single":
@@ -98,20 +134,39 @@ class BaseToolExecutor:
                     commit=True,
                     record=record,
                 )
-                if staff and staff.calcom_event_type_id:
+                if staff and (staff.calcom_event_type_id or staff.schedule_config):
                     self.assigned_staff = staff_to_assignment_dict(staff)
+                    self.assigned_schedule_config = staff.schedule_config
                     return staff.calcom_event_type_id
         except Exception as e:  # pragma: no cover - defensive; fall back to default
             self.log.warning("staff_assignment_failed", error=str(e))
 
         return default_event_type_id
 
-    def _create_booking_service(self, event_type_id: int | None = None) -> BookingService:
-        """Create a BookingService for the resolved (or agent default) event type."""
+    async def _create_booking_service(self, event_type_id: int | None = None) -> BookingService:
+        """Create a BookingService for the resolved (or agent default) event type.
+
+        The concrete calendar provider is chosen by ``get_calendar_provider``
+        (Cal.com today; Google when the workspace has a live connection). The
+        assigned staff member's ``schedule_config`` (or the agent's) feeds the
+        Google slot engine.
+        """
+        resolved = event_type_id or getattr(self.agent, "calcom_event_type_id", None)
+        schedule_config = getattr(self, "assigned_schedule_config", None) or getattr(
+            self.agent, "schedule_config", None
+        )
+        provider = await get_calendar_provider(
+            event_type_id=resolved,
+            agent=self.agent,
+            workspace_id=getattr(self.agent, "workspace_id", None),
+            schedule_config=schedule_config,
+            timezone=self.timezone,
+        )
         return BookingService(
             api_key=settings.calcom_api_key,
-            event_type_id=event_type_id or self.agent.calcom_event_type_id,
+            event_type_id=resolved or 0,
             timezone=self.timezone,
+            provider=provider,
         )
 
     # ── Shared tool implementations ─────────────────────────────────
@@ -122,17 +177,18 @@ class BaseToolExecutor:
         end_date_str: str | None,
         required_skill: str | None = None,
     ) -> dict[str, Any]:
-        """Check Cal.com availability. Delegates formatting to hooks."""
-        error = self._validate_calcom_config()
+        """Check calendar availability. Delegates formatting to hooks."""
+        error = await self._validate_booking_config()
         if error:
             return error
 
+        google_connected = await self._workspace_has_google()
         # Peek only: an availability check must not consume a round-robin turn.
         event_type_id = await self._resolve_event_type_id(required_skill, record=False)
-        if not event_type_id:
+        if not event_type_id and not google_connected:
             return {"success": False, "error": "No bookable calendar available"}
 
-        booking_service = self._create_booking_service(event_type_id)
+        booking_service = await self._create_booking_service(event_type_id)
         try:
             result = await booking_service.check_availability(
                 start_date_str=start_date_str,
@@ -164,8 +220,8 @@ class BaseToolExecutor:
         notes: str | None = None,
         required_skill: str | None = None,
     ) -> dict[str, Any]:
-        """Book a Cal.com appointment. Delegates formatting/persistence to hooks."""
-        error = self._validate_calcom_config()
+        """Book an appointment. Delegates formatting/persistence to hooks."""
+        error = await self._validate_booking_config()
         if error:
             return error
 
@@ -176,15 +232,16 @@ class BaseToolExecutor:
                 "message": "Please ask the customer for their email address",
             }
 
+        google_connected = await self._workspace_has_google()
         event_type_id = await self._resolve_event_type_id(required_skill)
-        if not event_type_id:
+        if not event_type_id and not google_connected:
             return {"success": False, "error": "No bookable calendar available"}
 
         contact_name = self.get_contact_name()
         contact_phone = self.get_contact_phone()
         metadata = self.get_booking_metadata(notes)
 
-        booking_service = self._create_booking_service(event_type_id)
+        booking_service = await self._create_booking_service(event_type_id)
         try:
             result = await booking_service.book_appointment(
                 date_str=date_str,

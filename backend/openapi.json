@@ -2084,6 +2084,18 @@
             ],
             "title": "Reminder Template"
           },
+          "schedule_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Config"
+          },
           "system_prompt": {
             "title": "System Prompt",
             "type": "string"
@@ -2400,6 +2412,18 @@
               }
             ],
             "title": "Reminder Template"
+          },
+          "schedule_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Config"
           },
           "system_prompt": {
             "title": "System Prompt",
@@ -2913,6 +2937,18 @@
               }
             ],
             "title": "Reminder Template"
+          },
+          "schedule_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Config"
           },
           "system_prompt": {
             "anyOf": [
@@ -14064,6 +14100,93 @@
           "value"
         ],
         "title": "GeneratedValueStackItem",
+        "type": "object"
+      },
+      "GoogleCalendarConnectResponse": {
+        "description": "Consent-screen redirect instructions for the browser.",
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url",
+          "redirect_uri",
+          "expires_at"
+        ],
+        "title": "GoogleCalendarConnectResponse",
+        "type": "object"
+      },
+      "GoogleCalendarStatusResponse": {
+        "description": "Safe Google Calendar connection status.",
+        "properties": {
+          "client_configured": {
+            "default": false,
+            "title": "Client Configured",
+            "type": "boolean"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "google_calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Calendar Id"
+          },
+          "saved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved At"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          },
+          "token_expiry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Expiry"
+          }
+        },
+        "required": [
+          "connected"
+        ],
+        "title": "GoogleCalendarStatusResponse",
         "type": "object"
       },
       "GuaranteeProgressResponse": {
@@ -27435,6 +27558,13 @@
             ],
             "title": "Headline Tier"
           },
+          "mockups": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalMockup"
+            },
+            "title": "Mockups",
+            "type": "array"
+          },
           "night_preview": {
             "anyOf": [
               {
@@ -27632,6 +27762,34 @@
           "line_total"
         ],
         "title": "ProposalLine",
+        "type": "object"
+      },
+      "ProposalMockup": {
+        "description": "A rep-uploaded design mockup shown in the proposal's visual gallery.\n\n``image`` is a self-contained data URL (base64 JPEG/PNG/WebP) stored inline\nin the snapshot exactly like the night-preview image — this deployment has\nno object storage. The wizard resizes images client-side before upload, and\nthe length cap is a defensive backstop against an oversized snapshot row.",
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "image": {
+            "maxLength": 3000000,
+            "minLength": 1,
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "ProposalMockup",
         "type": "object"
       },
       "ProposalTemplateSettings": {
@@ -28043,6 +28201,14 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "mockups": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalMockup"
+            },
+            "maxItems": 8,
+            "title": "Mockups",
+            "type": "array"
           },
           "night_preview": {
             "anyOf": [
@@ -39231,6 +39397,86 @@
         "summary": "Unsubscribe",
         "tags": [
           "Email Unsubscribe"
+        ]
+      }
+    },
+    "/api/v1/integrations/google-calendar/callback": {
+      "get": {
+        "description": "Hosted OAuth callback: exchange the code, persist tokens, bounce to the UI.",
+        "operationId": "google_calendar_callback_api_v1_integrations_google_calendar_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Calendar Callback",
+        "tags": [
+          "Integrations"
         ]
       }
     },
@@ -52899,6 +53145,153 @@
           }
         ],
         "summary": "Create Integration",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar": {
+      "delete": {
+        "description": "Disconnect (deactivate + revoke) the workspace's Google Calendar.",
+        "operationId": "disconnect_google_calendar_endpoint_api_v1_workspaces__workspace_id__integrations_google_calendar_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Disconnect Google Calendar Endpoint",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar/connect": {
+      "post": {
+        "description": "Return a Google consent URL for the workspace admin to connect a calendar.",
+        "operationId": "connect_google_calendar_api_v1_workspaces__workspace_id__integrations_google_calendar_connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarConnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Connect Google Calendar",
+        "tags": [
+          "Integrations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/integrations/google-calendar/status": {
+      "get": {
+        "description": "Return the workspace's Google Calendar connection status.",
+        "operationId": "google_calendar_status_api_v1_workspaces__workspace_id__integrations_google_calendar_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Google Calendar Status",
         "tags": [
           "Integrations"
         ]
@@ -69696,6 +70089,32 @@
           }
         },
         "summary": "Calcom Booking Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/webhooks/google-calendar/notifications": {
+      "post": {
+        "description": "Receive an events.watch push and trigger a background sync.",
+        "operationId": "google_calendar_notification_webhooks_google_calendar_notifications_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Google Calendar Notification Webhooks Google Calendar Notifications Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Google Calendar Notification",
         "tags": [
           "webhooks"
         ]

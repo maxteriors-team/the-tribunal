@@ -12,6 +12,7 @@ from app.models.automation_event import AutomationEvent
 from app.models.automation_execution import AutomationExecution
 from app.models.bandit_decision import BanditDecision, DecisionType
 from app.models.bookable_staff import BookableStaff
+from app.models.calendar_connection import CalendarConnection
 from app.models.call_feedback import CallFeedback
 from app.models.call_outcome import CallOutcome
 from app.models.call_payment import CallPayment, CallPaymentStatus
@@ -159,6 +160,7 @@ __all__ = [
     "CampaignReport",
     "Appointment",
     "BookableStaff",
+    "CalendarConnection",
     "PhoneNumber",
     "PhoneNumberProvider",
     "PhoneNumberDailyStats",
