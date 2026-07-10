@@ -26,6 +26,8 @@ from app.models.conversation import (
     MessageStatus,
     advances_message_status,
 )
+from app.models.phone_number import PhoneNumber
+from app.services.agents import ensure_default_agent
 from app.services.idempotency import (
     find_message_by_idempotency_key,
     idempotency_headers,
@@ -542,6 +544,40 @@ class TelnyxSMSService:
 
         return message, previous_status
 
+    async def _resolve_default_agent_id(
+        self,
+        db: AsyncSession,
+        workspace_id: uuid.UUID,
+        workspace_phone: str,
+    ) -> uuid.UUID | None:
+        """Resolve the agent that should own an inbound SMS conversation.
+
+        Prefers an explicit :attr:`PhoneNumber.assigned_agent_id` for the
+        receiving number; otherwise falls back to the workspace's default agent
+        via :func:`ensure_default_agent` (auto-creating one from a template if
+        none exists) so a brand-new lead always reaches an AI responder instead
+        of ``no_agent_assigned``. ``ensure_default_agent`` flushes but does not
+        commit; the caller owns the transaction.
+        """
+        result = await db.execute(
+            select(PhoneNumber.assigned_agent_id).where(
+                PhoneNumber.workspace_id == workspace_id,
+                PhoneNumber.is_active.is_(True),
+                PhoneNumber.phone_number == workspace_phone,
+            )
+        )
+        assigned_agent_id = result.scalar_one_or_none()
+        if assigned_agent_id is not None:
+            return assigned_agent_id
+
+        default_agent = await ensure_default_agent(db, workspace_id)
+        self.logger.info(
+            "inbound_default_agent_fallback",
+            workspace_id=str(workspace_id),
+            agent_id=str(default_agent.id),
+        )
+        return default_agent.id
+
     async def _get_or_create_conversation(
         self,
         db: AsyncSession,
@@ -571,12 +607,23 @@ class TelnyxSMSService:
         conversation = result.scalar_one_or_none()
 
         if conversation:
+            dirty = False
             # If conversation exists but has no contact_id, try to link one now
             if not conversation.contact_id:
                 contact = await self._find_contact_by_phone(db, workspace_id, contact_phone)
                 if contact:
                     conversation.contact_id = contact.id
-                    await db.commit()
+                    dirty = True
+            # Repair legacy conversations that were created before inbound agent
+            # assignment existed: without an agent the AI responder logs
+            # ``no_agent_assigned`` and never replies.
+            if conversation.assigned_agent_id is None:
+                conversation.assigned_agent_id = await self._resolve_default_agent_id(
+                    db, workspace_id, workspace_phone
+                )
+                dirty = dirty or conversation.assigned_agent_id is not None
+            if dirty:
+                await db.commit()
             return conversation
 
         # Try to find contact by phone number (use first() in case of duplicates)
@@ -617,6 +664,7 @@ class TelnyxSMSService:
             )
 
         # Create new conversation
+        assigned_agent_id = await self._resolve_default_agent_id(db, workspace_id, workspace_phone)
         conversation = Conversation(
             workspace_id=workspace_id,
             contact_id=contact.id if contact else None,
@@ -624,6 +672,7 @@ class TelnyxSMSService:
             contact_phone=contact_phone,
             channel=self.conversation_channel,
             ai_enabled=True,  # Default to AI enabled
+            assigned_agent_id=assigned_agent_id,
         )
         db.add(conversation)
         await db.flush()
