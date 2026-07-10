@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,10 +19,13 @@ from app.models.conversation import Conversation, Message, MessageChannel
 from app.models.phone_number import PhoneNumber
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
+from app.services.agents import ensure_default_agent
 from app.services.ai.text_agent import schedule_ai_response
 from app.services.approval.command_processor_service import command_processor_service
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.push_notifications import push_notification_service
+
+logger = structlog.get_logger()
 
 
 class CommandProcessor(Protocol):
@@ -412,7 +416,16 @@ async def _resolve_default_agent_id(
     workspace_id: uuid.UUID,
     workspace_phone: str,
 ) -> uuid.UUID | None:
-    """Return the sender identity's default agent, if one is configured."""
+    """Return the agent that should own an inbound conversation for this number.
+
+    Prefers an explicit :attr:`PhoneNumber.assigned_agent_id` when one is
+    configured. When the number has no assigned agent, falls back to the
+    workspace's default agent via :func:`ensure_default_agent` (auto-creating
+    one from a template if none exists) so brand-new leads texting/calling the
+    business number always get an AI responder instead of ``no_agent_assigned``.
+    ``ensure_default_agent`` flushes but does not commit; the caller owns the
+    transaction.
+    """
     result = await db.execute(
         select(PhoneNumber.assigned_agent_id).where(
             PhoneNumber.workspace_id == workspace_id,
@@ -421,7 +434,17 @@ async def _resolve_default_agent_id(
             | (PhoneNumber.mac_relay_sender_id == workspace_phone),
         )
     )
-    return result.scalar_one_or_none()
+    assigned_agent_id = result.scalar_one_or_none()
+    if assigned_agent_id is not None:
+        return assigned_agent_id
+
+    default_agent = await ensure_default_agent(db, workspace_id)
+    logger.info(
+        "inbound_default_agent_fallback",
+        workspace_id=str(workspace_id),
+        agent_id=str(default_agent.id),
+    )
+    return default_agent.id
 
 
 async def check_operator_by_phone(
