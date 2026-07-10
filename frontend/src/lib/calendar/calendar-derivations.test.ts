@@ -7,6 +7,7 @@ import {
   buildAppointmentsQueryParams,
   getContactName,
   getInitials,
+  getMonthRange,
   getWeekRange,
   offsetToLabel,
   scheduledCount,
@@ -89,6 +90,55 @@ describe("getWeekRange", () => {
     );
     expect(range.weekStartIso).toBe(range.weekStart.toISOString());
     expect(range.weekEndIso).toBe(range.weekEnd.toISOString());
+  });
+});
+
+describe("getMonthRange", () => {
+  it("returns a Sunday→Saturday grid of whole weeks covering the month", () => {
+    // 2026-07-01 is a Wednesday; the grid spans Sun Jun 28 → Sat Aug 1.
+    const range = getMonthRange(new Date(2026, 6, 15, 12, 0, 0));
+
+    // monthDate is the first of the active month.
+    expect(range.monthDate.getDate()).toBe(1);
+    expect(range.monthDate.getMonth()).toBe(6); // July (0-based)
+
+    // Every row is a full week and the grid is a whole number of weeks.
+    expect(range.weeks.every((week) => week.length === 7)).toBe(true);
+    const days = range.weeks.flat();
+    expect(days.length % 7).toBe(0);
+
+    // The grid starts on a Sunday and ends on a Saturday. gridEnd is the last
+    // *instant* of Saturday (endOfWeek), while the grid cells are midnight-dated
+    // days, so the final cell is compared by calendar day rather than instant.
+    expect(range.gridStart.getDay()).toBe(0);
+    expect(range.gridEnd.getDay()).toBe(6);
+    expect(days[0].getTime()).toBe(range.gridStart.getTime());
+    expect(days[days.length - 1].toDateString()).toBe(
+      range.gridEnd.toDateString(),
+    );
+
+    // The whole active month falls inside the grid bounds.
+    expect(range.gridStart.getTime()).toBeLessThanOrEqual(
+      range.monthDate.getTime(),
+    );
+    const monthEnd = new Date(2026, 6, 31, 12, 0, 0);
+    expect(range.gridEnd.getTime()).toBeGreaterThanOrEqual(monthEnd.getTime());
+
+    // ISO bounds mirror the grid endpoints (drive the range fetch).
+    expect(range.gridStartIso).toBe(range.gridStart.toISOString());
+    expect(range.gridEndIso).toBe(range.gridEnd.toISOString());
+  });
+
+  it("produces an exact 4-week grid with no padding when the month aligns to weeks", () => {
+    // 2026-02: Feb 1 is a Sunday and Feb 28 is a Saturday, so the grid needs no
+    // leading/trailing days from adjacent months — exactly four Sun→Sat rows.
+    const range = getMonthRange(new Date(2026, 1, 10, 12, 0, 0));
+    expect(range.weeks).toHaveLength(4);
+    expect(range.gridStart.getDate()).toBe(1);
+    expect(range.gridStart.getMonth()).toBe(1); // February
+    expect(range.gridStart.getDay()).toBe(0);
+    expect(range.gridEnd.getDate()).toBe(28);
+    expect(range.gridEnd.getDay()).toBe(6);
   });
 });
 
