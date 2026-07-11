@@ -40,7 +40,7 @@ logger = structlog.get_logger()
 
 # ── Configuration ────────────────────────────────────────────────────
 MODEL = "gpt-5.4-nano"
-MAX_TOOL_TURNS = 5  # safety cap on chained tool calls
+MAX_TOOL_TURNS = 8  # bounded, while allowing search + five detail lookups + synthesis
 HISTORY_LOAD_LIMIT = 60  # rows pulled from DB before summarization
 LLM_TIMEOUT_SECONDS = 45.0
 MAX_COMPLETION_TOKENS = 800

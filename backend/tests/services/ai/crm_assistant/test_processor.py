@@ -167,6 +167,55 @@ async def test_tool_loop_dispatches_and_records_actions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_five_contact_summary_can_reach_terminal_response() -> None:
+    """Search plus five detail lookups must fit before the bounded loop cap."""
+    db = _make_db()
+    workspace_id = uuid.uuid4()
+    responses = [
+        _make_response(tool_calls=[_tool_call("search", "search_contacts", {"limit": 5})]),
+        *[
+            _make_response(
+                tool_calls=[
+                    _tool_call(
+                        f"conversation_{index}",
+                        "get_conversation",
+                        {"contact_id": index},
+                    )
+                ]
+            )
+            for index in range(1, 6)
+        ],
+        _make_response(content="Contact summary complete."),
+    ]
+    create = AsyncMock(side_effect=responses)
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    with patch.object(
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
+    ), patch.object(
+        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    ), patch.object(
+        processor.CRMToolExecutor,
+        "execute",
+        AsyncMock(return_value={"success": True, "data": []}),
+    ):
+        result = await processor.process_assistant_message(
+            db=db,
+            workspace_id=workspace_id,
+            user_id=42,
+            message="Summarize my five newest contacts.",
+        )
+
+    assert result["response"] == "Contact summary complete."
+    assert create.await_count == 7
+    assert len(result["actions_taken"]) == 6
+
+
+@pytest.mark.asyncio
 async def test_prompt_cache_key_is_stable_and_workspace_scoped() -> None:
     """Same (workspace, user) → same cache key. Different workspace → different key."""
     ws_a = uuid.uuid4()
