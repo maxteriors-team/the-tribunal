@@ -68,6 +68,7 @@ import {
   type AppNavItem,
   type AppNavSection,
 } from "./app-nav";
+import { RecentChatsMenu } from "./recent-chats-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 const CommandPalette = dynamic(
@@ -361,10 +362,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
               ⌘K
             </kbd>
           </button>
+          <RecentChatsMenu />
           <Button
             variant="ghost"
             size="icon"
-            className="ml-2"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             aria-label="Toggle theme"
           >
