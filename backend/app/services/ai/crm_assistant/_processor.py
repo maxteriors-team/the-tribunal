@@ -44,7 +44,7 @@ MAX_TOOL_TURNS = 8  # bounded, while allowing search + five detail lookups + syn
 HISTORY_LOAD_LIMIT = 60  # rows pulled from DB before summarization
 LLM_TIMEOUT_SECONDS = 45.0
 MAX_COMPLETION_TOKENS = 800
-ENHANCE_PROMPT_MAX_TOKENS = 500
+ENHANCE_PROMPT_MAX_TOKENS = 300
 TEMPERATURE = 0.3
 
 AssistantStreamEvent = dict[str, Any]
@@ -148,9 +148,11 @@ Rules:
 - Preserve the operator's intent; do not execute the request.
 - Add explicit scope, relevant CRM record types, date range, ranking criteria,
   and output format when useful.
+- Request only data supported by the available tools listed below. Never invent
+  unsupported CRM objects such as accounts, owners, tasks, cases, or tickets.
 - Require record dates and evidence for factual claims.
 - Require missing data to be labeled instead of guessed.
-- Keep the result concise enough to edit.
+- Keep the result under 900 characters and easy to edit.
 - Return only the enhanced prompt, with no explanation or quotation marks.
 """
 
@@ -378,11 +380,13 @@ async def enhance_assistant_prompt(
 ) -> str:
     """Rewrite a draft for precision while leaving final approval to the operator."""
     client = await create_workspace_openai_client(db, workspace_id)
+    available_tools = ", ".join(tool["function"]["name"] for tool in get_crm_tools())
+    enhancement_instructions = f"{ENHANCE_PROMPT_SYSTEM}\n\nAvailable tools: {available_tools}"
     response = await asyncio.wait_for(
         client.chat.completions.create(
             model=MODEL,
             messages=[
-                {"role": "system", "content": ENHANCE_PROMPT_SYSTEM},
+                {"role": "system", "content": enhancement_instructions},
                 {"role": "user", "content": prompt.strip()},
             ],
             temperature=0.2,

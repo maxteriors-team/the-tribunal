@@ -41,6 +41,15 @@ class AssistantPromptEnhanceRequest(BaseModel):
 
     prompt: str = Field(min_length=1, max_length=4000)
 
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        """Normalize the draft and reject whitespace-only enhancement requests."""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Prompt cannot be empty")
+        return normalized
+
 
 class AssistantPromptEnhanceResponse(BaseModel):
     """Enhanced draft returned for operator review before sending."""
