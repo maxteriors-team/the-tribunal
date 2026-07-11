@@ -20,9 +20,15 @@ from app.schemas.crm_assistant import (
     AssistantConversationMetaResponse,
     AssistantConversationResponse,
     AssistantMessageResponse,
+    AssistantPromptEnhanceRequest,
+    AssistantPromptEnhanceResponse,
     AssistantRole,
 )
-from app.services.ai.crm_assistant import process_assistant_message, stream_assistant_message
+from app.services.ai.crm_assistant import (
+    enhance_assistant_prompt,
+    process_assistant_message,
+    stream_assistant_message,
+)
 
 router = APIRouter()
 
@@ -94,6 +100,18 @@ def _conversation_title(first_user_message: str | None) -> str:
 def _sse_frame(event: dict[str, Any]) -> str:
     """Encode one assistant stream event as an SSE data frame."""
     return f"data: {json.dumps(event, default=str)}\n\n"
+
+
+@router.post("/enhance-prompt", response_model=AssistantPromptEnhanceResponse)
+async def enhance_prompt(
+    workspace_id: uuid.UUID,
+    request: AssistantPromptEnhanceRequest,
+    db: DB,
+    _workspace: Annotated[Workspace, Depends(get_workspace)],
+) -> AssistantPromptEnhanceResponse:
+    """Rewrite an operator draft for review without executing it."""
+    enhanced_prompt = await enhance_assistant_prompt(db, workspace_id, request.prompt)
+    return AssistantPromptEnhanceResponse(enhanced_prompt=enhanced_prompt)
 
 
 @router.post("/chat", response_model=AssistantChatResponse)

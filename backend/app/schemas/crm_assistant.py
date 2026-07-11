@@ -36,6 +36,18 @@ class AssistantChatRequest(BaseModel):
             raise ValueError(str(exc)) from exc
 
 
+class AssistantPromptEnhanceRequest(BaseModel):
+    """Request to make an operator's draft more precise and evidence-oriented."""
+
+    prompt: str = Field(min_length=1, max_length=4000)
+
+
+class AssistantPromptEnhanceResponse(BaseModel):
+    """Enhanced draft returned for operator review before sending."""
+
+    enhanced_prompt: str
+
+
 class ActionSummary(BaseModel):
     """Summary of a tool action taken by the assistant."""
 

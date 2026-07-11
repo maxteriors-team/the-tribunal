@@ -44,6 +44,7 @@ MAX_TOOL_TURNS = 8  # bounded, while allowing search + five detail lookups + syn
 HISTORY_LOAD_LIMIT = 60  # rows pulled from DB before summarization
 LLM_TIMEOUT_SECONDS = 45.0
 MAX_COMPLETION_TOKENS = 800
+ENHANCE_PROMPT_MAX_TOKENS = 500
 TEMPERATURE = 0.3
 
 AssistantStreamEvent = dict[str, Any]
@@ -104,9 +105,22 @@ SYSTEM_PROMPT = """\
 You are the CRM operator assistant. Help the user run their CRM by calling tools.
 
 ## How to talk
-- Be concise. 1–3 sentences per reply.
+- Default to concise answers. For analysis or comparisons, use compact bullets
+  with one item per record.
+- Include the details that support the answer: status, relevant activity,
+  record date, and next step.
 - After taking action, confirm what you did in one line.
 - No preamble, no recap, no "let me know if…".
+
+## Accuracy and evidence
+- Ground factual claims in tool results. Never invent or fill gaps from assumptions.
+- Cite evidence inline with the CRM record type and date when available, for example \
+"Last inbound SMS — 2026-07-10".
+- Label missing evidence explicitly, for example "No conversation found" or
+  "No appointment recorded".
+- For rankings or follow-up recommendations, state the criteria used and
+  distinguish facts from your recommendation.
+- If the available fields cannot answer the question, say what is missing instead of guessing.
 
 ## How to work
 - Prefer tools over guessing. If you need data, call a tool.
@@ -125,6 +139,20 @@ to execute it with the matching tool (approvals → review, prospect batch → \
 plan_outbound_growth_workflow, draft campaign → start after explicit confirmation).
 4. Stop after the queue — don't invent extra tasks. If the queue is empty, say so \
 and suggest the most useful setup step."""
+
+
+ENHANCE_PROMPT_SYSTEM = """\
+Rewrite the operator's draft into a precise CRM Assistant request.
+
+Rules:
+- Preserve the operator's intent; do not execute the request.
+- Add explicit scope, relevant CRM record types, date range, ranking criteria,
+  and output format when useful.
+- Require record dates and evidence for factual claims.
+- Require missing data to be labeled instead of guessed.
+- Keep the result concise enough to edit.
+- Return only the enhanced prompt, with no explanation or quotation marks.
+"""
 
 
 def _cache_key(workspace_id: uuid.UUID, user_id: int) -> str:
@@ -341,6 +369,31 @@ def _api_params(api_messages: list[dict[str, Any]], cache_key: str) -> dict[str,
         "max_completion_tokens": MAX_COMPLETION_TOKENS,
         "prompt_cache_key": cache_key,
     }
+
+
+async def enhance_assistant_prompt(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    prompt: str,
+) -> str:
+    """Rewrite a draft for precision while leaving final approval to the operator."""
+    client = await create_workspace_openai_client(db, workspace_id)
+    response = await asyncio.wait_for(
+        client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": ENHANCE_PROMPT_SYSTEM},
+                {"role": "user", "content": prompt.strip()},
+            ],
+            temperature=0.2,
+            max_completion_tokens=ENHANCE_PROMPT_MAX_TOKENS,
+        ),
+        timeout=LLM_TIMEOUT_SECONDS,
+    )
+    enhanced = (response.choices[0].message.content or "").strip()
+    if not enhanced:
+        raise RuntimeError("OpenAI returned an empty enhanced prompt")
+    return enhanced
 
 
 async def _collect_stream_turn(

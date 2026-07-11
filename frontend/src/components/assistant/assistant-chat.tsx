@@ -28,11 +28,14 @@ export function AssistantChat({ className }: { className?: string }) {
     setInput,
     imageDataUrl,
     setImageDataUrl,
+    isEnhancing,
+    enhancementError,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,
     handleDeleteConversation,
     sendMessage,
+    handleEnhancePrompt,
     handleSubmit,
     handleKeyDown,
     handleStop,
@@ -83,8 +86,11 @@ export function AssistantChat({ className }: { className?: string }) {
           isStreaming={activeRuntime.isStreaming}
           canSend={Boolean(workspaceId)}
           imageDataUrl={imageDataUrl}
+          isEnhancing={isEnhancing}
+          enhancementError={enhancementError}
           onInputChange={setInput}
           onImageChange={setImageDataUrl}
+          onEnhance={() => void handleEnhancePrompt()}
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
           onStop={handleStop}

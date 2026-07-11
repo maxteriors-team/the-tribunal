@@ -57,6 +57,41 @@ def _make_db() -> AsyncMock:
 
 
 @pytest.mark.asyncio
+async def test_enhance_prompt_uses_workspace_client_without_executing_tools() -> None:
+    """Enhancement rewrites the draft only and uses the tenant credential."""
+    db = AsyncMock()
+    workspace_id = uuid.uuid4()
+    create = AsyncMock(
+        return_value=_make_response(
+            content=(
+                "Analyze my five newest contacts using dated CRM evidence; "
+                "rank follow-up priority and label missing data."
+            )
+        )
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+
+    with patch.object(
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
+    ) as client_factory:
+        enhanced = await processor.enhance_assistant_prompt(
+            db,
+            workspace_id,
+            "Who needs follow-up?",
+        )
+
+    client_factory.assert_awaited_once_with(db, workspace_id)
+    assert "dated CRM evidence" in enhanced
+    request = create.await_args.kwargs
+    assert "tools" not in request
+    assert request["messages"][-1] == {"role": "user", "content": "Who needs follow-up?"}
+
+
+@pytest.mark.asyncio
 async def test_simple_response_no_tools() -> None:
     """When the LLM returns plain text, return it as the response."""
     db = _make_db()

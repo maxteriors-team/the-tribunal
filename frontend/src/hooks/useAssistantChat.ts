@@ -42,11 +42,14 @@ export interface UseAssistantChatResult {
   setInput: (value: string) => void;
   imageDataUrl: string | null;
   setImageDataUrl: (value: string | null) => void;
+  isEnhancing: boolean;
+  enhancementError: string | null;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   handleNewConversation: () => void;
   handleSelectConversation: (conversationId: string) => void;
   handleDeleteConversation: (conversationId: string) => void;
   sendMessage: (message: string) => Promise<void>;
+  handleEnhancePrompt: () => Promise<void>;
   handleSubmit: (event: React.FormEvent) => void;
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleStop: () => void;
@@ -75,6 +78,8 @@ export function useAssistantChat(): UseAssistantChatResult {
   );
   const [input, setInput] = useState("");
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhancementError, setEnhancementError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllersRef = useRef<Record<string, AbortController>>({});
   const accumulatorsRef = useRef<Record<string, StreamAccumulator>>({});
@@ -214,6 +219,7 @@ export function useAssistantChat(): UseAssistantChatResult {
 
       setInput("");
       setImageDataUrl(null);
+      setEnhancementError(null);
       setRuntimes((current) => {
         const runtime =
           current[conversationId] ??
@@ -287,6 +293,24 @@ export function useAssistantChat(): UseAssistantChatResult {
     [deleteConversation, handleNewConversation, resolvedActiveConversationId],
   );
 
+  const handleEnhancePrompt = useCallback(async () => {
+    const draft = input.trim();
+    if (!workspaceId || !draft || activeRuntime.isStreaming || isEnhancing) return;
+
+    setIsEnhancing(true);
+    setEnhancementError(null);
+    try {
+      const result = await assistantApi.enhancePrompt(workspaceId, draft);
+      setInput(result.enhanced_prompt);
+    } catch (error) {
+      setEnhancementError(
+        error instanceof Error ? error.message : "Could not enhance this prompt.",
+      );
+    } finally {
+      setIsEnhancing(false);
+    }
+  }, [activeRuntime.isStreaming, input, isEnhancing, workspaceId]);
+
   const handleSubmit = useCallback(
     (event: React.FormEvent) => {
       event.preventDefault();
@@ -329,12 +353,15 @@ export function useAssistantChat(): UseAssistantChatResult {
     setInput,
     imageDataUrl,
     setImageDataUrl,
+    isEnhancing,
+    enhancementError,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,
     handleDeleteConversation: (conversationId) =>
       void handleDeleteConversation(conversationId),
     sendMessage,
+    handleEnhancePrompt,
     handleSubmit,
     handleKeyDown,
     handleStop,

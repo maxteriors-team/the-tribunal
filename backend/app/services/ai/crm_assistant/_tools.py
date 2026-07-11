@@ -38,7 +38,12 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_contacts",
-            "description": "Search contacts by name, phone, email, or company.",
+            "description": (
+                "Search contacts by name, phone, email, or company, newest first. "
+                "Returns dated status, qualification, engagement, source, "
+                "and appointment evidence. "
+                "Use an empty query to list the newest contacts."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -395,7 +400,10 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_conversation",
-            "description": "Read recent messages with a contact.",
+            "description": (
+                "Read dated recent messages and conversation metadata for a contact. "
+                "Use this before making communication or follow-up claims."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

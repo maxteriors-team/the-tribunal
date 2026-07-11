@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query-keys";
 
 const {
   deleteConversationMock,
+  enhancePromptMock,
   getConversationMock,
   getHistoryMock,
   listConversationsMock,
@@ -20,6 +21,7 @@ const {
   useWorkspaceIdMock,
 } = vi.hoisted(() => ({
   deleteConversationMock: vi.fn(),
+  enhancePromptMock: vi.fn(),
   getConversationMock: vi.fn(),
   getHistoryMock: vi.fn(),
   listConversationsMock: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock("@/lib/api/assistant", async () => {
     assistantApi: {
       ...actual.assistantApi,
       deleteConversation: deleteConversationMock,
+      enhancePrompt: enhancePromptMock,
       getConversation: getConversationMock,
       getHistory: getHistoryMock,
       listConversations: listConversationsMock,
@@ -175,12 +178,17 @@ const growthConversation: AssistantConversationResponse = {
 
 beforeEach(() => {
   deleteConversationMock.mockReset();
+  enhancePromptMock.mockReset();
   getConversationMock.mockReset();
   getHistoryMock.mockReset();
   listConversationsMock.mockReset();
   streamChatMock.mockReset();
   useWorkspaceIdMock.mockReset();
   deleteConversationMock.mockResolvedValue(undefined);
+  enhancePromptMock.mockResolvedValue({
+    enhanced_prompt:
+      "Analyze five contacts using dated CRM evidence and label missing data.",
+  });
   getConversationMock.mockResolvedValue(growthConversation);
   getHistoryMock.mockResolvedValue(null);
   listConversationsMock.mockResolvedValue([]);
@@ -232,6 +240,25 @@ describe("AssistantChat", () => {
       );
     });
     expect(await screen.findByText("Queued")).toBeInTheDocument();
+  });
+
+  it("enhances a draft for review without sending it", async () => {
+    renderAssistant({ activeConversation: growthConversation });
+    const composer = screen.getByPlaceholderText("Ask your CRM assistant…");
+
+    await userEvent.type(composer, "Who needs follow-up?");
+    await userEvent.click(screen.getByRole("button", { name: "Enhance" }));
+
+    await waitFor(() => {
+      expect(enhancePromptMock).toHaveBeenCalledWith(
+        "ws_growth",
+        "Who needs follow-up?",
+      );
+    });
+    expect(composer).toHaveValue(
+      "Analyze five contacts using dated CRM evidence and label missing data.",
+    );
+    expect(streamChatMock).not.toHaveBeenCalled();
   });
 
   it("starts a fresh chat with a new conversation id", async () => {

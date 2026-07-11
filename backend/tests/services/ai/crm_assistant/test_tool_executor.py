@@ -1,8 +1,10 @@
 """Tests for the CRM tool executor — workspace scoping + dispatch."""
 
 import uuid
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -73,7 +75,6 @@ async def test_search_contacts_filters_by_workspace() -> None:
 
     async def fake_execute(stmt: Any) -> Any:
         captured_stmts.append(stmt)
-        from unittest.mock import MagicMock
         result = MagicMock()
         result.scalars.return_value.all.return_value = []
         return result
@@ -90,3 +91,41 @@ async def test_search_contacts_filters_by_workspace() -> None:
     assert len(captured_stmts) == 1
     compiled = captured_stmts[0].compile()
     assert workspace_id in compiled.params.values()
+
+
+@pytest.mark.asyncio
+async def test_search_contacts_returns_dated_followup_evidence() -> None:
+    """Search results expose enough dated CRM evidence for grounded recommendations."""
+    now = datetime(2026, 7, 10, 15, 30, tzinfo=UTC)
+    contact = SimpleNamespace(
+        id=7,
+        first_name="Ava",
+        last_name="Rivera",
+        phone_number="+15555550123",
+        email="ava@example.com",
+        status="qualified",
+        company_name="Rivera Co",
+        lead_score=88,
+        engagement_score=73,
+        is_qualified=True,
+        qualification_signals={"interest_level": "high", "next_steps": "Send estimate"},
+        source="inbound_sms",
+        last_appointment_status="completed",
+        last_engaged_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [contact]
+    db = AsyncMock()
+    db.execute.return_value = result
+    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1)
+
+    response = await executor.execute("search_contacts", {"query": "Ava", "limit": 5})
+
+    evidence = response["data"][0]
+    assert evidence["lead_score"] == 88
+    assert evidence["engagement_score"] == 73
+    assert evidence["qualification_signals"]["next_steps"] == "Send estimate"
+    assert evidence["last_engaged_at"] == now.isoformat()
+    assert evidence["updated_at"] == now.isoformat()

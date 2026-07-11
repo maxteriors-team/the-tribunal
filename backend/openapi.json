@@ -3872,6 +3872,36 @@
         "title": "AssistantMessageResponse",
         "type": "object"
       },
+      "AssistantPromptEnhanceRequest": {
+        "description": "Request to make an operator's draft more precise and evidence-oriented.",
+        "properties": {
+          "prompt": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "AssistantPromptEnhanceRequest",
+        "type": "object"
+      },
+      "AssistantPromptEnhanceResponse": {
+        "description": "Enhanced draft returned for operator review before sending.",
+        "properties": {
+          "enhanced_prompt": {
+            "title": "Enhanced Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enhanced_prompt"
+        ],
+        "title": "AssistantPromptEnhanceResponse",
+        "type": "object"
+      },
       "AtRiskDeal": {
         "description": "One ranked at-risk deal for the proactive list view.",
         "properties": {
@@ -46180,6 +46210,65 @@
           }
         ],
         "summary": "Get Assistant Conversation",
+        "tags": [
+          "CRM Assistant"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/assistant/enhance-prompt": {
+      "post": {
+        "description": "Rewrite an operator draft for review without executing it.",
+        "operationId": "enhance_prompt_api_v1_workspaces__workspace_id__assistant_enhance_prompt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantPromptEnhanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantPromptEnhanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enhance Prompt",
         "tags": [
           "CRM Assistant"
         ]

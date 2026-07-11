@@ -60,6 +60,17 @@ class ContactAssistantTools:
                     "email": contact.email,
                     "status": contact.status,
                     "company": contact.company_name,
+                    "lead_score": contact.lead_score,
+                    "engagement_score": contact.engagement_score,
+                    "is_qualified": contact.is_qualified,
+                    "qualification_signals": contact.qualification_signals,
+                    "source": contact.source,
+                    "last_appointment_status": contact.last_appointment_status,
+                    "last_engaged_at": (
+                        contact.last_engaged_at.isoformat() if contact.last_engaged_at else None
+                    ),
+                    "created_at": contact.created_at.isoformat() if contact.created_at else None,
+                    "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
                 }
                 for contact in contacts
             ],

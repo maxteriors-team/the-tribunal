@@ -245,8 +245,11 @@ export function MessageComposer({
   isStreaming,
   canSend,
   imageDataUrl,
+  isEnhancing,
+  enhancementError,
   onInputChange,
   onImageChange,
+  onEnhance,
   onSubmit,
   onKeyDown,
   onStop,
@@ -255,8 +258,11 @@ export function MessageComposer({
   isStreaming: boolean;
   canSend: boolean;
   imageDataUrl: string | null;
+  isEnhancing: boolean;
+  enhancementError: string | null;
   onInputChange: (value: string) => void;
   onImageChange: (value: string | null) => void;
+  onEnhance: () => void;
   onSubmit: (event: React.FormEvent) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onStop: () => void;
@@ -302,6 +308,9 @@ export function MessageComposer({
       {imageError ? (
         <p className="mb-2 text-xs text-destructive">{imageError}</p>
       ) : null}
+      {enhancementError ? (
+        <p className="mb-2 text-xs text-destructive">{enhancementError}</p>
+      ) : null}
       <div className="flex items-end gap-2">
         <input
           ref={fileInputRef}
@@ -329,6 +338,21 @@ export function MessageComposer({
           onKeyDown={onKeyDown}
           disabled={!canSend}
         />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-12 gap-1.5"
+          onClick={onEnhance}
+          disabled={!input.trim() || !canSend || isStreaming || isEnhancing}
+        >
+          {isEnhancing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+          Enhance
+        </Button>
         {isStreaming ? (
           <Button type="button" size="icon" variant="secondary" onClick={onStop}>
             <Square className="size-4" />

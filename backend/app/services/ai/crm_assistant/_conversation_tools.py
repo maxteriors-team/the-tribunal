@@ -95,11 +95,24 @@ class ConversationAssistantTools:
 
         return {
             "success": True,
+            "conversation": {
+                "id": str(conversation.id),
+                "contact_id": conversation.contact_id,
+                "channel": conversation.channel,
+                "last_message_at": (
+                    conversation.last_message_at.isoformat()
+                    if conversation.last_message_at
+                    else None
+                ),
+                "ai_enabled": conversation.ai_enabled,
+                "ai_paused": conversation.ai_paused,
+            },
             "data": [
                 {
                     "direction": message.direction,
                     "body": message.body,
                     "channel": message.channel,
+                    "status": message.status,
                     "created_at": message.created_at.isoformat() if message.created_at else None,
                 }
                 for message in reversed(messages)

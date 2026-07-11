@@ -2133,6 +2133,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/assistant/enhance-prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enhance Prompt
+         * @description Rewrite an operator draft for review without executing it.
+         */
+        post: operations["enhance_prompt_api_v1_workspaces__workspace_id__assistant_enhance_prompt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/assistant/history": {
         parameters: {
             query?: never;
@@ -9453,6 +9473,22 @@ export interface components {
             tool_calls?: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        /**
+         * AssistantPromptEnhanceRequest
+         * @description Request to make an operator's draft more precise and evidence-oriented.
+         */
+        AssistantPromptEnhanceRequest: {
+            /** Prompt */
+            prompt: string;
+        };
+        /**
+         * AssistantPromptEnhanceResponse
+         * @description Enhanced draft returned for operator review before sending.
+         */
+        AssistantPromptEnhanceResponse: {
+            /** Enhanced Prompt */
+            enhanced_prompt: string;
         };
         /**
          * AtRiskDeal
@@ -26832,6 +26868,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enhance_prompt_api_v1_workspaces__workspace_id__assistant_enhance_prompt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantPromptEnhanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantPromptEnhanceResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

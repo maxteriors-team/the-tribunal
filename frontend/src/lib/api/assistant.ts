@@ -16,6 +16,10 @@ export interface AssistantChatResponse {
   conversation_id?: string | null;
 }
 
+export interface AssistantPromptEnhanceResponse {
+  enhanced_prompt: string;
+}
+
 export interface AssistantMessageResponse {
   id: string;
   role: AssistantRole;
@@ -94,6 +98,17 @@ function parseSseData(frame: string): AssistantStreamEvent | null {
 }
 
 export const assistantApi = {
+  enhancePrompt: async (
+    workspaceId: string,
+    prompt: string,
+  ): Promise<AssistantPromptEnhanceResponse> => {
+    const { data } = await api.post<AssistantPromptEnhanceResponse>(
+      `${basePath(workspaceId)}/enhance-prompt`,
+      { prompt },
+    );
+    return data;
+  },
+
   chat: async (
     workspaceId: string,
     message: string,
