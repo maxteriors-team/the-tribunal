@@ -94,6 +94,14 @@ def create_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=get_openai_bearer_token())
 
 
+async def create_workspace_openai_client(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+) -> AsyncOpenAI:
+    """Create an OpenAI client using the workspace credential, then env fallback."""
+    return AsyncOpenAI(api_key=await get_workspace_openai_bearer_token(db, workspace_id))
+
+
 async def get_workspace_openai_bearer_token(
     db: AsyncSession,
     workspace_id: uuid.UUID,

@@ -34,7 +34,7 @@ from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tools import get_crm_tools
 from app.services.ai.image_input import build_chat_image_content_part
-from app.services.ai.openai_credentials import create_openai_client
+from app.services.ai.openai_credentials import create_workspace_openai_client
 
 logger = structlog.get_logger()
 
@@ -423,7 +423,7 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
     await _append_assistant_message(db, conversation, "user", message)
     api_messages = await _build_api_messages(db, conversation.id)
 
-    client = create_openai_client()
+    client = await create_workspace_openai_client(db, workspace_id)
     cache_key = _cache_key(workspace_id, user_id)
     api_messages = await maybe_summarize(client, api_messages)
     _attach_image_to_last_user_message(api_messages, image)
@@ -591,7 +591,7 @@ async def process_assistant_message(  # noqa: PLR0915
     # ── 3. Load history (most recent N), oldest first ──────────────────
     api_messages = await _build_api_messages(db, conversation.id)
 
-    client = create_openai_client()
+    client = await create_workspace_openai_client(db, workspace_id)
     cache_key = _cache_key(workspace_id, user_id)
 
     # Compact older history if we're over budget. Preserves the system

@@ -70,8 +70,10 @@ async def test_simple_response_no_tools() -> None:
     )
 
     with patch.object(
-        processor, "create_openai_client", return_value=fake_client
-    ), patch.object(
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
+    ) as client_factory, patch.object(
         processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
     ):
         result = await processor.process_assistant_message(
@@ -80,6 +82,46 @@ async def test_simple_response_no_tools() -> None:
 
     assert result["response"] == "Hello, operator."
     assert result["actions_taken"] == []
+    client_factory.assert_awaited_once_with(db, workspace_id)
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stream_uses_workspace_openai_client() -> None:
+    """Streaming chat resolves the requesting workspace's credential."""
+    db = _make_db()
+    workspace_id = uuid.uuid4()
+    fake_client = SimpleNamespace()
+
+    async def fake_stream_turn(*_args: Any) -> Any:
+        yield {"type": "delta", "text": "Hello"}
+        yield {
+            "type": "turn_complete",
+            "content": "Hello",
+            "tool_calls": [],
+            "tool_calls_payload": [],
+        }
+
+    with patch.object(
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
+    ) as client_factory, patch.object(
+        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    ), patch.object(processor, "_collect_stream_turn", new=fake_stream_turn):
+        events = [
+            event
+            async for event in processor.stream_assistant_message(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=42,
+                message="hi",
+            )
+        ]
+
+    client_factory.assert_awaited_once_with(db, workspace_id)
+    assert events[0] == {"type": "delta", "text": "Hello"}
+    assert events[-1]["type"] == "done"
     db.commit.assert_awaited()
 
 
@@ -102,7 +144,9 @@ async def test_tool_loop_dispatches_and_records_actions() -> None:
     )
 
     with patch.object(
-        processor, "create_openai_client", return_value=fake_client
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
     ), patch.object(
         processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
     ), patch.object(
@@ -149,7 +193,9 @@ async def test_prompt_cache_key_passed_to_openai_call() -> None:
     )
 
     with patch.object(
-        processor, "create_openai_client", return_value=fake_client
+        processor,
+        "create_workspace_openai_client",
+        new=AsyncMock(return_value=fake_client),
     ), patch.object(
         processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
     ):
