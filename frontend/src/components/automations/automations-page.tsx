@@ -15,7 +15,6 @@ import {
   Mail,
   Phone,
   Tag,
-  UserCheck,
   ArrowRight,
   Settings2,
   Loader2,
@@ -115,7 +114,6 @@ const actionTypeConfig: Record<AutomationActionType, { label: string; icon: Luci
   wait: { label: "Wait", icon: Timer },
   delay: { label: "Delay", icon: Timer },
   update_status: { label: "Update Status", icon: Settings2 },
-  assign_agent: { label: "Assign Agent", icon: UserCheck },
 };
 
 // Triggers offered in the builder dropdown, grouped for readability.

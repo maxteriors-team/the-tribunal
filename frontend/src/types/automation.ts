@@ -32,8 +32,7 @@ export type AutomationActionType =
   | "add_tag"
   | "wait"
   | "delay"
-  | "update_status"
-  | "assign_agent";
+  | "update_status";
 
 export interface AutomationAction {
   type: AutomationActionType;
