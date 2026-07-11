@@ -13,7 +13,6 @@ import {
   Drama,
   FileText,
   FlaskConical,
-  Gauge,
   Gift,
   KanbanSquare,
   LayoutDashboard,
@@ -123,13 +122,6 @@ export const workspaceNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
     requires: "pipeline:write_own",
-  },
-  {
-    title: "Deal Coach",
-    url: "/deal-coach",
-    icon: Gauge,
-    sidebar: true,
-    commandPalette: true,
   },
   {
     title: "Quotes",

@@ -6,7 +6,6 @@ import Link from "next/link";
 
 import { AppointmentPerformanceCard } from "@/components/dashboard/appointment-performance-card";
 import { DashboardStatsGrid } from "@/components/dashboard/dashboard-stats";
-import { DealCoachCard } from "@/components/dashboard/deal-coach-card";
 import { KnowledgeBaseCard } from "@/components/dashboard/knowledge-base-card";
 import { LeadSourceRoiCard } from "@/components/dashboard/lead-source-roi-card";
 import {
@@ -114,17 +113,6 @@ export function DashboardPage() {
       >
         <SpeedToLeadCard
           speedToLeadStats={data?.speed_to_lead_stats}
-          isPending={isPending}
-        />
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.17 }}
-      >
-        <DealCoachCard
-          dealCoachStats={data?.deal_coach_stats}
           isPending={isPending}
         />
       </motion.div>
