@@ -14,6 +14,7 @@ This module delegates to focused submodules:
 import asyncio
 import time
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.metrics import observe_ai_text_response_failure
 from app.models.agent import Agent
+from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.services.ai.message_context_builder import build_message_context
 from app.services.ai.openai_credentials import (
@@ -35,11 +37,14 @@ from app.services.ai.opt_out_detector import (
 from app.services.ai.text_response_generator import generate_text_response
 from app.services.ai.text_response_timing import calculate_text_response_delay_ms
 from app.services.notifications import notify_workspace_event
+from app.services.rate_limiting.opt_out_manager import OptOutManager
 
 logger = structlog.get_logger()
 
 # Pending responses waiting for debounce
 _pending_responses: dict[str, asyncio.Task[None]] = {}
+
+_opt_out_manager = OptOutManager()
 
 
 async def process_inbound_with_ai(  # noqa: PLR0911
@@ -144,12 +149,16 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         )
 
         if is_genuine_opt_out:
-            # Confirmed opt-out - disable AI and don't respond
-            conversation.ai_enabled = False
-            await db.commit()
-            log.info(
-                "opt_out_confirmed_by_ai",
-                message=last_inbound.body[:100],
+            # Confirmed opt-out. Disabling AI on this one thread is not enough:
+            # without a global opt-out record, campaigns/drips and the iMessage
+            # relay (which has no carrier STOP) can keep texting this lead. Record
+            # it on the workspace-wide opt-out list so every outbound path
+            # suppresses, and stamp contact consent for the compliance record.
+            await _record_ai_confirmed_opt_out(
+                db=db,
+                conversation=conversation,
+                inbound_message=last_inbound,
+                log=log,
             )
             return
         else:
@@ -258,6 +267,53 @@ async def _notify_ai_went_dark(
         )
     except Exception as exc:  # noqa: BLE001 - notification must not break nurture
         log.warning("ai_dark_notification_failed", error=str(exc), reason=reason)
+
+
+async def _record_ai_confirmed_opt_out(
+    *,
+    db: AsyncSession,
+    conversation: Conversation,
+    inbound_message: Message,
+    log: Any,
+) -> None:
+    """Persist a workspace-wide opt-out for an AI-confirmed STOP request.
+
+    Disables AI on the conversation, adds the contact to the global opt-out list
+    (so campaigns, drips, reminders, review requests and the iMessage relay all
+    suppress future sends), and stamps the contact's SMS consent status for the
+    compliance record. Idempotent: when the campaign reply handler already
+    recorded the opt-out, :meth:`OptOutManager.add_opt_out` returns ``None`` and
+    we still commit the AI-disable / consent changes ourselves.
+    """
+    conversation.ai_enabled = False
+
+    if conversation.contact_id is not None:
+        contact = await db.get(Contact, conversation.contact_id)
+        if contact is not None:
+            contact.sms_consent_status = "opted_out"
+            contact.sms_consent_source = "sms_reply"
+            contact.sms_consent_collected_at = datetime.now(UTC)
+            contact.sms_consent_notes = (
+                f"Opted out via SMS reply: {inbound_message.body[:100]}"
+            )
+
+    opt_out = await _opt_out_manager.add_opt_out(
+        workspace_id=conversation.workspace_id,
+        phone_number=conversation.contact_phone,
+        db=db,
+        keyword=inbound_message.body[:50] if inbound_message.body else None,
+        source_message_id=inbound_message.id,
+    )
+    if opt_out is None:
+        # Already on the opt-out list; add_opt_out skipped its own commit, so
+        # persist the ai_enabled / consent changes here.
+        await db.commit()
+
+    log.info(
+        "opt_out_confirmed_by_ai",
+        message=inbound_message.body[:100],
+        global_opt_out_recorded=opt_out is not None,
+    )
 
 
 async def _send_ai_text_response_after_delay(
