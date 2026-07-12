@@ -74,6 +74,16 @@ sms_bounce_total = Counter(
     labelnames=("workspace_id", "bounce_type"),
 )
 
+ai_text_response_failures_total = Counter(
+    "ai_text_response_failures_total",
+    (
+        "Inbound texts where the AI failed to reply, labelled by reason "
+        "(no_credential/generation_failed/send_failed). A rising count means "
+        "leads are being nurtured with silence."
+    ),
+    labelnames=("workspace_id", "reason"),
+)
+
 
 # --------------------------------------------------------------------------- #
 # Cal.com webhooks
@@ -227,6 +237,22 @@ def observe_sms_bounce(
     sms_bounce_total.labels(
         workspace_id=_ws_label(workspace_id),
         bounce_type=bounce_type or "unknown",
+    ).inc()
+
+
+def observe_ai_text_response_failure(
+    workspace_id: uuid.UUID | str | None,
+    reason: str,
+) -> None:
+    """Record an inbound text the AI could not reply to.
+
+    ``reason`` is ``no_credential`` (OpenAI creds missing/expired),
+    ``generation_failed`` (LLM returned nothing / errored), or ``send_failed``
+    (reply generated but the outbound provider rejected it).
+    """
+    ai_text_response_failures_total.labels(
+        workspace_id=_ws_label(workspace_id),
+        reason=reason or "unknown",
     ).inc()
 
 

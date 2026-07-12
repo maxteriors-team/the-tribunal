@@ -94,12 +94,41 @@ def create_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=get_openai_bearer_token())
 
 
+def build_async_openai_client(context: OpenAICredentialContext) -> AsyncOpenAI:
+    """Build an ``AsyncOpenAI`` SDK client that honors OAuth headers.
+
+    For a plain API key this is equivalent to ``AsyncOpenAI(api_key=...)``. For
+    an OAuth/Codex bearer token it also attaches the ``ChatGPT-Account-ID`` /
+    ``originator`` / ``User-Agent`` headers the OAuth backend requires, mirroring
+    the voice/realtime path (:mod:`app.api.v1.realtime`). Without these headers
+    OAuth-backed chat/SMS calls 401 and the failure is silently swallowed by
+    callers, so an OAuth-authenticated workspace never gets AI text replies.
+
+    ``Authorization`` is intentionally dropped from the default headers: the SDK
+    derives it from ``api_key``, and passing it twice would conflict.
+    """
+    extra_headers = {
+        key: value
+        for key, value in context.openai_headers().items()
+        if key.lower() != "authorization"
+    }
+    return AsyncOpenAI(
+        api_key=context.bearer_token,
+        default_headers=extra_headers or None,
+    )
+
+
 async def create_workspace_openai_client(
     db: AsyncSession,
     workspace_id: uuid.UUID,
 ) -> AsyncOpenAI:
-    """Create an OpenAI client using the workspace credential, then env fallback."""
-    return AsyncOpenAI(api_key=await get_workspace_openai_bearer_token(db, workspace_id))
+    """Create an OpenAI client using the workspace credential, then env fallback.
+
+    Uses :func:`build_async_openai_client` so OAuth-backed workspaces get the
+    required OAuth headers instead of a bare bearer token.
+    """
+    context = await resolve_openai_credentials(db, workspace_id)
+    return build_async_openai_client(context)
 
 
 async def get_workspace_openai_bearer_token(

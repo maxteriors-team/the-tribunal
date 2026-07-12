@@ -26,6 +26,10 @@ from app.services.ai.message_context_builder import (
     get_offer_context,
     get_workspace_timezone,
 )
+from app.services.ai.openai_credentials import (
+    OpenAICredentialContext,
+    build_async_openai_client,
+)
 from app.services.ai.text_prompt_builder import (
     FOLLOWUP_SYSTEM_PROMPT,
     build_booking_instructions,
@@ -194,6 +198,8 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
     conversation: Conversation,
     db: AsyncSession,
     openai_api_key: str,
+    *,
+    credential: OpenAICredentialContext | None = None,
 ) -> str | None:
     """Generate AI response for a text conversation.
 
@@ -203,7 +209,12 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         agent: The text agent to use
         conversation: The conversation
         db: Database session
-        openai_api_key: OpenAI API key
+        openai_api_key: OpenAI API key (used when ``credential`` is not supplied)
+        credential: Resolved OpenAI credential context. When provided, the SDK
+            client is built with :func:`build_async_openai_client` so OAuth
+            tokens carry the required OAuth headers; a bare ``openai_api_key``
+            omits them and OAuth-backed workspaces get 401s that surface as an
+            empty reply.
 
     Returns:
         Generated response text, or None if failed
@@ -273,8 +284,13 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         knowledge_context=knowledge_context,
     )
 
-    # Create OpenAI client
-    client = AsyncOpenAI(api_key=openai_api_key)
+    # Create OpenAI client. Prefer the resolved credential so OAuth-backed
+    # workspaces get the required OAuth headers; fall back to the bare key.
+    client = (
+        build_async_openai_client(credential)
+        if credential is not None
+        else AsyncOpenAI(api_key=openai_api_key)
+    )
 
     try:
         # Build messages for API call

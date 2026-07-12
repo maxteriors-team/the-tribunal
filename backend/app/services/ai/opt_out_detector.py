@@ -25,7 +25,11 @@ import re
 import structlog
 from openai import AsyncOpenAI
 
-from app.services.ai.openai_credentials import get_openai_bearer_token
+from app.services.ai.openai_credentials import (
+    OpenAICredentialContext,
+    build_async_openai_client,
+    get_openai_bearer_token,
+)
 
 logger = structlog.get_logger()
 
@@ -99,6 +103,8 @@ async def classify_opt_out_intent(
     message: str,
     conversation_context: list[dict[str, str]] | None = None,
     openai_api_key: str | None = None,
+    *,
+    credential: OpenAICredentialContext | None = None,
 ) -> bool:
     """Use AI to determine if a message is a genuine opt-out request.
 
@@ -116,7 +122,9 @@ async def classify_opt_out_intent(
     """
     log = logger.bind(message_preview=message[:50] if message else "")
 
-    api_key = openai_api_key or get_openai_bearer_token()
+    api_key = (credential.bearer_token if credential is not None else openai_api_key) or (
+        get_openai_bearer_token()
+    )
     if not api_key:
         log.warning("no_openai_key_for_opt_out_classifier")
         # Fall back to keyword-only detection if no API key
@@ -137,7 +145,11 @@ async def classify_opt_out_intent(
 
 Is this a genuine opt-out request (user wants to stop receiving SMS/text messages)?"""
 
-    client = AsyncOpenAI(api_key=api_key)
+    client = (
+        build_async_openai_client(credential)
+        if credential is not None
+        else AsyncOpenAI(api_key=api_key)
+    )
 
     try:
         response = await asyncio.wait_for(

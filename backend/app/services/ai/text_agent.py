@@ -20,12 +20,13 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.metrics import observe_ai_text_response_failure
 from app.models.agent import Agent
 from app.models.conversation import Conversation, Message
 from app.services.ai.message_context_builder import build_message_context
 from app.services.ai.openai_credentials import (
     OpenAICredentialError,
-    get_workspace_openai_bearer_token,
+    resolve_openai_credentials,
 )
 from app.services.ai.opt_out_detector import (
     classify_opt_out_intent,
@@ -33,6 +34,7 @@ from app.services.ai.opt_out_detector import (
 )
 from app.services.ai.text_response_generator import generate_text_response
 from app.services.ai.text_response_timing import calculate_text_response_delay_ms
+from app.services.notifications import notify_workspace_event
 
 logger = structlog.get_logger()
 
@@ -90,11 +92,29 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     # Resolve the workspace's own OpenAI credential (workspace integration first,
     # then global env fallback), matching the voice path. Using the global token
     # here would ignore a tenant's configured key and misattribute their usage.
+    # Resolve the full context (not just the bearer token) so OAuth-backed
+    # workspaces get the required OAuth headers on every chat call.
     try:
-        openai_key = await get_workspace_openai_bearer_token(db, workspace_id)
+        credential = await resolve_openai_credentials(db, workspace_id)
     except OpenAICredentialError:
-        log.error("no_openai_credential")
+        # A missing/expired credential means this lead gets silence. Make it
+        # loud: metric for alerting + operator notification so a human can jump
+        # in, instead of the reply vanishing with only a debug log.
+        observe_ai_text_response_failure(workspace_id, "no_credential")
+        log.error(
+            "ai_text_response_failed",
+            reason="no_credential",
+            workspace_id=str(workspace_id),
+            contact_phone=conversation.contact_phone,
+        )
+        await _notify_ai_went_dark(
+            db,
+            conversation=conversation,
+            reason="no_credential",
+            log=log,
+        )
         return
+    openai_key = credential.bearer_token
 
     # === AI-POWERED OPT-OUT DETECTION ===
     # Get last inbound message to check for opt-out intent
@@ -120,6 +140,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
             message=last_inbound.body,
             conversation_context=messages_context,
             openai_api_key=openai_key,
+            credential=credential,
         )
 
         if is_genuine_opt_out:
@@ -144,10 +165,25 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         conversation=conversation,
         db=db,
         openai_api_key=openai_key,
+        credential=credential,
     )
 
     if not response_text:
-        log.warning("no_response_generated")
+        # Generation returned nothing (LLM error/timeout/empty). The lead is
+        # left on read — surface it for alerting and pull in an operator.
+        observe_ai_text_response_failure(workspace_id, "generation_failed")
+        log.error(
+            "ai_text_response_failed",
+            reason="generation_failed",
+            workspace_id=str(workspace_id),
+            contact_phone=conversation.contact_phone,
+        )
+        await _notify_ai_went_dark(
+            db,
+            conversation=conversation,
+            reason="generation_failed",
+            log=log,
+        )
         return
 
     response_delay_ms = calculate_text_response_delay_ms(
@@ -169,6 +205,59 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         wait_ms=send_wait_ms,
         log=log,
     )
+
+
+_AI_DARK_MESSAGES: dict[str, str] = {
+    "no_credential": (
+        "AI couldn't reply to a new lead — OpenAI isn't connected for this "
+        "workspace. Connect it in Settings, then follow up manually."
+    ),
+    "generation_failed": (
+        "AI couldn't reply to a new lead and the conversation is waiting on a "
+        "human. Jump in so the lead isn't left on read."
+    ),
+    "send_failed": (
+        "AI wrote a reply to a new lead but it couldn't be delivered. Check the "
+        "conversation and follow up so the lead isn't left on read."
+    ),
+}
+
+
+async def _notify_ai_went_dark(
+    db: AsyncSession,
+    *,
+    conversation: Conversation,
+    reason: str,
+    log: Any,
+) -> None:
+    """Alert workspace operators that AI could not reply to an inbound lead.
+
+    Best-effort: a notification failure must never break (or re-raise into) the
+    already-failing nurture path. Deduped per (conversation, reason) so retries
+    and repeat inbounds don't spam operators.
+    """
+    body = _AI_DARK_MESSAGES.get(reason, _AI_DARK_MESSAGES["generation_failed"])
+    try:
+        await notify_workspace_event(
+            db,
+            workspace_id=conversation.workspace_id,
+            notification_type="message",
+            title="AI needs a hand",
+            body=body,
+            data={
+                "type": "ai_response_failed",
+                "reason": reason,
+                "conversationId": str(conversation.id),
+                "screen": f"/(tabs)/messages/{conversation.id}",
+            },
+            channel_id="messages",
+            email_subject="AI couldn't reply to a lead",
+            email_heading="AI needs a hand",
+            email_intro=body,
+            dedupe_key=f"ai_dark:{conversation.id}:{reason}",
+        )
+    except Exception as exc:  # noqa: BLE001 - notification must not break nurture
+        log.warning("ai_dark_notification_failed", error=str(exc), reason=reason)
 
 
 async def _send_ai_text_response_after_delay(
@@ -224,10 +313,20 @@ async def _send_ai_text_response_after_delay(
             wait_ms=wait_ms,
         )
     except Exception as e:
+        # Reply was generated but the provider rejected the send. Count it and
+        # notify so the lead isn't silently dropped after passing generation.
+        observe_ai_text_response_failure(workspace_id, "send_failed")
         log.error(
-            "failed_to_send_ai_response",
+            "ai_text_response_failed",
+            reason="send_failed",
             error=str(e),
             error_type=type(e).__name__,
+        )
+        await _notify_ai_went_dark(
+            db,
+            conversation=current_conversation,
+            reason="send_failed",
+            log=log,
         )
     finally:
         await sms_service.close()
