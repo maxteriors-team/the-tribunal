@@ -15,7 +15,12 @@ import pytest
 from app.core.config import settings
 from app.core.encryption import encrypt_json
 from app.models.workspace import WorkspaceIntegration
-from app.services.ai.openai_credentials import OpenAICredentialError, resolve_openai_credentials
+from app.services.ai.openai_credentials import (
+    OpenAICredentialContext,
+    OpenAICredentialError,
+    build_async_openai_client,
+    resolve_openai_credentials,
+)
 
 
 class _ScalarResult:
@@ -156,3 +161,47 @@ async def test_expired_oauth_refresh_failure_does_not_fall_back_to_env() -> None
 
     with pytest.raises(OpenAICredentialError, match="refreshed"):
         await resolve_openai_credentials(db, integration.workspace_id)
+
+
+def _client_default_headers(client: Any) -> dict[str, str]:
+    """Return the SDK client's default headers, lowercased for comparison."""
+    raw = dict(getattr(client, "default_headers", {}) or {})
+    return {key.lower(): value for key, value in raw.items()}
+
+
+def test_build_client_attaches_oauth_headers_without_duplicating_auth() -> None:
+    """OAuth tokens must carry the ChatGPT-Account-ID/originator headers.
+
+    Regression guard: the SMS/chat path used to build ``AsyncOpenAI(api_key=...)``
+    with no OAuth headers, so OAuth-backed workspaces 401'd and the failure was
+    swallowed into an empty reply. ``Authorization`` must not be duplicated into
+    default_headers because the SDK derives it from ``api_key``.
+    """
+    context = OpenAICredentialContext(
+        bearer_token="oauth-token",
+        source="workspace_oauth",
+        account_id="acct_123",
+        is_oauth=True,
+    )
+
+    client = build_async_openai_client(context)
+    headers = _client_default_headers(client)
+
+    assert headers.get("chatgpt-account-id") == "acct_123"
+    assert "originator" in headers
+    assert "authorization" not in headers
+
+
+def test_build_client_plain_api_key_adds_no_oauth_headers() -> None:
+    """A plain API key must not gain OAuth-only headers (no behavior change)."""
+    context = OpenAICredentialContext(
+        bearer_token="sk-plain",
+        source="workspace_api_key",
+        is_oauth=False,
+    )
+
+    client = build_async_openai_client(context)
+    headers = _client_default_headers(client)
+
+    assert "chatgpt-account-id" not in headers
+    assert "originator" not in headers
