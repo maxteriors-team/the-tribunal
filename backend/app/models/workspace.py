@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from app.models.campaign import Campaign
     from app.models.contact import Contact
     from app.models.conversation import Conversation
-    from app.models.field_service import Crew, ServiceLocation, Technician
+    from app.models.field_service import BusinessLocation, Crew, ServiceLocation, Technician
     from app.models.lead_magnet import LeadMagnet
     from app.models.message_template import MessageTemplate
     from app.models.message_test import MessageTest
@@ -104,6 +104,9 @@ class Workspace(Base):
     )
     message_templates: Mapped[list["MessageTemplate"]] = relationship(
         "MessageTemplate", back_populates="workspace", cascade="all, delete-orphan"
+    )
+    business_locations: Mapped[list["BusinessLocation"]] = relationship(
+        "BusinessLocation", back_populates="workspace", cascade="all, delete-orphan"
     )
     service_locations: Mapped[list["ServiceLocation"]] = relationship(
         "ServiceLocation", back_populates="workspace", cascade="all, delete-orphan"

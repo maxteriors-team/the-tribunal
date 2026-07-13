@@ -13,8 +13,11 @@ maps those errors to responses via
 :class:`app.api.service_errors.ServiceErrorRoute`.
 """
 
+from app.services.field_service.business_locations import BusinessLocationService
 from app.services.field_service.crews import CrewService
 from app.services.field_service.exceptions import (
+    BusinessLocationNameConflictError,
+    BusinessLocationNotFoundError,
     ContactNotInWorkspaceError,
     CrewNameConflictError,
     CrewNotFoundError,
@@ -26,9 +29,12 @@ from app.services.field_service.locations import ServiceLocationService
 from app.services.field_service.technicians import TechnicianService
 
 __all__ = [
+    "BusinessLocationService",
     "ServiceLocationService",
     "CrewService",
     "TechnicianService",
+    "BusinessLocationNotFoundError",
+    "BusinessLocationNameConflictError",
     "ServiceLocationNotFoundError",
     "CrewNotFoundError",
     "CrewNameConflictError",

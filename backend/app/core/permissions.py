@@ -66,6 +66,11 @@ class Capability(StrEnum):
     REPORTS_VIEW = "reports:view"
     MEMBERS_MANAGE = "members:manage"
     WORKSPACE_MANAGE = "workspace:manage"
+    # ``locations:manage`` = create/edit/deactivate the workspace's business
+    # locations (branches / business units). Admin + manager; everyone else may
+    # still *read* the list (reads use plain membership, not this capability) so
+    # the location filter dropdown works for all members.
+    LOCATIONS_MANAGE = "locations:manage"
 
 
 class Tier(StrEnum):
@@ -109,6 +114,7 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
+        Capability.LOCATIONS_MANAGE,
     }
     sales: set[Capability] = {
         Capability.CRM_READ,

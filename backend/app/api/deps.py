@@ -423,3 +423,6 @@ CanViewReports = Annotated[
 CanManageMembers = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.MEMBERS_MANAGE))
 ]
+CanManageLocations = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.LOCATIONS_MANAGE))
+]

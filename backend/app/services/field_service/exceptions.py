@@ -19,6 +19,20 @@ class ServiceLocationNotFoundError(NotFoundError):
         super().__init__(message)
 
 
+class BusinessLocationNotFoundError(NotFoundError):
+    """A business location does not exist in the workspace. [404]"""
+
+    def __init__(self, message: str = "Business location not found") -> None:
+        super().__init__(message)
+
+
+class BusinessLocationNameConflictError(ConflictError):
+    """A business location with the same name already exists. [409]"""
+
+    def __init__(self, message: str = "A location with this name already exists") -> None:
+        super().__init__(message)
+
+
 class CrewNotFoundError(NotFoundError):
     """A crew does not exist in the workspace. [404]"""
 

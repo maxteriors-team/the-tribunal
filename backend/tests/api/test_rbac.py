@@ -119,6 +119,13 @@ _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
         ["owner", "admin", "manager"],
         ["sales_rep", "technician", "member"],
     ),
+    # Managing business locations (branches): admin + manager tier (which
+    # includes dispatcher). Everyone else may only read the list.
+    (
+        Capability.LOCATIONS_MANAGE,
+        ["owner", "admin", "manager", "dispatcher"],
+        ["sales_rep", "technician", "member"],
+    ),
 ]
 
 
@@ -283,6 +290,29 @@ async def test_sales_cannot_delete_contacts_despite_authoring_outreach() -> None
             assert (await client.post(_url("/contacts/bulk-delete"), json={})).status_code == 403
         async with _client_as("manager") as client:
             assert (await client.delete(_url("/contacts/5"))).status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_business_locations_read_open_write_gated() -> None:
+    """Any member may read the business-location list (the filter dropdown), but
+    only ``locations:manage`` holders (admin + manager) may create one."""
+    try:
+        # A plain member can read the list but cannot create a branch.
+        async with _client_as("member") as client:
+            assert (await client.get(_url("/business-locations"))).status_code != 403
+            resp = await client.post(_url("/business-locations"), json={"name": "X"})
+            assert resp.status_code == 403
+        # A field technician cannot even read (no workspace read surface here?).
+        # They still resolve membership, so the read gate (plain member) lets
+        # them through; only the write is capability-gated.
+        async with _client_as("technician") as client:
+            resp = await client.post(_url("/business-locations"), json={"name": "X"})
+            assert resp.status_code == 403
+        # A manager can create (past the gate; the mocked DB may 500 in the body).
+        async with _client_as("manager") as client:
+            resp = await client.post(_url("/business-locations"), json={"name": "X"})
+            assert resp.status_code != 403
     finally:
         _clear_overrides()
 
