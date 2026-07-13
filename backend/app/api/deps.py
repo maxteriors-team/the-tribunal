@@ -489,6 +489,9 @@ CanManageMembers = Annotated[
 CanManageWorkspace = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.WORKSPACE_MANAGE))
 ]
+CanManageLocations = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.LOCATIONS_MANAGE))
+]
 
 # Capability gate for routes that act on the caller's active workspace without a
 # ``workspace_id`` path parameter (self-serve onboarding). Adds no parameters to

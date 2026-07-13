@@ -1,11 +1,77 @@
-"""Schemas for field-service entities: service locations, crews, technicians."""
+"""Schemas for field-service entities: business locations, service locations,
+crews, technicians."""
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
+
+
+# --------------------------------------------------------------------------- #
+# Business locations (the company's own branches / business units)
+# --------------------------------------------------------------------------- #
+class BusinessLocationCreate(BaseModel):
+    """Create a business location (branch)."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
+    business_hours: dict[str, Any] = Field(default_factory=dict)
+    address_line1: str | None = Field(None, max_length=500)
+    address_line2: str | None = Field(None, max_length=500)
+    city: str | None = Field(None, max_length=200)
+    state: str | None = Field(None, max_length=200)
+    postal_code: str | None = Field(None, max_length=50)
+    country: str = Field(default="US", min_length=2, max_length=2)
+    phone: str | None = Field(None, max_length=50)
+    is_active: bool = True
+
+
+class BusinessLocationUpdate(BaseModel):
+    """Partial update for a business location."""
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    timezone: str | None = Field(None, min_length=1, max_length=64)
+    business_hours: dict[str, Any] | None = None
+    address_line1: str | None = Field(None, max_length=500)
+    address_line2: str | None = Field(None, max_length=500)
+    city: str | None = Field(None, max_length=200)
+    state: str | None = Field(None, max_length=200)
+    postal_code: str | None = Field(None, max_length=50)
+    country: str | None = Field(None, min_length=2, max_length=2)
+    phone: str | None = Field(None, max_length=50)
+    is_active: bool | None = None
+
+
+class BusinessLocationResponse(BaseModel):
+    """Business location response."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    name: str
+    timezone: str
+    business_hours: dict[str, Any]
+    address_line1: str | None
+    address_line2: str | None
+    city: str | None
+    state: str | None
+    postal_code: str | None
+    country: str
+    phone: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BusinessLocationListResponse(BaseModel):
+    """List of business locations."""
+
+    items: list[BusinessLocationResponse]
+    total: int
 
 
 # --------------------------------------------------------------------------- #

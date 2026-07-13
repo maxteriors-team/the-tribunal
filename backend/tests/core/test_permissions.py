@@ -76,6 +76,7 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
+        Capability.LOCATIONS_MANAGE,
     }
     assert capabilities_for("manager") == frozenset(granted)
     for denied in (
@@ -173,6 +174,15 @@ def test_comms_send_is_broad_but_field_and_manage_are_excluded() -> None:
         assert not role_can(role, Capability.COMMS_MANAGE), role
     assert role_can("admin", Capability.COMMS_MANAGE)
     assert role_can("owner", Capability.COMMS_MANAGE)
+
+
+def test_locations_manage_is_admin_and_manager_only() -> None:
+    # Managing business locations (branches) is an operations power: admin +
+    # manager tier (owner/admin/manager/dispatcher). Everyone else only reads.
+    for role in ("owner", "admin", "manager", "dispatcher"):
+        assert role_can(role, Capability.LOCATIONS_MANAGE), role
+    for role in ("sales_rep", "technician", "member"):
+        assert not role_can(role, Capability.LOCATIONS_MANAGE), role
 
 
 def test_reports_view_is_admin_only() -> None:
