@@ -280,6 +280,67 @@ TAKE_MESSAGE_TOOL: dict[str, Any] = {
     },
 }
 
+# Save-lead-info tool.
+# Lets the agent write structured details the caller volunteers (name, email,
+# company, address, what they're looking for) onto the caller's CRM contact
+# record, creating the contact from the caller's phone number if they are not
+# already in the CRM. Without this, spoken lead details only survive as a
+# free-text message note and never populate the contact profile. Opt-in via
+# ``save_lead_info`` (or the existing ``crm_update`` intent) in enabled_tools.
+SAVE_LEAD_INFO_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "save_lead_info",
+    "description": (
+        "Save details the CURRENT caller gives you about themselves onto their "
+        "contact record in the CRM. Call this whenever the caller shares their "
+        "name, email, company, mailing address, or what they're looking for, so "
+        "the team has it after the call. You can call it more than once as new "
+        "details come up. Only include fields the caller actually gave you \u2014 "
+        "never guess or invent an email, address, or name. Read an email or "
+        "address back to the caller to confirm before saving it."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "first_name": {
+                "type": "string",
+                "description": "The caller's first name.",
+            },
+            "last_name": {
+                "type": "string",
+                "description": "The caller's last name.",
+            },
+            "email": {
+                "type": "string",
+                "description": (
+                    "The caller's email address. Read it back to confirm spelling "
+                    "before saving."
+                ),
+            },
+            "company_name": {
+                "type": "string",
+                "description": "The caller's company or business name.",
+            },
+            "address": {
+                "type": "string",
+                "description": (
+                    "The caller's mailing or property address in their own words "
+                    "(e.g. '123 Main St, Austin TX 78701')."
+                ),
+            },
+            "interest": {
+                "type": "string",
+                "description": (
+                    "Short summary of what the caller wants or is interested in "
+                    "(e.g. 'wants a quote for a kitchen remodel in April'). Saved "
+                    "as a note on the contact."
+                ),
+            },
+        },
+        "required": [],
+    },
+}
+
 # In-call payment / deposit collection tool.
 # SECURE BY DESIGN: this NEVER reads raw card numbers over the AI channel. The
 # execution layer creates a Stripe Checkout Session for the requested amount and
@@ -568,6 +629,7 @@ def build_tools_list(
     enable_lookup_caller_record: bool = False,
     enable_take_message: bool = False,
     enable_collect_payment: bool = False,
+    enable_save_lead_info: bool = False,
     enable_end_call: bool = True,
     timezone: str = "America/New_York",
 ) -> list[dict[str, Any]]:
@@ -616,6 +678,10 @@ def build_tools_list(
     if enable_collect_payment:
         tools.append(COLLECT_PAYMENT_TOOL)
         tools.append(CHECK_PAYMENT_STATUS_TOOL)
+
+    # Write caller-provided lead details onto the CRM contact record
+    if enable_save_lead_info:
+        tools.append(SAVE_LEAD_INFO_TOOL)
 
     # DTMF for IVR
     if enable_dtmf:
@@ -711,6 +777,7 @@ def get_tools_from_agent_config(
         enable_lookup_caller_record=is_lookup_caller_record_enabled(agent),
         enable_take_message=is_take_message_enabled(agent),
         enable_collect_payment=is_collect_payment_enabled(agent),
+        enable_save_lead_info=is_save_lead_info_enabled(agent),
         timezone=timezone,
     )
 
@@ -763,6 +830,20 @@ def is_take_message_enabled(agent: Any) -> bool:
     if not agent:
         return False
     return "take_message" in (agent.enabled_tools or [])
+
+
+def is_save_lead_info_enabled(agent: Any) -> bool:
+    """Return whether the save-lead-info CRM write tool should be exposed.
+
+    Opt-in via ``"save_lead_info"`` in the agent's ``enabled_tools``, or the
+    pre-existing ``"crm_update"`` intent already declared on lead-responder
+    templates. The tool writes/creates a CRM contact, so it is enabled
+    explicitly for lead-capturing agents rather than on every agent.
+    """
+    if not agent:
+        return False
+    enabled_tools = agent.enabled_tools or []
+    return "save_lead_info" in enabled_tools or "crm_update" in enabled_tools
 
 
 # Grok available voices (for validation)

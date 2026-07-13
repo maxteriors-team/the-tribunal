@@ -48,12 +48,17 @@ _pending_hangups: set[asyncio.Task[None]] = set()
 # ``end_call`` is included: hanging up when the conversation is over is a benign
 # call-control action (no spend, no external mutation), and gating it would
 # leave the caller in dead air waiting for an operator to approve the hangup.
+# ``save_lead_info`` is included: it writes the caller's OWN details onto their
+# own contact record (no outbound action, no spend). Gating it behind approval
+# would stall the live call while the caller is dictating their email/address,
+# so it runs inline like ``take_message``.
 GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
     {
         "search_knowledge",
         "lookup_caller_record",
         "take_message",
         "check_payment_status",
+        "save_lead_info",
         "end_call",
     }
 )
@@ -149,7 +154,7 @@ class VoiceToolExecutor(BaseToolExecutor):
 
     # ── Main dispatch ───────────────────────────────────────────────
 
-    async def execute(  # noqa: PLR0911 - flat tool dispatch table
+    async def execute(  # noqa: PLR0911, PLR0912 - flat tool dispatch table
         self,
         function_name: str,
         arguments: dict[str, Any],
@@ -227,6 +232,16 @@ class VoiceToolExecutor(BaseToolExecutor):
                 reason=arguments.get("reason", ""),
                 intent=arguments.get("intent"),
                 summary=arguments.get("summary"),
+            )
+
+        if function_name == "save_lead_info":
+            return await self._execute_save_lead_info(
+                first_name=arguments.get("first_name"),
+                last_name=arguments.get("last_name"),
+                email=arguments.get("email"),
+                company_name=arguments.get("company_name"),
+                address=arguments.get("address"),
+                interest=arguments.get("interest"),
             )
 
         if function_name == "end_call":
@@ -1237,6 +1252,157 @@ class VoiceToolExecutor(BaseToolExecutor):
             "message": (
                 "Got it — I've taken the message and the team has been notified. "
                 "Let the caller know their message has been passed along."
+            ),
+        }
+
+    async def _execute_save_lead_info(  # noqa: PLR0912, PLR0913, PLR0915
+        self,
+        *,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        email: str | None = None,
+        company_name: str | None = None,
+        address: str | None = None,
+        interest: str | None = None,
+    ) -> dict[str, Any]:
+        """Write caller-provided details onto their CRM contact record.
+
+        Hard-scoped to the live call: the workspace and the caller's phone come
+        from the call context, never from the model. Updates the conversation's
+        linked contact, or creates one from the caller's number when this is a
+        brand-new lead not yet in the CRM. Provided values win over blanks but
+        never erase existing data, and ``interest`` is appended to notes.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from app.core.encryption import hash_phone, hash_value
+        from app.db.session import AsyncSessionLocal
+        from app.models.contact import Contact
+        from app.models.conversation import Message as MessageModel
+        from app.services.contacts.address_parsing import parse_us_address
+
+        def _clean(value: str | None, limit: int) -> str | None:
+            if value is None:
+                return None
+            trimmed = value.strip()
+            return trimmed[:limit] if trimmed else None
+
+        first_name = _clean(first_name, 100)
+        last_name = _clean(last_name, 100)
+        email = _clean(email, 320)
+        company_name = _clean(company_name, 255)
+        address = _clean(address, 500)
+        interest = _clean(interest, 1000)
+
+        if not any([first_name, last_name, email, company_name, address, interest]):
+            return {
+                "success": False,
+                "error": "No caller details were provided to save.",
+            }
+
+        if not self.call_control_id:
+            self.log.warning("save_lead_info_no_call_control_id")
+            return {"success": False, "error": "No active call to attach this info to."}
+
+        async with AsyncSessionLocal() as db:
+            msg_result = await db.execute(
+                select(MessageModel)
+                .options(selectinload(MessageModel.conversation))
+                .where(MessageModel.provider_message_id == self.call_control_id)
+            )
+            call_message = msg_result.scalar_one_or_none()
+            if not call_message or not call_message.conversation:
+                self.log.warning(
+                    "save_lead_info_no_call_message", call_control_id=self.call_control_id
+                )
+                return {
+                    "success": False,
+                    "error": "Could not find the current call to save this info to.",
+                }
+
+            conversation = call_message.conversation
+            workspace_id = self.workspace_id or conversation.workspace_id
+
+            contact: Contact | None = None
+            if conversation.contact_id is not None:
+                contact_result = await db.execute(
+                    select(Contact).where(
+                        Contact.id == conversation.contact_id,
+                        Contact.workspace_id == workspace_id,
+                    )
+                )
+                contact = contact_result.scalar_one_or_none()
+
+            created = False
+            if contact is None:
+                # Brand-new caller not yet in the CRM: create the contact from
+                # the call's caller number so their details are not lost.
+                caller_phone = conversation.contact_phone
+                contact = Contact(
+                    workspace_id=workspace_id,
+                    first_name=first_name or "Caller",
+                    phone_number=caller_phone,
+                    phone_hash=hash_phone(caller_phone),
+                    source="inbound_call",
+                    status="new",
+                )
+                db.add(contact)
+                created = True
+            elif first_name:
+                contact.first_name = first_name
+
+            if last_name:
+                contact.last_name = last_name
+            if company_name:
+                contact.company_name = company_name
+            if email:
+                contact.email = email
+                contact.email_hash = hash_value(email)
+            if address:
+                parsed = parse_us_address(address)
+                if parsed is not None:
+                    contact.address_line1 = parsed.line1
+                    if parsed.city:
+                        contact.address_city = parsed.city
+                    if parsed.state:
+                        contact.address_state = parsed.state
+                    if parsed.zip_code:
+                        contact.address_zip = parsed.zip_code
+            if interest:
+                stamped = f"[call note] {interest}"
+                contact.notes = f"{contact.notes}\n{stamped}".strip() if contact.notes else stamped
+
+            if conversation.contact_id is None:
+                await db.flush()
+                conversation.contact_id = contact.id
+
+            await db.commit()
+
+            self.log.info(
+                "save_lead_info_saved",
+                call_control_id=self.call_control_id,
+                contact_id=str(contact.id),
+                created=created,
+                fields=[
+                    name
+                    for name, value in (
+                        ("first_name", first_name),
+                        ("last_name", last_name),
+                        ("email", email),
+                        ("company_name", company_name),
+                        ("address", address),
+                        ("interest", interest),
+                    )
+                    if value
+                ],
+            )
+
+        return {
+            "success": True,
+            "message": (
+                "Saved the caller's details to their contact record. "
+                "Confirm to the caller that you've got their information."
             ),
         }
 
