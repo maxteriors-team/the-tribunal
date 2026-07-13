@@ -51,15 +51,21 @@ class _ExecuteResult:
 class _SequencedSession:
     """Async session stub returning a queued sequence of scalar rows."""
 
-    def __init__(self, rows: list[Any]) -> None:
+    def __init__(self, rows: list[Any], *, workspace: Any = None) -> None:
         self._rows = list(rows)
         self.added: list[Any] = []
         self.flush = AsyncMock()
         self.commit = AsyncMock()
+        self._workspace = workspace
 
     async def execute(self, *_args: Any, **_kwargs: Any) -> _ExecuteResult:
         row = self._rows.pop(0) if self._rows else None
         return _ExecuteResult(row)
+
+    async def get(self, *_args: Any, **_kwargs: Any) -> Any:
+        # Used by the auto-pipeline helper to load the workspace; ``None`` makes
+        # it a clean no-op so these save-lead tests stay focused on the write.
+        return self._workspace
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -175,6 +181,34 @@ async def test_updates_existing_contact_without_blanking_or_replacing() -> None:
     assert existing.notes is not None
     assert "existing note" in existing.notes  # appended, not replaced
     assert "ready to buy" in existing.notes
+
+
+async def test_saving_lead_info_opens_a_pipeline_card() -> None:
+    # Wiring proof: after a caller's details are saved on an inbound call, the
+    # contact is dropped onto the Opportunities board via open_lead_opportunity.
+    conversation = _Conversation(contact_id=None, contact_phone="+15125557004")
+    session = _SequencedSession([_CallMessage(conversation), None])
+
+    opened = AsyncMock()
+    with (
+        patch.object(db_session_module, "AsyncSessionLocal", lambda: session),
+        patch("app.services.opportunities.open_lead_opportunity", opened),
+    ):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            first_name="Sam",
+        )
+
+    assert result["success"] is True
+    opened.assert_awaited_once()
+    # Called with the saved contact and the inbound-call source.
+    await_args = opened.await_args
+    assert await_args is not None
+    contact_arg = (
+        await_args.args[2] if len(await_args.args) > 2 else await_args.kwargs.get("contact")
+    )
+    assert isinstance(contact_arg, Contact)
+    assert contact_arg.first_name == "Sam"
+    assert await_args.kwargs.get("source") == "inbound_call"
 
 
 async def test_no_fields_returns_error_without_touching_db() -> None:

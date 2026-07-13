@@ -22,6 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pipeline import Pipeline, PipelineStage
 
+__all__ = [
+    "DEFAULT_PIPELINE_DESCRIPTION",
+    "DEFAULT_PIPELINE_NAME",
+    "DEFAULT_PIPELINE_STAGES",
+    "ensure_default_pipeline",
+    "get_default_pipeline_first_stage",
+]
+
 logger = structlog.get_logger()
 
 DEFAULT_PIPELINE_NAME = "Sales Pipeline"
@@ -79,3 +87,24 @@ async def ensure_default_pipeline(
         stage_count=len(DEFAULT_PIPELINE_STAGES),
     )
     return pipeline
+
+
+async def get_default_pipeline_first_stage(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+) -> tuple[Pipeline, PipelineStage | None]:
+    """Return the workspace's default pipeline and its entry (lowest-order) stage.
+
+    Provisions the default pipeline when absent (via :func:`ensure_default_pipeline`)
+    so callers that drop new opportunities onto the board always land in a real
+    pipeline / first stage instead of the ``pipeline is None`` branch. Flushes but
+    does not commit — the caller owns the transaction.
+    """
+    pipeline = await ensure_default_pipeline(db, workspace_id)
+    stage_result = await db.execute(
+        select(PipelineStage)
+        .where(PipelineStage.pipeline_id == pipeline.id)
+        .order_by(PipelineStage.order.asc())
+        .limit(1)
+    )
+    return pipeline, stage_result.scalar_one_or_none()

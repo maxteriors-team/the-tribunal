@@ -333,6 +333,16 @@ class PublicEmbedService:
 
         await self.db.flush()
 
+        # Auto-open a pipeline card so the embed lead lands on the Opportunities
+        # board. Deduped + workspace-gated inside the helper; never break the
+        # embed flow if pipeline provisioning fails.
+        try:
+            from app.services.opportunities import open_lead_opportunity
+
+            await open_lead_opportunity(self.db, agent.workspace_id, contact, source="embed")
+        except Exception as exc:  # noqa: BLE001 - lead capture must not break
+            logger.warning("auto_pipeline_failed", contact_id=contact.id, error=str(exc))
+
 
 def _split_caller_name(caller_name: str) -> tuple[str, str | None]:
     """Split a caller name into first and optional last name."""

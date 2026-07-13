@@ -267,6 +267,10 @@ async def persist_inbound_text_message(
     # Speed-to-lead SLA: anchor the lead's first inbound touch.
     from app.services.sla import mark_inbound_lead
 
+    # Only the first inbound message makes this a "new lead"; capture it before
+    # mark_inbound_lead stamps the anchor so we open a pipeline card once per
+    # conversation instead of on every reply.
+    is_first_inbound = conversation.first_inbound_at is None
     mark_inbound_lead(conversation)
 
     if conversation.contact_id:
@@ -276,6 +280,18 @@ async def persist_inbound_text_message(
             await record_engagement(db, conversation.contact_id)
         except Exception as exc:
             log.warning("engagement_update_failed", error=str(exc))
+
+        if is_first_inbound:
+            # Auto-open a pipeline card so the inbound-SMS lead lands on the
+            # Opportunities board. Deduped + workspace-gated inside the helper.
+            try:
+                from app.services.opportunities import open_lead_opportunity
+
+                contact = await db.get(Contact, conversation.contact_id)
+                if contact is not None:
+                    await open_lead_opportunity(db, workspace_id, contact, source="inbound_sms")
+            except Exception as exc:
+                log.warning("auto_pipeline_failed", error=str(exc))
 
     try:
         await db.commit()

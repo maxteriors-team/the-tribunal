@@ -32,8 +32,7 @@ from app.core.encryption import hash_phone
 from app.models.contact import Contact
 from app.models.lead_prospect import LeadProspect, ProspectStatus
 from app.models.opportunity import Opportunity
-from app.models.pipeline import Pipeline, PipelineStage
-from app.services.opportunities import ensure_default_pipeline
+from app.services.opportunities import get_default_pipeline_first_stage
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.tags.tag_service import TagService
 
@@ -181,30 +180,8 @@ class ProspectPromotionService:
     async def _open_opportunity(
         self, prospect: LeadProspect, contact: Contact
     ) -> Opportunity | None:
-        """Open an opportunity in the workspace's default pipeline."""
-        pipeline_result = await self._db.execute(
-            select(Pipeline)
-            .where(Pipeline.workspace_id == prospect.workspace_id, Pipeline.is_active.is_(True))
-            .order_by(Pipeline.created_at.asc())
-            .limit(1)
-        )
-        pipeline = pipeline_result.scalar_one_or_none()
-        if pipeline is None:
-            # Self-heal: a workspace should always have a default pipeline, but
-            # older workspaces may predate provisioning. Create one so the
-            # opportunity lands in a real pipeline instead of being dropped.
-            self._logger.info(
-                "promotion_provisioning_default_pipeline",
-                workspace_id=str(prospect.workspace_id),
-            )
-            pipeline = await ensure_default_pipeline(self._db, prospect.workspace_id)
-        stage_result = await self._db.execute(
-            select(PipelineStage)
-            .where(PipelineStage.pipeline_id == pipeline.id)
-            .order_by(PipelineStage.order.asc())
-            .limit(1)
-        )
-        stage = stage_result.scalar_one_or_none()
+        """Open an opportunity in the workspace's default pipeline / first stage."""
+        pipeline, stage = await get_default_pipeline_first_stage(self._db, prospect.workspace_id)
 
         company = prospect.company_name or contact.company_name or "Ad-library lead"
         opportunity = Opportunity(

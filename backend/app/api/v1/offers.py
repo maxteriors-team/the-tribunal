@@ -528,6 +528,18 @@ async def submit_offer_optin(
     # Increment opt-ins counter
     offer.opt_ins += 1
 
+    # Auto-open a pipeline card so the opt-in lands on the Opportunities board.
+    # Deduped + workspace-gated inside the helper; never break opt-in capture.
+    if contact is not None:
+        try:
+            import structlog
+
+            from app.services.opportunities import open_lead_opportunity
+
+            await open_lead_opportunity(db, offer.workspace_id, contact, source="offer")
+        except Exception:
+            structlog.get_logger().exception("auto_pipeline_failed", contact_id=contact.id)
+
     await db.commit()
 
     return OptInResponse(

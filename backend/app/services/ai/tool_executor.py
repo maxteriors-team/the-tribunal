@@ -1390,6 +1390,16 @@ class VoiceToolExecutor(BaseToolExecutor):
                 await db.flush()
                 conversation.contact_id = contact.id
 
+            # Auto-open a pipeline card so the caller lands on the Opportunities
+            # board. Deduped + workspace-gated inside the helper; never break the
+            # call's lead capture if pipeline provisioning fails.
+            try:
+                from app.services.opportunities import open_lead_opportunity
+
+                await open_lead_opportunity(db, workspace_id, contact, source="inbound_call")
+            except Exception as exc:  # noqa: BLE001 - lead capture must not break
+                logger.warning("auto_pipeline_failed", error=str(exc))
+
             await db.commit()
 
             self.log.info(

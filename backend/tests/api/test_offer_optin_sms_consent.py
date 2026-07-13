@@ -65,6 +65,12 @@ def _result(scalar: object = None, scalars_all: list | None = None) -> MagicMock
 
 def _make_app(execute_results: list[MagicMock], db: AsyncMock) -> FastAPI:
     db.execute = AsyncMock(side_effect=execute_results)
+    # The auto-pipeline helper loads the workspace via db.get; return one with
+    # the feature disabled so opt-in consent tests stay focused (the helper
+    # early-returns without consuming the execute sequence).
+    disabled_ws = MagicMock()
+    disabled_ws.settings = {"auto_pipeline": {"enabled": False}}
+    db.get = AsyncMock(return_value=disabled_ws)
     app = FastAPI(lifespan=_test_lifespan)
     app.include_router(offers_module.public_router, prefix="/api/v1/p/offers")
 
