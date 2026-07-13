@@ -293,9 +293,7 @@ async def _record_ai_confirmed_opt_out(
             contact.sms_consent_status = "opted_out"
             contact.sms_consent_source = "sms_reply"
             contact.sms_consent_collected_at = datetime.now(UTC)
-            contact.sms_consent_notes = (
-                f"Opted out via SMS reply: {inbound_message.body[:100]}"
-            )
+            contact.sms_consent_notes = f"Opted out via SMS reply: {inbound_message.body[:100]}"
 
     opt_out = await _opt_out_manager.add_opt_out(
         workspace_id=conversation.workspace_id,
