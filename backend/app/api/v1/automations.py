@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser
+from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.automation import Automation
@@ -95,7 +95,7 @@ async def create_automation(
     automation_in: AutomationCreate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Automation:
     """Create a new automation."""
     automation = Automation(
@@ -141,7 +141,7 @@ async def update_automation(
     automation_in: AutomationUpdate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Automation:
     """Update an automation."""
     result = await db.execute(
@@ -182,7 +182,7 @@ async def delete_automation(
     automation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> None:
     """Delete an automation."""
     result = await db.execute(
@@ -208,7 +208,7 @@ async def toggle_automation(
     automation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Automation:
     """Toggle automation active status."""
     result = await db.execute(

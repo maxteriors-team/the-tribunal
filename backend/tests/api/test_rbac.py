@@ -32,6 +32,7 @@ from app.api.deps import (
     CanViewReports,
     CanWriteBilling,
     CanWriteCRM,
+    CanWriteOutreach,
     CanWritePipelineOwn,
     get_current_user,
     get_db,
@@ -70,6 +71,13 @@ _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
     # Field technicians (``technician``) are operational-only: no CRM read.
     (Capability.CRM_READ, ["owner", "admin", "manager", "sales_rep", "member"], ["technician"]),
     (Capability.CRM_WRITE, ["owner", "admin", "manager"], ["sales_rep", "technician", "member"]),
+    # Outreach authoring (campaigns/segments/automations): sales + operations,
+    # but NOT plain members or field technicians.
+    (
+        Capability.OUTREACH_WRITE,
+        ["owner", "admin", "manager", "dispatcher", "sales_rep"],
+        ["technician", "member"],
+    ),
     # Everyone can see the jobs schedule, including field technicians.
     (
         Capability.JOBS_READ,
@@ -130,6 +138,7 @@ def test_capability_aliases_are_wired() -> None:
         CanReadBilling,
         CanWriteBilling,
         CanWriteCRM,
+        CanWriteOutreach,
         CanWritePipelineOwn,
         CanSendComms,
         CanManageComms,
@@ -241,20 +250,39 @@ async def test_field_technician_is_locked_to_operational_surfaces() -> None:
         _clear_overrides()
 
 
-async def test_segments_and_automations_require_crm_capability() -> None:
-    """Segments/automations reads need crm:read (member+), writes need crm:write
-    (manager+); a field technician is denied both."""
+async def test_segments_and_automations_gated_reads_and_outreach_writes() -> None:
+    """Reads need crm:read (member+); authoring needs outreach:write (sales+).
+    Sales can create outreach but a plain member cannot; field techs get neither."""
     try:
+        # Field technician: denied read and write.
         async with _client_as("technician") as client:
             assert (await client.get(_url("/segments"))).status_code == 403
             assert (await client.get(_url("/automations"))).status_code == 403
-        # Member: crm:read → may read, but not create (needs crm:write).
+            assert (await client.post(_url("/segments"), json={})).status_code == 403
+        # Member: crm:read → may read, but has no outreach:write → cannot create.
         async with _client_as("member") as client:
             assert (await client.get(_url("/segments"))).status_code != 403
             assert (await client.post(_url("/segments"), json={})).status_code == 403
-        # Manager: crm:write → may create.
+        # Sales rep: outreach:write → may author outreach…
+        async with _client_as("sales_rep") as client:
+            assert (await client.post(_url("/segments"), json={})).status_code != 403
+            assert (await client.post(_url("/campaigns"), json={})).status_code != 403
+        # Manager (crm:write → outreach:write): may create too.
         async with _client_as("manager") as client:
             assert (await client.post(_url("/segments"), json={})).status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_sales_cannot_delete_contacts_despite_authoring_outreach() -> None:
+    """The outreach:write split must NOT hand sales destructive contact powers:
+    delete/bulk-delete stay on crm:write (manager+)."""
+    try:
+        async with _client_as("sales_rep") as client:
+            assert (await client.delete(_url("/contacts/5"))).status_code == 403
+            assert (await client.post(_url("/contacts/bulk-delete"), json={})).status_code == 403
+        async with _client_as("manager") as client:
+            assert (await client.delete(_url("/contacts/5"))).status_code != 403
     finally:
         _clear_overrides()
 

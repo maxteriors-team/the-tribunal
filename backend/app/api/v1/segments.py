@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Request
 
-from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser, get_workspace
 from app.schemas.segment import (
     SegmentContactsResponse,
     SegmentCreate,
@@ -41,7 +41,7 @@ async def create_segment(
     segment_in: SegmentCreate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> SegmentResponse:
     """Create a new segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -94,7 +94,7 @@ async def update_segment(
     segment_in: SegmentUpdate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> SegmentResponse:
     """Update a segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -115,7 +115,7 @@ async def delete_segment(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> None:
     """Delete a segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -146,7 +146,7 @@ async def refresh_segment(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> SegmentResponse:
     """Refresh a segment's cached contact count."""
     workspace = await get_workspace(request, workspace_id, current_user, db)

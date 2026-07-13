@@ -20,6 +20,7 @@
 export type Capability =
   | "crm:read"
   | "crm:write"
+  | "outreach:write"
   | "pipeline:write"
   | "pipeline:write_own"
   | "jobs:read"
@@ -47,6 +48,7 @@ const ROLE_TIERS: Record<string, Tier> = {
 const ALL_CAPABILITIES: Capability[] = [
   "crm:read",
   "crm:write",
+  "outreach:write",
   "pipeline:write",
   "pipeline:write_own",
   "jobs:read",
@@ -65,6 +67,7 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
   manager: [
     "crm:read",
     "crm:write",
+    "outreach:write",
     "pipeline:write",
     "pipeline:write_own",
     "jobs:read",
@@ -73,7 +76,9 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "billing:read",
     "billing:write",
   ],
-  sales: ["crm:read", "pipeline:write_own", "jobs:read", "comms:send"],
+  // Sales authors outreach (campaigns/segments/automations) but has no
+  // crm:write, so it cannot delete/import contacts — mirror of the backend.
+  sales: ["crm:read", "outreach:write", "pipeline:write_own", "jobs:read", "comms:send"],
   tech: ["crm:read", "jobs:read", "comms:send"],
   // Field technicians: operational-only — the jobs schedule and nothing else.
   field: ["jobs:read"],

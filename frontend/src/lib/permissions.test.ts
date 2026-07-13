@@ -78,8 +78,9 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("sales owns only its own pipeline", () => {
+  it("sales owns its own pipeline and authors outreach, but cannot write contacts", () => {
     expect(can("sales_rep", "pipeline:write_own")).toBe(true);
+    expect(can("sales_rep", "outreach:write")).toBe(true);
     for (const cap of [
       "pipeline:write",
       "crm:write",
@@ -88,6 +89,15 @@ describe("capability matrix (mirror of backend)", () => {
       "reports:view",
     ] as Capability[]) {
       expect(can("sales_rep", cap)).toBe(false);
+    }
+  });
+
+  it("outreach:write covers sales + operations but not member or field tech", () => {
+    for (const role of ["owner", "admin", "manager", "dispatcher", "sales_rep"]) {
+      expect(can(role, "outreach:write")).toBe(true);
+    }
+    for (const role of ["member", "technician"]) {
+      expect(can(role, "outreach:write")).toBe(false);
     }
   });
 

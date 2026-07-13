@@ -13,7 +13,7 @@ tier           maps from roles                intent
 ============== ============================== ==========================================
 ``admin``      ``owner``, ``admin``           everything: members, billing, reports, settings
 ``manager``    ``manager``, ``dispatcher``    run operations (CRM, jobs, billing); **no** reports
-``sales``      ``sales_rep``                  manage **own** pipeline; read CRM; text/call
+``sales``      ``sales_rep``                  own pipeline; read CRM; author outreach; text/call
 ``tech``       ``member``                     read CRM + jobs; log time; text/call
 ``field``      ``technician``                 operational only: view assigned jobs on the schedule
 ============== ============================== ==========================================
@@ -44,6 +44,11 @@ class Capability(StrEnum):
 
     CRM_READ = "crm:read"
     CRM_WRITE = "crm:write"
+    # ``outreach:write`` = author marketing/outreach tooling (campaigns, contact
+    # segments, automations). Split out from ``crm:write`` so the sales tier can
+    # build outreach without also gaining destructive contact powers
+    # (delete/bulk-delete/CSV import stay on ``crm:write`` = manager+).
+    OUTREACH_WRITE = "outreach:write"
     # ``pipeline:write`` = manage *any* opportunity; ``pipeline:write_own`` =
     # manage only opportunities the caller is the assigned owner of. The former
     # always implies the latter (see ``_TIER_CAPABILITIES`` construction).
@@ -97,6 +102,7 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
     manager: set[Capability] = {
         Capability.CRM_READ,
         Capability.CRM_WRITE,
+        Capability.OUTREACH_WRITE,
         Capability.PIPELINE_WRITE,
         Capability.JOBS_READ,
         Capability.JOBS_WRITE,
@@ -106,6 +112,9 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
     }
     sales: set[Capability] = {
         Capability.CRM_READ,
+        # Sales authors outreach (campaigns, segments, automations) but cannot
+        # delete/bulk-delete/import contacts — those stay on crm:write (manager+).
+        Capability.OUTREACH_WRITE,
         Capability.PIPELINE_WRITE_OWN,
         Capability.JOBS_READ,
         Capability.COMMS_SEND,
@@ -129,10 +138,14 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Tier.FIELD: field,
     }
 
-    # Invariant: anyone who can write any opportunity can write their own.
+    # Invariants, enforced here rather than trusting each tier's hand-written set:
+    #   * anyone who can write any opportunity can write their own;
+    #   * anyone who can write contacts (crm:write) can author outreach.
     for caps in matrix.values():
         if Capability.PIPELINE_WRITE in caps:
             caps.add(Capability.PIPELINE_WRITE_OWN)
+        if Capability.CRM_WRITE in caps:
+            caps.add(Capability.OUTREACH_WRITE)
 
     return {tier: frozenset(caps) for tier, caps in matrix.items()}
 

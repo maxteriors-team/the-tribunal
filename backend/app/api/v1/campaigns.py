@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser
+from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.models.agent import Agent
@@ -112,7 +112,7 @@ async def create_campaign(
     campaign_in: CampaignCreate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Campaign:
     """Create a new campaign."""
     # Verify agent if provided
@@ -189,7 +189,7 @@ async def update_campaign(
     campaign_in: CampaignUpdate,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Campaign:
     """Update a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -227,7 +227,7 @@ async def start_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> dict[str, str]:
     """Start a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -253,7 +253,7 @@ async def pause_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> dict[str, str]:
     """Pause a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -277,7 +277,7 @@ async def resume_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> dict[str, str]:
     """Resume a paused campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -301,7 +301,7 @@ async def cancel_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> dict[str, str]:
     """Cancel a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -325,7 +325,7 @@ async def add_contacts(
     contacts_in: CampaignContactAdd,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> dict[str, int]:
     """Add contacts to a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -482,7 +482,7 @@ async def delete_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> None:
     """Delete a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -507,7 +507,7 @@ async def duplicate_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    _gate: CanWriteCRM,
+    _gate: CanWriteOutreach,
 ) -> Campaign:
     """Duplicate a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)

@@ -68,6 +68,7 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
     granted = {
         Capability.CRM_READ,
         Capability.CRM_WRITE,
+        Capability.OUTREACH_WRITE,
         Capability.PIPELINE_WRITE,
         Capability.PIPELINE_WRITE_OWN,
         Capability.JOBS_READ,
@@ -86,15 +87,19 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         assert not role_can("manager", denied)
 
 
-def test_sales_owns_pipeline_only() -> None:
+def test_sales_owns_pipeline_and_authors_outreach() -> None:
     assert capabilities_for("sales_rep") == frozenset(
         {
             Capability.CRM_READ,
+            Capability.OUTREACH_WRITE,
             Capability.PIPELINE_WRITE_OWN,
             Capability.JOBS_READ,
             Capability.COMMS_SEND,
         }
     )
+    # Sales can author outreach (campaigns/segments/automations)…
+    assert role_can("sales_rep", Capability.OUTREACH_WRITE)
+    # …but not the destructive contact powers that ride on crm:write.
     for denied in (
         Capability.PIPELINE_WRITE,
         Capability.CRM_WRITE,
@@ -105,6 +110,23 @@ def test_sales_owns_pipeline_only() -> None:
         Capability.COMMS_MANAGE,
     ):
         assert not role_can("sales_rep", denied)
+
+
+def test_crm_write_always_implies_outreach_write() -> None:
+    # Writing contacts is strictly more than authoring outreach, so the invariant
+    # must hold for every role that can write the CRM.
+    for role in ALL_ROLES:
+        caps = capabilities_for(role)
+        if Capability.CRM_WRITE in caps:
+            assert Capability.OUTREACH_WRITE in caps, role
+
+
+def test_outreach_write_holders() -> None:
+    # Sales + operations tiers author outreach; field techs and members do not.
+    for role in ("owner", "admin", "manager", "dispatcher", "sales_rep"):
+        assert role_can(role, Capability.OUTREACH_WRITE), role
+    for role in ("technician", "member"):
+        assert not role_can(role, Capability.OUTREACH_WRITE), role
 
 
 def test_member_is_read_plus_messaging_only() -> None:

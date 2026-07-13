@@ -401,6 +401,9 @@ WorkspaceDispatcher = Annotated[
 # tier lacks the capability. See :mod:`app.core.permissions` for the matrix.
 CanReadCRM = Annotated[WorkspaceMembership, Depends(require_capability(Capability.CRM_READ))]
 CanWriteCRM = Annotated[WorkspaceMembership, Depends(require_capability(Capability.CRM_WRITE))]
+CanWriteOutreach = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.OUTREACH_WRITE))
+]
 CanWritePipelineOwn = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.PIPELINE_WRITE_OWN))
 ]
