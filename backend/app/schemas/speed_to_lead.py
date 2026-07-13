@@ -1,11 +1,37 @@
 """Schemas for speed-to-lead SLA settings, metrics, and the public proof badge."""
 
-from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.services.sla.speed_to_lead import (
     DEFAULT_BADGE_WINDOW_DAYS,
     DEFAULT_SLA_SECONDS,
 )
+
+
+def _validate_clock_str(value: str | None) -> str | None:
+    """Validate an ``HH:MM``/``HH:MM:SS`` 24-hour clock string.
+
+    Empty/whitespace normalizes to ``None`` (clears the value). Anything the
+    runtime parser can't read is rejected here rather than silently disabling
+    quiet hours downstream (which would risk off-hours texting).
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    parts = value.split(":")
+    if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
+        msg = "Quiet hours must be in HH:MM or HH:MM:SS 24-hour format"
+        raise ValueError(msg)
+    hour, minute = int(parts[0]), int(parts[1])
+    second = int(parts[2]) if len(parts) == 3 else 0
+    if not (0 <= hour < 24 and 0 <= minute < 60 and 0 <= second < 60):
+        msg = "Quiet hours must be a valid 24-hour clock value"
+        raise ValueError(msg)
+    return value
 
 
 class SpeedToLeadSettingsResponse(BaseModel):
@@ -71,3 +97,37 @@ class MissedCallTextbackSettingsUpdate(BaseModel):
     quiet_hours_start: str | None = None
     quiet_hours_end: str | None = None
     timezone: str | None = None
+
+    @field_validator("quiet_hours_start", "quiet_hours_end")
+    @classmethod
+    def _validate_quiet_hours(cls, v: str | None) -> str | None:
+        """Reject clock strings the runtime can't parse; empty clears the value."""
+        return _validate_clock_str(v)
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, v: str | None) -> str | None:
+        """Reject unknown IANA zones that would silently fall back to UTC and
+        compute quiet hours against the wrong wall clock. Empty clears it."""
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            msg = f"Unknown timezone: {v}"
+            raise ValueError(msg) from exc
+        return v
+
+    @field_validator("template")
+    @classmethod
+    def _validate_template(cls, v: str | None) -> str | None:
+        """A blank template silently no-ops the text-back; reject it early."""
+        if v is None:
+            return None
+        if not v.strip():
+            msg = "Message template cannot be empty"
+            raise ValueError(msg)
+        return v

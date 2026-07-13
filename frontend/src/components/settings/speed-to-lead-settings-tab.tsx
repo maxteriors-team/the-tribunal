@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Loader2, Zap } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ import {
   type SpeedToLeadSettings,
 } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 function formatSeconds(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${value}s`;
@@ -80,6 +82,11 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
   // Initialised once from loaded data; no effect-based mirroring needed.
   const [slaSeconds, setSlaSeconds] = useState<number>(settings.sla_seconds);
   const [template, setTemplate] = useState<string>(textback.template);
+  const [quietStart, setQuietStart] = useState<string>(
+    textback.quiet_hours_start ?? "",
+  );
+  const [quietEnd, setQuietEnd] = useState<string>(textback.quiet_hours_end ?? "");
+  const [timezone, setTimezone] = useState<string>(textback.timezone ?? "");
 
   const slaMutation = useMutation({
     mutationFn: (data: Parameters<typeof settingsApi.updateSpeedToLead>[1]) =>
@@ -102,7 +109,10 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.missedCallTextback(workspaceId),
       });
+      toast.success("Text-back settings saved");
     },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Couldn't save text-back settings")),
   });
 
   const pct = metrics?.pct_within_sla;
@@ -277,6 +287,68 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
               }
             >
               Save message
+            </Button>
+          </div>
+
+          <div className="space-y-3 border-t pt-4">
+            <div className="space-y-0.5">
+              <Label>Quiet hours (optional)</Label>
+              <p className="text-sm text-muted-foreground">
+                Skip auto-texts during these local hours to stay compliant. Set
+                both a start and end to enable; leave blank to text back any time.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="quiet-start" className="text-xs">
+                  Start
+                </Label>
+                <Input
+                  id="quiet-start"
+                  type="time"
+                  value={quietStart}
+                  onChange={(e) => setQuietStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="quiet-end" className="text-xs">
+                  End
+                </Label>
+                <Input
+                  id="quiet-end"
+                  type="time"
+                  value={quietEnd}
+                  onChange={(e) => setQuietEnd(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="quiet-tz" className="text-xs">
+                Timezone
+              </Label>
+              <Input
+                id="quiet-tz"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                placeholder="America/New_York"
+              />
+            </div>
+            <Button
+              onClick={() =>
+                textbackMutation.mutate({
+                  quiet_hours_start: quietStart || null,
+                  quiet_hours_end: quietEnd || null,
+                  timezone: timezone.trim() || null,
+                })
+              }
+              disabled={
+                textbackMutation.isPending ||
+                ((quietStart || "") === (textback.quiet_hours_start ?? "") &&
+                  (quietEnd || "") === (textback.quiet_hours_end ?? "") &&
+                  (timezone.trim() || "") === (textback.timezone ?? ""))
+              }
+            >
+              Save quiet hours
             </Button>
           </div>
         </CardContent>
