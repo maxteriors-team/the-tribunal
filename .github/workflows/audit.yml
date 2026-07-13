@@ -72,7 +72,7 @@ jobs:
 
       - name: Upload pip-audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pip-audit-report
           path: backend/pip-audit-report.json
@@ -130,7 +130,7 @@ jobs:
         # mask the real gate — the job still fails at the explicit step below, and
         # the findings are in the job summary + uploaded artifact regardless.
         continue-on-error: true
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@v6
         with:
           title: "Security: backend pip-audit detected vulnerabilities"
           content-filepath: backend/pip-audit-issue.md
@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload npm audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: npm-audit-report
           path: frontend/npm-audit-report.json
@@ -253,7 +253,7 @@ jobs:
         # mask the real gate — the job still fails at the explicit step below, and
         # the findings are in the job summary + uploaded artifact regardless.
         continue-on-error: true
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@v6
         with:
           title: "Security: frontend npm audit detected high-severity vulnerabilities"
           content-filepath: frontend/npm-audit-issue.md
@@ -307,7 +307,7 @@ jobs:
 
       - name: Upload gitleaks report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gitleaks-report
           path: gitleaks-report.sarif
@@ -343,7 +343,7 @@ jobs:
         # mask the real gate — the job still fails at the explicit step below, and
         # the findings are in the job summary + uploaded artifact regardless.
         continue-on-error: true
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@v6
         with:
           title: "Security: gitleaks detected secrets in repository history"
           content-filepath: gitleaks-issue.md
