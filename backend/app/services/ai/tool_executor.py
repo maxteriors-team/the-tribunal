@@ -12,6 +12,7 @@ Usage:
     result = await executor.execute("check_availability", {"start_date": "2024-01-15"})
 """
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -25,6 +26,16 @@ from app.services.approval.approval_gate_service import approval_gate_service
 
 logger = structlog.get_logger()
 
+# Seconds to wait after the model calls ``end_call`` before hanging up the
+# Telnyx leg, so the spoken farewell ("...have a great day!") finishes playing
+# instead of being cut off mid-word.
+END_CALL_HANGUP_DELAY_SECONDS = 7.0
+
+# Strong references to in-flight delayed-hangup tasks. asyncio only holds a weak
+# reference to a bare ``create_task`` result, so without this the task could be
+# garbage-collected before the delay elapses and the call would never hang up.
+_pending_hangups: set[asyncio.Task[None]] = set()
+
 # Read-only tools that never mutate state and so bypass the HITL approval gate.
 # Gating a knowledge lookup behind operator approval would stall the live call
 # for a harmless retrieval, so it is always allowed to run.
@@ -34,8 +45,17 @@ logger = structlog.get_logger()
 # ``check_payment_status`` is included: it only reads the current call's most
 # recent payment status from Stripe (no spend, no mutation of external state),
 # so gating it behind approval would needlessly stall the live call.
+# ``end_call`` is included: hanging up when the conversation is over is a benign
+# call-control action (no spend, no external mutation), and gating it would
+# leave the caller in dead air waiting for an operator to approve the hangup.
 GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
-    {"search_knowledge", "lookup_caller_record", "take_message", "check_payment_status"}
+    {
+        "search_knowledge",
+        "lookup_caller_record",
+        "take_message",
+        "check_payment_status",
+        "end_call",
+    }
 )
 
 _ALLOWED_MESSAGE_URGENCIES: frozenset[str] = frozenset({"low", "medium", "high"})
@@ -64,6 +84,36 @@ def _format_time_12h(time_24h: str) -> str:
         return formatted
     except ValueError:
         return time_24h
+
+
+async def _delayed_hangup(
+    *,
+    call_control_id: str,
+    delay_seconds: float,
+    log: Any,
+) -> None:
+    """Wait ``delay_seconds`` then hang up the Telnyx call leg.
+
+    Runs as a detached background task so the model's ``end_call`` tool call
+    returns immediately and its farewell audio finishes playing. Hanging up an
+    already-ended call is harmless \u2014 :meth:`TelnyxVoiceService.hangup_call`
+    swallows and logs the resulting provider error.
+    """
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    try:
+        await asyncio.sleep(delay_seconds)
+    except asyncio.CancelledError:  # pragma: no cover - shutdown/teardown
+        return
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        await voice_service.hangup_call(call_control_id)
+        log.info("end_call_hung_up", call_control_id=call_control_id)
+    except Exception as exc:  # noqa: BLE001 - best-effort teardown
+        log.warning("end_call_hangup_failed", call_control_id=call_control_id, error=str(exc))
+    finally:
+        await voice_service.close()
 
 
 class VoiceToolExecutor(BaseToolExecutor):
@@ -178,6 +228,9 @@ class VoiceToolExecutor(BaseToolExecutor):
                 intent=arguments.get("intent"),
                 summary=arguments.get("summary"),
             )
+
+        if function_name == "end_call":
+            return await self._execute_end_call(reason=arguments.get("reason"))
 
         self.log.warning("unknown_voice_tool", function_name=function_name)
         return {"success": False, "error": f"Unknown function: {function_name}"}
@@ -1520,6 +1573,44 @@ class VoiceToolExecutor(BaseToolExecutor):
             "message": (
                 "Reaching a team member and briefing them now. "
                 "Tell the caller you're connecting them, then stop speaking."
+            ),
+        }
+
+    async def _execute_end_call(self, reason: str | None = None) -> dict[str, Any]:
+        """Gracefully end the live call after the model's spoken farewell.
+
+        The model is instructed to say its goodbye *before* calling this tool, so
+        we do not hang up immediately \u2014 that would clip the farewell audio.
+        Instead we schedule the Telnyx hangup ``END_CALL_HANGUP_DELAY_SECONDS``
+        later and return right away, telling the model to stay silent.
+        """
+        if not self.call_control_id:
+            self.log.warning("end_call_no_call_control_id")
+            return {"success": False, "error": "No active call to end."}
+        if not settings.telnyx_api_key:
+            return {"success": False, "error": "Telnyx API key not configured"}
+
+        task = asyncio.create_task(
+            _delayed_hangup(
+                call_control_id=self.call_control_id,
+                delay_seconds=END_CALL_HANGUP_DELAY_SECONDS,
+                log=self.log,
+            )
+        )
+        _pending_hangups.add(task)
+        task.add_done_callback(_pending_hangups.discard)
+
+        self.log.info(
+            "end_call_scheduled",
+            call_control_id=self.call_control_id,
+            delay_seconds=END_CALL_HANGUP_DELAY_SECONDS,
+            reason=reason,
+        )
+        return {
+            "success": True,
+            "message": (
+                "The call will hang up shortly. Do not say anything else \u2014 "
+                "your goodbye has already been delivered."
             ),
         }
 

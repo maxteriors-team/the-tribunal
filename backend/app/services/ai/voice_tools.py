@@ -64,6 +64,42 @@ DTMF_TOOL: dict[str, Any] = {
     },
 }
 
+# End-call tool.
+# Gives the phone agent a way to gracefully hang up once the conversation is
+# genuinely over. Without it the agent can only fall silent, which leaves the
+# caller in dead air until an idle timeout tears down the media stream. The
+# execution layer speaks nothing itself: the model must deliver its farewell
+# BEFORE calling this, and the hangup is delayed a few seconds so the goodbye
+# audio finishes playing before the line drops.
+END_CALL_TOOL: dict[str, Any] = {
+    "type": "function",
+    "name": "end_call",
+    "description": (
+        "End and hang up the current phone call. Use this ONLY when the "
+        "conversation is genuinely complete \u2014 the caller has said goodbye, "
+        "declined further help, or you have finished helping them and said your "
+        "farewell. IMPORTANT: First say a short, warm goodbye out loud to the "
+        "caller (for example 'Thanks for calling, have a great day!'). Then call "
+        "this tool. Do NOT say anything after calling it \u2014 the line will hang "
+        "up on its own a few seconds later. Never use this while the caller still "
+        "needs help or is mid-sentence."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": (
+                    "Brief reason the call is ending, for logging only "
+                    "(e.g. 'caller said goodbye', 'not interested', "
+                    "'finished booking'). Not spoken to the caller."
+                ),
+            },
+        },
+        "required": [],
+    },
+}
+
 # Live transfer / handoff tool.
 # Lets the AI hand the active call to a human closer when the caller asks for a
 # human or qualifies as a hot lead. The execution layer resolves warm vs cold
@@ -532,6 +568,7 @@ def build_tools_list(
     enable_lookup_caller_record: bool = False,
     enable_take_message: bool = False,
     enable_collect_payment: bool = False,
+    enable_end_call: bool = True,
     timezone: str = "America/New_York",
 ) -> list[dict[str, Any]]:
     """Build a complete tools list based on enabled features.
@@ -547,6 +584,8 @@ def build_tools_list(
         enable_lookup_caller_record: Include the read-only caller record lookup tool
         enable_take_message: Include the "take a message" capture tool
         enable_collect_payment: Include the in-call payment/deposit collection tool
+        enable_end_call: Include the graceful end-call/hangup tool (on by default;
+            every voice agent should be able to hang up when a call is over)
         timezone: Timezone for booking tools date context
 
     Returns:
@@ -589,6 +628,10 @@ def build_tools_list(
     # Fixed Prestyj application-link SMS
     if enable_application_link_sms:
         tools.append(APPLICATION_LINK_SMS_TOOL)
+
+    # Graceful hang-up once the conversation is over
+    if enable_end_call:
+        tools.append(END_CALL_TOOL)
 
     # Booking tools with date context
     if enable_booking:
