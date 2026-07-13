@@ -30,7 +30,7 @@ from app.services.lead_sources.attribution_service import (
     WebAttributionInput,
     apply_web_attribution,
 )
-from app.services.push_notifications import push_notification_service
+from app.services.notifications import notify_workspace_event
 from app.services.sla.speed_to_lead import (
     MIN_LEADS_FOR_PUBLIC_BADGE,
     compute_sla_metrics,
@@ -204,7 +204,7 @@ async def _execute_action(
 
 
 async def _notify_new_lead(lead_source: LeadSource, contact: Contact, db: DB) -> None:
-    """Send SMS and push notifications to workspace members about a new lead."""
+    """Notify workspace members about a new lead via push, email, and SMS."""
     config = lead_source.action_config or {}
     from_number = config.get("from_phone_number", settings.demo_from_phone_number)
     name = contact.first_name or "Unknown"
@@ -212,22 +212,34 @@ async def _notify_new_lead(lead_source: LeadSource, contact: Contact, db: DB) ->
         name = f"{name} {contact.last_name}"
 
     body = f"New lead: {name} - {contact.phone_number}"
+    source_label = lead_source.name or "Website form"
 
-    # Send push notification to all workspace members
+    # Push + email fan-out to every workspace member, gated per user by the
+    # master push/email toggles and the ``new_lead`` per-type preference.
     try:
-        await push_notification_service.send_to_workspace_members(
-            db=db,
-            workspace_id=str(lead_source.workspace_id),
+        await notify_workspace_event(
+            db,
+            workspace_id=lead_source.workspace_id,
+            notification_type="new_lead",
             title="New Lead",
             body=body,
             data={
                 "type": "new_lead",
                 "contactId": str(contact.id),
             },
-            notification_type="message",
+            email_subject=f"New lead: {name}",
+            email_heading="New lead captured",
+            email_intro=f"{name} just submitted your {source_label} form.",
+            email_details={
+                "Name": name,
+                "Phone": contact.phone_number or "\u2014",
+                "Email": contact.email or "\u2014",
+                "Source": source_label,
+            },
+            dedupe_key=f"new_lead:{contact.id}",
         )
     except Exception:
-        logger.exception("lead_push_notification_failed", contact_id=contact.id)
+        logger.exception("lead_event_notification_failed", contact_id=contact.id)
 
     # Send SMS notification to workspace members who have SMS notifications enabled
     if not settings.telnyx_api_key or not from_number:

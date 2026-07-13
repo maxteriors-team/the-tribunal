@@ -72,6 +72,11 @@ export function NotificationsSettingsTab() {
       label: "Automations",
       description: "When an automation triggers for your workspace",
     },
+    {
+      key: "notification_push_new_lead",
+      label: "New leads",
+      description: "When a lead submits your website form",
+    },
   ];
 
   return (

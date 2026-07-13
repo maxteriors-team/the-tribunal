@@ -27,6 +27,7 @@ NOTIFICATION_TYPE_PREFS = {
     "missed_call_textback": "notification_push_missed_call_textback",
     "roleplay": "notification_push_roleplay",
     "automation": "notification_push_automations",
+    "new_lead": "notification_push_new_lead",
 }
 
 

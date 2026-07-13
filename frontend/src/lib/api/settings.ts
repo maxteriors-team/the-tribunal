@@ -32,6 +32,7 @@ export interface NotificationSettings {
   notification_push_missed_call_textback: boolean;
   notification_push_roleplay: boolean;
   notification_push_automations: boolean;
+  notification_push_new_lead: boolean;
 }
 
 export interface UpdateNotificationRequest {
@@ -47,6 +48,7 @@ export interface UpdateNotificationRequest {
   notification_push_missed_call_textback?: boolean;
   notification_push_roleplay?: boolean;
   notification_push_automations?: boolean;
+  notification_push_new_lead?: boolean;
 }
 
 // Integration types

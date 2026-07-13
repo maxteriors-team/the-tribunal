@@ -74,6 +74,7 @@ _NOTIFICATION_PREF_FIELDS = (
     "notification_push_missed_call_textback",
     "notification_push_roleplay",
     "notification_push_automations",
+    "notification_push_new_lead",
 )
 
 

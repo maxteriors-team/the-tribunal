@@ -86,6 +86,7 @@ class NotificationSettings(BaseModel):
     notification_push_missed_call_textback: bool
     notification_push_roleplay: bool
     notification_push_automations: bool
+    notification_push_new_lead: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -103,6 +104,7 @@ class NotificationSettingsUpdate(BaseModel):
     notification_push_missed_call_textback: bool | None = None
     notification_push_roleplay: bool | None = None
     notification_push_automations: bool | None = None
+    notification_push_new_lead: bool | None = None
 
 
 class IntegrationStatus(BaseModel):

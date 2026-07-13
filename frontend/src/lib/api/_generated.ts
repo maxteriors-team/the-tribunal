@@ -15819,6 +15819,8 @@ export interface components {
             notification_push_messages: boolean;
             /** Notification Push Missed Call Textback */
             notification_push_missed_call_textback: boolean;
+            /** Notification Push New Lead */
+            notification_push_new_lead: boolean;
             /** Notification Push Reviews */
             notification_push_reviews: boolean;
             /** Notification Push Roleplay */
@@ -15849,6 +15851,8 @@ export interface components {
             notification_push_messages?: boolean | null;
             /** Notification Push Missed Call Textback */
             notification_push_missed_call_textback?: boolean | null;
+            /** Notification Push New Lead */
+            notification_push_new_lead?: boolean | null;
             /** Notification Push Reviews */
             notification_push_reviews?: boolean | null;
             /** Notification Push Roleplay */

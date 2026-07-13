@@ -20298,6 +20298,10 @@
             "title": "Notification Push Missed Call Textback",
             "type": "boolean"
           },
+          "notification_push_new_lead": {
+            "title": "Notification Push New Lead",
+            "type": "boolean"
+          },
           "notification_push_reviews": {
             "title": "Notification Push Reviews",
             "type": "boolean"
@@ -20327,7 +20331,8 @@
           "notification_push_deal_alerts",
           "notification_push_missed_call_textback",
           "notification_push_roleplay",
-          "notification_push_automations"
+          "notification_push_automations",
+          "notification_push_new_lead"
         ],
         "title": "NotificationSettings",
         "type": "object"
@@ -20422,6 +20427,17 @@
               }
             ],
             "title": "Notification Push Missed Call Textback"
+          },
+          "notification_push_new_lead": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Push New Lead"
           },
           "notification_push_reviews": {
             "anyOf": [

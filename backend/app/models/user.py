@@ -66,6 +66,7 @@ class User(Base):
     notification_push_automations: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    notification_push_new_lead: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
