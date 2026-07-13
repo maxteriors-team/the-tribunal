@@ -313,8 +313,7 @@ SAVE_LEAD_INFO_TOOL: dict[str, Any] = {
             "email": {
                 "type": "string",
                 "description": (
-                    "The caller's email address. Read it back to confirm spelling "
-                    "before saving."
+                    "The caller's email address. Read it back to confirm spelling before saving."
                 ),
             },
             "company_name": {
