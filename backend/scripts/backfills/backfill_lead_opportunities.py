@@ -82,6 +82,7 @@ async def _run(
 ) -> int:
     """Open a pipeline card for every contact lacking an open opportunity."""
     from sqlalchemy import exists, select
+    from sqlalchemy.orm import load_only
 
     from app.db.session import AsyncSessionLocal
     from app.models.contact import Contact
@@ -121,8 +122,23 @@ async def _run(
                 )
                 .correlate(Contact)
             )
+            # Load only the plaintext columns the helper needs (id + the name
+            # fields used for the deal name). Deferring the Fernet-encrypted
+            # columns (phone_number/email/address) means the backfill never
+            # decrypts, so it runs against any environment with DB access
+            # without the app's ENCRYPTION_KEY — and never trips on rows written
+            # under a rotated key.
             contact_query = (
                 select(Contact)
+                .options(
+                    load_only(
+                        Contact.id,
+                        Contact.workspace_id,
+                        Contact.first_name,
+                        Contact.last_name,
+                        Contact.company_name,
+                    )
+                )
                 .where(Contact.workspace_id == workspace.id, ~has_open_card)
                 .order_by(Contact.created_at)
             )
