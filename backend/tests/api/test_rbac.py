@@ -67,8 +67,15 @@ async def _run_gate(capability: Capability, role: str) -> bool:
 
 # (capability, roles that MUST pass, roles that MUST be denied)
 _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
-    (Capability.CRM_READ, ["owner", "admin", "manager", "sales_rep", "technician", "member"], []),
+    # Field technicians (``technician``) are operational-only: no CRM read.
+    (Capability.CRM_READ, ["owner", "admin", "manager", "sales_rep", "member"], ["technician"]),
     (Capability.CRM_WRITE, ["owner", "admin", "manager"], ["sales_rep", "technician", "member"]),
+    # Everyone can see the jobs schedule, including field technicians.
+    (
+        Capability.JOBS_READ,
+        ["owner", "admin", "manager", "dispatcher", "sales_rep", "technician", "member"],
+        [],
+    ),
     (
         Capability.BILLING_WRITE,
         ["owner", "admin", "manager"],
@@ -86,8 +93,8 @@ _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
     ),
     (
         Capability.COMMS_SEND,
-        ["owner", "admin", "manager", "sales_rep", "technician", "member"],
-        [],
+        ["owner", "admin", "manager", "sales_rep", "member"],
+        ["technician"],
     ),
     (
         Capability.COMMS_MANAGE,
@@ -210,12 +217,17 @@ async def test_number_provisioning_is_admin_only() -> None:
         _clear_overrides()
 
 
-async def test_texting_a_contact_is_allowed_for_every_tier() -> None:
+async def test_texting_a_contact_is_allowed_for_messaging_tiers() -> None:
     body = {"body": "hello", "from_number": "+15551230000"}
     try:
-        for role in ("technician", "sales_rep", "manager", "admin"):
+        # Sales/manager/admin (and member) can text customers…
+        for role in ("sales_rep", "manager", "admin", "member"):
             async with _client_as(role) as client:
                 resp = await client.post(_url("/contacts/5/messages"), json=body)
                 assert resp.status_code != 403, role
+        # …but a field technician is operational-only and cannot message contacts.
+        async with _client_as("technician") as client:
+            resp = await client.post(_url("/contacts/5/messages"), json=body)
+            assert resp.status_code == 403
     finally:
         _clear_overrides()

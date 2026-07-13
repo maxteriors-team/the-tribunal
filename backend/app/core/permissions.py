@@ -5,7 +5,7 @@ This is the policy layer that sits on top of the role *vocabulary* in
 membership hold", this module answers "what is that role allowed to do".
 
 The CRM has accumulated seven role strings (``owner, admin, manager, dispatcher,
-sales_rep, technician, member``). For access control they collapse into **four
+sales_rep, technician, member``). For access control they collapse into **five
 graded tiers**, admin broadest:
 
 ============== ============================== ==========================================
@@ -14,10 +14,16 @@ tier           maps from roles                intent
 ``admin``      ``owner``, ``admin``           everything: members, billing, reports, settings
 ``manager``    ``manager``, ``dispatcher``    run operations (CRM, jobs, billing); **no** reports
 ``sales``      ``sales_rep``                  manage **own** pipeline; read CRM; text/call
-``tech``       ``technician``, ``member``     read CRM + jobs; log time; text/call
+``tech``       ``member``                     read CRM + jobs; log time; text/call
+``field``      ``technician``                 operational only: view assigned jobs on the schedule
 ============== ============================== ==========================================
 
-Unknown / legacy role strings fall through to the **tech** tier (lowest
+Field technicians are deliberately the narrowest tier: they see only the jobs
+schedule, with no access to contacts, pipeline, campaigns, billing/pricing, or
+any other CRM surface. Reads on those surfaces are capability-gated, so the
+matrix here is the enforcement point, not just a nav filter.
+
+Unknown / legacy role strings fall through to the **field** tier (lowest
 privilege) so a corrupted or unrecognised value fails closed rather than
 silently escalating.
 
@@ -58,15 +64,16 @@ class Capability(StrEnum):
 
 
 class Tier(StrEnum):
-    """The access tier a role collapses into. Ordered admin → tech."""
+    """The access tier a role collapses into. Ordered admin → field."""
 
     ADMIN = "admin"
     MANAGER = "manager"
     SALES = "sales"
     TECH = "tech"
+    FIELD = "field"
 
 
-# Role string → tier. Anything not listed resolves to ``Tier.TECH`` via
+# Role string → tier. Anything not listed resolves to ``Tier.FIELD`` via
 # :func:`role_tier` (fail-closed), so new/legacy/corrupt strings never escalate.
 _ROLE_TIERS: dict[str, Tier] = {
     WorkspaceRole.OWNER.value: Tier.ADMIN,
@@ -74,7 +81,7 @@ _ROLE_TIERS: dict[str, Tier] = {
     WorkspaceRole.MANAGER.value: Tier.MANAGER,
     WorkspaceRole.DISPATCHER.value: Tier.MANAGER,
     WorkspaceRole.SALES_REP.value: Tier.SALES,
-    WorkspaceRole.TECHNICIAN.value: Tier.TECH,
+    WorkspaceRole.TECHNICIAN.value: Tier.FIELD,
     WorkspaceRole.MEMBER.value: Tier.TECH,
 }
 
@@ -108,12 +115,18 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.JOBS_READ,
         Capability.COMMS_SEND,
     }
+    # Field technicians are operational-only: the jobs schedule and nothing else.
+    # No CRM/pipeline/campaigns/billing, so pricing and customer data stay hidden.
+    field: set[Capability] = {
+        Capability.JOBS_READ,
+    }
 
     matrix: dict[Tier, set[Capability]] = {
         Tier.ADMIN: set(Capability),
         Tier.MANAGER: manager,
         Tier.SALES: sales,
         Tier.TECH: tech,
+        Tier.FIELD: field,
     }
 
     # Invariant: anyone who can write any opportunity can write their own.
@@ -128,11 +141,11 @@ TIER_CAPABILITIES: dict[Tier, frozenset[Capability]] = _build_matrix()
 
 
 def role_tier(role: str) -> Tier:
-    """Return the access tier for a role string, defaulting to ``Tier.TECH``.
+    """Return the access tier for a role string, defaulting to ``Tier.FIELD``.
 
     Fail-closed: unknown/legacy/corrupt strings get the lowest tier.
     """
-    return _ROLE_TIERS.get(role, Tier.TECH)
+    return _ROLE_TIERS.get(role, Tier.FIELD)
 
 
 def capabilities_for(role: str) -> frozenset[Capability]:

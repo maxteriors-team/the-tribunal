@@ -4369,6 +4369,10 @@ export interface paths {
         /**
          * Job Profitability
          * @description Compute the job's P&L (revenue from the linked invoice minus costs).
+         *
+         *     Gated on ``billing:read``: the P&L exposes customer revenue, profit, and
+         *     margin, so a field technician (``jobs:read`` only, no billing) must not see
+         *     it — even though they can still log their own time and expenses on the job.
          */
         get: operations["job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get"];
         put?: never;

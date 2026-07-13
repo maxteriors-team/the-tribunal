@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, LogOut, MoonStar, Search, Settings, Sun } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 
@@ -54,14 +54,17 @@ import { useSetupStatus } from "@/hooks/useSetupStatus";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { nudgesApi } from "@/lib/api/nudges";
 import { pendingActionsApi } from "@/lib/api/pending-actions";
-import type { Capability } from "@/lib/permissions";
+import type { Capability, Tier } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 import { useAuth } from "@/providers/auth-provider";
+import { useWorkspace } from "@/providers/workspace-provider";
 
 import {
   appNavSections,
   breadcrumbLabels,
+  canSeeNavItem,
+  isFieldOperationalPath,
   isNavItemVisible,
   setupNavItem,
   type AppNavBadgeKey,
@@ -114,6 +117,7 @@ function buildBreadcrumbs(pathname: string): BreadcrumbSegment[] {
 }
 
 function getVisibleSidebarSections(
+  tier: Tier,
   can: (capability: Capability) => boolean,
 ): AppNavSection[] {
   return appNavSections
@@ -124,7 +128,7 @@ function getVisibleSidebarSections(
         (item) =>
           item.sidebar &&
           isNavItemVisible(item) &&
-          (!item.requires || can(item.requires)),
+          canSeeNavItem(item, tier, can),
       ),
     }))
     .filter((section) => section.items.length > 0);
@@ -136,6 +140,8 @@ interface AppSidebarProps {
 
 export function AppSidebar({ children }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { isPending: workspacePending } = useWorkspace();
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const workspaceId = useWorkspaceId();
@@ -237,8 +243,20 @@ export function AppSidebar({ children }: AppSidebarProps) {
     </SidebarGroupContent>
   );
 
-  const { can } = useCapabilities();
-  const visibleSidebarSections = getVisibleSidebarSections(can);
+  const { tier, can } = useCapabilities();
+  const visibleSidebarSections = getVisibleSidebarSections(tier, can);
+
+  // Field technicians are operational-only: keep them on the jobs schedule and
+  // its calendar. This is UX, not the security boundary — the API enforces the
+  // capability gate — so it waits for the workspace/role to load before acting
+  // (the tier fails closed to "field" while the role is still resolving, which
+  // must not bounce a real manager/admin off a CRM page mid-load).
+  useEffect(() => {
+    if (workspacePending) return;
+    if (tier !== "field") return;
+    if (isFieldOperationalPath(pathname)) return;
+    router.replace("/jobs");
+  }, [workspacePending, tier, pathname, router]);
 
   return (
     <SidebarProvider data-app-shell>

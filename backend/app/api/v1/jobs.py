@@ -17,6 +17,7 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import (
     DB,
+    CanReadBilling,
     CurrentUser,
     TransactionalDB,
     WorkspaceAccess,
@@ -183,9 +184,11 @@ async def unassign_technician(
 # --------------------------------------------------------------------------- #
 # Field execution: time tracking, expenses, profitability.
 #
-# Reads are open to any workspace member; costing writes are too, so a field
-# technician (not necessarily a dispatcher) can clock in and log expenses on a
-# job. Every call is workspace-scoped in the service.
+# Time-entry and expense reads/writes are open to any workspace member, so a
+# field technician (not necessarily a dispatcher) can clock in and log expenses
+# on a job. Profitability is the exception: it exposes customer revenue/profit/
+# margin and is gated on ``billing:read`` (see ``job_profitability``). Every call
+# is workspace-scoped in the service.
 # --------------------------------------------------------------------------- #
 @router.get("/{job_id}/time-entries", response_model=list[TimeEntryResponse])
 async def list_time_entries(
@@ -285,7 +288,13 @@ async def delete_expense(
 async def job_profitability(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CanReadBilling,
     db: DB,
 ) -> JobProfitability:
-    """Compute the job's P&L (revenue from the linked invoice minus costs)."""
+    """Compute the job's P&L (revenue from the linked invoice minus costs).
+
+    Gated on ``billing:read``: the P&L exposes customer revenue, profit, and
+    margin, so a field technician (``jobs:read`` only, no billing) must not see
+    it — even though they can still log their own time and expenses on the job.
+    """
     return await JobCostingService(db).get_profitability(job_id, workspace.id)

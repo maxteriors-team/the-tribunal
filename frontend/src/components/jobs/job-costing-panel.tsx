@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useAddExpense,
   useClockIn,
@@ -41,9 +42,15 @@ interface JobCostingPanelProps {
  * phone-width screen.
  */
 export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
+  const { can } = useCapabilities();
+  // Revenue, profit, and margin are billing data. Technicians (jobs:read only)
+  // log their time/expenses but must not see what the customer pays or the
+  // job's margin — mirror the backend billing:read gate on /profitability.
+  const canViewPnl = can("billing:read");
+
   const timeEntries = useJobTimeEntries(workspaceId, jobId);
   const expenses = useJobExpenses(workspaceId, jobId);
-  const pnl = useJobProfitability(workspaceId, jobId);
+  const pnl = useJobProfitability(workspaceId, jobId, canViewPnl);
 
   const clockIn = useClockIn(workspaceId, jobId);
   const clockOut = useClockOut(workspaceId, jobId);
@@ -55,7 +62,10 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
 
-  const openTimer = pnl.data?.open_timer ?? false;
+  // Derive the running-timer state from the time entries (a running entry has
+  // no ``ended_at``) rather than the P&L payload, so clock in/out still works
+  // for technicians who cannot read profitability.
+  const openTimer = (timeEntries.data ?? []).some((entry) => !entry.ended_at);
   const currency = pnl.data?.currency ?? "USD";
 
   const handleClockIn = () => {
@@ -98,55 +108,58 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
 
   return (
     <div className="space-y-5">
-      {/* P&L summary */}
-      <div className="rounded-lg border p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium">Profitability</span>
-          {openTimer && (
-            <Badge variant="secondary" className="gap-1">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-              Timer running
-            </Badge>
+      {/* P&L summary — billing:read only. Hidden from technicians so they never
+          see customer revenue, profit, or margin. */}
+      {canViewPnl && (
+        <div className="rounded-lg border p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium">Profitability</span>
+            {openTimer && (
+              <Badge variant="secondary" className="gap-1">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                Timer running
+              </Badge>
+            )}
+          </div>
+          {pnl.isLoading || !pnl.data ? (
+            <p className="text-sm text-muted-foreground">Calculating…</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                <span className="text-muted-foreground">Revenue</span>
+                <span className="text-right tabular-nums">
+                  {formatCurrency(pnl.data.revenue, currency)}
+                </span>
+                <span className="text-muted-foreground">
+                  Labor · {pnl.data.total_hours}h
+                </span>
+                <span className="text-right tabular-nums">
+                  −{formatCurrency(pnl.data.labor_cost, currency)}
+                </span>
+                <span className="text-muted-foreground">Expenses</span>
+                <span className="text-right tabular-nums">
+                  −{formatCurrency(pnl.data.expense_cost, currency)}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t pt-2">
+                <span className="text-sm font-medium">Profit</span>
+                <span
+                  className={`text-base font-semibold tabular-nums ${
+                    pnl.data.profit >= 0 ? "text-emerald-600" : "text-destructive"
+                  }`}
+                >
+                  {formatCurrency(pnl.data.profit, currency)}
+                  {pnl.data.margin !== null && pnl.data.margin !== undefined && (
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      ({Math.round(pnl.data.margin * 100)}%)
+                    </span>
+                  )}
+                </span>
+              </div>
+            </>
           )}
         </div>
-        {pnl.isLoading || !pnl.data ? (
-          <p className="text-sm text-muted-foreground">Calculating…</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-              <span className="text-muted-foreground">Revenue</span>
-              <span className="text-right tabular-nums">
-                {formatCurrency(pnl.data.revenue, currency)}
-              </span>
-              <span className="text-muted-foreground">
-                Labor · {pnl.data.total_hours}h
-              </span>
-              <span className="text-right tabular-nums">
-                −{formatCurrency(pnl.data.labor_cost, currency)}
-              </span>
-              <span className="text-muted-foreground">Expenses</span>
-              <span className="text-right tabular-nums">
-                −{formatCurrency(pnl.data.expense_cost, currency)}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center justify-between border-t pt-2">
-              <span className="text-sm font-medium">Profit</span>
-              <span
-                className={`text-base font-semibold tabular-nums ${
-                  pnl.data.profit >= 0 ? "text-emerald-600" : "text-destructive"
-                }`}
-              >
-                {formatCurrency(pnl.data.profit, currency)}
-                {pnl.data.margin !== null && pnl.data.margin !== undefined && (
-                  <span className="ml-1 text-xs font-normal text-muted-foreground">
-                    ({Math.round(pnl.data.margin * 100)}%)
-                  </span>
-                )}
-              </span>
-            </div>
-          </>
-        )}
-      </div>
+      )}
 
       {/* Time tracking */}
       <div className="space-y-2">

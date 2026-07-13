@@ -272,3 +272,75 @@ class TestUpdateAndDelete:
         response = await client.delete(_base(f"/{JOB_ID}"))
         assert response.status_code == 204
         mock_service.delete.assert_awaited_once()
+
+
+def _profitability_response() -> dict[str, object]:
+    """A serialized JobProfitability the mocked costing service returns."""
+    return {
+        "job_id": str(JOB_ID),
+        "currency": "USD",
+        "revenue": 1000.0,
+        "labor_cost": 200.0,
+        "expense_cost": 50.0,
+        "total_cost": 250.0,
+        "profit": 750.0,
+        "margin": 0.75,
+        "total_hours": 4.0,
+        "open_timer": False,
+    }
+
+
+@asynccontextmanager
+async def _costing_client(role: str) -> AsyncIterator[AsyncClient]:
+    """Client whose membership carries ``role``, with JobCostingService mocked.
+
+    The capability gate on ``/profitability`` resolves the caller's role via
+    ``get_membership``, so overriding the membership role is what exercises the
+    billing:read gate.
+    """
+    app = FastAPI(lifespan=_test_lifespan)
+
+    async def override_get_db() -> AsyncIterator[AsyncMock]:
+        yield AsyncMock()
+
+    membership = _make_membership()
+    membership.role = role
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_transactional_db] = override_get_db
+    app.dependency_overrides[get_current_user] = lambda: _make_user()
+    app.dependency_overrides[get_workspace] = lambda: _make_workspace()
+    app.dependency_overrides[get_membership] = lambda: membership
+    _mount(app)
+
+    costing = AsyncMock()
+    costing.get_profitability.return_value = _profitability_response()
+    costing.list_time_entries.return_value = []
+    with patch.object(jobs_module, "JobCostingService", return_value=costing):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as ac:
+            yield ac
+
+
+class TestJobCostingAccess:
+    """Profitability (revenue/profit/margin) is gated on billing:read; a
+    technician can still log time but must not see the job's P&L."""
+
+    async def test_technician_forbidden_from_profitability(self) -> None:
+        async with _costing_client("technician") as ac:
+            response = await ac.get(_base(f"/{JOB_ID}/profitability"))
+        assert response.status_code == 403
+
+    async def test_technician_can_read_time_entries(self) -> None:
+        # Time tracking stays open to the field tech even without billing:read.
+        async with _costing_client("technician") as ac:
+            response = await ac.get(_base(f"/{JOB_ID}/time-entries"))
+        assert response.status_code == 200
+
+    async def test_dispatcher_can_read_profitability(self) -> None:
+        # A billing-capable role (dispatcher → manager tier) still sees the P&L.
+        async with _costing_client("dispatcher") as ac:
+            response = await ac.get(_base(f"/{JOB_ID}/profitability"))
+        assert response.status_code == 200
+        assert response.json()["revenue"] == 1000.0

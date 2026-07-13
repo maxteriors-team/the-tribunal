@@ -36,7 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { Capability } from "@/lib/permissions";
+import type { Capability, Tier } from "@/lib/permissions";
 
 export type AppNavBadgeKey = "nudges" | "pending-actions";
 
@@ -407,4 +407,33 @@ export const breadcrumbLabels: Record<string, string> = {
 
 export function isNavItemVisible(item: AppNavItem) {
   return !item.devOnly || process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Route prefixes a field technician (operational-only tier) may see and reach.
+ * Field techs get the jobs schedule and its calendar — nothing else in the CRM.
+ */
+export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = ["/jobs", "/calendar"];
+
+/** Whether a path is inside the field-technician operational allowlist. */
+export function isFieldOperationalPath(pathname: string): boolean {
+  return FIELD_OPERATIONAL_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+/**
+ * Whether a nav item should be shown to a caller.
+ *
+ * Field technicians are fail-closed to an explicit operational allowlist, so a
+ * newly added CRM nav item never leaks to them by default. Every other tier
+ * uses the capability gate (`requires`).
+ */
+export function canSeeNavItem(
+  item: AppNavItem,
+  tier: Tier,
+  can: (capability: Capability) => boolean,
+): boolean {
+  if (tier === "field") return isFieldOperationalPath(item.url);
+  return !item.requires || can(item.requires);
 }

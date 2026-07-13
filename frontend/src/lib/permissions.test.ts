@@ -9,18 +9,18 @@ describe("roleTier", () => {
     ["manager", "manager"],
     ["dispatcher", "manager"],
     ["sales_rep", "sales"],
-    ["technician", "tech"],
+    ["technician", "field"],
     ["member", "tech"],
   ];
   it.each(cases)("maps %s → %s", (role, tier) => {
     expect(roleTier(role)).toBe(tier);
   });
 
-  it("fails closed to tech for unknown/empty/null roles", () => {
-    expect(roleTier("wizard")).toBe("tech");
-    expect(roleTier("")).toBe("tech");
-    expect(roleTier(null)).toBe("tech");
-    expect(roleTier(undefined)).toBe("tech");
+  it("fails closed to field for unknown/empty/null roles", () => {
+    expect(roleTier("wizard")).toBe("field");
+    expect(roleTier("")).toBe("field");
+    expect(roleTier(null)).toBe("field");
+    expect(roleTier(undefined)).toBe("field");
   });
 });
 
@@ -29,10 +29,25 @@ describe("capability matrix (mirror of backend)", () => {
     const all = new Set<Capability>(TIER_CAPABILITIES.admin);
     expect(TIER_CAPABILITIES.admin.length).toBe(all.size); // no dupes
     // admin is the superset of every other tier
-    for (const tier of ["manager", "sales", "tech"] as Tier[]) {
+    for (const tier of ["manager", "sales", "tech", "field"] as Tier[]) {
       for (const cap of TIER_CAPABILITIES[tier]) {
         expect(all.has(cap)).toBe(true);
       }
+    }
+  });
+
+  it("field technicians are operational-only (jobs:read and nothing else)", () => {
+    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read"]);
+    expect(can("technician", "jobs:read")).toBe(true);
+    for (const cap of [
+      "crm:read",
+      "crm:write",
+      "pipeline:write_own",
+      "comms:send",
+      "billing:read",
+      "reports:view",
+    ] as Capability[]) {
+      expect(can("technician", cap)).toBe(false);
     }
   });
 
@@ -76,10 +91,12 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("comms:send is universal; comms:manage is admin-only", () => {
-    for (const role of ["admin", "manager", "sales_rep", "technician", "member"]) {
+  it("comms:send covers every tier except field; comms:manage is admin-only", () => {
+    for (const role of ["admin", "manager", "sales_rep", "member"]) {
       expect(can(role, "comms:send")).toBe(true);
     }
+    // Field technicians cannot message customers.
+    expect(can("technician", "comms:send")).toBe(false);
     for (const role of ["manager", "sales_rep", "technician", "member"]) {
       expect(can(role, "comms:manage")).toBe(false);
     }
@@ -87,7 +104,7 @@ describe("capability matrix (mirror of backend)", () => {
   });
 
   it("pipeline:write implies pipeline:write_own", () => {
-    for (const tier of ["admin", "manager", "sales", "tech"] as Tier[]) {
+    for (const tier of ["admin", "manager", "sales", "tech", "field"] as Tier[]) {
       const caps = TIER_CAPABILITIES[tier];
       if (caps.includes("pipeline:write")) {
         expect(caps).toContain("pipeline:write_own");

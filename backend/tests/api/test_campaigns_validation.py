@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import campaigns as campaigns_module
 
 WS_ID = uuid.uuid4()
@@ -106,9 +106,20 @@ def _make_auth_test_app(
     async def override_get_current_user() -> MagicMock:
         return mock_user
 
+    async def override_get_membership() -> MagicMock:
+        # Campaign routes are now capability-gated (crm:read / crm:write); a
+        # manager holds both, so these validation tests exercise the handler
+        # body rather than the RBAC gate (covered in test_rbac.py).
+        membership = MagicMock()
+        membership.workspace_id = mock_workspace.id
+        membership.user_id = mock_user.id
+        membership.role = "manager"
+        return membership
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = override_get_membership
 
     app.include_router(
         campaigns_module.router,

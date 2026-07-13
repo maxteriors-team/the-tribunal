@@ -14,7 +14,7 @@ import { campaignsApi } from "@/lib/api/campaigns";
 import { contactsApi } from "@/lib/api/contacts";
 import { queryKeys } from "@/lib/query-keys";
 
-import { appNavSections, isNavItemVisible } from "./app-nav";
+import { appNavSections, canSeeNavItem, isNavItemVisible } from "./app-nav";
 
 interface CommandPaletteProps {
   open?: boolean;
@@ -79,7 +79,7 @@ export function CommandPalette({
     placeholderData: keepPreviousData,
   });
 
-  const { can } = useCapabilities();
+  const { tier, can } = useCapabilities();
   const commandGroups = useMemo(
     () =>
       appNavSections
@@ -90,11 +90,11 @@ export function CommandPalette({
             (item) =>
               item.commandPalette &&
               isNavItemVisible(item) &&
-              (!item.requires || can(item.requires))
+              canSeeNavItem(item, tier, can)
           ),
         }))
         .filter((section) => section.items.length > 0),
-    [can]
+    [tier, can]
   );
 
   const contacts = contactsQuery.data?.items ?? [];

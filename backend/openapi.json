@@ -55126,7 +55126,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability": {
       "get": {
-        "description": "Compute the job's P&L (revenue from the linked invoice minus costs).",
+        "description": "Compute the job's P&L (revenue from the linked invoice minus costs).\n\nGated on ``billing:read``: the P&L exposes customer revenue, profit, and\nmargin, so a field technician (``jobs:read`` only, no billing) must not see\nit — even though they can still log their own time and expenses on the job.",
         "operationId": "job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get",
         "parameters": [
           {

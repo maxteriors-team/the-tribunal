@@ -2,22 +2,20 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
-from app.models.workspace import Workspace
 from app.schemas.campaign import (
     CampaignAnalytics,
     CampaignContactAdd,
@@ -91,7 +89,7 @@ async def list_campaigns(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     status_filter: str | None = None,
@@ -114,7 +112,7 @@ async def create_campaign(
     campaign_in: CampaignCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Campaign:
     """Create a new campaign."""
     # Verify agent if provided
@@ -178,7 +176,7 @@ async def get_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
 ) -> Campaign:
     """Get a campaign by ID."""
     return await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -191,7 +189,7 @@ async def update_campaign(
     campaign_in: CampaignUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Campaign:
     """Update a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -229,7 +227,7 @@ async def start_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> dict[str, str]:
     """Start a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -255,7 +253,7 @@ async def pause_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> dict[str, str]:
     """Pause a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -279,7 +277,7 @@ async def resume_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> dict[str, str]:
     """Resume a paused campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -303,7 +301,7 @@ async def cancel_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> dict[str, str]:
     """Cancel a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -327,7 +325,7 @@ async def add_contacts(
     contacts_in: CampaignContactAdd,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> dict[str, int]:
     """Add contacts to a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -378,7 +376,7 @@ async def list_campaign_contacts(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
     status_filter: str | None = None,
     limit: int = Query(100, ge=1, le=500),
 ) -> list[CampaignContactResponse]:
@@ -405,7 +403,7 @@ async def get_analytics(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
 ) -> CampaignAnalytics:
     """Get campaign analytics."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -442,7 +440,7 @@ async def get_guarantee_progress(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
 ) -> GuaranteeProgressResponse:
     """Get campaign guarantee progress."""
     log = structlog.get_logger().bind(campaign_id=str(campaign_id))
@@ -484,7 +482,7 @@ async def delete_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> None:
     """Delete a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
@@ -509,7 +507,7 @@ async def duplicate_campaign(
     campaign_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Campaign:
     """Duplicate a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
