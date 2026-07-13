@@ -25,6 +25,7 @@ from app.core.metrics import observe_ai_text_response_failure
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
+from app.models.workspace import Workspace
 from app.services.ai.message_context_builder import build_message_context
 from app.services.ai.openai_credentials import (
     OpenAICredentialError,
@@ -38,6 +39,7 @@ from app.services.ai.text_response_generator import generate_text_response
 from app.services.ai.text_response_timing import calculate_text_response_delay_ms
 from app.services.notifications import notify_workspace_event
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.services.sla.speed_to_lead import get_speed_to_lead_settings
 
 logger = structlog.get_logger()
 
@@ -201,6 +203,20 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     )
     elapsed_ms = round((time.monotonic() - response_started_at) * 1000)
     send_wait_ms = max(0, response_delay_ms - elapsed_ms)
+
+    # The human-like delay must never push the FIRST reply to a new lead past the
+    # workspace speed-to-lead SLA — the response time we advertise and measure.
+    # Ongoing conversation keeps its full human-like pacing (cap is None once a
+    # first response has been recorded).
+    sla_cap_ms = await _first_response_sla_cap_ms(db, conversation)
+    if sla_cap_ms is not None and sla_cap_ms < send_wait_ms:
+        log.info(
+            "speed_to_lead_delay_capped",
+            from_wait_ms=send_wait_ms,
+            to_wait_ms=sla_cap_ms,
+        )
+        send_wait_ms = sla_cap_ms
+
     agent_id = agent.id
 
     await _send_ai_text_response_after_delay(
@@ -267,6 +283,41 @@ async def _notify_ai_went_dark(
         )
     except Exception as exc:  # noqa: BLE001 - notification must not break nurture
         log.warning("ai_dark_notification_failed", error=str(exc), reason=reason)
+
+
+# Fraction of the SLA budget the first reply is allowed to consume, leaving
+# headroom for send + carrier latency so "within SLA" stays true end to end.
+_SPEED_TO_LEAD_DELAY_BUDGET = 0.8
+
+
+async def _first_response_sla_cap_ms(
+    db: AsyncSession,
+    conversation: Conversation,
+) -> int | None:
+    """Max additional wait (ms) for the first reply so it stays within the SLA.
+
+    Returns ``None`` when no cap applies: this is not the first response to an
+    inbound-led conversation, or the workspace has speed-to-lead disabled. When a
+    cap applies it is the remaining SLA budget from now (never negative), so a
+    reply that is already late is sent immediately instead of waiting further.
+    """
+    # Only the first response to a lead who reached out first is SLA-measured.
+    if conversation.first_inbound_at is None or conversation.first_response_at is not None:
+        return None
+
+    workspace = await db.get(Workspace, conversation.workspace_id)
+    if workspace is None:
+        return None
+    config = get_speed_to_lead_settings(workspace)
+    if not config.enabled:
+        return None
+
+    anchor = conversation.first_inbound_at
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=UTC)
+    budget_ms = int(config.sla_seconds * 1000 * _SPEED_TO_LEAD_DELAY_BUDGET)
+    elapsed_ms = int((datetime.now(UTC) - anchor).total_seconds() * 1000)
+    return max(0, budget_ms - elapsed_ms)
 
 
 async def _record_ai_confirmed_opt_out(
