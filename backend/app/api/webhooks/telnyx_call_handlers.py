@@ -88,16 +88,27 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
         conversation = conv_result.scalar_one_or_none()
 
         if not conversation:
+            from app.core.encryption import hash_phone
             from app.models.contact import Contact
+            from app.utils.phone import phone_lookup_variants
 
-            # Try to find contact
-            contact_result = await db.execute(
-                select(Contact).where(
-                    Contact.workspace_id == workspace_id,
-                    Contact.phone_number == from_number,
+            # Match the caller by deterministic phone hash, not the Fernet-
+            # encrypted ``phone_number`` column: that column's ciphertext differs
+            # every write, so an ``== from_number`` comparison never matches and
+            # every known caller looked like a brand-new contact. Hash all E.164/
+            # national variants so formatting differences still resolve.
+            phone_hashes = [hash_phone(v) for v in phone_lookup_variants(from_number)]
+            contact = None
+            if phone_hashes:
+                contact_result = await db.execute(
+                    select(Contact)
+                    .where(
+                        Contact.workspace_id == workspace_id,
+                        Contact.phone_hash.in_(phone_hashes),
+                    )
+                    .limit(1)
                 )
-            )
-            contact = contact_result.scalar_one_or_none()
+                contact = contact_result.scalars().first()
 
             conversation = Conversation(
                 workspace_id=workspace_id,

@@ -35,12 +35,23 @@ from tests.fixtures.webhooks import load_telnyx_payload
 # --------------------------------------------------------------------------- #
 
 
+class _Scalars:
+    def __init__(self, scalar: Any = None) -> None:
+        self._scalar = scalar
+
+    def first(self) -> Any:
+        return self._scalar
+
+
 class _Result:
     def __init__(self, scalar: Any = None) -> None:
         self._scalar = scalar
 
     def scalar_one_or_none(self) -> Any:
         return self._scalar
+
+    def scalars(self) -> _Scalars:
+        return _Scalars(self._scalar)
 
 
 def _make_db(execute_returns: list[Any]) -> MagicMock:
@@ -237,6 +248,43 @@ async def test_call_initiated_creates_message_and_conversation(
     db.commit.assert_awaited()
     _stub_metrics_and_push["push"].send_to_workspace_members.assert_awaited_once()
     _stub_metrics_and_push["auto_answer"].assert_awaited_once()
+
+
+async def test_call_initiated_links_known_caller_by_phone_hash(
+    monkeypatch: pytest.MonkeyPatch,
+    call_initiated: dict[str, Any],
+    _stub_metrics_and_push: dict[str, MagicMock],
+) -> None:
+    # Regression: the contact lookup must match the caller by deterministic
+    # phone_hash, not the Fernet-encrypted phone_number column (which never
+    # matches an equality compare), so a known caller's conversation is linked
+    # to their existing contact instead of looking like a brand-new lead.
+    workspace_id = uuid.uuid4()
+    phone_record = MagicMock()
+    phone_record.workspace_id = workspace_id
+    phone_record.phone_number = "+12125550100"
+    phone_record.assigned_agent_id = None
+
+    known_contact = MagicMock()
+    known_contact.id = 4321
+
+    db = _make_db(
+        execute_returns=[
+            _Result(scalar=phone_record),  # PhoneNumber lookup
+            _Result(scalar=None),  # Message dedupe → fresh
+            _Result(scalar=None),  # Conversation lookup → create new
+            _Result(scalar=known_contact),  # Contact lookup by phone_hash → match
+        ]
+    )
+    _patch_session_local(monkeypatch, db)
+
+    await handlers.handle_call_initiated(call_initiated, _make_log())
+
+    conversations = [
+        c.args[0] for c in db.add.call_args_list if type(c.args[0]).__name__ == "Conversation"
+    ]
+    assert conversations, "expected a Conversation to be created"
+    assert conversations[0].contact_id == known_contact.id
 
 
 async def test_call_initiated_is_idempotent_on_retry(
