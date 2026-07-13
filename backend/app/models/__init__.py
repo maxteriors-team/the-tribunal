@@ -35,6 +35,7 @@ from app.models.failed_job import (
     FailedJob,
 )
 from app.models.field_service import (
+    BusinessLocation,
     Crew,
     Job,
     JobAssignment,
@@ -289,6 +290,7 @@ __all__ = [
     "DeviceToken",
     "EmailEvent",
     "EmailEventType",
+    "BusinessLocation",
     "ServiceLocation",
     "Crew",
     "Technician",

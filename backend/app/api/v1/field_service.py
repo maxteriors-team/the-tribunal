@@ -1,8 +1,12 @@
-"""Field-service endpoints: service locations, crews, and technicians.
+"""Field-service endpoints: business locations, service locations, crews, and
+technicians.
 
-Three routers mounted under a workspace. Reads are available to any workspace
+Four routers mounted under a workspace. Reads are available to any workspace
 member; writes are role-gated:
 
+- Business locations (the company's own branches / business units) — managed by
+  the ``locations:manage`` capability (:data:`CanManageLocations`, admin +
+  manager); any member may read so the location filter dropdown works for all.
 - Service locations (customer job sites) — created/edited by dispatchers and up
   (:data:`WorkspaceDispatcher`), since CSRs and dispatchers manage sites.
 - Crews and technicians (the field roster) — managed by managers and up
@@ -19,6 +23,7 @@ from fastapi import APIRouter
 
 from app.api.deps import (
     DB,
+    CanManageLocations,
     TransactionalDB,
     WorkspaceAccess,
     WorkspaceDispatcher,
@@ -26,6 +31,10 @@ from app.api.deps import (
 )
 from app.api.service_errors import ServiceErrorRoute
 from app.schemas.field_service import (
+    BusinessLocationCreate,
+    BusinessLocationListResponse,
+    BusinessLocationResponse,
+    BusinessLocationUpdate,
     CrewCreate,
     CrewListResponse,
     CrewResponse,
@@ -40,6 +49,7 @@ from app.schemas.field_service import (
     TechnicianUpdate,
 )
 from app.services.field_service import (
+    BusinessLocationService,
     CrewService,
     ServiceLocationService,
     TechnicianService,
@@ -48,9 +58,75 @@ from app.services.field_service import (
 # ServiceErrorRoute maps the field-service domain errors (NotFound/Conflict/
 # Validation) raised by the service layer onto HTTP responses at the boundary,
 # so the services stay free of web-framework coupling.
+business_locations_router = APIRouter(route_class=ServiceErrorRoute)
 locations_router = APIRouter(route_class=ServiceErrorRoute)
 crews_router = APIRouter(route_class=ServiceErrorRoute)
 technicians_router = APIRouter(route_class=ServiceErrorRoute)
+
+
+# --------------------------------------------------------------------------- #
+# Business locations (the company's own branches / business units)
+# --------------------------------------------------------------------------- #
+@business_locations_router.get("", response_model=BusinessLocationListResponse)
+async def list_business_locations(
+    workspace: WorkspaceAccess,
+    db: DB,
+    is_active: bool | None = None,
+) -> BusinessLocationListResponse:
+    """List business locations, optionally filtered by active state.
+
+    Available to any workspace member so the location filter dropdown works for
+    everyone; writes below are gated on ``locations:manage``.
+    """
+    service = BusinessLocationService(db)
+    return BusinessLocationListResponse(**await service.list(workspace.id, is_active=is_active))
+
+
+@business_locations_router.post("", response_model=BusinessLocationResponse, status_code=201)
+async def create_business_location(
+    payload: BusinessLocationCreate,
+    membership: CanManageLocations,
+    db: TransactionalDB,
+) -> BusinessLocationResponse:
+    """Create a business location (branch)."""
+    service = BusinessLocationService(db)
+    return await service.create(membership.workspace_id, payload.model_dump())
+
+
+@business_locations_router.get("/{location_id}", response_model=BusinessLocationResponse)
+async def get_business_location(
+    location_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> BusinessLocationResponse:
+    """Get a single business location."""
+    service = BusinessLocationService(db)
+    return await service.get(location_id, workspace.id)
+
+
+@business_locations_router.put("/{location_id}", response_model=BusinessLocationResponse)
+async def update_business_location(
+    location_id: uuid.UUID,
+    payload: BusinessLocationUpdate,
+    membership: CanManageLocations,
+    db: TransactionalDB,
+) -> BusinessLocationResponse:
+    """Update a business location."""
+    service = BusinessLocationService(db)
+    return await service.update(
+        location_id, membership.workspace_id, payload.model_dump(exclude_unset=True)
+    )
+
+
+@business_locations_router.delete("/{location_id}", status_code=204)
+async def delete_business_location(
+    location_id: uuid.UUID,
+    membership: CanManageLocations,
+    db: TransactionalDB,
+) -> None:
+    """Delete a business location."""
+    service = BusinessLocationService(db)
+    await service.delete(location_id, membership.workspace_id)
 
 
 # --------------------------------------------------------------------------- #

@@ -367,7 +367,13 @@ api_router.include_router(
     prefix="/workspaces/{workspace_id}/referral-partners",
     tags=["Referral Partners"],
 )
-# Field service: locations, crews, technicians (ServiceTitan/Jobber-style)
+# Field service: business locations, service locations, crews, technicians
+# (ServiceTitan/Jobber-style)
+api_router.include_router(
+    field_service.business_locations_router,
+    prefix="/workspaces/{workspace_id}/business-locations",
+    tags=["Field Service"],
+)
 api_router.include_router(
     field_service.locations_router,
     prefix="/workspaces/{workspace_id}/service-locations",

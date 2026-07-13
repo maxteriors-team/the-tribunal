@@ -3,6 +3,12 @@
 These are the operational backbone for ServiceTitan/Jobber-style dispatch in a
 home-service workspace:
 
+- :class:`BusinessLocation` — a physical **branch of the business** (e.g. the
+  "Austin" vs "Dallas" office) that the workspace operates from. This is the
+  ServiceTitan "Business Unit": staff, jobs, and appointments can be tagged to a
+  branch so the dashboard can filter and roll up by location. Do **not** confuse
+  it with :class:`ServiceLocation`, which is a *customer's* job site. Address
+  fields here are business data (not customer PII) and are stored in plain text.
 - :class:`ServiceLocation` — a physical job site belonging to a customer
   (``contact``). One customer may have many locations (primary residence, a
   rental, a commercial unit). Postal address fields are customer PII and are
@@ -29,7 +35,7 @@ home-service workspace:
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -46,7 +52,7 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.dialects.postgresql import TEXT as PG_TEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +63,79 @@ if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.user import User
     from app.models.workspace import Workspace
+
+
+class BusinessLocation(Base):
+    """A physical branch/business unit the workspace operates from.
+
+    Distinct from :class:`ServiceLocation` (a customer's job site): a
+    ``BusinessLocation`` is one of the *company's* own branches. Staff, jobs, and
+    appointments can be tagged to a branch (via a nullable ``business_location_id``
+    FK) so operators can filter and roll up by location. Address fields are
+    business data (not customer PII), so unlike ``ServiceLocation`` they are
+    stored in plain text and are SQL-queryable.
+    """
+
+    __tablename__ = "business_locations"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_business_locations_workspace_name"),
+        Index(
+            "ix_business_locations_workspace_active",
+            "workspace_id",
+            "is_active",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # IANA timezone for the branch (e.g. "America/Chicago"); drives per-branch
+    # scheduling/business-hours display. Defaults to UTC.
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
+    # Opening hours keyed by weekday, free-form JSON so the UI owns the shape
+    # (cf. ``Workspace.settings``). Empty dict = "not configured".
+    business_hours: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    # Business address — plain text (not customer PII), so it is SQL-queryable.
+    address_line1: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    address_line2: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    country: Mapped[str] = mapped_column(
+        String(2), nullable=False, default="US", server_default="US"
+    )
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="business_locations")
+
+    def __repr__(self) -> str:
+        return f"<BusinessLocation(id={self.id}, name={self.name})>"
 
 
 class ServiceLocation(Base):
