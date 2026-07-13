@@ -217,6 +217,48 @@ async def test_number_provisioning_is_admin_only() -> None:
         _clear_overrides()
 
 
+async def test_field_technician_is_locked_to_operational_surfaces() -> None:
+    """A field technician sees only the jobs schedule; every other CRM surface
+    (segments/automations/campaigns/pricing) is denied at the API."""
+    denied_reads = [
+        "/contacts",
+        "/segments",
+        "/automations",
+        "/campaigns",
+        "/catalog-items",  # price book
+        "/invoices",
+    ]
+    try:
+        async with _client_as("technician") as client:
+            for suffix in denied_reads:
+                resp = await client.get(_url(suffix))
+                assert resp.status_code == 403, f"technician should be denied GET {suffix}"
+            # The jobs schedule (operational) is reachable: the gate lets it
+            # through (non-403; the mocked DB may 500 in the handler body).
+            resp = await client.get(_url("/jobs"))
+            assert resp.status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_segments_and_automations_require_crm_capability() -> None:
+    """Segments/automations reads need crm:read (member+), writes need crm:write
+    (manager+); a field technician is denied both."""
+    try:
+        async with _client_as("technician") as client:
+            assert (await client.get(_url("/segments"))).status_code == 403
+            assert (await client.get(_url("/automations"))).status_code == 403
+        # Member: crm:read → may read, but not create (needs crm:write).
+        async with _client_as("member") as client:
+            assert (await client.get(_url("/segments"))).status_code != 403
+            assert (await client.post(_url("/segments"), json={})).status_code == 403
+        # Manager: crm:write → may create.
+        async with _client_as("manager") as client:
+            assert (await client.post(_url("/segments"), json={})).status_code != 403
+    finally:
+        _clear_overrides()
+
+
 async def test_texting_a_contact_is_allowed_for_messaging_tiers() -> None:
     body = {"body": "hello", "from_number": "+15551230000"}
     try:

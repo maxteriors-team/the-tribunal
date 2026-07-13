@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Request
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser, get_workspace
 from app.schemas.segment import (
     SegmentContactsResponse,
     SegmentCreate,
@@ -25,6 +25,7 @@ async def list_segments(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanReadCRM,
 ) -> SegmentListResponse:
     """List all segments for a workspace."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -40,6 +41,7 @@ async def create_segment(
     segment_in: SegmentCreate,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteCRM,
 ) -> SegmentResponse:
     """Create a new segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -60,6 +62,7 @@ async def preview_segment(
     preview_in: SegmentPreviewRequest,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanReadCRM,
 ) -> SegmentPreviewResponse:
     """Preview how many contacts match an unsaved filter definition."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -75,6 +78,7 @@ async def get_segment(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanReadCRM,
 ) -> SegmentResponse:
     """Get a specific segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -90,6 +94,7 @@ async def update_segment(
     segment_in: SegmentUpdate,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteCRM,
 ) -> SegmentResponse:
     """Update a segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -110,6 +115,7 @@ async def delete_segment(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteCRM,
 ) -> None:
     """Delete a segment."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -124,6 +130,7 @@ async def get_segment_contacts(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanReadCRM,
 ) -> SegmentContactsResponse:
     """Resolve a segment to contact IDs."""
     workspace = await get_workspace(request, workspace_id, current_user, db)
@@ -139,6 +146,7 @@ async def refresh_segment(
     segment_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteCRM,
 ) -> SegmentResponse:
     """Refresh a segment's cached contact count."""
     workspace = await get_workspace(request, workspace_id, current_user, db)

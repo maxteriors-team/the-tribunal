@@ -2,16 +2,14 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.automation import Automation
-from app.models.workspace import Workspace
 from app.schemas.automation import (
     AutomationCreate,
     AutomationResponse,
@@ -28,7 +26,7 @@ async def get_automation_stats(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
 ) -> AutomationStatsResponse:
     """Get automation statistics for a workspace."""
     # Total automations
@@ -74,7 +72,7 @@ async def list_automations(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     active_only: bool = False,
@@ -97,7 +95,7 @@ async def create_automation(
     automation_in: AutomationCreate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Automation:
     """Create a new automation."""
     automation = Automation(
@@ -117,7 +115,7 @@ async def get_automation(
     automation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanReadCRM,
 ) -> Automation:
     """Get an automation by ID."""
     result = await db.execute(
@@ -143,7 +141,7 @@ async def update_automation(
     automation_in: AutomationUpdate,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Automation:
     """Update an automation."""
     result = await db.execute(
@@ -184,7 +182,7 @@ async def delete_automation(
     automation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> None:
     """Delete an automation."""
     result = await db.execute(
@@ -210,7 +208,7 @@ async def toggle_automation(
     automation_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanWriteCRM,
 ) -> Automation:
     """Toggle automation active status."""
     result = await db.execute(
