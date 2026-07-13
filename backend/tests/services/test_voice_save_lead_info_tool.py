@@ -29,12 +29,23 @@ class _Agent:
         self.workspace_id = uuid.uuid4()
 
 
+class _ScalarsResult:
+    def __init__(self, row: Any | None) -> None:
+        self._row = row
+
+    def first(self) -> Any | None:
+        return self._row
+
+
 class _ExecuteResult:
     def __init__(self, row: Any | None) -> None:
         self._row = row
 
     def scalar_one_or_none(self) -> Any | None:
         return self._row
+
+    def scalars(self) -> _ScalarsResult:
+        return _ScalarsResult(self._row)
 
 
 class _SequencedSession:
@@ -110,7 +121,8 @@ def test_save_lead_info_is_gate_exempt() -> None:
 
 async def test_creates_contact_for_new_caller_and_links_conversation() -> None:
     conversation = _Conversation(contact_id=None, contact_phone="+15125557001")
-    session = _SequencedSession([_CallMessage(conversation)])
+    # call_message lookup, then the phone-dedupe lookup returns no match.
+    session = _SequencedSession([_CallMessage(conversation), None])
 
     with patch.object(db_session_module, "AsyncSessionLocal", lambda: session):
         result = await _executor(conversation.workspace_id)._execute_save_lead_info(
@@ -180,3 +192,30 @@ async def test_no_call_control_id_returns_error() -> None:
     result = await executor._execute_save_lead_info(first_name="Alex")
 
     assert result["success"] is False
+
+
+async def test_dedupes_to_existing_contact_by_phone_when_conversation_unlinked() -> None:
+    # The conversation has no contact_id (e.g. the inbound-call handler failed to
+    # link the caller), but a contact with this phone already exists. We must
+    # update it, not fork the lead into a duplicate contact.
+    conversation = _Conversation(contact_id=None, contact_phone="+15125557003")
+    existing = Contact(
+        id=99,
+        workspace_id=conversation.workspace_id,
+        first_name="Robin",
+        phone_number="+15125557003",
+        phone_hash="hash",
+    )
+    # call_message lookup, then the phone-dedupe lookup finds the existing contact.
+    session = _SequencedSession([_CallMessage(conversation), existing])
+
+    with patch.object(db_session_module, "AsyncSessionLocal", lambda: session):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            email="robin@example.com",
+        )
+
+    assert result["success"] is True
+    # No duplicate contact created; the existing one was updated and linked.
+    assert [obj for obj in session.added if isinstance(obj, Contact)] == []
+    assert existing.email == "robin@example.com"
+    assert conversation.contact_id == existing.id

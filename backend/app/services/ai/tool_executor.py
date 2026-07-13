@@ -1324,6 +1324,7 @@ class VoiceToolExecutor(BaseToolExecutor):
             conversation = call_message.conversation
             workspace_id = self.workspace_id or conversation.workspace_id
 
+            caller_phone = conversation.contact_phone
             contact: Contact | None = None
             if conversation.contact_id is not None:
                 contact_result = await db.execute(
@@ -1334,11 +1335,23 @@ class VoiceToolExecutor(BaseToolExecutor):
                 )
                 contact = contact_result.scalar_one_or_none()
 
+            # Dedupe by phone before creating: the conversation may not be linked
+            # to the caller's existing contact (e.g. the inbound-call handler
+            # failed to match them), and creating a second contact for a number
+            # already in the CRM would fork the lead's history.
+            if contact is None:
+                dedupe_result = await db.execute(
+                    select(Contact).where(
+                        Contact.workspace_id == workspace_id,
+                        Contact.phone_hash == hash_phone(caller_phone),
+                    )
+                )
+                contact = dedupe_result.scalars().first()
+
             created = False
             if contact is None:
                 # Brand-new caller not yet in the CRM: create the contact from
                 # the call's caller number so their details are not lost.
-                caller_phone = conversation.contact_phone
                 contact = Contact(
                     workspace_id=workspace_id,
                     first_name=first_name or "Caller",
