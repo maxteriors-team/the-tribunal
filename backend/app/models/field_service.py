@@ -299,6 +299,11 @@ class Technician(Base):
     __table_args__ = (
         Index("ix_technicians_workspace_active", "workspace_id", "is_active"),
         Index("ix_technicians_workspace_crew", "workspace_id", "crew_id"),
+        Index(
+            "ix_technicians_workspace_business_location",
+            "workspace_id",
+            "business_location_id",
+        ),
         # Idempotency key for sync: one external record maps to one technician
         # per workspace. Partial so natively-created technicians (no external
         # id) are not forced onto a single null row.
@@ -332,6 +337,14 @@ class Technician(Base):
     crew_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("crews.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The business branch this technician is stationed at. Nullable = unassigned
+    # / all locations. SET NULL keeps the technician if the branch is removed.
+    business_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("business_locations.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -371,6 +384,7 @@ class Technician(Base):
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="technicians")
     crew: Mapped["Crew | None"] = relationship("Crew", back_populates="technicians")
+    business_location: Mapped["BusinessLocation | None"] = relationship("BusinessLocation")
     # One-directional: a technician may reference a user login without widening
     # the User model with a reverse collection.
     user: Mapped["User | None"] = relationship("User")

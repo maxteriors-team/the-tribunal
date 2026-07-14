@@ -11,6 +11,7 @@ from app.db.scope import select_workspace_owned
 from app.models.field_service import Technician
 from app.schemas.field_service import TechnicianResponse
 from app.services.field_service._refs import (
+    assert_business_location_in_workspace,
     assert_crew_in_workspace,
     assert_user_is_member,
     get_owned_or_raise,
@@ -30,10 +31,13 @@ class TechnicianService:
         )
 
     async def _validate_refs(self, workspace_id: uuid.UUID, data: dict[str, Any]) -> None:
-        """Validate crew/user references belong to the workspace when provided."""
+        """Validate crew/location/user references belong to the workspace when provided."""
         crew_id = data.get("crew_id")
         if crew_id is not None:
             await assert_crew_in_workspace(self.db, crew_id, workspace_id)
+        business_location_id = data.get("business_location_id")
+        if business_location_id is not None:
+            await assert_business_location_in_workspace(self.db, business_location_id, workspace_id)
         user_id = data.get("user_id")
         if user_id is not None:
             await assert_user_is_member(self.db, user_id, workspace_id)
