@@ -21263,6 +21263,8 @@ export interface components {
          * @description Create a technician.
          */
         TechnicianCreate: {
+            /** Business Location Id */
+            business_location_id?: string | null;
             /**
              * Color
              * @default #0ea5e9
@@ -21301,6 +21303,8 @@ export interface components {
          * @description Technician response.
          */
         TechnicianResponse: {
+            /** Business Location Id */
+            business_location_id: string | null;
             /** Color */
             color: string;
             /**
@@ -21358,6 +21362,8 @@ export interface components {
          * @description Partial update for a technician.
          */
         TechnicianUpdate: {
+            /** Business Location Id */
+            business_location_id?: string | null;
             /** Color */
             color?: string | null;
             /** Crew Id */
