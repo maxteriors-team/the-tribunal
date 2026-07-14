@@ -136,6 +136,12 @@ describe("queryKeys factory composition", () => {
       "ws_1",
       { active_only: true, text_capable: true },
     ]);
+    // Business locations expose an `active` filtered list for the branch filter.
+    expect(queryKeys.locations.active("ws_1")).toEqual([
+      "business-locations",
+      "ws_1",
+      { is_active: true },
+    ]);
   });
 
   it("nests detail-scoped sub-resources under the detail key", () => {

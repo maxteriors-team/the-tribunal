@@ -214,4 +214,20 @@ describe("buildAppointmentsQueryParams", () => {
     );
     expect(params.status_filter).toBe("completed");
   });
+
+  it("adds business_location_id when a location is selected and omits it otherwise", () => {
+    const unfiltered = buildAppointmentsQueryParams(
+      "2026-05-18T00:00:00Z",
+      "2026-05-24T23:59:59Z",
+      "",
+    );
+    expect("business_location_id" in unfiltered).toBe(false);
+    const filtered = buildAppointmentsQueryParams(
+      "2026-05-18T00:00:00Z",
+      "2026-05-24T23:59:59Z",
+      "",
+      "loc-123",
+    );
+    expect(filtered.business_location_id).toBe("loc-123");
+  });
 });
