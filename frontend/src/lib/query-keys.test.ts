@@ -236,6 +236,11 @@ describe("queryKeys factory composition", () => {
       "public-proposals",
       "tok_abc",
     ]);
+    expect(queryKeys.publicComparisons.all()).toEqual(["public-comparisons"]);
+    expect(queryKeys.publicComparisons.byToken("tok_abc")).toEqual([
+      "public-comparisons",
+      "tok_abc",
+    ]);
   });
 
   it("normalizes infinite-contacts filters and prefixes with the contacts root", () => {

@@ -8920,6 +8920,13 @@
             "title": "Minimum",
             "type": "number"
           },
+          "perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Perks",
+            "type": "array"
+          },
           "roofline_per_ft": {
             "default": 6,
             "minimum": 0.0,
@@ -8960,6 +8967,25 @@
           }
         },
         "title": "ChristmasConfig",
+        "type": "object"
+      },
+      "ChristmasEstimate": {
+        "description": "Seasonal-lighting side of the estimate.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "total"
+        ],
+        "title": "ChristmasEstimate",
         "type": "object"
       },
       "ClockInRequest": {
@@ -9120,6 +9146,80 @@
           "photos"
         ],
         "title": "CompanyCamProjectPhotos",
+        "type": "object"
+      },
+      "ComparisonShareRequest": {
+        "description": "Persist an estimate behind a token so the homeowner can view the savings.",
+        "properties": {
+          "channels": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "feet": {
+            "minimum": 0.0,
+            "title": "Feet",
+            "type": "number"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "storage": {
+            "default": false,
+            "title": "Storage",
+            "type": "boolean"
+          },
+          "takedown": {
+            "default": false,
+            "title": "Takedown",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "feet"
+        ],
+        "title": "ComparisonShareRequest",
+        "type": "object"
+      },
+      "ComparisonShareResult": {
+        "description": "The share token plus the ready-to-send client URL.",
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "url"
+        ],
+        "title": "ComparisonShareResult",
         "type": "object"
       },
       "ContactAgentAssignRequest": {
@@ -19071,6 +19171,98 @@
         "title": "LeadSourceWinnerSummary",
         "type": "object"
       },
+      "LinearFeetEstimateRequest": {
+        "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.",
+        "properties": {
+          "channels": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "feet": {
+            "minimum": 0.0,
+            "title": "Feet",
+            "type": "number"
+          },
+          "storage": {
+            "default": false,
+            "title": "Storage",
+            "type": "boolean"
+          },
+          "takedown": {
+            "default": false,
+            "title": "Takedown",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "feet"
+        ],
+        "title": "LinearFeetEstimateRequest",
+        "type": "object"
+      },
+      "LinearFeetEstimateResult": {
+        "description": "Full estimate for the rep tool. ``feet`` is INTERNAL and never shared.\n\n``difference`` is the single-season price gap; the multi-year block projects\nseasonal (temporary) cost over ``years`` seasons against permanent's one-time\ncost, which is the real \"pay once vs every season\" savings pitch.",
+        "properties": {
+          "christmas": {
+            "$ref": "#/components/schemas/ChristmasEstimate"
+          },
+          "christmas_perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Christmas Perks",
+            "type": "array"
+          },
+          "difference": {
+            "title": "Difference",
+            "type": "number"
+          },
+          "feet": {
+            "title": "Feet",
+            "type": "number"
+          },
+          "multi_year_savings": {
+            "title": "Multi Year Savings",
+            "type": "number"
+          },
+          "permanent": {
+            "$ref": "#/components/schemas/PermanentEstimate"
+          },
+          "permanent_one_time": {
+            "title": "Permanent One Time",
+            "type": "number"
+          },
+          "permanent_perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permanent Perks",
+            "type": "array"
+          },
+          "temporary_multi_year": {
+            "title": "Temporary Multi Year",
+            "type": "number"
+          },
+          "years": {
+            "title": "Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feet",
+          "permanent",
+          "christmas",
+          "difference",
+          "years",
+          "temporary_multi_year",
+          "permanent_one_time",
+          "multi_year_savings"
+        ],
+        "title": "LinearFeetEstimateResult",
+        "type": "object"
+      },
       "LiveCallResponse": {
         "description": "A live (in-progress) call available for operator supervision.",
         "properties": {
@@ -25802,9 +25994,40 @@
             "minimum": 0.0,
             "title": "Per Ft",
             "type": "number"
+          },
+          "perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Perks",
+            "type": "array"
           }
         },
         "title": "PermanentConfig",
+        "type": "object"
+      },
+      "PermanentEstimate": {
+        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "per_ft": {
+            "title": "Per Ft",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "total",
+          "per_ft"
+        ],
+        "title": "PermanentEstimate",
         "type": "object"
       },
       "PersonResult": {
@@ -26586,6 +26809,13 @@
           "commission": {
             "$ref": "#/components/schemas/CommissionConfig"
           },
+          "comparison_years": {
+            "default": 5,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Comparison Years",
+            "type": "integer"
+          },
           "financing": {
             "$ref": "#/components/schemas/FinancingConfig"
           },
@@ -26668,6 +26898,19 @@
                 "type": "null"
               }
             ]
+          },
+          "comparison_years": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Years"
           },
           "financing": {
             "anyOf": [
@@ -28630,6 +28873,123 @@
         "title": "ProspectStatus",
         "type": "string"
       },
+      "PublicChristmasComparison": {
+        "description": "Seasonal side as the client sees it.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "total"
+        ],
+        "title": "PublicChristmasComparison",
+        "type": "object"
+      },
+      "PublicComparison": {
+        "description": "Read-only, safe-fields-only comparison for the public token page.\n\nIntentionally carries **no** ``feet``, ``per_ft``, or ``channels`` — the client\nsees prices, the difference, the multi-year savings, and the perks of each\noption, never the internal measurement that produced them.",
+        "properties": {
+          "accent_color": {
+            "title": "Accent Color",
+            "type": "string"
+          },
+          "brand_color": {
+            "title": "Brand Color",
+            "type": "string"
+          },
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "christmas": {
+            "$ref": "#/components/schemas/PublicChristmasComparison"
+          },
+          "christmas_perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Christmas Perks",
+            "type": "array"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "difference": {
+            "title": "Difference",
+            "type": "number"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "multi_year_savings": {
+            "title": "Multi Year Savings",
+            "type": "number"
+          },
+          "permanent": {
+            "$ref": "#/components/schemas/PublicPermanentComparison"
+          },
+          "permanent_one_time": {
+            "title": "Permanent One Time",
+            "type": "number"
+          },
+          "permanent_perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permanent Perks",
+            "type": "array"
+          },
+          "temporary_multi_year": {
+            "title": "Temporary Multi Year",
+            "type": "number"
+          },
+          "years": {
+            "title": "Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "business_name",
+          "brand_color",
+          "accent_color",
+          "permanent",
+          "christmas",
+          "difference",
+          "years",
+          "temporary_multi_year",
+          "permanent_one_time",
+          "multi_year_savings"
+        ],
+        "title": "PublicComparison",
+        "type": "object"
+      },
       "PublicFeedbackResult": {
         "description": "Result of submitting private feedback.",
         "properties": {
@@ -28902,6 +29262,25 @@
           "name"
         ],
         "title": "PublicOfferResponse",
+        "type": "object"
+      },
+      "PublicPermanentComparison": {
+        "description": "Permanent side as the client sees it — price only, no per-foot rate.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "total"
+        ],
+        "title": "PublicPermanentComparison",
         "type": "object"
       },
       "PublicProposal": {
@@ -39590,6 +39969,49 @@
         "summary": "Accept Invitation",
         "tags": [
           "Invitations"
+        ]
+      }
+    },
+    "/api/v1/p/compare/{token}": {
+      "get": {
+        "description": "Render a client's permanent-vs-temporary savings comparison by token.\n\nPrices are recomputed from the workspace's live pricing config; the payload\nnever includes the internal linear-feet measurement. Unknown tokens 404.",
+        "operationId": "get_public_comparison_api_v1_p_compare__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Public Comparison",
+        "tags": [
+          "Public Comparison"
         ]
       }
     },
@@ -64062,6 +64484,124 @@
           }
         ],
         "summary": "Create Quote",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate": {
+      "post": {
+        "description": "Compute a permanent-vs-temporary estimate for a measured roofline.",
+        "operationId": "estimate_linear_feet_api_v1_workspaces__workspace_id__quotes_estimate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinearFeetEstimateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinearFeetEstimateResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Estimate Linear Feet",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/share": {
+      "post": {
+        "description": "Persist a comparison behind a token and return the client-facing link.",
+        "operationId": "share_comparison_api_v1_workspaces__workspace_id__quotes_estimate_share_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonShareResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Share Comparison",
         "tags": [
           "Quotes"
         ]

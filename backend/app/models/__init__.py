@@ -130,6 +130,7 @@ from app.models.roleplay import (
     RehearsalStatus,
     RehearseeType,
 )
+from app.models.roofline_comparison import RooflineComparison
 from app.models.segment import Segment
 from app.models.short_link import ShortLink
 from app.models.tag import ContactTag, Tag
@@ -238,6 +239,7 @@ __all__ = [
     "ReviewRequest",
     "ReviewRequestChannel",
     "ReviewRequestStatus",
+    "RooflineComparison",
     "Segment",
     "ShortLink",
     "DripCampaign",

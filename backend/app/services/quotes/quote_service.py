@@ -26,8 +26,21 @@ from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
 from app.models.catalog import CatalogItem
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
+from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
+from app.schemas.estimate import (
+    ChristmasEstimate,
+    ComparisonShareRequest,
+    ComparisonShareResult,
+    LinearFeetEstimateRequest,
+    LinearFeetEstimateResult,
+    PermanentEstimate,
+    PublicChristmasComparison,
+    PublicComparison,
+    PublicPermanentComparison,
+)
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
+from app.schemas.pricing import PricingSettings
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
@@ -56,6 +69,7 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
+from app.services.quotes.proposal_pricing import price_christmas, price_permanent
 from app.services.quotes.proposal_template import get_proposal_template
 
 logger = structlog.get_logger()
@@ -791,6 +805,162 @@ class QuoteService:
             selected_tier=document.selected_tier,
         )
         return QuoteDetailResponse.model_validate(quote)
+
+    # ------------------------------------------------------------------
+    # Roofline estimator + permanent-vs-temporary comparison
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_comparison(
+        config: PricingSettings, req: LinearFeetEstimateRequest
+    ) -> LinearFeetEstimateResult:
+        """Price permanent vs seasonal for a measured roofline (pure given config).
+
+        Every dollar is computed server-side from the workspace pricing config; the
+        rep's ``feet`` is the only untrusted input. Multi-year savings project the
+        seasonal (temporary) cost over ``comparison_years`` seasons against
+        permanent's one-time cost — the "pay once vs every season" pitch.
+        """
+        perm = price_permanent(config, feet=req.feet, channels=req.channels)
+        xmas = price_christmas(
+            config,
+            roofline_feet=req.feet,
+            takedown=req.takedown,
+            storage=req.storage,
+        )
+        perm_enabled = bool(config.permanent.enabled)
+        xmas_enabled = bool(config.christmas.enabled)
+        perm_total = float(perm.total) if perm_enabled else 0.0
+        xmas_total = float(xmas.total) if xmas_enabled else 0.0
+
+        years = int(config.comparison_years)
+        temporary_multi_year = round(xmas_total * years, 2)
+        permanent_one_time = perm_total
+        # Only a meaningful figure when both options are actually offered.
+        multi_year_savings = (
+            round(temporary_multi_year - permanent_one_time, 2)
+            if (perm_enabled and xmas_enabled)
+            else 0.0
+        )
+        difference = (
+            round(abs(perm_total - xmas_total), 2) if (perm_enabled and xmas_enabled) else 0.0
+        )
+
+        return LinearFeetEstimateResult(
+            feet=float(req.feet),
+            permanent=PermanentEstimate(
+                enabled=perm_enabled, total=perm_total, per_ft=float(config.permanent.per_ft)
+            ),
+            christmas=ChristmasEstimate(enabled=xmas_enabled, total=xmas_total),
+            difference=difference,
+            years=years,
+            temporary_multi_year=temporary_multi_year,
+            permanent_one_time=permanent_one_time,
+            multi_year_savings=multi_year_savings,
+            permanent_perks=list(config.permanent.perks),
+            christmas_perks=list(config.christmas.perks),
+        )
+
+    async def estimate_linear_feet(
+        self,
+        workspace_id: uuid.UUID,
+        req: LinearFeetEstimateRequest,
+    ) -> LinearFeetEstimateResult:
+        """Compute a permanent-vs-temporary estimate for a measured roofline.
+
+        Authenticated rep tool: the result carries ``feet`` (internal) plus both
+        totals and the multi-year savings. No persistence.
+        """
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+        return self._compute_comparison(config, req)
+
+    async def share_comparison(
+        self,
+        workspace_id: uuid.UUID,
+        req: ComparisonShareRequest,
+        *,
+        created_by_id: int | None = None,
+    ) -> ComparisonShareResult:
+        """Persist a comparison behind a token and return the client-facing URL.
+
+        Only the measured inputs are stored; prices are recomputed from live config
+        on every public view so a rate change is always reflected.
+        """
+        await get_or_404(self.db, Workspace, workspace_id)
+        comparison = RooflineComparison(
+            workspace_id=workspace_id,
+            feet=float(req.feet),
+            channels=int(req.channels),
+            takedown=bool(req.takedown),
+            storage=bool(req.storage),
+            client_name=req.client_name,
+            label=req.label,
+            created_by_id=created_by_id,
+        )
+        self.db.add(comparison)
+        await self.db.commit()
+        await self.db.refresh(comparison)
+
+        from app.core.config import settings
+
+        url = f"{settings.frontend_url.rstrip('/')}/p/compare/{comparison.public_token}"
+        self.log.info(
+            "roofline_comparison_shared",
+            comparison_id=str(comparison.id),
+            workspace_id=str(workspace_id),
+        )
+        return ComparisonShareResult(token=comparison.public_token, url=url)
+
+    async def get_public_comparison(self, token: str) -> PublicComparison:
+        """Return the safe, feet-free comparison for a public token.
+
+        Recomputes prices from the workspace's live pricing config. The public
+        payload deliberately excludes linear feet, per-foot rate, and zone counts.
+        """
+        result = await self.db.execute(
+            select(RooflineComparison)
+            .where(RooflineComparison.public_token == token)
+            .options(selectinload(RooflineComparison.workspace))
+        )
+        comparison = result.scalar_one_or_none()
+        if comparison is None:
+            raise NotFoundError("Comparison not found")
+
+        workspace = comparison.workspace
+        config = get_pricing_config(workspace)
+        template = get_proposal_template(workspace)
+        computed = self._compute_comparison(
+            config,
+            LinearFeetEstimateRequest(
+                feet=comparison.feet,
+                channels=comparison.channels,
+                takedown=comparison.takedown,
+                storage=comparison.storage,
+            ),
+        )
+
+        return PublicComparison(
+            business_name=template.business_name or (workspace.name if workspace else ""),
+            brand_color=template.brand_color,
+            accent_color=template.accent_color,
+            logo_url=template.logo_url,
+            client_name=comparison.client_name,
+            currency="USD",
+            permanent=PublicPermanentComparison(
+                enabled=computed.permanent.enabled, total=computed.permanent.total
+            ),
+            christmas=PublicChristmasComparison(
+                enabled=computed.christmas.enabled, total=computed.christmas.total
+            ),
+            difference=computed.difference,
+            years=computed.years,
+            temporary_multi_year=computed.temporary_multi_year,
+            permanent_one_time=computed.permanent_one_time,
+            multi_year_savings=computed.multi_year_savings,
+            permanent_perks=computed.permanent_perks,
+            christmas_perks=computed.christmas_perks,
+        )
 
     # ------------------------------------------------------------------
     # Conversion

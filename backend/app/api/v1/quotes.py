@@ -16,6 +16,13 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
+from app.schemas.estimate import (
+    ComparisonShareRequest,
+    ComparisonShareResult,
+    LinearFeetEstimateRequest,
+    LinearFeetEstimateResult,
+    PublicComparison,
+)
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
@@ -42,6 +49,10 @@ router = APIRouter(route_class=ServiceErrorRoute)
 # No-auth, token-keyed client proposal surface. Uses ServiceErrorRoute so the
 # service's NotFoundError/ConflictError map to 404/409 at the boundary.
 public_router = APIRouter(route_class=ServiceErrorRoute)
+# No-auth, token-keyed permanent-vs-temporary comparison surface (mounted at
+# ``/p/compare``). Deliberately separate so the client payload never carries the
+# internal linear-feet measurement.
+comparison_public_router = APIRouter(route_class=ServiceErrorRoute)
 
 
 @router.get("", response_model=PaginatedQuotes)
@@ -233,6 +244,38 @@ async def save_wizard_proposal(
     return await service.save_from_wizard(workspace_id, payload, created_by_id=current_user.id)
 
 
+# Roofline estimator: price permanent vs seasonal for a measured linear-feet
+# figure. Feet is the only client input; every dollar is server-computed.
+@router.post("/estimate", response_model=LinearFeetEstimateResult)
+async def estimate_linear_feet(
+    workspace_id: uuid.UUID,
+    payload: LinearFeetEstimateRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadBilling,
+) -> LinearFeetEstimateResult:
+    """Compute a permanent-vs-temporary estimate for a measured roofline."""
+    service = QuoteService(db)
+    return await service.estimate_linear_feet(workspace_id, payload)
+
+
+@router.post(
+    "/estimate/share",
+    response_model=ComparisonShareResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def share_comparison(
+    workspace_id: uuid.UUID,
+    payload: ComparisonShareRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> ComparisonShareResult:
+    """Persist a comparison behind a token and return the client-facing link."""
+    service = QuoteService(db)
+    return await service.share_comparison(workspace_id, payload, created_by_id=current_user.id)
+
+
 # Line-item sub-resource. Mutations return the full quote because totals change.
 @router.post(
     "/{quote_id}/line-items",
@@ -329,3 +372,16 @@ async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCh
     return PublicProposalDepositCheckout(
         url=checkout.url, amount=checkout.amount, currency=checkout.currency
     )
+
+
+# ---------------------------------------------------------------------------
+# Public permanent-vs-temporary comparison (no auth, token-keyed)
+# ---------------------------------------------------------------------------
+@comparison_public_router.get("/{token}", response_model=PublicComparison)
+async def get_public_comparison(token: str, db: DB) -> PublicComparison:
+    """Render a client's permanent-vs-temporary savings comparison by token.
+
+    Prices are recomputed from the workspace's live pricing config; the payload
+    never includes the internal linear-feet measurement. Unknown tokens 404.
+    """
+    return await QuoteService(db).get_public_comparison(token)

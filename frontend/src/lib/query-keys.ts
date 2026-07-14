@@ -131,8 +131,16 @@ const salesWizard = {
   catalog: (workspaceId: string) => ["sales-wizard-catalog", workspaceId] as const,
 };
 
+// Roofline estimator: a live permanent-vs-temporary price for a measured
+// footage + option flags. Keyed on the inputs so the recompute is cached.
+const estimator = {
+  compute: (workspaceId: string, params: QueryKeyParams) =>
+    ["estimator", workspaceId, normalizeQueryKeyParams(params)] as const,
+};
+
 export const queryKeys = {
   salesWizard,
+  estimator,
   adLibrary: {
     ...adAdvertisers,
     advertisers: (workspaceId: string, params?: QueryKeyParams | null) =>
@@ -382,6 +390,10 @@ export const queryKeys = {
   publicProposals: {
     all: () => ["public-proposals"] as const,
     byToken: (token: string) => ["public-proposals", token] as const,
+  },
+  publicComparisons: {
+    all: () => ["public-comparisons"] as const,
+    byToken: (token: string) => ["public-comparisons", token] as const,
   },
   reviews: {
     ...reviews,

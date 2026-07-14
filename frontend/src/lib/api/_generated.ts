@@ -300,6 +300,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/compare/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Comparison
+         * @description Render a client's permanent-vs-temporary savings comparison by token.
+         *
+         *     Prices are recomputed from the workspace's live pricing config; the payload
+         *     never includes the internal linear-feet measurement. Unknown tokens 404.
+         */
+        get: operations["get_public_comparison_api_v1_p_compare__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/demo/call": {
         parameters: {
             query?: never;
@@ -6395,6 +6418,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate Linear Feet
+         * @description Compute a permanent-vs-temporary estimate for a measured roofline.
+         */
+        post: operations["estimate_linear_feet_api_v1_workspaces__workspace_id__quotes_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share Comparison
+         * @description Persist a comparison behind a token and return the client-facing link.
+         */
+        post: operations["share_comparison_api_v1_workspaces__workspace_id__quotes_estimate_share_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/wizard": {
         parameters: {
             query?: never;
@@ -11573,6 +11636,8 @@ export interface components {
              * @default 0
              */
             minimum: number;
+            /** Perks */
+            perks?: string[];
             /**
              * Roofline Per Ft
              * @default 6
@@ -11597,6 +11662,16 @@ export interface components {
             tree_rates?: components["schemas"]["SizeRate"][];
             /** Wreath Rates */
             wreath_rates?: components["schemas"]["SizeRate"][];
+        };
+        /**
+         * ChristmasEstimate
+         * @description Seasonal-lighting side of the estimate.
+         */
+        ChristmasEstimate: {
+            /** Enabled */
+            enabled: boolean;
+            /** Total */
+            total: number;
         };
         /**
          * ClockInRequest
@@ -11673,6 +11748,43 @@ export interface components {
             project_name: string;
             /** Project Url */
             project_url: string;
+        };
+        /**
+         * ComparisonShareRequest
+         * @description Persist an estimate behind a token so the homeowner can view the savings.
+         */
+        ComparisonShareRequest: {
+            /**
+             * Channels
+             * @default 0
+             */
+            channels: number;
+            /** Client Name */
+            client_name?: string | null;
+            /** Feet */
+            feet: number;
+            /** Label */
+            label?: string | null;
+            /**
+             * Storage
+             * @default false
+             */
+            storage: boolean;
+            /**
+             * Takedown
+             * @default false
+             */
+            takedown: boolean;
+        };
+        /**
+         * ComparisonShareResult
+         * @description The share token plus the ready-to-send client URL.
+         */
+        ComparisonShareResult: {
+            /** Token */
+            token: string;
+            /** Url */
+            url: string;
         };
         /**
          * ContactAgentAssignRequest
@@ -15411,6 +15523,61 @@ export interface components {
             spend: number;
         };
         /**
+         * LinearFeetEstimateRequest
+         * @description A rep's measured roofline plus optional per-service knobs.
+         *
+         *     ``feet`` is the measured linear footage; the optional flags let the rep model
+         *     a fuller quote (permanent zones, seasonal takedown/storage) without leaving
+         *     the estimator.
+         */
+        LinearFeetEstimateRequest: {
+            /**
+             * Channels
+             * @default 0
+             */
+            channels: number;
+            /** Feet */
+            feet: number;
+            /**
+             * Storage
+             * @default false
+             */
+            storage: boolean;
+            /**
+             * Takedown
+             * @default false
+             */
+            takedown: boolean;
+        };
+        /**
+         * LinearFeetEstimateResult
+         * @description Full estimate for the rep tool. ``feet`` is INTERNAL and never shared.
+         *
+         *     ``difference`` is the single-season price gap; the multi-year block projects
+         *     seasonal (temporary) cost over ``years`` seasons against permanent's one-time
+         *     cost, which is the real "pay once vs every season" savings pitch.
+         */
+        LinearFeetEstimateResult: {
+            christmas: components["schemas"]["ChristmasEstimate"];
+            /** Christmas Perks */
+            christmas_perks?: string[];
+            /** Difference */
+            difference: number;
+            /** Feet */
+            feet: number;
+            /** Multi Year Savings */
+            multi_year_savings: number;
+            permanent: components["schemas"]["PermanentEstimate"];
+            /** Permanent One Time */
+            permanent_one_time: number;
+            /** Permanent Perks */
+            permanent_perks?: string[];
+            /** Temporary Multi Year */
+            temporary_multi_year: number;
+            /** Years */
+            years: number;
+        };
+        /**
          * LiveCallResponse
          * @description A live (in-progress) call available for operator supervision.
          */
@@ -17760,6 +17927,20 @@ export interface components {
              * @default 32
              */
             per_ft: number;
+            /** Perks */
+            perks?: string[];
+        };
+        /**
+         * PermanentEstimate
+         * @description Permanent-lighting side of the estimate (rep view — includes per_ft).
+         */
+        PermanentEstimate: {
+            /** Enabled */
+            enabled: boolean;
+            /** Per Ft */
+            per_ft: number;
+            /** Total */
+            total: number;
         };
         /**
          * PersonResult
@@ -18047,6 +18228,11 @@ export interface components {
             cash_discount?: components["schemas"]["CashDiscountConfig"];
             christmas?: components["schemas"]["ChristmasConfig"];
             commission?: components["schemas"]["CommissionConfig"];
+            /**
+             * Comparison Years
+             * @default 5
+             */
+            comparison_years: number;
             financing?: components["schemas"]["FinancingConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
             savings?: components["schemas"]["SavingsConfig"];
@@ -18070,6 +18256,8 @@ export interface components {
             cash_discount?: components["schemas"]["CashDiscountConfig"] | null;
             christmas?: components["schemas"]["ChristmasConfig"] | null;
             commission?: components["schemas"]["CommissionConfig"] | null;
+            /** Comparison Years */
+            comparison_years?: number | null;
             financing?: components["schemas"]["FinancingConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
             savings?: components["schemas"]["SavingsConfig"] | null;
@@ -18736,6 +18924,57 @@ export interface components {
          */
         ProspectStatus: "new" | "enriching" | "enriched" | "queued" | "contacted" | "replied" | "qualified" | "converted" | "suppressed" | "archived";
         /**
+         * PublicChristmasComparison
+         * @description Seasonal side as the client sees it.
+         */
+        PublicChristmasComparison: {
+            /** Enabled */
+            enabled: boolean;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PublicComparison
+         * @description Read-only, safe-fields-only comparison for the public token page.
+         *
+         *     Intentionally carries **no** ``feet``, ``per_ft``, or ``channels`` — the client
+         *     sees prices, the difference, the multi-year savings, and the perks of each
+         *     option, never the internal measurement that produced them.
+         */
+        PublicComparison: {
+            /** Accent Color */
+            accent_color: string;
+            /** Brand Color */
+            brand_color: string;
+            /** Business Name */
+            business_name: string;
+            christmas: components["schemas"]["PublicChristmasComparison"];
+            /** Christmas Perks */
+            christmas_perks?: string[];
+            /** Client Name */
+            client_name?: string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /** Difference */
+            difference: number;
+            /** Logo Url */
+            logo_url?: string | null;
+            /** Multi Year Savings */
+            multi_year_savings: number;
+            permanent: components["schemas"]["PublicPermanentComparison"];
+            /** Permanent One Time */
+            permanent_one_time: number;
+            /** Permanent Perks */
+            permanent_perks?: string[];
+            /** Temporary Multi Year */
+            temporary_multi_year: number;
+            /** Years */
+            years: number;
+        };
+        /**
          * PublicFeedbackResult
          * @description Result of submitting private feedback.
          */
@@ -18816,6 +19055,16 @@ export interface components {
             urgency_type?: string | null;
             /** Value Stack Items */
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
+        };
+        /**
+         * PublicPermanentComparison
+         * @description Permanent side as the client sees it — price only, no per-foot rate.
+         */
+        PublicPermanentComparison: {
+            /** Enabled */
+            enabled: boolean;
+            /** Total */
+            total: number;
         };
         /**
          * PublicProposal
@@ -23063,6 +23312,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationAcceptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_comparison_api_v1_p_compare__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicComparison"];
                 };
             };
             /** @description Validation Error */
@@ -35824,6 +36104,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_linear_feet_api_v1_workspaces__workspace_id__quotes_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearFeetEstimateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearFeetEstimateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_comparison_api_v1_workspaces__workspace_id__quotes_estimate_share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComparisonShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonShareResult"];
                 };
             };
             /** @description Validation Error */

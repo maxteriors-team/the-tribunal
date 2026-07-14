@@ -221,6 +221,12 @@ api_router.include_router(
     prefix="/p/quotes",
     tags=["Public Proposals"],
 )
+# Public permanent-vs-temporary savings comparison (no auth, token-keyed)
+api_router.include_router(
+    quotes.comparison_public_router,
+    prefix="/p/compare",
+    tags=["Public Comparison"],
+)
 api_router.include_router(
     dashboard.router,
     prefix="/workspaces/{workspace_id}/dashboard",

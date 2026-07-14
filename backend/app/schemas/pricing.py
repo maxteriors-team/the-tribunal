@@ -171,6 +171,18 @@ class BistroConfig(BaseModel):
 # --------------------------------------------------------------------------- #
 # Permanent holiday lighting (per-linear-foot roofline + controller/channels)
 # --------------------------------------------------------------------------- #
+def _default_permanent_perks() -> list[str]:
+    """Client-facing selling points for permanent lighting (operator-editable)."""
+    return [
+        "Installed once — never put up or take down lights again",
+        "App-controlled colors, scenes, and schedules year-round",
+        "Works for every holiday, game day, and party — not just Christmas",
+        "No annual install or removal fees eating into your budget",
+        "Professional-grade LEDs backed by a multi-year warranty",
+        "Hidden when off — a clean roofline in daylight",
+    ]
+
+
 class PermanentConfig(BaseModel):
     """Permanent LED roofline priced per linear foot plus a controller/hub.
 
@@ -187,6 +199,8 @@ class PermanentConfig(BaseModel):
     included_channels: int = Field(default=1, ge=0)
     minimum: float = Field(default=0, ge=0)
     label: str = "Permanent Holiday Lighting"
+    # Client-facing perks rendered on the comparison page (operator-editable).
+    perks: list[str] = Field(default_factory=_default_permanent_perks)
 
 
 # --------------------------------------------------------------------------- #
@@ -222,6 +236,17 @@ def _default_wreath_rates() -> list[SizeRate]:
     ]
 
 
+def _default_christmas_perks() -> list[str]:
+    """Client-facing selling points for temporary lighting (operator-editable)."""
+    return [
+        "Lower upfront cost to get a festive look this season",
+        "Professional install, takedown, and off-season storage handled for you",
+        "Switch up the design or colors from year to year",
+        "Nothing permanently attached to your home",
+        "Great way to try holiday lighting before committing to permanent",
+    ]
+
+
 class ChristmasConfig(BaseModel):
     """Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.
 
@@ -241,6 +266,8 @@ class ChristmasConfig(BaseModel):
     storage_price: float = Field(default=0, ge=0)  # flat off-season storage fee
     minimum: float = Field(default=0, ge=0)
     label: str = "Christmas Lighting"
+    # Client-facing perks rendered on the comparison page (operator-editable).
+    perks: list[str] = Field(default_factory=_default_christmas_perks)
 
 
 # --------------------------------------------------------------------------- #
@@ -267,6 +294,8 @@ class PricingSettings(BaseModel):
     bistro: BistroConfig = Field(default_factory=BistroConfig)
     permanent: PermanentConfig = Field(default_factory=PermanentConfig)
     christmas: ChristmasConfig = Field(default_factory=ChristmasConfig)
+    # Horizon (seasons) for the permanent-vs-temporary multi-year savings pitch.
+    comparison_years: int = Field(default=5, ge=1, le=30)
 
 
 # --------------------------------------------------------------------------- #
@@ -396,3 +425,4 @@ class PricingSettingsUpdate(BaseModel):
     bistro: BistroConfig | None = None
     permanent: PermanentConfig | None = None
     christmas: ChristmasConfig | None = None
+    comparison_years: int | None = Field(default=None, ge=1, le=30)
