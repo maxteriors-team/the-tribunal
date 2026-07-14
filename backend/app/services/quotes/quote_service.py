@@ -194,6 +194,7 @@ class QuoteService:
             currency=quote_in.currency,
             tax_amount=quote_in.tax_amount,
             discount_amount=quote_in.discount_amount,
+            deposit_percentage=quote_in.deposit_percentage,
             issue_date=quote_in.issue_date,
             expiry_date=quote_in.expiry_date,
             notes=quote_in.notes,
@@ -268,6 +269,7 @@ class QuoteService:
             "currency",
             "tax_amount",
             "discount_amount",
+            "deposit_percentage",
             "issue_date",
             "expiry_date",
             "notes",
@@ -604,6 +606,12 @@ class QuoteService:
         if quote.contact is not None:
             client_name = quote.contact.full_name or quote.contact.first_name
 
+        total = float(quote.total or 0)
+        deposit_pct = (
+            float(quote.deposit_percentage) if quote.deposit_percentage is not None else None
+        )
+        deposit_amount = round(total * deposit_pct / 100, 2) if deposit_pct else None
+
         return PublicProposal(
             token=token,
             number=quote.number,
@@ -613,7 +621,7 @@ class QuoteService:
             subtotal=float(quote.subtotal or 0),
             tax_amount=float(quote.tax_amount or 0),
             discount_amount=float(quote.discount_amount or 0),
-            total=float(quote.total or 0),
+            total=total,
             issue_date=quote.issue_date,
             expiry_date=quote.expiry_date,
             is_expired=quote.status == "expired",
@@ -622,6 +630,9 @@ class QuoteService:
             notes=quote.notes,
             terms=quote.terms or template.default_terms,
             client_name=client_name,
+            deposit_percentage=deposit_pct,
+            deposit_amount=deposit_amount,
+            deposit_paid=quote.deposit_paid_at is not None,
             proposal_document=quote.proposal_document,
             line_items=[
                 PublicProposalLineItem(

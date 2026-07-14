@@ -28925,6 +28925,33 @@
             "title": "Currency",
             "type": "string"
           },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "deposit_paid": {
+            "default": false,
+            "title": "Deposit Paid",
+            "type": "boolean"
+          },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
+          },
           "discount_amount": {
             "title": "Discount Amount",
             "type": "number"
@@ -29185,6 +29212,30 @@
           }
         },
         "title": "PublicProposalDecline",
+        "type": "object"
+      },
+      "PublicProposalDepositCheckout": {
+        "description": "Hosted Stripe Checkout URL for paying a proposal's deposit.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "amount",
+          "currency"
+        ],
+        "title": "PublicProposalDepositCheckout",
         "type": "object"
       },
       "PublicProposalLineItem": {
@@ -29761,6 +29812,19 @@
             "title": "Currency",
             "type": "string"
           },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
+          },
           "discount_amount": {
             "default": 0.0,
             "minimum": 0.0,
@@ -30024,6 +30088,29 @@
               }
             ],
             "title": "Declined At"
+          },
+          "deposit_paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Paid At"
+          },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
           },
           "discount_amount": {
             "title": "Discount Amount",
@@ -30473,6 +30560,29 @@
             ],
             "title": "Declined At"
           },
+          "deposit_paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Paid At"
+          },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
+          },
           "discount_amount": {
             "title": "Discount Amount",
             "type": "number"
@@ -30664,6 +30774,19 @@
               }
             ],
             "title": "Currency"
+          },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
           },
           "discount_amount": {
             "anyOf": [
@@ -40368,6 +40491,49 @@
           }
         },
         "summary": "Decline Public Proposal",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/deposit-checkout": {
+      "post": {
+        "description": "Start a Stripe Checkout Session so the client can pay the deposit.\n\nReturns the hosted payment URL for the frontend to redirect to. A bad state\n(no deposit due, already paid, expired/declined, or Stripe unconfigured)\nsurfaces as a 400 with a client-safe message.",
+        "operationId": "create_deposit_checkout_api_v1_p_quotes__token__deposit_checkout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalDepositCheckout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Deposit Checkout",
         "tags": [
           "Public Proposals"
         ]

@@ -381,6 +381,15 @@ async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
 
         await handle_invoice_checkout_session_completed(session, db)
         return
+    # Public-proposal deposits also run in ``payment`` mode; route them by their
+    # ``quote_id`` metadata before the generic in-call-payment branch below.
+    if metadata.get("quote_id"):
+        from app.services.payments.quote_deposit_service import (
+            handle_deposit_checkout_session_completed,
+        )
+
+        await handle_deposit_checkout_session_completed(session, db)
+        return
     if session.get("mode") == "payment" or metadata.get("call_payment_id"):
         from app.services.payments import call_payment_service
 

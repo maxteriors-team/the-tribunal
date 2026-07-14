@@ -106,11 +106,18 @@ async def create_payment_checkout_session(
     product_name: str,
     metadata: dict[str, str],
     customer_email: str | None = None,
+    success_url: str | None = None,
+    cancel_url: str | None = None,
 ) -> CheckoutSessionResult:
-    """Create a Stripe Checkout Session (``payment`` mode) for an in-call payment.
+    """Create a Stripe Checkout Session (``payment`` mode) for a one-off payment.
+
+    Reused for in-call payments and public-proposal deposits. ``success_url`` /
+    ``cancel_url`` default to the generic payment result pages when omitted so
+    callers that want to return the customer somewhere specific (e.g. back to a
+    proposal) can override them.
 
     Raises ``stripe.StripeError`` on Stripe failures so the caller can surface a
-    friendly message to the AI without persisting a dangling row.
+    friendly message without persisting a dangling row.
     """
     client = _stripe_client()
     params: dict[str, Any] = {
@@ -125,8 +132,8 @@ async def create_payment_checkout_session(
                 "quantity": 1,
             }
         ],
-        "success_url": f"{settings.frontend_url}/payment-complete",
-        "cancel_url": f"{settings.frontend_url}/payment-cancelled",
+        "success_url": success_url or f"{settings.frontend_url}/payment-complete",
+        "cancel_url": cancel_url or f"{settings.frontend_url}/payment-cancelled",
         "metadata": metadata,
         "payment_intent_data": {"metadata": metadata},
     }

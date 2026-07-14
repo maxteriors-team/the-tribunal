@@ -57,6 +57,13 @@ const createQuoteSchema = z.object({
   title: z.string(),
   expiry_date: z.string(),
   tax_amount: moneyString,
+  deposit_percentage: z
+    .string()
+    .trim()
+    .refine(
+      (v) => v === "" || (!Number.isNaN(Number(v)) && Number(v) >= 0 && Number(v) <= 100),
+      { error: "0–100" },
+    ),
   notes: z.string(),
   line_items: z.array(lineItemSchema).min(1, { error: "Add at least one line item" }),
 });
@@ -75,6 +82,7 @@ const DEFAULT_VALUES: CreateQuoteFormValues = {
   title: "",
   expiry_date: "",
   tax_amount: "",
+  deposit_percentage: "",
   notes: "",
   line_items: [{ ...EMPTY_LINE }],
 };
@@ -135,6 +143,10 @@ export function QuoteCreateDialog({
         title: values.title.trim() || undefined,
         expiry_date: values.expiry_date || undefined,
         tax_amount: values.tax_amount === "" ? undefined : Number(values.tax_amount),
+        deposit_percentage:
+          values.deposit_percentage === ""
+            ? undefined
+            : Number(values.deposit_percentage),
         notes: values.notes.trim() || undefined,
         line_items: values.line_items.map((li) => ({
           name: li.name.trim(),
@@ -311,7 +323,7 @@ export function QuoteCreateDialog({
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <FormField
                 control={form.control}
                 name="expiry_date"
@@ -338,6 +350,27 @@ export function QuoteCreateDialog({
                         step="0.01"
                         inputMode="decimal"
                         placeholder="0.00"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="deposit_percentage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Deposit %</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        inputMode="decimal"
+                        placeholder="e.g. 30"
                         {...field}
                       />
                     </FormControl>

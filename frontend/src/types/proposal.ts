@@ -45,10 +45,20 @@ export interface PublicProposal {
   notes?: string | null;
   terms?: string | null;
   client_name?: string | null;
+  /** Optional upfront deposit the client can pay online to accept the quote. */
+  deposit_percentage?: number | null;
+  deposit_amount?: number | null;
+  deposit_paid: boolean;
   line_items: PublicProposalLineItem[];
   branding: PublicProposalBranding;
   /** Sales-wizard snapshot (multi-tier presentation); null for plain quotes. */
   proposal_document?: Record<string, unknown> | null;
+}
+
+export interface PublicProposalDepositCheckout {
+  url: string;
+  amount: number;
+  currency: string;
 }
 
 export interface PublicProposalActionResult {

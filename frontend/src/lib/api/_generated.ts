@@ -661,6 +661,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/quotes/{token}/deposit-checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Deposit Checkout
+         * @description Start a Stripe Checkout Session so the client can pay the deposit.
+         *
+         *     Returns the hosted payment URL for the frontend to redirect to. A bad state
+         *     (no deposit due, already paid, expired/declined, or Stripe unconfigured)
+         *     surfaces as a 400 with a client-safe message.
+         */
+        post: operations["create_deposit_checkout_api_v1_p_quotes__token__deposit_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/reviews/{token}": {
         parameters: {
             query?: never;
@@ -18806,6 +18830,15 @@ export interface components {
             client_name?: string | null;
             /** Currency */
             currency: string;
+            /** Deposit Amount */
+            deposit_amount?: number | null;
+            /**
+             * Deposit Paid
+             * @default false
+             */
+            deposit_paid: boolean;
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -18896,6 +18929,18 @@ export interface components {
         PublicProposalDecline: {
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * PublicProposalDepositCheckout
+         * @description Hosted Stripe Checkout URL for paying a proposal's deposit.
+         */
+        PublicProposalDepositCheckout: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /** Url */
+            url: string;
         };
         /**
          * PublicProposalLineItem
@@ -19163,6 +19208,8 @@ export interface components {
              * @default USD
              */
             currency: string;
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /**
              * Discount Amount
              * @default 0
@@ -19253,6 +19300,10 @@ export interface components {
             decline_reason?: string | null;
             /** Declined At */
             declined_at?: string | null;
+            /** Deposit Paid At */
+            deposit_paid_at?: string | null;
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -19414,6 +19465,10 @@ export interface components {
             decline_reason?: string | null;
             /** Declined At */
             declined_at?: string | null;
+            /** Deposit Paid At */
+            deposit_paid_at?: string | null;
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -19473,6 +19528,8 @@ export interface components {
             contact_id?: number | null;
             /** Currency */
             currency?: string | null;
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /** Discount Amount */
             discount_amount?: number | null;
             /** Expiry Date */
@@ -23637,6 +23694,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicProposalActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_deposit_checkout_api_v1_p_quotes__token__deposit_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalDepositCheckout"];
                 };
             };
             /** @description Validation Error */

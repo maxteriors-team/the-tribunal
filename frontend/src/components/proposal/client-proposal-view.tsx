@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils/date";
 import type { PublicProposal } from "@/types/proposal";
 
+import { DepositPanel } from "./deposit-panel";
 import { fmt, type ProposalDoc } from "./document";
 import { proposalFontVars } from "./proposal-fonts";
 
@@ -654,6 +655,8 @@ export function ClientProposalView({
             <p>{data.terms}</p>
           </div>
         ) : null}
+
+        <DepositPanel data={data} />
 
         <div className="cta-section no-print">
           {decided ? (

@@ -34,6 +34,9 @@ export interface Quote {
   discount_amount: number;
   total: number;
   currency: string;
+  /** Optional upfront deposit as a percentage of the total (0–100); null = none. */
+  deposit_percentage?: number | null;
+  deposit_paid_at?: string | null;
   issue_date?: string | null;
   expiry_date?: string | null;
   sent_at?: string | null;
@@ -68,6 +71,7 @@ export interface CreateQuoteRequest {
   currency?: string;
   tax_amount?: number;
   discount_amount?: number;
+  deposit_percentage?: number;
   issue_date?: string;
   expiry_date?: string;
   notes?: string;
@@ -83,6 +87,7 @@ export interface UpdateQuoteRequest {
   currency?: string;
   tax_amount?: number;
   discount_amount?: number;
+  deposit_percentage?: number;
   issue_date?: string;
   expiry_date?: string;
   notes?: string;

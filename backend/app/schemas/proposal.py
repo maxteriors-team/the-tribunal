@@ -124,6 +124,13 @@ class PublicProposal(BaseModel):
     notes: str | None = None
     terms: str | None = None
     client_name: str | None = None
+    # Optional upfront deposit the client can pay online to accept the quote.
+    # ``deposit_amount`` is derived from ``deposit_percentage`` * ``total``;
+    # ``deposit_paid`` reflects a completed Stripe payment. All null/false when
+    # the operator didn't request a deposit.
+    deposit_percentage: float | None = None
+    deposit_amount: float | None = None
+    deposit_paid: bool = False
     line_items: list[PublicProposalLineItem] = Field(default_factory=list)
     # Rich multi-tier presentation snapshot built by the sales wizard. When set,
     # the public page renders the Good/Better/Best tiers, financing, Care Plan,
@@ -146,3 +153,11 @@ class PublicProposalActionResult(BaseModel):
     message: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicProposalDepositCheckout(BaseModel):
+    """Hosted Stripe Checkout URL for paying a proposal's deposit."""
+
+    url: str
+    amount: float
+    currency: str

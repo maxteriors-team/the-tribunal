@@ -12,7 +12,7 @@ mutations return the full quote detail because they recompute the parent totals.
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
@@ -20,6 +20,7 @@ from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
     PublicProposalDecline,
+    PublicProposalDepositCheckout,
 )
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
@@ -306,3 +307,25 @@ async def decline_public_proposal(
 ) -> PublicProposalActionResult:
     """Client declines their proposal with an optional reason (idempotent)."""
     return await QuoteService(db).decline_public(token, reason=payload.reason)
+
+
+@public_router.post("/{token}/deposit-checkout", response_model=PublicProposalDepositCheckout)
+async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCheckout:
+    """Start a Stripe Checkout Session so the client can pay the deposit.
+
+    Returns the hosted payment URL for the frontend to redirect to. A bad state
+    (no deposit due, already paid, expired/declined, or Stripe unconfigured)
+    surfaces as a 400 with a client-safe message.
+    """
+    from app.services.payments.quote_deposit_service import (
+        DepositError,
+        create_deposit_checkout_session,
+    )
+
+    try:
+        checkout = await create_deposit_checkout_session(db, token)
+    except DepositError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PublicProposalDepositCheckout(
+        url=checkout.url, amount=checkout.amount, currency=checkout.currency
+    )

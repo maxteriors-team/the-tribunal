@@ -105,6 +105,18 @@ class Quote(Base):
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
 
+    # Optional upfront deposit the client can pay online to accept the quote.
+    # Percentage of ``total`` (0-100); null = no deposit requested. The deposit
+    # amount is derived (never stored) so it always tracks the live total.
+    deposit_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Deposit payment provenance (Stripe Checkout in ``payment`` mode). Set once
+    # the client pays; ``deposit_paid_at`` is the idempotency guard for the webhook.
+    deposit_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deposit_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    deposit_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     status: Mapped[str] = mapped_column(
         Enum(*QUOTE_STATUSES, name="quote_status"),
         nullable=False,

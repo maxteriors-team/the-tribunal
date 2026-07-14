@@ -67,6 +67,8 @@ class QuoteBase(BaseModel):
     currency: str = "USD"
     tax_amount: float = Field(default=0.0, ge=0)
     discount_amount: float = Field(default=0.0, ge=0)
+    # Optional upfront deposit as a percentage of the total (0-100). Null = none.
+    deposit_percentage: float | None = Field(default=None, ge=0, le=100)
     issue_date: date | None = None
     expiry_date: date | None = None
     notes: str | None = None
@@ -90,6 +92,7 @@ class QuoteUpdate(BaseModel):
     currency: str | None = None
     tax_amount: float | None = Field(default=None, ge=0)
     discount_amount: float | None = Field(default=None, ge=0)
+    deposit_percentage: float | None = Field(default=None, ge=0, le=100)
     issue_date: date | None = None
     expiry_date: date | None = None
     notes: str | None = None
@@ -144,6 +147,8 @@ class QuoteResponse(BaseModel):
     discount_amount: float
     total: float
     currency: str
+    deposit_percentage: float | None = None
+    deposit_paid_at: datetime | None = None
     issue_date: date | None = None
     expiry_date: date | None = None
     sent_at: datetime | None = None

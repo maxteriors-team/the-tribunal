@@ -704,3 +704,53 @@
 .proposal-view .grand-row.lead strong { color: var(--gold); font-size: 34px; }
 .proposal-view .grand-row.muted span, .proposal-view .grand-row.muted strong { color: var(--t4); font-size: 11px; font-family: var(--font-montserrat), sans-serif; }
 .proposal-view .grand-row.muted strong { font-weight: 700; }
+
+/* ------------------------------------------------------------------ *
+ * Plain line-item quote (no wizard snapshot). Reuses the dark/gold
+ * tokens above; only the itemized table + totals are bespoke here.
+ * ------------------------------------------------------------------ */
+.proposal-view .pq-hero-title { font-family: var(--font-cormorant), serif; font-size: clamp(38px, 6vw, 64px); font-weight: 300; font-style: italic; color: var(--t1); line-height: 0.96; letter-spacing: 0.01em; margin-bottom: 24px; text-align: center; }
+.proposal-view .pq-intro { max-width: 620px; margin: 0 auto 8px; text-align: center; font-size: 14px; line-height: 1.8; color: var(--t2); white-space: pre-line; }
+
+.proposal-view .pq-table-wrap { margin-bottom: 40px; overflow-x: auto; }
+.proposal-view .pq-table { width: 100%; border-collapse: collapse; }
+.proposal-view .pq-table thead th { font-family: var(--font-montserrat), sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.20em; text-transform: uppercase; color: var(--gold-d); padding: 0 0 14px; border-bottom: 1px solid var(--bdr-g); text-align: right; white-space: nowrap; }
+.proposal-view .pq-table thead th:first-child { text-align: left; }
+.proposal-view .pq-table tbody td { padding: 16px 0; border-bottom: 1px solid var(--bdr); vertical-align: top; text-align: right; }
+.proposal-view .pq-table tbody td:first-child { text-align: left; padding-right: 20px; }
+.proposal-view .pq-item-name { font-family: var(--font-montserrat), sans-serif; font-size: 14px; font-weight: 500; color: var(--t1); }
+.proposal-view .pq-item-desc { font-size: 12px; color: var(--t4); margin-top: 4px; line-height: 1.5; white-space: pre-line; }
+.proposal-view .pq-num { font-family: var(--font-montserrat), sans-serif; font-size: 13px; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.proposal-view .pq-num.muted { color: var(--t4); }
+.proposal-view .pq-amount { font-family: var(--font-cormorant), serif; font-size: 18px; font-weight: 400; color: var(--t1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.proposal-view .pq-totals { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.proposal-view .pq-totals-inner { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px; }
+.proposal-view .pq-total-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.proposal-view .pq-total-row span { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t3); }
+.proposal-view .pq-total-row strong { font-family: var(--font-cormorant), serif; font-weight: 300; color: var(--t1); font-size: 20px; font-variant-numeric: tabular-nums; }
+.proposal-view .pq-total-row.grand { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--bdr-g); }
+.proposal-view .pq-total-row.grand span { color: var(--gold-d); }
+.proposal-view .pq-total-row.grand strong { color: var(--gold); font-size: 34px; }
+
+/* ------------------------------------------------------------------ *
+ * Deposit panel (shared by plain quotes + wizard proposals). Lets the
+ * client pay an upfront deposit online to accept the quote.
+ * ------------------------------------------------------------------ */
+.proposal-view .dep-panel { margin: 40px auto 0; max-width: 560px; border: 1px solid var(--bdr-g); background: linear-gradient(135deg, rgba(212, 175, 90, 0.09), rgba(212, 175, 90, 0.01)); padding: 24px 26px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.proposal-view .dep-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.proposal-view .dep-label { font-size: 9px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold-d); }
+.proposal-view .dep-amount { font-family: var(--font-cormorant), serif; font-size: 34px; font-weight: 300; color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
+.proposal-view .dep-sub { font-size: 12px; color: var(--t3); }
+.proposal-view .dep-pay-btn { padding: 15px 34px; background: var(--gold); color: #0a0a0a; border: none; font-family: var(--font-montserrat), sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
+.proposal-view .dep-pay-btn:hover { background: var(--gold-l); box-shadow: 0 0 40px rgba(212, 175, 90, 0.2); }
+.proposal-view .dep-pay-btn:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+.proposal-view .dep-panel.paid { border-color: rgba(110, 200, 140, 0.4); background: rgba(110, 200, 140, 0.07); }
+.proposal-view .dep-panel.paid .dep-label { color: #8fd6a8; }
+.proposal-view .dep-panel.paid .dep-amount { color: #8fd6a8; }
+.proposal-view .dep-paid-badge { display: inline-flex; align-items: center; gap: 8px; color: #8fd6a8; font-family: var(--font-montserrat), sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+.proposal-view .dep-error { flex-basis: 100%; font-size: 12px; color: #e0968f; margin-top: 2px; }
+@media (max-width: 520px) {
+  .proposal-view .dep-panel { flex-direction: column; align-items: stretch; text-align: center; }
+  .proposal-view .dep-pay-btn { width: 100%; }
+}
