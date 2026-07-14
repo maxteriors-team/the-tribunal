@@ -9,6 +9,7 @@ export interface AppointmentsListParams {
   status_filter?: string;
   contact_id?: number;
   agent_id?: string;
+  business_location_id?: string;
   date_from?: string; // ISO datetime string
   date_to?: string; // ISO datetime string
 }

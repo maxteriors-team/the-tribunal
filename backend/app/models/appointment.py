@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.models.campaign import Campaign
     from app.models.contact import Contact
     from app.models.conversation import Message
+    from app.models.field_service import BusinessLocation
     from app.models.workspace import Workspace
 
 
@@ -49,6 +50,11 @@ class Appointment(Base):
             "ix_appointments_workspace_scheduled_at",
             "workspace_id",
             "scheduled_at",
+        ),
+        Index(
+            "ix_appointments_workspace_business_location",
+            "workspace_id",
+            "business_location_id",
         ),
     )
 
@@ -87,6 +93,14 @@ class Appointment(Base):
     bookable_staff_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("bookable_staff.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The business branch this appointment belongs to. Nullable = unassigned /
+    # all locations. SET NULL keeps the appointment if the branch is removed.
+    business_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("business_locations.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -146,6 +160,7 @@ class Appointment(Base):
     message: Mapped["Message | None"] = relationship("Message", back_populates="appointment")
     campaign: Mapped["Campaign | None"] = relationship("Campaign", back_populates="appointments")
     bookable_staff: Mapped["BookableStaff | None"] = relationship("BookableStaff")
+    business_location: Mapped["BusinessLocation | None"] = relationship("BusinessLocation")
 
     def __repr__(self) -> str:
         return (

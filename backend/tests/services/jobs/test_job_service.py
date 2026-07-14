@@ -330,6 +330,55 @@ async def test_list_filters_by_status_crew_and_technician() -> None:
         assert [item.id for item in by_tech["items"]] == [tagged.id]
 
 
+async def test_list_filters_by_business_location() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        service = JobService(db)
+        from app.services.field_service import BusinessLocationService
+
+        branch = await BusinessLocationService(db).create(ws.id, {"name": "Austin"})
+        at_branch = await service.create(
+            ws.id,
+            {
+                "contact_id": contact.id,
+                "title": "At branch",
+                "business_location_id": branch.id,
+            },
+        )
+        unassigned = await service.create(
+            ws.id, {"contact_id": contact.id, "title": "Unassigned"}
+        )
+
+        # Filtering by the branch returns only that branch's job.
+        filtered = await service.list(ws.id, business_location_id=branch.id)
+        assert [item.id for item in filtered["items"]] == [at_branch.id]
+
+        # No filter returns everything (today's behavior).
+        every = {item.id for item in (await service.list(ws.id))["items"]}
+        assert {at_branch.id, unassigned.id} <= every
+
+
+async def test_create_with_cross_workspace_location_is_404() -> None:
+    async with AsyncSessionLocal() as db:
+        ws_a = await _workspace(db)
+        ws_b = await _workspace(db)
+        contact = await _contact(db, ws_a.id)
+        from app.services.field_service import BusinessLocationService
+
+        branch_b = await BusinessLocationService(db).create(ws_b.id, {"name": "Dallas"})
+        with pytest.raises(HTTPException) as exc:
+            await JobService(db).create(
+                ws_a.id,
+                {
+                    "contact_id": contact.id,
+                    "title": "X",
+                    "business_location_id": branch_b.id,
+                },
+            )
+        assert exc.value.status_code == 404
+
+
 async def test_list_filters_by_date_range() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)

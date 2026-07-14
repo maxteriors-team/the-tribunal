@@ -3340,6 +3340,18 @@
             ],
             "title": "Agent Id"
           },
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "calcom_booking_id": {
             "anyOf": [
               {
@@ -3608,6 +3620,18 @@
       "AppointmentUpdate": {
         "description": "Schema for updating an appointment.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "duration_minutes": {
             "anyOf": [
               {
@@ -19751,6 +19775,19 @@
       "JobCreate": {
         "description": "Create a job. Optionally pre-scheduled and/or pre-assigned to workers.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional business location (branch)",
+            "title": "Business Location Id"
+          },
           "contact_id": {
             "description": "Owning customer contact id",
             "title": "Contact Id",
@@ -20311,6 +20348,18 @@
       "JobResponse": {
         "description": "Job response: the work order plus everything needed to execute it.\n\nCarries the job site, the customer's name/phone, and the scope of work so a\nfield technician — who holds ``jobs:read`` and nothing else — can answer\n\"what am I doing, and where\" from this payload alone. Every embedded\nprojection is price-free.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "contact_id": {
             "title": "Contact Id",
             "type": "integer"
@@ -20650,6 +20699,18 @@
       "JobUpdate": {
         "description": "Partial update for a job. Status is recomputed from the time window.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "crew_id": {
             "anyOf": [
               {
@@ -56444,6 +56505,23 @@
           },
           {
             "in": "query",
+            "name": "business_location_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Business Location Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "date_from",
             "required": false,
             "schema": {
@@ -67501,6 +67579,23 @@
                 }
               ],
               "title": "Crew Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "business_location_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Business Location Id"
             }
           },
           {
