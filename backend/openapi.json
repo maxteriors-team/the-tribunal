@@ -9186,6 +9186,18 @@
             ],
             "title": "Label"
           },
+          "per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Ft Override"
+          },
           "storage": {
             "default": false,
             "title": "Storage",
@@ -19172,7 +19184,7 @@
         "type": "object"
       },
       "LinearFeetEstimateRequest": {
-        "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.",
+        "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.\n\n``per_ft_override`` is an **internal-only** adjustment to the permanent\nlinear-foot rate for *this* estimate. It lets a rep tune the $/ft for one job\nwithout editing the workspace's customer-facing pricing config, and it is\nnever serialized to the client comparison (the public schema has no per-foot\nfield). ``None`` means \"use the standard configured rate\".",
         "properties": {
           "channels": {
             "default": 0,
@@ -19184,6 +19196,18 @@
             "minimum": 0.0,
             "title": "Feet",
             "type": "number"
+          },
+          "per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Ft Override"
           },
           "storage": {
             "default": false,

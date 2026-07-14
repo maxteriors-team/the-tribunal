@@ -11765,6 +11765,8 @@ export interface components {
             feet: number;
             /** Label */
             label?: string | null;
+            /** Per Ft Override */
+            per_ft_override?: number | null;
             /**
              * Storage
              * @default false
@@ -15529,6 +15531,12 @@ export interface components {
          *     ``feet`` is the measured linear footage; the optional flags let the rep model
          *     a fuller quote (permanent zones, seasonal takedown/storage) without leaving
          *     the estimator.
+         *
+         *     ``per_ft_override`` is an **internal-only** adjustment to the permanent
+         *     linear-foot rate for *this* estimate. It lets a rep tune the $/ft for one job
+         *     without editing the workspace's customer-facing pricing config, and it is
+         *     never serialized to the client comparison (the public schema has no per-foot
+         *     field). ``None`` means "use the standard configured rate".
          */
         LinearFeetEstimateRequest: {
             /**
@@ -15538,6 +15546,8 @@ export interface components {
             channels: number;
             /** Feet */
             feet: number;
+            /** Per Ft Override */
+            per_ft_override?: number | null;
             /**
              * Storage
              * @default false

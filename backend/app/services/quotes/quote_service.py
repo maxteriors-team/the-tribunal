@@ -820,8 +820,22 @@ class QuoteService:
         rep's ``feet`` is the only untrusted input. Multi-year savings project the
         seasonal (temporary) cost over ``comparison_years`` seasons against
         permanent's one-time cost — the "pay once vs every season" pitch.
+
+        An internal ``per_ft_override`` (rep-only) adjusts the permanent
+        linear-foot rate for this estimate via a throwaway config copy, so the
+        workspace's customer-facing pricing is never mutated. The override affects
+        only the permanent side; seasonal roofline pricing is untouched.
         """
-        perm = price_permanent(config, feet=req.feet, channels=req.channels)
+        perm_config = config
+        if req.per_ft_override is not None:
+            perm_config = config.model_copy(
+                update={
+                    "permanent": config.permanent.model_copy(
+                        update={"per_ft": req.per_ft_override}
+                    )
+                }
+            )
+        perm = price_permanent(perm_config, feet=req.feet, channels=req.channels)
         xmas = price_christmas(
             config,
             roofline_feet=req.feet,
@@ -849,7 +863,7 @@ class QuoteService:
         return LinearFeetEstimateResult(
             feet=float(req.feet),
             permanent=PermanentEstimate(
-                enabled=perm_enabled, total=perm_total, per_ft=float(config.permanent.per_ft)
+                enabled=perm_enabled, total=perm_total, per_ft=float(perm.per_ft)
             ),
             christmas=ChristmasEstimate(enabled=xmas_enabled, total=xmas_total),
             difference=difference,
@@ -894,6 +908,9 @@ class QuoteService:
             channels=int(req.channels),
             takedown=bool(req.takedown),
             storage=bool(req.storage),
+            per_ft_override=(
+                float(req.per_ft_override) if req.per_ft_override is not None else None
+            ),
             client_name=req.client_name,
             label=req.label,
             created_by_id=created_by_id,
@@ -937,6 +954,7 @@ class QuoteService:
                 channels=comparison.channels,
                 takedown=comparison.takedown,
                 storage=comparison.storage,
+                per_ft_override=comparison.per_ft_override,
             ),
         )
 

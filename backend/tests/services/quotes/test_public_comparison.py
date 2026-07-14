@@ -125,6 +125,28 @@ async def test_disabled_permanent_shows_not_configured_side() -> None:
         assert public.multi_year_savings == 0
 
 
+async def test_internal_per_ft_override_recomputes_public_total_without_leaking_rate() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        # Rep tunes the permanent rate up to $45/ft for this one job (internal).
+        share = await svc.share_comparison(
+            ws.id, ComparisonShareRequest(feet=100, per_ft_override=45)
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # The homeowner's price reflects the internal rate ($45), not the $30
+        # standard configured rate: 100ft * $45 + $300 controller = $4,800.
+        assert public.permanent.total == 100 * 45 + 300
+
+        # The rate itself is a private input: neither the per-foot rate nor the
+        # override is a field on the client payload.
+        dumped = public.model_dump()
+        assert "per_ft" not in dumped
+        assert "per_ft_override" not in dumped
+
+
 async def test_unknown_comparison_token_404() -> None:
     async with AsyncSessionLocal() as db:
         svc = QuoteService(db)

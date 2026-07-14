@@ -127,6 +127,26 @@ def test_permanent_minimum_applied() -> None:
     assert result.permanent.total == 5000
 
 
+def test_internal_per_ft_override_adjusts_permanent_only() -> None:
+    config = _config()
+    standard = _estimate(config, 100)
+    overridden = _estimate(config, 100, per_ft_override=45)
+
+    # Permanent bills the internal rate: 100ft * $45 + $300 controller = $4,800.
+    assert overridden.permanent.per_ft == 45
+    assert overridden.permanent.total == 4800
+    # Seasonal roofline is untouched by the permanent linear-ft override.
+    assert overridden.christmas.total == standard.christmas.total == 600
+    # The workspace's customer-facing rate is never mutated by the override.
+    assert config.permanent.per_ft == 30
+    assert standard.permanent.total == 3300
+
+
+def test_per_ft_override_none_uses_configured_rate() -> None:
+    config = _config()
+    assert _estimate(config, 100, per_ft_override=None).permanent.total == 3300
+
+
 def test_perks_default_copy_present() -> None:
     result = _estimate(_config(), 50)
     assert len(result.permanent_perks) >= 3

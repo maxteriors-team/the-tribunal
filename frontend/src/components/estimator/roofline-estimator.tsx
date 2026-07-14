@@ -48,6 +48,9 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const [rooflinePts, setRooflinePts] = useState<Point[]>([]);
   const [takedown, setTakedown] = useState(false);
   const [storage, setStorage] = useState(false);
+  // Internal-only per-linear-foot rate for this estimate. null = use the
+  // workspace's standard configured rate. Never shown to the client.
+  const [perFtOverride, setPerFtOverride] = useState<number | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   const referenceFeet = useMemo(
@@ -114,6 +117,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
         imgRef.current = img;
         setReferencePts([]);
         setRooflinePts([]);
+        setPerFtOverride(null);
         setShareUrl(null);
         setDrawMode("reference");
         setHasImage(true);
@@ -153,11 +157,18 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const clearAll = () => {
     setReferencePts([]);
     setRooflinePts([]);
+    setPerFtOverride(null);
     setShareUrl(null);
   };
 
   // ---- Server pricing ----------------------------------------------------
-  const estimateParams = { feet, channels: 0, takedown, storage };
+  const estimateParams = {
+    feet,
+    channels: 0,
+    takedown,
+    storage,
+    per_ft_override: perFtOverride,
+  };
   const { data: estimate, isFetching } = useQuery({
     queryKey: queryKeys.estimator.compute(workspaceId, estimateParams),
     queryFn: () => estimatorApi.estimate(workspaceId, estimateParams),
@@ -167,10 +178,15 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   });
 
   const shareMutation = useMutation({
-    mutationFn: () =>
-      estimatorApi.share(workspaceId, { feet, channels: 0, takedown, storage }),
+    mutationFn: () => estimatorApi.share(workspaceId, estimateParams),
     onSuccess: (result) => setShareUrl(result.url),
   });
+
+  const onRateChange = (raw: string) => {
+    const n = Number(raw);
+    setPerFtOverride(raw === "" || Number.isNaN(n) ? null : Math.max(0, n));
+    setShareUrl(null);
+  };
 
   const clientView: ComparisonView | null = estimate
     ? {
@@ -320,6 +336,28 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                 />
                 Include off-season storage
               </label>
+
+              {estimate?.permanent.enabled ? (
+                <label
+                  className="est-hint"
+                  style={{ display: "flex", gap: 6, alignItems: "center" }}
+                >
+                  <span>Linear-ft rate $</span>
+                  <input
+                    className="est-input"
+                    style={{ width: 84 }}
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="decimal"
+                    value={perFtOverride ?? ""}
+                    placeholder={String(estimate.permanent.per_ft)}
+                    onChange={(e) => onRateChange(e.target.value)}
+                    aria-label="Internal linear-foot rate override"
+                  />
+                  <span className="est-internal-badge">Internal only</span>
+                </label>
+              ) : null}
 
               <div className="est-mode-toggle" role="group" aria-label="View mode">
                 <button
