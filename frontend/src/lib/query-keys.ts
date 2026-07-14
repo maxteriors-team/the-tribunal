@@ -114,6 +114,7 @@ const recurringJobs = createResourceQueryKeys("recurring-jobs");
 const quotes = createResourceQueryKeys("quotes");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
+const businessLocations = createResourceQueryKeys("business-locations");
 const messageTemplates = createResourceQueryKeys("message-templates");
 const messageTests = createResourceQueryKeys("message-tests");
 const nudges = createResourceQueryKeys("nudges");
@@ -452,6 +453,12 @@ export const queryKeys = {
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),
+  // Business locations = the company's own branches / business units.
+  locations: {
+    ...businessLocations,
+    active: (workspaceId: string) =>
+      businessLocations.list(workspaceId, { is_active: true }),
+  },
   technicians: {
     ...technicians,
     active: (workspaceId: string) => technicians.list(workspaceId, { is_active: true }),

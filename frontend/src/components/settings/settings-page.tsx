@@ -1,11 +1,12 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText } from "lucide-react";
+import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, MapPin } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
+import { LocationsSettingsTab } from "@/components/settings/locations-settings-tab";
 import { NotificationsSettingsTab } from "@/components/settings/notifications-settings-tab";
 import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
@@ -28,6 +29,7 @@ const settingsTabs = [
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
   { value: "team", label: "Team", icon: Building2 },
+  { value: "locations", label: "Locations", icon: MapPin },
   { value: "lead-sources", label: "Lead Sources", icon: FileInput },
 ];
 
@@ -50,7 +52,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-11 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-12 lg:w-auto lg:inline-grid">
           {settingsTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
               <tab.icon className="size-4" />
@@ -116,6 +118,12 @@ export function SettingsPage() {
         <TabsContent value="team">
           <QueryErrorBoundary message="Failed to load team settings. Please try again.">
             <TeamSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="locations">
+          <QueryErrorBoundary message="Failed to load locations. Please try again.">
+            <LocationsSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

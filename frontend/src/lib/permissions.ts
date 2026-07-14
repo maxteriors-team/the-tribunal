@@ -31,7 +31,8 @@ export type Capability =
   | "billing:write"
   | "reports:view"
   | "members:manage"
-  | "workspace:manage";
+  | "workspace:manage"
+  | "locations:manage";
 
 export type Tier = "admin" | "manager" | "sales" | "tech" | "field";
 
@@ -60,6 +61,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "reports:view",
   "members:manage",
   "workspace:manage",
+  "locations:manage",
 ];
 
 export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
@@ -75,6 +77,7 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "comms:send",
     "billing:read",
     "billing:write",
+    "locations:manage",
   ],
   // Sales authors outreach (campaigns/segments/automations) but has no
   // crm:write, so it cannot delete/import contacts — mirror of the backend.
