@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, Layers, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
+import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, Layers, MapPin, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
@@ -8,6 +8,7 @@ import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { FinancingSettingsCard } from "@/components/settings/financing-settings-card";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
+import { LocationsSettingsTab } from "@/components/settings/locations-settings-tab";
 import { NeighborOutreachSettingsTab } from "@/components/settings/neighbor-outreach-settings-tab";
 import { NotificationsSettingsTab } from "@/components/settings/notifications-settings-tab";
 import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
@@ -42,6 +43,7 @@ const settingsTabs = [
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
   { value: "team", label: "Team", icon: Building2 },
+  { value: "locations", label: "Locations", icon: MapPin },
   { value: "lead-sources", label: "Lead Sources", icon: FileInput },
 ];
 
@@ -177,6 +179,12 @@ export function SettingsPage() {
         <TabsContent value="team">
           <QueryErrorBoundary message="Failed to load team settings. Please try again.">
             <TeamSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="locations">
+          <QueryErrorBoundary message="Failed to load locations. Please try again.">
+            <LocationsSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 
