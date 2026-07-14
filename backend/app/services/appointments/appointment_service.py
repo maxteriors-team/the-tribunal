@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.pagination import paginate
+from app.db.scope import assert_workspace_owned
 from app.models.agent import Agent
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.field_service import BusinessLocation
 from app.models.workspace import Workspace
 from app.schemas.appointment import (
     AppointmentAgentStat,
@@ -57,6 +59,7 @@ class AppointmentService:
         status_filter: str | None = None,
         contact_id: int | None = None,
         agent_id: str | None = None,
+        business_location_id: uuid.UUID | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> PaginatedAppointments:
@@ -73,6 +76,8 @@ class AppointmentService:
             query = query.where(Appointment.contact_id == contact_id)
         if agent_id is not None:
             query = query.where(Appointment.agent_id == uuid.UUID(agent_id))
+        if business_location_id is not None:
+            query = query.where(Appointment.business_location_id == business_location_id)
         if date_from is not None:
             query = query.where(Appointment.scheduled_at >= date_from)
         if date_to is not None:
@@ -174,6 +179,19 @@ class AppointmentService:
 
         previous_status = appointment.status
         update_data = appointment_in.model_dump(exclude_unset=True)
+
+        # A branch assignment must belong to this workspace, so an appointment
+        # can't be linked to another tenant's business location.
+        business_location_id = update_data.get("business_location_id")
+        if business_location_id is not None:
+            await assert_workspace_owned(
+                self.db,
+                BusinessLocation,
+                business_location_id,
+                workspace_id,
+                detail="Business location not found",
+            )
+
         for field, value in update_data.items():
             setattr(appointment, field, value)
 

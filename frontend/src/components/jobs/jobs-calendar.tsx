@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { JobDetailDialog } from "@/components/jobs/job-detail-dialog";
 import { NewJobDialog } from "@/components/jobs/new-job-dialog";
+import { LocationFilter } from "@/components/locations/location-filter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,7 @@ export function JobsCalendar() {
   const canWriteJobs = can("jobs:write");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>("");
+  const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const [mineOnly, setMineOnly] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -141,8 +143,8 @@ export function JobsCalendar() {
   );
 
   const queryParams = useMemo(
-    () => buildJobsQueryParams(weekStartIso, weekEndIso, statusFilter),
-    [weekStartIso, weekEndIso, statusFilter],
+    () => buildJobsQueryParams(weekStartIso, weekEndIso, statusFilter, locationId),
+    [weekStartIso, weekEndIso, statusFilter, locationId],
   );
 
   const boardQuery = useJobs(workspaceId ?? "", queryParams, !mineOnly);
@@ -196,6 +198,10 @@ export function JobsCalendar() {
     setMineOnly(checked);
     setSelectedJobId(null);
   }, []);
+  const changeLocation = useCallback((next: string | undefined) => {
+    setLocationId(next);
+    setSelectedJobId(null);
+  }, []);
 
   if (!workspaceId) {
     return <PageLoadingState className="h-96" message="Loading workspace…" />;
@@ -226,6 +232,13 @@ export function JobsCalendar() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {!mineOnly && (
+            <LocationFilter
+              workspaceId={workspaceId}
+              value={locationId}
+              onChange={changeLocation}
+            />
+          )}
           <div className="flex items-center gap-2">
             <Switch id="mine-only" checked={mineOnly} onCheckedChange={changeMineOnly} />
             <Label htmlFor="mine-only" className="text-sm">

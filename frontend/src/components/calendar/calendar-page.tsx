@@ -16,6 +16,7 @@ import { ReminderBadges } from "@/components/calendar/appointment-actions";
 import { AppointmentDetailsDialog } from "@/components/calendar/appointment-details-dialog";
 import { CalendarMonthView } from "@/components/calendar/calendar-month-view";
 import { NewAppointmentDialog } from "@/components/calendar/new-appointment-dialog";
+import { LocationFilter } from "@/components/locations/location-filter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export function CalendarPage() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const workspaceId = useWorkspaceId();
 
   // The visible date range drives both the fetch (query key + params) and the
@@ -70,8 +72,9 @@ export function CalendarPage() {
     view === "month" ? monthRange.gridEndIso : weekRange.weekEndIso;
 
   const queryParams = useMemo(
-    () => buildAppointmentsQueryParams(rangeStartIso, rangeEndIso, statusFilter),
-    [rangeStartIso, rangeEndIso, statusFilter],
+    () =>
+      buildAppointmentsQueryParams(rangeStartIso, rangeEndIso, statusFilter, locationId),
+    [rangeStartIso, rangeEndIso, statusFilter, locationId],
   );
 
   const { data: appointmentsData, isPending, error, refetch } = useAppointments(
@@ -180,6 +183,13 @@ export function CalendarPage() {
             </button>
           ))}
         </div>
+        {workspaceId && (
+          <LocationFilter
+            workspaceId={workspaceId}
+            value={locationId}
+            onChange={setLocationId}
+          />
+        )}
         <span className="text-sm text-muted-foreground">
           {totalCount} result{totalCount !== 1 ? "s" : ""}
         </span>

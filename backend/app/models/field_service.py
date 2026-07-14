@@ -440,6 +440,11 @@ class Job(Base):
             "scheduled_start",
         ),
         Index("ix_field_service_jobs_workspace_crew", "workspace_id", "crew_id"),
+        Index(
+            "ix_field_service_jobs_workspace_business_location",
+            "workspace_id",
+            "business_location_id",
+        ),
         # One external record (e.g. a Jobber job) maps to at most one job per
         # workspace, so an idempotent sync can upsert without creating dupes.
         Index(
@@ -488,6 +493,14 @@ class Job(Base):
     crew_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("crews.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The business branch this job belongs to. Nullable = unassigned / all
+    # locations. SET NULL keeps the job if the branch is removed.
+    business_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("business_locations.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -545,6 +558,7 @@ class Job(Base):
     contact: Mapped["Contact"] = relationship("Contact")
     service_location: Mapped["ServiceLocation | None"] = relationship("ServiceLocation")
     crew: Mapped["Crew | None"] = relationship("Crew")
+    business_location: Mapped["BusinessLocation | None"] = relationship("BusinessLocation")
 
     # The tag rows. Deleting a job removes its assignments.
     assignments: Mapped[list["JobAssignment"]] = relationship(
