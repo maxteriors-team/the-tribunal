@@ -16,10 +16,11 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.db.scope import get_workspace_owned
 from app.models.contact import Contact
-from app.models.field_service import Crew
+from app.models.field_service import BusinessLocation, Crew
 from app.models.workspace import WorkspaceMembership
 from app.services.exceptions import ServiceError
 from app.services.field_service.exceptions import (
+    BusinessLocationNotFoundError,
     ContactNotInWorkspaceError,
     CrewNotFoundError,
     UserNotMemberError,
@@ -58,6 +59,14 @@ async def assert_crew_in_workspace(
     """Ensure ``crew_id`` belongs to ``workspace_id`` before assigning it."""
     if await get_workspace_owned(db, Crew, crew_id, workspace_id) is None:
         raise CrewNotFoundError()
+
+
+async def assert_business_location_in_workspace(
+    db: AsyncSession, business_location_id: uuid.UUID, workspace_id: uuid.UUID
+) -> None:
+    """Ensure ``business_location_id`` belongs to ``workspace_id`` before assigning it."""
+    if await get_workspace_owned(db, BusinessLocation, business_location_id, workspace_id) is None:
+        raise BusinessLocationNotFoundError()
 
 
 async def assert_user_is_member(db: AsyncSession, user_id: int, workspace_id: uuid.UUID) -> None:

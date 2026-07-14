@@ -195,6 +195,7 @@ class TechnicianCreate(BaseModel):
     phone: str | None = Field(None, max_length=50)
     skills: list[str] = Field(default_factory=list)
     crew_id: uuid.UUID | None = None
+    business_location_id: uuid.UUID | None = None
     user_id: int | None = None
     color: str = Field(default="#0ea5e9", pattern=HEX_COLOR)
     is_active: bool = True
@@ -208,6 +209,7 @@ class TechnicianUpdate(BaseModel):
     phone: str | None = Field(None, max_length=50)
     skills: list[str] | None = None
     crew_id: uuid.UUID | None = None
+    business_location_id: uuid.UUID | None = None
     user_id: int | None = None
     color: str | None = Field(None, pattern=HEX_COLOR)
     is_active: bool | None = None
@@ -220,6 +222,7 @@ class TechnicianResponse(BaseModel):
     workspace_id: uuid.UUID
     user_id: int | None
     crew_id: uuid.UUID | None
+    business_location_id: uuid.UUID | None
     name: str
     email: str | None
     phone: str | None

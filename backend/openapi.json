@@ -44749,6 +44749,18 @@
       "TechnicianCreate": {
         "description": "Create a technician.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "color": {
             "default": "#0ea5e9",
             "pattern": "^#[0-9a-fA-F]{6}$",
@@ -44852,6 +44864,18 @@
       "TechnicianResponse": {
         "description": "Technician response.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "color": {
             "title": "Color",
             "type": "string"
@@ -44942,6 +44966,7 @@
           "workspace_id",
           "user_id",
           "crew_id",
+          "business_location_id",
           "name",
           "email",
           "phone",
@@ -44982,6 +45007,18 @@
       "TechnicianUpdate": {
         "description": "Partial update for a technician.",
         "properties": {
+          "business_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Location Id"
+          },
           "color": {
             "anyOf": [
               {
