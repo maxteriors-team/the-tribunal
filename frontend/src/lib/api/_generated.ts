@@ -11665,11 +11665,13 @@ export interface components {
         };
         /**
          * ChristmasEstimate
-         * @description Seasonal-lighting side of the estimate.
+         * @description Seasonal-lighting side of the estimate (rep view — includes per_ft).
          */
         ChristmasEstimate: {
             /** Enabled */
             enabled: boolean;
+            /** Per Ft */
+            per_ft: number;
             /** Total */
             total: number;
         };
@@ -11759,6 +11761,8 @@ export interface components {
              * @default 0
              */
             channels: number;
+            /** Christmas Per Ft Override */
+            christmas_per_ft_override?: number | null;
             /** Client Name */
             client_name?: string | null;
             /** Feet */
@@ -15532,11 +15536,12 @@ export interface components {
          *     a fuller quote (permanent zones, seasonal takedown/storage) without leaving
          *     the estimator.
          *
-         *     ``per_ft_override`` is an **internal-only** adjustment to the permanent
-         *     linear-foot rate for *this* estimate. It lets a rep tune the $/ft for one job
-         *     without editing the workspace's customer-facing pricing config, and it is
-         *     never serialized to the client comparison (the public schema has no per-foot
-         *     field). ``None`` means "use the standard configured rate".
+         *     ``per_ft_override`` and ``christmas_per_ft_override`` are **internal-only**
+         *     adjustments to the permanent and seasonal linear-foot rates for *this*
+         *     estimate. They let a rep tune the $/ft for one job without editing the
+         *     workspace's customer-facing pricing config, and are never serialized to the
+         *     client comparison (the public schema has no per-foot field). ``None`` on
+         *     either means "use the standard configured rate" for that side.
          */
         LinearFeetEstimateRequest: {
             /**
@@ -15544,6 +15549,8 @@ export interface components {
              * @default 0
              */
             channels: number;
+            /** Christmas Per Ft Override */
+            christmas_per_ft_override?: number | null;
             /** Feet */
             feet: number;
             /** Per Ft Override */

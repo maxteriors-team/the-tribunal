@@ -60,11 +60,13 @@ class RooflineComparison(Base):
     takedown: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     storage: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Internal-only override of the permanent per-linear-foot rate for this
-    # estimate. Separate from the workspace's customer-facing pricing config and
-    # never serialized to the public comparison; NULL means "use the standard
-    # configured rate" when prices are recomputed on each public view.
+    # Internal-only overrides of the per-linear-foot rates for this estimate
+    # (permanent + seasonal). Separate from the workspace's customer-facing
+    # pricing config and never serialized to the public comparison; NULL means
+    # "use the standard configured rate" for that side when prices are recomputed
+    # on each public view.
     per_ft_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+    christmas_per_ft_override: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Optional presentation context shown to the client / used internally.
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)

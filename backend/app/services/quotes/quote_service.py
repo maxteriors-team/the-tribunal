@@ -821,10 +821,10 @@ class QuoteService:
         seasonal (temporary) cost over ``comparison_years`` seasons against
         permanent's one-time cost — the "pay once vs every season" pitch.
 
-        An internal ``per_ft_override`` (rep-only) adjusts the permanent
-        linear-foot rate for this estimate via a throwaway config copy, so the
-        workspace's customer-facing pricing is never mutated. The override affects
-        only the permanent side; seasonal roofline pricing is untouched.
+        Internal ``per_ft_override`` / ``christmas_per_ft_override`` (rep-only)
+        adjust the permanent and seasonal linear-foot rates for this estimate via
+        throwaway config copies, so the workspace's customer-facing pricing is
+        never mutated. Each override affects only its own side.
         """
         perm_config = config
         if req.per_ft_override is not None:
@@ -835,9 +835,18 @@ class QuoteService:
                     )
                 }
             )
+        xmas_config = config
+        if req.christmas_per_ft_override is not None:
+            xmas_config = config.model_copy(
+                update={
+                    "christmas": config.christmas.model_copy(
+                        update={"roofline_per_ft": req.christmas_per_ft_override}
+                    )
+                }
+            )
         perm = price_permanent(perm_config, feet=req.feet, channels=req.channels)
         xmas = price_christmas(
-            config,
+            xmas_config,
             roofline_feet=req.feet,
             takedown=req.takedown,
             storage=req.storage,
@@ -865,7 +874,11 @@ class QuoteService:
             permanent=PermanentEstimate(
                 enabled=perm_enabled, total=perm_total, per_ft=float(perm.per_ft)
             ),
-            christmas=ChristmasEstimate(enabled=xmas_enabled, total=xmas_total),
+            christmas=ChristmasEstimate(
+                enabled=xmas_enabled,
+                total=xmas_total,
+                per_ft=float(xmas_config.christmas.roofline_per_ft),
+            ),
             difference=difference,
             years=years,
             temporary_multi_year=temporary_multi_year,
@@ -911,6 +924,11 @@ class QuoteService:
             per_ft_override=(
                 float(req.per_ft_override) if req.per_ft_override is not None else None
             ),
+            christmas_per_ft_override=(
+                float(req.christmas_per_ft_override)
+                if req.christmas_per_ft_override is not None
+                else None
+            ),
             client_name=req.client_name,
             label=req.label,
             created_by_id=created_by_id,
@@ -955,6 +973,7 @@ class QuoteService:
                 takedown=comparison.takedown,
                 storage=comparison.storage,
                 per_ft_override=comparison.per_ft_override,
+                christmas_per_ft_override=comparison.christmas_per_ft_override,
             ),
         )
 

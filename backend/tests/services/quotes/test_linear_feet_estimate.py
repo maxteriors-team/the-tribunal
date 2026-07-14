@@ -147,6 +147,29 @@ def test_per_ft_override_none_uses_configured_rate() -> None:
     assert _estimate(config, 100, per_ft_override=None).permanent.total == 3300
 
 
+def test_internal_christmas_per_ft_override_adjusts_seasonal_only() -> None:
+    config = _config()
+    standard = _estimate(config, 100)
+    overridden = _estimate(config, 100, christmas_per_ft_override=9)
+
+    # Seasonal bills the internal rate: 100ft * $9 = $900.
+    assert overridden.christmas.per_ft == 9
+    assert overridden.christmas.total == 900
+    # Permanent is untouched by the seasonal override.
+    assert overridden.permanent.total == standard.permanent.total == 3300
+    # The workspace's customer-facing rate is never mutated.
+    assert config.christmas.roofline_per_ft == 6
+    assert standard.christmas.total == 600
+
+
+def test_both_per_ft_overrides_apply_independently() -> None:
+    result = _estimate(_config(), 100, per_ft_override=45, christmas_per_ft_override=9)
+    assert result.permanent.total == 4800  # 100*45 + 300
+    assert result.christmas.total == 900  # 100*9
+    assert result.permanent.per_ft == 45
+    assert result.christmas.per_ft == 9
+
+
 def test_perks_default_copy_present() -> None:
     result = _estimate(_config(), 50)
     assert len(result.permanent_perks) >= 3

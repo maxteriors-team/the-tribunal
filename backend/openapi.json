@@ -8970,11 +8970,15 @@
         "type": "object"
       },
       "ChristmasEstimate": {
-        "description": "Seasonal-lighting side of the estimate.",
+        "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).",
         "properties": {
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "per_ft": {
+            "title": "Per Ft",
+            "type": "number"
           },
           "total": {
             "title": "Total",
@@ -8983,7 +8987,8 @@
         },
         "required": [
           "enabled",
-          "total"
+          "total",
+          "per_ft"
         ],
         "title": "ChristmasEstimate",
         "type": "object"
@@ -9156,6 +9161,18 @@
             "minimum": 0.0,
             "title": "Channels",
             "type": "integer"
+          },
+          "christmas_per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Christmas Per Ft Override"
           },
           "client_name": {
             "anyOf": [
@@ -19184,13 +19201,25 @@
         "type": "object"
       },
       "LinearFeetEstimateRequest": {
-        "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.\n\n``per_ft_override`` is an **internal-only** adjustment to the permanent\nlinear-foot rate for *this* estimate. It lets a rep tune the $/ft for one job\nwithout editing the workspace's customer-facing pricing config, and it is\nnever serialized to the client comparison (the public schema has no per-foot\nfield). ``None`` means \"use the standard configured rate\".",
+        "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.\n\n``per_ft_override`` and ``christmas_per_ft_override`` are **internal-only**\nadjustments to the permanent and seasonal linear-foot rates for *this*\nestimate. They let a rep tune the $/ft for one job without editing the\nworkspace's customer-facing pricing config, and are never serialized to the\nclient comparison (the public schema has no per-foot field). ``None`` on\neither means \"use the standard configured rate\" for that side.",
         "properties": {
           "channels": {
             "default": 0,
             "minimum": 0.0,
             "title": "Channels",
             "type": "integer"
+          },
+          "christmas_per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Christmas Per Ft Override"
           },
           "feet": {
             "minimum": 0.0,

@@ -147,6 +147,29 @@ async def test_internal_per_ft_override_recomputes_public_total_without_leaking_
         assert "per_ft_override" not in dumped
 
 
+async def test_internal_christmas_per_ft_override_recomputes_public_total_without_leaking_rate() -> (  # noqa: E501
+    None
+):
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        # Rep tunes the seasonal roofline rate up to $9/ft for this one job.
+        share = await svc.share_comparison(
+            ws.id, ComparisonShareRequest(feet=100, christmas_per_ft_override=9)
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # Seasonal price reflects the internal rate ($9), not the $6 standard.
+        assert public.christmas.total == 100 * 9
+        # Permanent side untouched by the seasonal override.
+        assert public.permanent.total == 100 * 30 + 300
+        # No per-foot rate or override field on the client payload.
+        dumped = public.model_dump()
+        assert "per_ft" not in dumped
+        assert "christmas_per_ft_override" not in dumped
+
+
 async def test_unknown_comparison_token_404() -> None:
     async with AsyncSessionLocal() as db:
         svc = QuoteService(db)
