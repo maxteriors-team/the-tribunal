@@ -28,6 +28,7 @@ from app.db.scope import (
 )
 from app.models.contact import Contact
 from app.models.field_service import (
+    BusinessLocation,
     Crew,
     Job,
     JobAssignment,
@@ -76,6 +77,17 @@ class JobService:
     async def _assert_crew(self, crew_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
         await assert_workspace_owned(self.db, Crew, crew_id, workspace_id, detail="Crew not found")
 
+    async def _assert_business_location(
+        self, business_location_id: uuid.UUID, workspace_id: uuid.UUID
+    ) -> None:
+        await assert_workspace_owned(
+            self.db,
+            BusinessLocation,
+            business_location_id,
+            workspace_id,
+            detail="Business location not found",
+        )
+
     async def _assert_invoice(self, invoice_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
         await assert_workspace_owned(
             self.db, Invoice, invoice_id, workspace_id, detail="Invoice not found"
@@ -103,6 +115,9 @@ class JobService:
         crew_id = data.get("crew_id")
         if crew_id is not None:
             await self._assert_crew(crew_id, workspace_id)
+        business_location_id = data.get("business_location_id")
+        if business_location_id is not None:
+            await self._assert_business_location(business_location_id, workspace_id)
         invoice_id = data.get("invoice_id")
         if invoice_id is not None:
             await self._assert_invoice(invoice_id, workspace_id)
@@ -140,6 +155,7 @@ class JobService:
         *,
         status: JobStatus | None = None,
         crew_id: uuid.UUID | None = None,
+        business_location_id: uuid.UUID | None = None,
         technician_id: uuid.UUID | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
@@ -150,6 +166,8 @@ class JobService:
             criteria.append(Job.status == status)
         if crew_id is not None:
             criteria.append(Job.crew_id == crew_id)
+        if business_location_id is not None:
+            criteria.append(Job.business_location_id == business_location_id)
         if date_from is not None:
             criteria.append(Job.scheduled_start >= date_from)
         if date_to is not None:

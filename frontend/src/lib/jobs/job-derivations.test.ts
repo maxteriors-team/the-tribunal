@@ -127,4 +127,10 @@ describe("buildJobsQueryParams", () => {
     const params = buildJobsQueryParams("a", "b", "completed");
     expect(params.status).toBe("completed");
   });
+
+  it("adds business_location_id when a location is selected and omits it otherwise", () => {
+    expect(buildJobsQueryParams("a", "b", "").business_location_id).toBeUndefined();
+    const params = buildJobsQueryParams("a", "b", "", "loc-123");
+    expect(params.business_location_id).toBe("loc-123");
+  });
 });

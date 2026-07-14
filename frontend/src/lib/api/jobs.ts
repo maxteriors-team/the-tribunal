@@ -27,6 +27,7 @@ export type JobProfitability = Schemas["JobProfitability"];
 export interface JobListParams {
   status?: JobStatus;
   crew_id?: string;
+  business_location_id?: string;
   technician_id?: string;
   date_from?: string;
   date_to?: string;

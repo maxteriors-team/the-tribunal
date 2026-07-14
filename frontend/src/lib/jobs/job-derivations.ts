@@ -93,10 +93,12 @@ export function buildJobsQueryParams(
   weekStartIso: string,
   weekEndIso: string,
   statusFilter: JobStatusFilter,
+  businessLocationId?: string,
 ): JobListParams {
   return {
     date_from: weekStartIso,
     date_to: weekEndIso,
     ...(statusFilter ? { status: statusFilter } : {}),
+    ...(businessLocationId ? { business_location_id: businessLocationId } : {}),
   };
 }

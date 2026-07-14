@@ -9292,6 +9292,8 @@ export interface components {
         AppointmentResponse: {
             /** Agent Id */
             agent_id: string | null;
+            /** Business Location Id */
+            business_location_id?: string | null;
             /** Calcom Booking Id */
             calcom_booking_id: number | null;
             /** Calcom Booking Uid */
@@ -9384,6 +9386,8 @@ export interface components {
          * @description Schema for updating an appointment.
          */
         AppointmentUpdate: {
+            /** Business Location Id */
+            business_location_id?: string | null;
             /** Duration Minutes */
             duration_minutes?: number | null;
             /** Notes */
@@ -14482,6 +14486,11 @@ export interface components {
          */
         JobCreate: {
             /**
+             * Business Location Id
+             * @description Optional business location (branch)
+             */
+            business_location_id?: string | null;
+            /**
              * Contact Id
              * @description Owning customer contact id
              */
@@ -14653,6 +14662,8 @@ export interface components {
          * @description Job response, including its assigned technicians.
          */
         JobResponse: {
+            /** Business Location Id */
+            business_location_id?: string | null;
             /** Contact Id */
             contact_id: number;
             /**
@@ -14730,6 +14741,8 @@ export interface components {
          * @description Partial update for a job. Status is recomputed from the time window.
          */
         JobUpdate: {
+            /** Business Location Id */
+            business_location_id?: string | null;
             /** Crew Id */
             crew_id?: string | null;
             /** Description */
@@ -26686,6 +26699,7 @@ export interface operations {
                 status_filter?: string | null;
                 contact_id?: number | null;
                 agent_id?: string | null;
+                business_location_id?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
             };
@@ -31377,6 +31391,7 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["JobStatus"] | null;
                 crew_id?: string | null;
+                business_location_id?: string | null;
                 technician_id?: string | null;
                 /** @description Jobs scheduled on or after this time */
                 date_from?: string | null;

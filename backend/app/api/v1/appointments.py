@@ -35,6 +35,7 @@ async def list_appointments(
     ),
     contact_id: int | None = Query(None),
     agent_id: str | None = Query(None),
+    business_location_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
 ) -> PaginatedAppointments:
@@ -58,6 +59,7 @@ async def list_appointments(
         status_filter=status_filter,
         contact_id=contact_id,
         agent_id=agent_id,
+        business_location_id=business_location_id,
         date_from=date_from,
         date_to=date_to,
     )

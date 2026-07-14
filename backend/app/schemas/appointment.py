@@ -29,6 +29,7 @@ class AppointmentUpdate(BaseModel):
     duration_minutes: int | None = Field(default=None, ge=15, le=480)
     service_type: str | None = None
     notes: str | None = None
+    business_location_id: uuid.UUID | None = None
 
 
 class ContactSummary(BaseModel):
@@ -55,6 +56,7 @@ class AppointmentResponse(AppointmentBase):
     agent_id: uuid.UUID | None
     message_id: uuid.UUID | None = None
     campaign_id: uuid.UUID | None = None
+    business_location_id: uuid.UUID | None = None
     scheduled_at: datetime
     status: str
     calcom_booking_uid: str | None

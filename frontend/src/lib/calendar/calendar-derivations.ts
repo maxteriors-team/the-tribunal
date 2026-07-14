@@ -156,12 +156,14 @@ export function buildAppointmentsQueryParams(
   weekStartIso: string,
   weekEndIso: string,
   statusFilter: StatusFilter,
+  businessLocationId?: string,
 ): {
   page: number;
   page_size: number;
   date_from: string;
   date_to: string;
   status_filter?: StatusFilter;
+  business_location_id?: string;
 } {
   return {
     page: 1,
@@ -169,5 +171,6 @@ export function buildAppointmentsQueryParams(
     date_from: weekStartIso,
     date_to: weekEndIso,
     ...(statusFilter ? { status_filter: statusFilter } : {}),
+    ...(businessLocationId ? { business_location_id: businessLocationId } : {}),
   };
 }
