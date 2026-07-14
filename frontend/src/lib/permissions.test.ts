@@ -113,6 +113,15 @@ describe("capability matrix (mirror of backend)", () => {
     expect(can("admin", "comms:manage")).toBe(true);
   });
 
+  it("locations:manage covers admin + manager tier only", () => {
+    for (const role of ["owner", "admin", "manager", "dispatcher"]) {
+      expect(can(role, "locations:manage")).toBe(true);
+    }
+    for (const role of ["sales_rep", "technician", "member"]) {
+      expect(can(role, "locations:manage")).toBe(false);
+    }
+  });
+
   it("pipeline:write implies pipeline:write_own", () => {
     for (const tier of ["admin", "manager", "sales", "tech", "field"] as Tier[]) {
       const caps = TIER_CAPABILITIES[tier];
