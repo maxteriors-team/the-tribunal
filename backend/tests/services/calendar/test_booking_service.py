@@ -138,6 +138,9 @@ async def test_book_appointment_pre_validate_offers_alternatives_when_taken() ->
         email="a@b.com",
         contact_name="Alice",
         pre_validate=True,
+        # Pin ``now`` to midnight so the morning slots aren't filtered as past
+        # regardless of the wall-clock time the suite runs at.
+        now=datetime(2026, 7, 15, 0, 0, tzinfo=TZ),
     )
     assert result.success is False
     assert result.alternative_slots

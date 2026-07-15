@@ -157,13 +157,15 @@ class BookingService:
         phone_number: str | None = None,
         *,
         pre_validate: bool = False,
+        now: datetime | None = None,
     ) -> BookingResult:
         """Confirm a local booking.
 
         No external calendar is contacted — the caller persists the appointment
         row. When ``pre_validate`` is set (voice agents), the slot is re-checked
         against current availability and alternatives are returned if it was
-        taken since it was offered.
+        taken since it was offered. ``now`` is injectable (default the current
+        clock) so the re-check is deterministic in tests.
         """
         try:
             self._get_timezone()
@@ -172,7 +174,7 @@ class BookingService:
             return BookingResult(success=False, error=f"Invalid date/time format: {e}")
 
         if pre_validate:
-            availability = await self.check_availability(date_str, date_str, max_slots=50)
+            availability = await self.check_availability(date_str, date_str, max_slots=50, now=now)
             if availability.success:
                 still_open = any(s.time == time_str for s in availability.slots)
                 if not still_open:
