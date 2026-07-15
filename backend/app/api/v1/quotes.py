@@ -28,6 +28,7 @@ from app.schemas.proposal import (
     PublicProposalActionResult,
     PublicProposalDecline,
     PublicProposalDepositCheckout,
+    PublicProposalDepositStatus,
 )
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
@@ -208,6 +209,8 @@ async def convert_quote(
         quote_id,
         create_job=payload.create_job,
         create_invoice=payload.create_invoice,
+        scheduled_start=payload.scheduled_start,
+        scheduled_end=payload.scheduled_end,
     )
 
 
@@ -371,6 +374,30 @@ async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCh
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return PublicProposalDepositCheckout(
         url=checkout.url, amount=checkout.amount, currency=checkout.currency
+    )
+
+
+@public_router.post("/{token}/deposit-status", response_model=PublicProposalDepositStatus)
+async def reconcile_deposit_status(token: str, db: DB) -> PublicProposalDepositStatus:
+    """Reconcile a proposal's deposit against Stripe on return from checkout.
+
+    A webhook backstop: verifies the stored Checkout Session and marks the
+    deposit paid if Stripe confirms it, so a delayed/absent webhook never leaves
+    a paid deposit showing unpaid. Idempotent.
+    """
+    from app.services.payments.quote_deposit_service import (
+        DepositError,
+        reconcile_deposit,
+    )
+
+    try:
+        status_result = await reconcile_deposit(db, token)
+    except DepositError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return PublicProposalDepositStatus(
+        deposit_paid=status_result.deposit_paid,
+        deposit_amount=status_result.deposit_amount,
+        currency=status_result.currency,
     )
 
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -305,6 +305,43 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         again = await svc.convert_quote(ws.id, quote.id)
         assert again.job_id == result.job_id
         assert again.invoice_id == result.invoice_id
+
+
+async def test_convert_schedules_job_when_window_supplied() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        location = await _make_location(db, ws.id, contact.id)
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                service_location_id=location.id,
+                title="Install lighting",
+                line_items=[QuoteLineItemCreate(name="Labor", unit_price=150.0)],
+            ),
+        )
+        await svc.approve_quote(ws.id, quote.id)
+
+        start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        end = start + timedelta(hours=3)
+        result = await svc.convert_quote(
+            ws.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=start,
+            scheduled_end=end,
+        )
+
+        assert result.job_id is not None
+        job = await db.get(Job, result.job_id)
+        assert job is not None
+        # The window is stored and the job lands on the calendar as scheduled.
+        assert job.scheduled_start == start
+        assert job.scheduled_end == end
+        assert job.status == "scheduled"
 
 
 async def test_convert_requires_approved_status() -> None:

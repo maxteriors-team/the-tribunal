@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { salesWizardApi } from "@/lib/api/sales-wizard";
+import { REFERENCE_PRESETS, type Point } from "@/lib/estimator/measure";
 import { queryKeys } from "@/lib/query-keys";
 import type {
   CatalogItemResponse,
@@ -101,11 +102,22 @@ export interface NightLight {
   warmth: number;
 }
 
+/** How a wizard deposit's value is read: percent of total, or a flat amount. */
+export type DepositMode = "percentage" | "fixed";
+
 export interface NightPreviewState {
   /** Composited "lit at night" JPEG data-URL saved into the proposal. */
   image: string | null;
   lights: NightLight[];
   dusk: number;
+  // ── Roofline "measure-as-you-draw" trace (persists so re-opening the night
+  // screen restores the drawing; rides into the opaque `night_preview` snapshot).
+  /** Key of the chosen `REFERENCE_PRESETS` object used to set the pixel scale. */
+  referenceKey: string;
+  /** Two canvas points marking the known-width reference object. */
+  referencePts: Point[];
+  /** Traced roofline polyline, in canvas pixels. */
+  rooflinePts: Point[];
 }
 
 export interface ClientDraft {
@@ -192,6 +204,11 @@ export interface UseSalesWizardReturn {
   ) => void;
   night: NightPreviewState;
   setNight: (patch: Partial<NightPreviewState>) => void;
+  // Upfront deposit selection (empty value => workspace default on save).
+  depositMode: DepositMode;
+  setDepositMode: (mode: DepositMode) => void;
+  depositInput: string;
+  setDepositInput: (value: string) => void;
   // Server-computed document (live preview)
   document: WizardDocument | null;
   isPreviewing: boolean;
@@ -248,7 +265,15 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     image: null,
     lights: [],
     dusk: 0.55,
+    referenceKey: REFERENCE_PRESETS[0].key,
+    referencePts: [],
+    rooflinePts: [],
   });
+  // Upfront deposit the rep requests on the quote. Value is a raw string so
+  // typing feels native; empty/0 means "use the workspace default".
+  const [depositMode, setDepositMode] = useState<DepositMode>("percentage");
+  const [depositInput, setDepositInput] = useState<string>("");
+  const depositValue = Math.max(0, Number.parseFloat(depositInput) || 0);
 
   // Defaults derive from loaded config/preview instead of effect-synced state,
   // so first render is already correct and no cascading setState is needed.
@@ -442,11 +467,22 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
           }
         : null,
       night_preview: night.image
-        ? { image: night.image, lights: night.lights, dusk: night.dusk }
+        ? {
+            image: night.image,
+            lights: night.lights,
+            dusk: night.dusk,
+            reference_key: night.referenceKey,
+            reference_pts: night.referencePts,
+            roofline_pts: night.rooflinePts,
+          }
         : null,
       mockups: mockups
         .filter((m) => m.image)
         .map((m) => ({ image: m.image, caption: m.caption.trim() || null })),
+      // Deposit rides along when the rep entered one; a zero value falls back to
+      // the workspace default on the server.
+      deposit:
+        depositValue > 0 ? { mode: depositMode, value: depositValue } : null,
     };
   }, [
     client,
@@ -461,6 +497,8 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     christmas,
     night,
     mockups,
+    depositMode,
+    depositValue,
   ]);
 
   // ── Debounced live preview ──
@@ -580,6 +618,10 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     setSeasonalItem,
     night,
     setNight,
+    depositMode,
+    setDepositMode,
+    depositInput,
+    setDepositInput,
     document,
     isPreviewing,
     tierView,

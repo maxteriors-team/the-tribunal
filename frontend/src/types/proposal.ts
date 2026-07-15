@@ -49,6 +49,8 @@ export interface PublicProposal {
   deposit_percentage?: number | null;
   deposit_amount?: number | null;
   deposit_paid: boolean;
+  /** True when a deposit is owed and not yet paid (drives the client CTA). */
+  deposit_required?: boolean;
   line_items: PublicProposalLineItem[];
   branding: PublicProposalBranding;
   /** Sales-wizard snapshot (multi-tier presentation); null for plain quotes. */
@@ -65,4 +67,12 @@ export interface PublicProposalActionResult {
   token: string;
   status: PublicProposalStatus;
   message: string;
+  deposit_required?: boolean;
+  deposit_amount?: number | null;
+}
+
+export interface PublicProposalDepositStatus {
+  deposit_paid: boolean;
+  deposit_amount?: number | null;
+  currency: string;
 }

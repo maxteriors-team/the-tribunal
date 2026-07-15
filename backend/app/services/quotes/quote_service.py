@@ -126,6 +126,118 @@ class QuoteService:
     def _line_total(quantity: float, unit_price: float, discount: float) -> float:
         return round(quantity * unit_price - discount, 2)
 
+    @staticmethod
+    def _wizard_deposit_selection(
+        payload: ProposalWizardPayload, config: PricingSettings
+    ) -> tuple[str, float] | None:
+        """Resolve the wizard's deposit (mode, value): payload first, else the
+        workspace default. Returns None when no deposit applies."""
+        sel = payload.deposit
+        if sel is not None and sel.value > 0:
+            return sel.mode, float(sel.value)
+        default = config.deposit
+        if default.enabled and default.value > 0:
+            return default.mode, float(default.value)
+        return None
+
+    def _attach_deposit_to_document(
+        self,
+        document: ProposalDocument,
+        payload: ProposalWizardPayload,
+        config: PricingSettings,
+    ) -> None:
+        """Set the document's display deposit from the resolved selection.
+
+        Deposit is taken on the selected (financed) all-in total so the preview
+        shows the client exactly what's due today. No-op when no deposit applies.
+        """
+        from app.services.payments.quote_deposit_service import resolve_deposit
+
+        selection = self._wizard_deposit_selection(payload, config)
+        if selection is None:
+            return
+        mode, value = selection
+        total = float(document.grand_financed_total or 0)
+        document.deposit_mode = mode
+        document.deposit_value = value
+        document.deposit_amount = resolve_deposit(mode, value, total)
+
+    async def _resolve_wizard_contact(
+        self,
+        workspace_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+    ) -> int | None:
+        """Find or create the quote-to contact from the wizard's client details.
+
+        Contacts are phone-keyed in this CRM (``phone_hash`` is required), so a
+        new contact is only created when a phone is present. Matching prefers a
+        hashed email, then a hashed phone, so re-quoting the same client never
+        duplicates them. Returns None when there's nothing to match or create on
+        (e.g. an email-only client) — the quote is still saved, just unlinked.
+        """
+        client = payload.client
+        if client is None:
+            return None
+        email = (client.email or "").strip() or None
+        phone = (client.phone or "").strip() or None
+
+        from app.core.encryption import hash_phone, hash_value
+        from app.models.contact import Contact
+
+        if email:
+            match = await self.db.execute(
+                select(Contact).where(
+                    Contact.workspace_id == workspace_id,
+                    Contact.email_hash == hash_value(email),
+                )
+            )
+            found = match.scalars().first()
+            if found is not None:
+                return found.id
+        if phone:
+            match = await self.db.execute(
+                select(Contact).where(
+                    Contact.workspace_id == workspace_id,
+                    Contact.phone_hash == hash_phone(phone),
+                )
+            )
+            found = match.scalars().first()
+            if found is not None:
+                return found.id
+
+        # Only create when we can satisfy the required phone identity key.
+        if phone is None:
+            return None
+        from app.services.contacts.contact_service import ContactService
+
+        service = ContactService(self.db)
+        contact = await service.create_contact(
+            workspace_id,
+            first_name=(client.first_name or "").strip() or "Client",
+            last_name=(client.last_name or "").strip() or None,
+            email=email,
+            phone_number=phone,
+            source="sales_wizard",
+        )
+        return contact.id
+
+    @staticmethod
+    def _apply_default_deposit(quote: Quote, workspace: Workspace) -> None:
+        """Set the workspace's default deposit on a quote that requests none.
+
+        Reads the pricing config's ``DepositConfig``; a percentage default maps to
+        ``deposit_percentage`` and a fixed default to ``deposit_amount_fixed``.
+        No-op when the config's deposit is disabled or zero.
+        """
+        config = get_pricing_config(workspace)
+        deposit = config.deposit
+        if not deposit.enabled or deposit.value <= 0:
+            return
+        if deposit.mode == "fixed":
+            quote.deposit_amount_fixed = round(float(deposit.value), 2)
+        else:
+            quote.deposit_percentage = min(100.0, round(float(deposit.value), 2))
+
     async def _next_quote_number(self, workspace_id: uuid.UUID) -> str:
         """Allocate the next ``QUO-000001`` number for a workspace.
 
@@ -209,6 +321,7 @@ class QuoteService:
             tax_amount=quote_in.tax_amount,
             discount_amount=quote_in.discount_amount,
             deposit_percentage=quote_in.deposit_percentage,
+            deposit_amount_fixed=quote_in.deposit_amount_fixed,
             issue_date=quote_in.issue_date,
             expiry_date=quote_in.expiry_date,
             notes=quote_in.notes,
@@ -216,6 +329,10 @@ class QuoteService:
             status="draft",
             created_by_id=created_by_id,
         )
+        # Inherit the workspace's default deposit when the operator set none.
+        if quote.deposit_percentage is None and quote.deposit_amount_fixed is None:
+            workspace = await get_or_404(self.db, Workspace, workspace_id)
+            self._apply_default_deposit(quote, workspace)
         for item in quote_in.line_items:
             quote.line_items.append(
                 QuoteLineItem(
@@ -284,6 +401,7 @@ class QuoteService:
             "tax_amount",
             "discount_amount",
             "deposit_percentage",
+            "deposit_amount_fixed",
             "issue_date",
             "expiry_date",
             "notes",
@@ -292,6 +410,13 @@ class QuoteService:
             value = getattr(quote_in, field)
             if value is not None:
                 setattr(quote, field, value)
+
+        # Deposit modes are mutually exclusive: setting one clears the other so a
+        # switch from percentage to fixed (or back) never leaves both populated.
+        if quote_in.deposit_amount_fixed is not None:
+            quote.deposit_percentage = None
+        elif quote_in.deposit_percentage is not None:
+            quote.deposit_amount_fixed = None
 
         self._recompute_totals(quote)
         await self.db.commit()
@@ -624,7 +749,12 @@ class QuoteService:
         deposit_pct = (
             float(quote.deposit_percentage) if quote.deposit_percentage is not None else None
         )
-        deposit_amount = round(total * deposit_pct / 100, 2) if deposit_pct else None
+        # Fixed or percentage — resolved through the shared deposit calculator so
+        # the client page and the Stripe charge always agree on the amount due.
+        from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
+
+        deposit_due = resolve_amount(quote)
+        deposit_paid = quote.deposit_paid_at is not None
 
         return PublicProposal(
             token=token,
@@ -645,8 +775,9 @@ class QuoteService:
             terms=quote.terms or template.default_terms,
             client_name=client_name,
             deposit_percentage=deposit_pct,
-            deposit_amount=deposit_amount,
-            deposit_paid=quote.deposit_paid_at is not None,
+            deposit_amount=deposit_due,
+            deposit_paid=deposit_paid,
+            deposit_required=deposit_due is not None and not deposit_paid,
             proposal_document=quote.proposal_document,
             line_items=[
                 PublicProposalLineItem(
@@ -679,10 +810,17 @@ class QuoteService:
         """
         quote = await self._load_by_token(token)
         result = await self.approve_quote(quote.workspace_id, quote.id)
+        # Surface any unpaid deposit so the client page can hand off to checkout.
+        from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
+
+        due = resolve_amount(quote)
+        unpaid = due is not None and quote.deposit_paid_at is None
         return PublicProposalActionResult(
             token=token,
             status=result.status,
             message="Thank you! Your proposal has been approved.",
+            deposit_required=unpaid,
+            deposit_amount=due,
         )
 
     async def decline_public(
@@ -749,6 +887,7 @@ class QuoteService:
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
         document, _ = build_proposal_document(config, catalog, payload)
+        self._attach_deposit_to_document(document, payload, config)
         return document
 
     async def save_from_wizard(
@@ -766,10 +905,18 @@ class QuoteService:
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
         document, line_items = build_proposal_document(config, catalog, payload)
+        self._attach_deposit_to_document(document, payload, config)
+
+        # Wizard quotes must carry a contact so an approved quote can convert into
+        # a scheduled job. Use the explicit contact, else resolve/create one from
+        # the collected client details (email then phone) within this workspace.
+        contact_id = payload.contact_id
+        if contact_id is None:
+            contact_id = await self._resolve_wizard_contact(workspace_id, payload)
 
         quote = Quote(
             workspace_id=workspace_id,
-            contact_id=payload.contact_id,
+            contact_id=contact_id,
             service_location_id=payload.service_location_id,
             opportunity_id=payload.opportunity_id,
             number=await self._next_quote_number(workspace_id),
@@ -793,6 +940,14 @@ class QuoteService:
                 )
             )
         self._recompute_totals(quote)
+        # Persist the resolved deposit selection onto the quote (one column only).
+        selection = self._wizard_deposit_selection(payload, config)
+        if selection is not None:
+            mode, value = selection
+            if mode == "fixed":
+                quote.deposit_amount_fixed = round(value, 2)
+            else:
+                quote.deposit_percentage = min(100.0, round(value, 2))
         self.db.add(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
@@ -1015,12 +1170,15 @@ class QuoteService:
         *,
         create_job: bool = True,
         create_invoice: bool = True,
+        scheduled_start: datetime | None = None,
+        scheduled_end: datetime | None = None,
     ) -> QuoteConvertResponse:
         """Convert an approved quote into a job and/or an invoice (idempotent).
 
         Re-running returns the already-linked job/invoice rather than creating
         duplicates. A job needs a ``contact_id``; converting to an invoice copies
-        the quote's line items verbatim.
+        the quote's line items verbatim. When ``scheduled_start``/``scheduled_end``
+        are supplied, the created job lands on the calendar as ``scheduled``.
         """
         from app.services.invoices import InvoiceService
         from app.services.jobs import JobService
@@ -1072,19 +1230,22 @@ class QuoteService:
         if create_job and job_id is None:
             if quote.contact_id is None:
                 raise ConflictError("Cannot create a job from a quote with no contact")
-            job = await JobService(self.db).create(
-                workspace_id,
-                {
-                    "contact_id": quote.contact_id,
-                    "service_location_id": quote.service_location_id,
-                    "title": quote.title or f"Quote {quote.number}",
-                    "description": quote.notes,
-                    # Link the job to the just-created invoice (or a previously
-                    # converted one) so its P&L has a revenue side.
-                    "invoice_id": invoice_id,
-                    "technician_ids": [],
-                },
-            )
+            job_data: dict[str, object] = {
+                "contact_id": quote.contact_id,
+                "service_location_id": quote.service_location_id,
+                "title": quote.title or f"Quote {quote.number}",
+                "description": quote.notes,
+                # Link the job to the just-created invoice (or a previously
+                # converted one) so its P&L has a revenue side.
+                "invoice_id": invoice_id,
+                "technician_ids": [],
+            }
+            # An optional schedule window lands the job ``scheduled`` in one step
+            # (JobService derives the status from the presence of the window).
+            if scheduled_start is not None and scheduled_end is not None:
+                job_data["scheduled_start"] = scheduled_start
+                job_data["scheduled_end"] = scheduled_end
+            job = await JobService(self.db).create(workspace_id, job_data)
             job_id = job.id
             quote.converted_job_id = job_id
 

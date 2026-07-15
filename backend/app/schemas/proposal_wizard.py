@@ -9,7 +9,7 @@ rendered by the public page). Client totals are never trusted.
 """
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,6 +47,18 @@ class WizardCharge(BaseModel):
 
     description: str | None = Field(default=None, max_length=300)
     net_amount: float = Field(default=0, ge=0)
+
+
+class WizardDepositSelection(BaseModel):
+    """Optional upfront deposit the rep sets on the quote.
+
+    ``mode`` picks how ``value`` is read: ``percentage`` (0-100 of the total) or
+    ``fixed`` (a flat amount in major units). Omitting this object falls back to
+    the workspace's default deposit config.
+    """
+
+    mode: Literal["percentage", "fixed"] = "percentage"
+    value: float = Field(default=0, ge=0)
 
 
 class WizardFixtureQty(BaseModel):
@@ -132,6 +144,8 @@ class ProposalWizardPayload(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     notes: str | None = None
     terms: str | None = None
+    # Optional upfront deposit; falls back to the workspace default when null.
+    deposit: WizardDepositSelection | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -249,6 +263,12 @@ class ProposalDocument(BaseModel):
     grand_financed_total: float = 0
     grand_cash_total: float = 0
     grand_monthly_payment: float = 0
+    # Resolved upfront deposit for the selected (financed) total, when requested.
+    # ``deposit_mode``/``deposit_value`` echo the rep's selection; ``deposit_amount``
+    # is the money due today. All null/zero when no deposit applies.
+    deposit_mode: str | None = None
+    deposit_value: float = 0
+    deposit_amount: float = 0
     # Internal fulfillment sheet for the selected tier (staff-only).
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
     notes: str | None = None

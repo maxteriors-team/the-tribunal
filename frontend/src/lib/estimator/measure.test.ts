@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  c9BulbPositions,
   distance,
   polylineLength,
   pxPerFoot,
@@ -78,5 +79,67 @@ describe("measure", () => {
     const garage = REFERENCE_PRESETS.find((p) => p.key === "single_garage");
     expect(garage?.feet).toBe(8);
     expect(REFERENCE_PRESETS.every((p) => p.feet > 0 && p.label)).toBe(true);
+  });
+});
+
+describe("c9BulbPositions", () => {
+  it("returns [] for fewer than two points", () => {
+    expect(c9BulbPositions([], 10)).toEqual([]);
+    expect(c9BulbPositions([{ x: 1, y: 1 }], 10)).toEqual([]);
+  });
+
+  it("returns [] for a non-positive spacing", () => {
+    const line: Point[] = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ];
+    expect(c9BulbPositions(line, 0)).toEqual([]);
+    expect(c9BulbPositions(line, -5)).toEqual([]);
+  });
+
+  it("returns [] for a zero-length line", () => {
+    expect(
+      c9BulbPositions(
+        [
+          { x: 5, y: 5 },
+          { x: 5, y: 5 },
+        ],
+        10,
+      ),
+    ).toEqual([]);
+  });
+
+  it("spaces bulbs evenly and includes both endpoints", () => {
+    // 100px line at 10px spacing -> 10 intervals -> 11 bulbs, 10px apart.
+    const bulbs = c9BulbPositions(
+      [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      10,
+    );
+    expect(bulbs).toHaveLength(11);
+    expect(bulbs[0]).toEqual({ x: 0, y: 0 });
+    expect(bulbs[10]).toEqual({ x: 100, y: 0 });
+    expect(bulbs[1].x).toBeCloseTo(10);
+    expect(bulbs[5].x).toBeCloseTo(50);
+  });
+
+  it("walks corners of a multi-segment polyline", () => {
+    // L-shape: 50px across then 50px down (total 100px) at 25px spacing.
+    const bulbs = c9BulbPositions(
+      [
+        { x: 0, y: 0 },
+        { x: 50, y: 0 },
+        { x: 50, y: 50 },
+      ],
+      25,
+    );
+    expect(bulbs).toHaveLength(5);
+    expect(bulbs[0]).toEqual({ x: 0, y: 0 });
+    expect(bulbs[2].x).toBeCloseTo(50);
+    expect(bulbs[2].y).toBeCloseTo(0);
+    expect(bulbs[4].x).toBeCloseTo(50);
+    expect(bulbs[4].y).toBeCloseTo(50);
   });
 });

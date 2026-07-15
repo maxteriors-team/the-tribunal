@@ -109,6 +109,10 @@ class Quote(Base):
     # Percentage of ``total`` (0-100); null = no deposit requested. The deposit
     # amount is derived (never stored) so it always tracks the live total.
     deposit_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Alternative to ``deposit_percentage``: a fixed deposit in major units. When
+    # set it takes precedence over the percentage and is clamped to the total.
+    # At most one of the two is set for a given quote.
+    deposit_amount_fixed: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     # Deposit payment provenance (Stripe Checkout in ``payment`` mode). Set once
     # the client pays; ``deposit_paid_at`` is the idempotency guard for the webhook.
     deposit_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

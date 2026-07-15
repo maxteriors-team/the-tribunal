@@ -7,10 +7,24 @@
  * Proposal" composites the canvas to a JPEG data-URL stored in the wizard's
  * `night_preview`, which the presentation and public proposal render.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  c9BulbPositions,
+  polylineLength,
+  pxPerFoot,
+  REFERENCE_PRESETS,
+  rooflineFeet,
+  type Point,
+} from "@/lib/estimator/measure";
+
 import type { NightLight, UseSalesWizardReturn } from "./use-sales-wizard";
+
+/** Canvas edit mode: paint lights, or trace the roofline to auto-measure it. */
+type NightMode = "lights" | "roofline";
+/** Sub-mode while measuring: set the known reference, then trace the eaves. */
+type MeasureStep = "reference" | "roofline";
 
 const NIGHT_TYPES = [
   { key: "uplight", label: "Uplight" },
@@ -182,6 +196,83 @@ function drawLight(
   }
 }
 
+/** Scale a normalized (0–1) trace into canvas pixels. */
+function toPixels(pts: readonly Point[], W: number, H: number): Point[] {
+  return pts.map((p) => ({ x: p.x * W, y: p.y * H }));
+}
+
+/**
+ * Render the traced roofline as a lit C9 bulb strand — evenly spaced warm bulbs
+ * with an additive glow, matching the bistro string style so the eaves read as
+ * Christmas lights in the composite. `ptsPx` is the roofline in canvas pixels;
+ * `spacing` is the bulb pitch in pixels (≈ one bulb per real foot when the trace
+ * is calibrated). Drawn inside a `lighter` composite pass by the caller.
+ */
+function drawC9Strand(
+  ctx: CanvasRenderingContext2D,
+  ptsPx: readonly Point[],
+  spacing: number,
+  sc: number,
+) {
+  const bulbs = c9BulbPositions(ptsPx, spacing);
+  if (bulbs.length < 2) return;
+  const col = warmthColor(0.14); // warm incandescent C9
+  // Faint warm wire along the eave line.
+  ctx.strokeStyle = rgba(col, 0.16);
+  ctx.lineWidth = Math.max(1, 1.3 * sc);
+  ctx.beginPath();
+  ptsPx.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+  const r = Math.min(Math.max(4, spacing * 0.38), 15 * sc);
+  for (const b of bulbs) {
+    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r);
+    g.addColorStop(0, rgba(col, 0.85));
+    g.addColorStop(0.35, rgba(col, 0.3));
+    g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, r, 0, 7);
+    ctx.fill();
+    // Bright filament core.
+    ctx.fillStyle = rgba([255, 244, 214], 0.95);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, Math.max(1.3, 1.7 * sc), 0, 7);
+    ctx.fill();
+  }
+}
+
+/** Crisp editing guide: a stroked polyline with a dot at each vertex. */
+function drawGuidePath(
+  ctx: CanvasRenderingContext2D,
+  ptsPx: readonly Point[],
+  color: string,
+  sc: number,
+) {
+  if (ptsPx.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, 2.5 * sc);
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ptsPx.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+  const r = Math.max(3, 4 * sc);
+  ptsPx.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, 7);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+/** Bulb pitch in pixels for a strand — one bulb per foot when calibrated. */
+function strandSpacing(refPx: readonly Point[], referenceFeet: number, H: number): number {
+  const perFt = pxPerFoot(polylineLength(refPx), referenceFeet);
+  if (perFt > 0) return Math.max(10, perFt);
+  return Math.max(14, 22 * (H / 600));
+}
+
 type DragPart = "p1" | "p2" | "body";
 
 interface NightPreviewScreenProps {
@@ -208,6 +299,33 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   const [type, setType] = useState<string>("uplight");
   const [sliders, setSliders] = useState({ ...DEFAULTS });
 
+  // ── Roofline "measure-as-you-draw" trace ──
+  // Points are normalized (0–1) so they survive canvas resizes, like lights.
+  // Seeded from the wizard on mount so leaving and re-opening restores the trace.
+  const [mode, setMode] = useState<NightMode>("lights");
+  const [measureStep, setMeasureStep] = useState<MeasureStep>("reference");
+  const [referenceKey, setReferenceKey] = useState(wizard.night.referenceKey);
+  const [referencePts, setReferencePts] = useState<Point[]>(
+    wizard.night.referencePts,
+  );
+  const [rooflinePts, setRooflinePts] = useState<Point[]>(
+    wizard.night.rooflinePts,
+  );
+  const lastFeetRef = useRef(-1);
+
+  const referenceFeet = useMemo(
+    () => REFERENCE_PRESETS.find((p) => p.key === referenceKey)?.feet ?? 0,
+    [referenceKey],
+  );
+  const calibrated =
+    pxPerFoot(polylineLength(referencePts), referenceFeet) > 0;
+  const feet = useMemo(
+    () => rooflineFeet(rooflinePts, referencePts, referenceFeet),
+    [rooflinePts, referencePts, referenceFeet],
+  );
+
+  const { setChristmas, toggleCategory, hasCategory, setNight } = wizard;
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -228,7 +346,18 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const light of lights) drawLight(ctx, light, W, H);
+    const roofPx = toPixels(rooflinePts, W, H);
+    if (roofPx.length >= 2) {
+      const refPx = toPixels(referencePts, W, H);
+      drawC9Strand(ctx, roofPx, strandSpacing(refPx, referenceFeet, H), H / 600);
+    }
     ctx.restore();
+    // Crisp editing guides (gold reference + green roofline outline) — live only.
+    if (mode === "roofline") {
+      const sc = H / 600;
+      drawGuidePath(ctx, toPixels(referencePts, W, H), "#d4af5a", sc);
+      drawGuidePath(ctx, toPixels(rooflinePts, W, H), "rgba(120,220,150,0.95)", sc);
+    }
     if (selected >= 0 && lights[selected]) {
       const l = lights[selected];
       ctx.save();
@@ -244,7 +373,16 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
       }
       ctx.restore();
     }
-  }, [lights, selected, before, dusk]);
+  }, [
+    lights,
+    selected,
+    before,
+    dusk,
+    mode,
+    referencePts,
+    rooflinePts,
+    referenceFeet,
+  ]);
 
   const setupCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -273,6 +411,18 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   useEffect(() => {
     draw();
   }, [draw, hasImage]);
+
+  // A valid calibrated trace drives the seasonal roofline price: push the
+  // measured feet into `christmas.roofline_feet` and auto-enable the category so
+  // the live preview re-prices. Guarded by feet > 0 and a last-written ref so a
+  // single draw doesn't loop or surprise-toggle on an empty trace.
+  useEffect(() => {
+    if (!calibrated || feet <= 0) return;
+    if (lastFeetRef.current === feet) return;
+    lastFeetRef.current = feet;
+    setChristmas({ roofline_feet: String(feet) });
+    if (!hasCategory("christmas")) toggleCategory("christmas");
+  }, [calibrated, feet, setChristmas, toggleCategory, hasCategory]);
 
   const point = (ev: React.PointerEvent): { nx: number; ny: number } => {
     const canvas = canvasRef.current!;
@@ -320,6 +470,17 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
     }
     ev.preventDefault();
     const p = point(ev);
+    // Roofline mode: click-to-place vertices, not draggable light painting.
+    if (mode === "roofline") {
+      const pt = { x: clamp01(p.nx), y: clamp01(p.ny) };
+      if (measureStep === "reference") {
+        // Reference is exactly two points; a third click restarts it.
+        setReferencePts((prev) => (prev.length >= 2 ? [pt] : [...prev, pt]));
+      } else {
+        setRooflinePts((prev) => [...prev, pt]);
+      }
+      return;
+    }
     const hit = hitTest(p);
     if (hit) {
       setSelected(hit.i);
@@ -348,6 +509,7 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   };
 
   const onPointerMove = (ev: React.PointerEvent) => {
+    if (mode === "roofline") return;
     const drag = draggingRef.current;
     if (!drag || selected < 0) return;
     ev.preventDefault();
@@ -379,6 +541,7 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   };
 
   const onPointerUp = () => {
+    if (mode === "roofline") return;
     draggingRef.current = null;
     // A bare tap in bistro mode leaves a zero-length strand — give it a
     // sensible default span so the tap still hangs visible lights.
@@ -474,7 +637,13 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const light of lights) drawLight(ctx, light, W, H);
+    const roofPx = toPixels(rooflinePts, W, H);
+    if (roofPx.length >= 2) {
+      const refPx = toPixels(referencePts, W, H);
+      drawC9Strand(ctx, roofPx, strandSpacing(refPx, referenceFeet, H), H / 600);
+    }
     ctx.restore();
+    // No editing guides in the composite — only the lit strand shows the client.
     let url: string | null = null;
     try {
       url = canvas.toDataURL("image/jpeg", 0.85);
@@ -492,7 +661,14 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
     }
     const url = compositeDataURL();
     if (url) {
-      wizard.setNight({ image: url, lights, dusk });
+      setNight({
+        image: url,
+        lights,
+        dusk,
+        referenceKey,
+        referencePts,
+        rooflinePts,
+      });
       toast.success("Night preview saved to proposal");
     } else {
       toast.error("Could not save image");
@@ -528,6 +704,27 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
     setLights((prev) => prev.slice(0, -1));
     setSelected(lights.length - 2);
   };
+
+  // Undo/Clear scoped to the active sub-path while measuring, so the rep can fix
+  // one trace without wiping the reference (or the painted lights).
+  const undoMeasure = () => {
+    if (measureStep === "reference") setReferencePts((p) => p.slice(0, -1));
+    else setRooflinePts((p) => p.slice(0, -1));
+  };
+  const clearMeasure = () => {
+    if (measureStep === "reference") setReferencePts([]);
+    else setRooflinePts([]);
+  };
+  const measureHint =
+    measureStep === "reference"
+      ? calibrated
+        ? "Reference set. Switch to \u201cTrace roofline\u201d and click along the eaves."
+        : `Click the two ends of the ${
+            REFERENCE_PRESETS.find((p) => p.key === referenceKey)?.label
+          } to set the scale.`
+      : calibrated
+        ? "Click along the roofline \u2014 a point at every corner. Bulbs light as you go."
+        : "Set the reference first so the roofline can be measured.";
 
   const warmthLabel =
     sliders.warmth < 0.33 ? "Warm" : sliders.warmth < 0.66 ? "Neutral" : "Cool";
@@ -573,7 +770,8 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
         />
         {!hasImage ? (
           <div className="night-empty">
-            Add a photo of the home, then tap to drop lights.
+            Add a photo of the home, then paint lights or trace the roofline to
+            auto-measure it.
           </div>
         ) : null}
       </div>
@@ -593,26 +791,116 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
           >
             &#128247; Add / Change Photo
           </button>
-          <div className="night-types">
-            {NIGHT_TYPES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                className={`night-type-btn${t.key === type ? " active" : ""}`}
-                onClick={() => applyType(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div
+            className="night-mode-toggle"
+            role="group"
+            aria-label="Canvas mode"
+          >
+            <button
+              type="button"
+              className={mode === "lights" ? "active" : ""}
+              onClick={() => setMode("lights")}
+            >
+              &#128161; Lights
+            </button>
+            <button
+              type="button"
+              className={mode === "roofline" ? "active" : ""}
+              onClick={() => setMode("roofline")}
+            >
+              &#128207; Roofline (measure)
+            </button>
           </div>
-          <button type="button" className="night-mini-btn" onClick={undo}>
-            &#8630; Undo
-          </button>
-          <button type="button" className="night-mini-btn" onClick={clearLights}>
-            &#10005; Clear Lights
-          </button>
         </div>
-        <div className="night-sliders">
+        {mode === "lights" ? (
+          <div className="night-row">
+            <div className="night-types">
+              {NIGHT_TYPES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={`night-type-btn${t.key === type ? " active" : ""}`}
+                  onClick={() => applyType(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="night-mini-btn" onClick={undo}>
+              &#8630; Undo
+            </button>
+            <button
+              type="button"
+              className="night-mini-btn"
+              onClick={clearLights}
+            >
+              &#10005; Clear Lights
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="night-row">
+              <div
+                className="night-mode-toggle"
+                role="group"
+                aria-label="Measure step"
+              >
+                <button
+                  type="button"
+                  className={measureStep === "reference" ? "active" : ""}
+                  onClick={() => setMeasureStep("reference")}
+                >
+                  1. Reference
+                </button>
+                <button
+                  type="button"
+                  className={measureStep === "roofline" ? "active" : ""}
+                  onClick={() => setMeasureStep("roofline")}
+                >
+                  2. Trace roofline
+                </button>
+              </div>
+              <select
+                className="night-select"
+                value={referenceKey}
+                onChange={(e) => setReferenceKey(e.target.value)}
+                aria-label="Reference object"
+              >
+                {REFERENCE_PRESETS.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.label} ({preset.feet} ft)
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="night-mini-btn"
+                onClick={undoMeasure}
+              >
+                &#8630; Undo
+              </button>
+              <button
+                type="button"
+                className="night-mini-btn"
+                onClick={clearMeasure}
+              >
+                &#10005; Clear
+              </button>
+            </div>
+            <div className="night-measure-readout">
+              <div className="night-feet">{calibrated ? `${feet} ft` : "\u2014"}</div>
+              <div className="night-feet-label">
+                {calibrated
+                  ? "Measured roofline \u2192 live Christmas price"
+                  : "Not calibrated yet"}
+              </div>
+            </div>
+          </>
+        )}
+        <div
+          className="night-sliders"
+          style={mode === "roofline" ? { display: "none" } : undefined}
+        >
           <div className="night-slider-wrap">
             <div className="night-slider-label">
               Dusk <span>{Math.round(dusk * 100)}%</span>
@@ -685,9 +973,9 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
           </div>
         </div>
         <div className="night-hint">
-          Tap the photo to drop a light &middot; Bistro: press &amp; drag to
-          hang a string, drag its ends to re-span &middot; sliders adjust the
-          selected light &middot; hold &ldquo;Before&rdquo; to compare.
+          {mode === "roofline"
+            ? measureHint
+            : "Tap the photo to drop a light \u00b7 Bistro: press & drag to hang a string, drag its ends to re-span \u00b7 sliders adjust the selected light \u00b7 hold \u201cBefore\u201d to compare."}
         </div>
       </div>
     </div>

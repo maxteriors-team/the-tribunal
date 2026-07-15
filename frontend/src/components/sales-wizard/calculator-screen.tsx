@@ -66,6 +66,74 @@ function ClientField({ wizard, field, label, placeholder, type }: FieldProps) {
   );
 }
 
+/**
+ * Upfront deposit control for the Review step. The rep picks percentage or a
+ * fixed amount; leaving it blank inherits the workspace default on save. The
+ * resolved amount due comes from the server document so it always matches what
+ * the client is charged.
+ */
+function DepositField({ wizard }: { wizard: UseSalesWizardReturn }) {
+  const { depositMode, setDepositMode, depositInput, setDepositInput } = wizard;
+  const configured = wizard.pricing?.deposit;
+  const resolved = wizard.document?.deposit_amount ?? 0;
+  const hasValue = Number.parseFloat(depositInput) > 0;
+  const defaultHint =
+    configured?.enabled && (configured.value ?? 0) > 0
+      ? configured.mode === "fixed"
+        ? `Default: ${fmt(configured.value)}`
+        : `Default: ${configured.value}%`
+      : "No default set";
+  return (
+    <div className="deposit-field">
+      <div className="deposit-field-head">
+        <div className="deposit-field-title">Upfront Deposit</div>
+        <div className="deposit-field-hint">{defaultHint}</div>
+      </div>
+      <div className="deposit-field-row">
+        <div className="deposit-mode-toggle" role="group" aria-label="Deposit mode">
+          <button
+            type="button"
+            className={depositMode === "percentage" ? "active" : ""}
+            onClick={() => setDepositMode("percentage")}
+          >
+            %
+          </button>
+          <button
+            type="button"
+            className={depositMode === "fixed" ? "active" : ""}
+            onClick={() => setDepositMode("fixed")}
+          >
+            $
+          </button>
+        </div>
+        <input
+          className="deposit-input"
+          type="number"
+          min={0}
+          step={depositMode === "percentage" ? 5 : 50}
+          inputMode="decimal"
+          placeholder={depositMode === "percentage" ? "e.g. 50" : "e.g. 1000"}
+          value={depositInput}
+          onChange={(e) => setDepositInput(e.target.value)}
+          aria-label="Deposit value"
+        />
+        <div className="deposit-due">
+          {resolved > 0 ? (
+            <>
+              <span className="deposit-due-amount">{fmt(resolved)}</span>
+              <span className="deposit-due-label">due at acceptance</span>
+            </>
+          ) : (
+            <span className="deposit-due-label">
+              {hasValue ? "Add lines to price the deposit" : "No deposit"}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CalculatorScreen({
   wizard,
   brandName,
@@ -404,6 +472,8 @@ export function CalculatorScreen({
             </div>
 
             <GrandTotals wizard={wizard} />
+
+            <DepositField wizard={wizard} />
 
             {hasLandscape ? (
               <div className="totals-panel" style={{ marginTop: 16 }}>

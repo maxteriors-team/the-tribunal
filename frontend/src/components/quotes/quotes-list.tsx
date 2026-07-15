@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, FileText, MoreHorizontal, Plus, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -36,7 +37,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { Quote, QuoteStatus } from "@/types";
 
-import { QuoteCreateDialog } from "./quote-create-dialog";
+import { ConvertQuoteDialog } from "./convert-quote-dialog";
 
 const STATUS_VARIANT: Record<
   QuoteStatus,
@@ -51,8 +52,9 @@ const STATUS_VARIANT: Record<
 
 export function QuotesList() {
   const workspaceId = useWorkspaceId();
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
+  const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
 
   const query = useQuery({
     queryKey: queryKeys.quotes.list(workspaceId ?? ""),
@@ -99,28 +101,10 @@ export function QuotesList() {
       toast.error(getApiErrorMessage(err, "Failed to decline quote")),
   });
 
-  const convertMutation = useMutation({
-    mutationFn: (id: string) => quotesApi.convert(workspaceId ?? "", id),
-    onSuccess: (result) => {
-      const parts: string[] = [];
-      if (result.job_id) parts.push("job");
-      if (result.invoice_id) parts.push("invoice");
-      toast.success(
-        parts.length
-          ? `Converted to ${parts.join(" + ")}`
-          : "Quote converted"
-      );
-      invalidate();
-    },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to convert quote")),
-  });
-
   const busy =
     sendMutation.isPending ||
     approveMutation.isPending ||
-    declineMutation.isPending ||
-    convertMutation.isPending;
+    declineMutation.isPending;
 
   const clientProposalUrl = (quote: Quote): string | null =>
     quote.public_token ? `${window.location.origin}/p/quotes/${quote.public_token}` : null;
@@ -139,8 +123,11 @@ export function QuotesList() {
     if (url) window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  // Consolidated entry point: every new quote is built in the sales wizard (the
+  // single quoting system), which prices every line server-side and saves one
+  // Quote with its rich proposal snapshot.
   const newQuoteButton = (
-    <Button onClick={() => setCreateOpen(true)} size="sm">
+    <Button onClick={() => router.push("/sales-wizard")} size="sm">
       <Plus className="mr-1.5 h-4 w-4" />
       New quote
     </Button>
@@ -212,7 +199,7 @@ export function QuotesList() {
                     onSend={() => sendMutation.mutate(quote.id)}
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
-                    onConvert={() => convertMutation.mutate(quote.id)}
+                    onConvert={() => setConvertQuote(quote)}
                     onCopyLink={() => copyClientLink(quote)}
                     onPreview={() => openClientProposal(quote)}
                   />
@@ -229,7 +216,14 @@ export function QuotesList() {
     <div className="space-y-4">
       <div className="flex items-center justify-end">{newQuoteButton}</div>
       {body}
-      <QuoteCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ConvertQuoteDialog
+        workspaceId={workspaceId ?? ""}
+        quote={convertQuote}
+        open={convertQuote !== null}
+        onOpenChange={(open) => {
+          if (!open) setConvertQuote(null);
+        }}
+      />
     </div>
   );
 }

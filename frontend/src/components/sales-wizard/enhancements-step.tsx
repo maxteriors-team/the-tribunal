@@ -391,13 +391,19 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
       ) : null}
 
       {showCare ? (
-        <button
-          type="button"
-          className="night-launch-btn"
-          onClick={onOpenNight}
-        >
-          &#9789;&nbsp; Night Mode &#8212; Show It Lit at Night
-        </button>
+        <>
+          <button
+            type="button"
+            className="night-launch-btn"
+            onClick={onOpenNight}
+          >
+            &#9789;&nbsp; Night Mode &#8212; Show It Lit at Night
+          </button>
+          <div className="night-launch-sub">
+            Trace your roofline on the photo to auto-measure the footage and light
+            it up &#8212; the Christmas price updates as you draw.
+          </div>
+        </>
       ) : null}
     </>
   );

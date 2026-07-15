@@ -3,6 +3,7 @@ import type {
   PublicProposal,
   PublicProposalActionResult,
   PublicProposalDepositCheckout,
+  PublicProposalDepositStatus,
 } from "@/types/proposal";
 
 // Public client proposal API (no auth required — keyed on the share token).
@@ -26,5 +27,12 @@ export const publicProposalsApi = {
   depositCheckout: (token: string): Promise<PublicProposalDepositCheckout> =>
     apiPost<PublicProposalDepositCheckout>(
       `/api/v1/p/quotes/${token}/deposit-checkout`,
+    ),
+
+  // Reconcile the deposit against Stripe on return from checkout (webhook
+  // backstop). Marks paid if Stripe confirms it; safe to call repeatedly.
+  depositStatus: (token: string): Promise<PublicProposalDepositStatus> =>
+    apiPost<PublicProposalDepositStatus>(
+      `/api/v1/p/quotes/${token}/deposit-status`,
     ),
 };

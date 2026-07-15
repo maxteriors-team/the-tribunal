@@ -457,3 +457,63 @@ async def test_deliver_quote_validates_missing_destination_and_channel() -> None
             await svc.deliver_quote(ws.id, qid, channel="sms", to=None)
         with pytest.raises(ValidationError, match="Unknown delivery channel"):
             await svc.deliver_quote(ws.id, qid, channel="fax", to=None)
+
+
+async def test_wizard_deposit_persists_and_shows_in_document() -> None:
+    """A rep-set wizard deposit is priced into the document (on the financed
+    total) and persisted onto the saved quote."""
+    from app.schemas.proposal_wizard import WizardDepositSelection
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.deposit = WizardDepositSelection(mode="percentage", value=50)
+
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        # Deposit is taken on the combined financed total (13692 + 3090 = 16782).
+        assert doc.grand_financed_total == 16782.0
+        assert doc.deposit_mode == "percentage"
+        assert doc.deposit_amount == 8391.0
+
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert saved.deposit_percentage == 50.0
+        assert saved.deposit_amount == 8391.0
+        assert saved.deposit_required is True
+
+
+async def test_wizard_links_contact_and_converts_to_scheduled_job() -> None:
+    """A wizard quote with client phone details resolves/creates a contact so an
+    approved quote can convert into a job (which needs a contact)."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.field_service import Job
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.client.email = "newlead@example.com"
+        payload.client.phone = "+15551230000"
+
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert saved.contact_id is not None  # contact was created + linked
+
+        qid = uuid.UUID(str(saved.id))
+        await svc.approve_quote(ws.id, qid)
+        start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        result = await svc.convert_quote(
+            ws.id,
+            qid,
+            create_invoice=False,
+            scheduled_start=start,
+            scheduled_end=start + timedelta(hours=3),
+        )
+        assert result.job_id is not None
+        job = await db.get(Job, result.job_id)
+        assert job is not None
+        assert job.status == "scheduled"
+
+        # Re-quoting the same phone reuses the contact rather than duplicating it.
+        again = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert again.contact_id == saved.contact_id

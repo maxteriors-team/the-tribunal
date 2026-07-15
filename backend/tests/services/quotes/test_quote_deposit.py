@@ -14,7 +14,6 @@ from collections.abc import AsyncIterator
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
@@ -24,7 +23,10 @@ from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
 from app.services.payments import quote_deposit_service as deposit
-from app.services.payments.call_payment_service import CheckoutSessionResult
+from app.services.payments.call_payment_service import (
+    CheckoutSessionResult,
+    SessionStatus,
+)
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -222,3 +224,128 @@ async def test_checkout_requires_stripe_configured(monkeypatch) -> None:
         token, _ = await _sent_quote_with_deposit(svc, ws.id, contact.id)
         with pytest.raises(deposit.DepositError):
             await deposit.create_deposit_checkout_session(db, token)
+
+
+async def test_fixed_deposit_amount_clamps_to_total() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        # Fixed $500 deposit on a $1070 total resolves to exactly $500.
+        created = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Fixed deposit",
+                deposit_amount_fixed=500.0,
+                line_items=[
+                    QuoteLineItemCreate(name="Fixtures", quantity=6, unit_price=120.0),
+                    QuoteLineItemCreate(name="Labor", quantity=1, unit_price=400.0, discount=50.0),
+                ],
+            ),
+        )
+        sent = await svc.mark_sent(ws.id, created.id)
+        proposal = await svc.get_public_proposal(sent.public_token)
+        assert proposal.total == 1070.0
+        assert proposal.deposit_percentage is None
+        assert proposal.deposit_amount == 500.0
+        assert proposal.deposit_required is True
+
+        # A fixed deposit larger than the total is clamped down to the total.
+        big = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Oversized deposit",
+                deposit_amount_fixed=99999.0,
+                line_items=[QuoteLineItemCreate(name="Job", unit_price=200.0)],
+            ),
+        )
+        big_sent = await svc.mark_sent(ws.id, big.id)
+        big_proposal = await svc.get_public_proposal(big_sent.public_token)
+        assert big_proposal.deposit_amount == 200.0
+
+
+async def test_workspace_default_deposit_is_inherited() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {"pricing": {"deposit": {"enabled": True, "mode": "percentage", "value": 50}}}
+        await db.flush()
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        # Operator sets no deposit -> inherits the 50% workspace default.
+        created = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Inherited deposit",
+                line_items=[QuoteLineItemCreate(name="Job", unit_price=1000.0)],
+            ),
+        )
+        sent = await svc.mark_sent(ws.id, created.id)
+        proposal = await svc.get_public_proposal(sent.public_token)
+        assert proposal.deposit_percentage == 50.0
+        assert proposal.deposit_amount == 500.0
+
+
+async def test_reconcile_marks_paid_when_stripe_reports_paid(monkeypatch) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        token, quote_id = await _sent_quote_with_deposit(svc, ws.id, contact.id)
+
+        # Simulate a checkout having been started (session id persisted).
+        quote = await db.get(Quote, quote_id)
+        quote.deposit_checkout_session_id = "cs_reconcile_1"
+        await db.flush()
+
+        monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
+
+        async def _paid_status(session_id: str) -> SessionStatus:
+            assert session_id == "cs_reconcile_1"
+            return SessionStatus(
+                payment_status="paid", status="complete", payment_intent_id="pi_rec_1"
+            )
+
+        monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _paid_status)
+
+        status = await deposit.reconcile_deposit(db, token)
+        assert status.deposit_paid is True
+        assert status.deposit_amount == 321.0
+
+        refreshed = await db.get(Quote, quote_id)
+        assert refreshed.deposit_paid_at is not None
+        assert refreshed.deposit_payment_intent_id == "pi_rec_1"
+
+        # Idempotent: a second reconcile keeps the same paid timestamp.
+        first = refreshed.deposit_paid_at
+        again = await deposit.reconcile_deposit(db, token)
+        assert again.deposit_paid is True
+        after = await db.get(Quote, quote_id)
+        assert after.deposit_paid_at == first
+
+
+async def test_reconcile_reports_unpaid_when_stripe_not_paid(monkeypatch) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        token, quote_id = await _sent_quote_with_deposit(svc, ws.id, contact.id)
+        quote = await db.get(Quote, quote_id)
+        quote.deposit_checkout_session_id = "cs_unpaid_1"
+        await db.flush()
+
+        monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
+
+        async def _unpaid_status(session_id: str) -> SessionStatus:
+            return SessionStatus(
+                payment_status="unpaid", status="open", payment_intent_id=None
+            )
+
+        monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _unpaid_status)
+
+        status = await deposit.reconcile_deposit(db, token)
+        assert status.deposit_paid is False
+        refreshed = await db.get(Quote, quote_id)
+        assert refreshed.deposit_paid_at is None

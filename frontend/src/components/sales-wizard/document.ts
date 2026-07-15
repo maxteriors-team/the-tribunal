@@ -80,6 +80,9 @@ export interface WizardDocument {
   grand_financed_total: number;
   grand_cash_total: number;
   grand_monthly_payment: number;
+  deposit_mode: string | null;
+  deposit_value: number;
+  deposit_amount: number;
 }
 
 export function normalizeDocument(doc: ProposalDocument): WizardDocument {
@@ -142,6 +145,9 @@ export function normalizeDocument(doc: ProposalDocument): WizardDocument {
     grand_financed_total: doc.grand_financed_total ?? 0,
     grand_cash_total: doc.grand_cash_total ?? 0,
     grand_monthly_payment: doc.grand_monthly_payment ?? 0,
+    deposit_mode: doc.deposit_mode ?? null,
+    deposit_value: doc.deposit_value ?? 0,
+    deposit_amount: doc.deposit_amount ?? 0,
   };
 }
 

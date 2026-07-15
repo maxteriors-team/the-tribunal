@@ -57,13 +57,21 @@ export const quotesApi = {
   convert: async (
     workspaceId: string,
     quoteId: string,
-    options?: { create_job?: boolean; create_invoice?: boolean }
+    options?: {
+      create_job?: boolean;
+      create_invoice?: boolean;
+      // ISO datetimes; supply both to schedule the created job on the calendar.
+      scheduled_start?: string | null;
+      scheduled_end?: string | null;
+    }
   ): Promise<QuoteConvertResult> => {
     return apiPost<QuoteConvertResult>(
       `${quotePath(workspaceId, quoteId)}/convert`,
       {
         create_job: options?.create_job ?? true,
         create_invoice: options?.create_invoice ?? true,
+        scheduled_start: options?.scheduled_start ?? null,
+        scheduled_end: options?.scheduled_end ?? null,
       }
     );
   },

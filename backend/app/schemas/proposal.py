@@ -131,6 +131,8 @@ class PublicProposal(BaseModel):
     deposit_percentage: float | None = None
     deposit_amount: float | None = None
     deposit_paid: bool = False
+    # True when a deposit is owed and not yet paid (drives the client CTA).
+    deposit_required: bool = False
     line_items: list[PublicProposalLineItem] = Field(default_factory=list)
     # Rich multi-tier presentation snapshot built by the sales wizard. When set,
     # the public page renders the Good/Better/Best tiers, financing, Care Plan,
@@ -146,11 +148,17 @@ class PublicProposalDecline(BaseModel):
 
 
 class PublicProposalActionResult(BaseModel):
-    """Result of a client approve/decline on the public proposal page."""
+    """Result of a client approve/decline on the public proposal page.
+
+    On approval, ``deposit_required``/``deposit_amount`` let the client page chain
+    straight into the Stripe deposit checkout when money is owed.
+    """
 
     token: str
     status: str
     message: str
+    deposit_required: bool = False
+    deposit_amount: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,4 +168,12 @@ class PublicProposalDepositCheckout(BaseModel):
 
     url: str
     amount: float
+    currency: str
+
+
+class PublicProposalDepositStatus(BaseModel):
+    """Reconciled deposit state after the client returns from Stripe checkout."""
+
+    deposit_paid: bool
+    deposit_amount: float | None = None
     currency: str

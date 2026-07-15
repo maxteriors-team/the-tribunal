@@ -285,28 +285,16 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
 export function GrandTotals({ wizard }: { wizard: UseSalesWizardReturn }) {
   const doc = wizard.document;
   const financed = doc?.grand_financed_total ?? 0;
-  const cash = doc?.grand_cash_total ?? 0;
   const monthly = doc?.grand_monthly_payment ?? 0;
-  const savings = financed - cash;
   if (financed <= 0) return null;
   return (
     <div className="grand-panel">
       <div className="grand-panel-title">All-In Project Total</div>
       <div className="grand-rows">
         <div className="grand-row lead">
-          <span>Cash / Check</span>
-          <strong>{fmt(cash)}</strong>
-        </div>
-        <div className="grand-row">
           <span>Financed total</span>
           <strong>{fmt(financed)}</strong>
         </div>
-        {savings > 0 ? (
-          <div className="grand-row muted">
-            <span>Cash savings</span>
-            <strong>{fmt(savings)}</strong>
-          </div>
-        ) : null}
         {monthly > 0 ? (
           <div className="grand-row muted">
             <span>As low as</span>

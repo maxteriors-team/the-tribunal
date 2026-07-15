@@ -728,7 +728,13 @@ export function ClientProposalView({
                   disabled={busy}
                   onClick={onApprove}
                 >
-                  {busy ? "Approving…" : <>&#10003;&nbsp; Approve Proposal</>}
+                  {busy ? (
+                    "Approving…"
+                  ) : data.deposit_required ? (
+                    <>&#10003;&nbsp; Approve &amp; Pay Deposit</>
+                  ) : (
+                    <>&#10003;&nbsp; Approve Proposal</>
+                  )}
                 </button>
                 <button
                   type="button"

@@ -10,7 +10,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
 
@@ -67,12 +67,23 @@ class QuoteBase(BaseModel):
     currency: str = "USD"
     tax_amount: float = Field(default=0.0, ge=0)
     discount_amount: float = Field(default=0.0, ge=0)
-    # Optional upfront deposit as a percentage of the total (0-100). Null = none.
+    # Optional upfront deposit. Set at most one: ``deposit_percentage`` (0-100 of
+    # the total) or ``deposit_amount_fixed`` (a flat amount in major units). Null
+    # on both = no deposit requested. A fixed amount wins if both are supplied.
     deposit_percentage: float | None = Field(default=None, ge=0, le=100)
+    deposit_amount_fixed: float | None = Field(default=None, ge=0)
     issue_date: date | None = None
     expiry_date: date | None = None
     notes: str | None = None
     terms: str | None = None
+
+    @model_validator(mode="after")
+    def _one_deposit_mode(self) -> "QuoteBase":
+        if self.deposit_percentage is not None and self.deposit_amount_fixed is not None:
+            raise ValueError(
+                "Set only one of deposit_percentage or deposit_amount_fixed"
+            )
+        return self
 
 
 class QuoteCreate(QuoteBase):
@@ -93,10 +104,19 @@ class QuoteUpdate(BaseModel):
     tax_amount: float | None = Field(default=None, ge=0)
     discount_amount: float | None = Field(default=None, ge=0)
     deposit_percentage: float | None = Field(default=None, ge=0, le=100)
+    deposit_amount_fixed: float | None = Field(default=None, ge=0)
     issue_date: date | None = None
     expiry_date: date | None = None
     notes: str | None = None
     terms: str | None = None
+
+    @model_validator(mode="after")
+    def _one_deposit_mode(self) -> "QuoteUpdate":
+        if self.deposit_percentage is not None and self.deposit_amount_fixed is not None:
+            raise ValueError(
+                "Set only one of deposit_percentage or deposit_amount_fixed"
+            )
+        return self
 
 
 class QuoteDeclineRequest(BaseModel):
@@ -125,10 +145,27 @@ class QuoteDeliverResult(BaseModel):
 
 
 class QuoteConvertRequest(BaseModel):
-    """Choose what an approved quote converts into. Defaults to both."""
+    """Choose what an approved quote converts into. Defaults to both.
+
+    An optional ``scheduled_start``/``scheduled_end`` window schedules the created
+    job on the calendar in one step; omit both to land the job unscheduled.
+    """
 
     create_job: bool = True
     create_invoice: bool = True
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+
+    @model_validator(mode="after")
+    def _check_window(self) -> "QuoteConvertRequest":
+        start, end = self.scheduled_start, self.scheduled_end
+        if (start is None) != (end is None):
+            raise ValueError(
+                "scheduled_start and scheduled_end must be provided together"
+            )
+        if start is not None and end is not None and end <= start:
+            raise ValueError("scheduled_end must be after scheduled_start")
+        return self
 
 
 class QuoteResponse(BaseModel):
@@ -148,6 +185,7 @@ class QuoteResponse(BaseModel):
     total: float
     currency: str
     deposit_percentage: float | None = None
+    deposit_amount_fixed: float | None = None
     deposit_paid_at: datetime | None = None
     issue_date: date | None = None
     expiry_date: date | None = None
@@ -164,6 +202,25 @@ class QuoteResponse(BaseModel):
     public_token: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def deposit_amount(self) -> float | None:
+        """Effective deposit in major units (fixed wins, clamped to total)."""
+        if self.deposit_amount_fixed is not None:
+            amount = float(self.deposit_amount_fixed)
+            if amount <= 0:
+                return None
+            return round(min(amount, self.total), 2) if self.total > 0 else round(amount, 2)
+        if self.deposit_percentage is not None and self.deposit_percentage > 0:
+            return round(self.total * float(self.deposit_percentage) / 100, 2)
+        return None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def deposit_required(self) -> bool:
+        """True when a deposit is owed and not yet paid."""
+        return self.deposit_amount is not None and self.deposit_paid_at is None
 
     model_config = ConfigDict(from_attributes=True)
 

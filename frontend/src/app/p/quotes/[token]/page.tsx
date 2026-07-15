@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { use } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 
 import { ClientProposalView } from "@/components/proposal/client-proposal-view";
 import { parseProposalDocument } from "@/components/proposal/document";
@@ -28,6 +28,20 @@ export default function PublicProposalPage({
     retry: false,
   });
 
+  const [payingDeposit, setPayingDeposit] = useState(false);
+
+  // Hand off to Stripe's hosted deposit page. Shared by the standalone "Pay
+  // Deposit" button and the "Approve & Pay Deposit" flow.
+  const payDeposit = useCallback(async () => {
+    setPayingDeposit(true);
+    try {
+      const { url } = await publicProposalsApi.depositCheckout(token);
+      window.location.href = url;
+    } catch {
+      setPayingDeposit(false);
+    }
+  }, [token]);
+
   const approveMutation = useMutation({
     mutationFn: () => publicProposalsApi.approve(token),
     onSuccess: (result) => {
@@ -38,6 +52,9 @@ export default function PublicProposalPage({
             ? { ...prev, status: result.status, is_decided: true }
             : prev,
       );
+      // Accept = pay: when a deposit is owed, roll straight into Stripe so the
+      // customer never has to hunt for a second button.
+      if (result.deposit_required) void payDeposit();
     },
   });
 
@@ -54,6 +71,38 @@ export default function PublicProposalPage({
       );
     },
   });
+
+  // Reliable deposit capture: on return from Stripe (``?deposit=paid``) the
+  // webhook may not have landed yet. Reconcile against Stripe directly and poll
+  // a few times with backoff until the deposit reads paid, so a delayed or
+  // missing webhook never strands a paid deposit as "unpaid".
+  const reconciledRef = useRef(false);
+  useEffect(() => {
+    if (reconciledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("deposit") !== "paid") return;
+    reconciledRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt += 1) {
+        try {
+          const status = await publicProposalsApi.depositStatus(token);
+          if (status.deposit_paid) {
+            await queryClient.invalidateQueries({
+              queryKey: queryKeys.publicProposals.byToken(token),
+            });
+            return;
+          }
+        } catch {
+          // Ignore and retry; the button state degrades gracefully.
+        }
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, queryClient]);
 
   if (isPending) {
     return (
@@ -74,7 +123,8 @@ export default function PublicProposalPage({
     );
   }
 
-  const busy = approveMutation.isPending || declineMutation.isPending;
+  const busy =
+    approveMutation.isPending || declineMutation.isPending || payingDeposit;
   const justApproved = approveMutation.isSuccess || data.status === "approved";
   const justDeclined = declineMutation.isSuccess || data.status === "declined";
   const actionError = approveMutation.isError || declineMutation.isError;

@@ -74,6 +74,20 @@ class CommissionConfig(BaseModel):
     label: str = "Sales Commission"
 
 
+class DepositConfig(BaseModel):
+    """Workspace default upfront deposit applied to new quotes.
+
+    When ``enabled`` a saved quote inherits this deposit unless the operator sets
+    one explicitly. ``mode`` picks how ``value`` is read: ``percentage`` (0-100
+    of the total) or ``fixed`` (a flat amount in major units). Disabled by
+    default so nothing changes for a workspace that never configures a deposit.
+    """
+
+    enabled: bool = False
+    mode: Literal["percentage", "fixed"] = "percentage"
+    value: float = Field(default=50, ge=0)
+
+
 # --------------------------------------------------------------------------- #
 # Tiers (Good / Better / Best) — named groups of catalog items + copy
 # --------------------------------------------------------------------------- #
@@ -359,6 +373,7 @@ class PricingSettings(BaseModel):
     financing: FinancingConfig = Field(default_factory=FinancingConfig)
     cash_discount: CashDiscountConfig = Field(default_factory=CashDiscountConfig)
     commission: CommissionConfig = Field(default_factory=CommissionConfig)
+    deposit: DepositConfig = Field(default_factory=DepositConfig)
     tier_order: list[str] = Field(default_factory=list)
     tiers: list[TierConfig] = Field(default_factory=list)
     care_plan: CarePlanConfig = Field(default_factory=CarePlanConfig)
@@ -502,6 +517,7 @@ class PricingSettingsUpdate(BaseModel):
     financing: FinancingConfig | None = None
     cash_discount: CashDiscountConfig | None = None
     commission: CommissionConfig | None = None
+    deposit: DepositConfig | None = None
     tier_order: list[str] | None = None
     tiers: list[TierConfig] | None = None
     care_plan: CarePlanConfig | None = None
