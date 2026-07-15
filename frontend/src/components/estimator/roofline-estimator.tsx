@@ -61,6 +61,13 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     {},
   );
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // Optional customer this estimate is saved onto. A phone is the identity key
+  // (contacts are phone-keyed), so without it the estimate still shares but stays
+  // unlinked. `savedToCustomer` reflects the server's resolve/create result.
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [savedToCustomer, setSavedToCustomer] = useState(false);
 
   const referenceFeet = useMemo(
     () => REFERENCE_PRESETS.find((p) => p.key === referenceKey)?.feet ?? 0,
@@ -216,9 +223,18 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     staleTime: 60_000,
   });
 
+  const shareParams = {
+    ...estimateParams,
+    client_name: clientName.trim() || null,
+    client_email: clientEmail.trim() || null,
+    client_phone: clientPhone.trim() || null,
+  };
   const shareMutation = useMutation({
-    mutationFn: () => estimatorApi.share(workspaceId, estimateParams),
-    onSuccess: (result) => setShareUrl(result.url),
+    mutationFn: () => estimatorApi.share(workspaceId, shareParams),
+    onSuccess: (result) => {
+      setShareUrl(result.url);
+      setSavedToCustomer(result.saved_to_customer);
+    },
   });
 
   const makeRateHandler =
@@ -446,8 +462,45 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                 disabled={feet <= 0 || shareMutation.isPending}
                 onClick={() => shareMutation.mutate()}
               >
-                {shareMutation.isPending ? "Creating link…" : "Share with client"}
+                {shareMutation.isPending ? "Saving…" : "Save & share"}
               </button>
+            </div>
+
+            <div className="est-customer">
+              <div className="est-customer-title">Save to customer</div>
+              <div className="est-customer-fields">
+                <input
+                  className="est-input"
+                  type="text"
+                  placeholder="Customer name"
+                  autoComplete="off"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  aria-label="Customer name"
+                />
+                <input
+                  className="est-input"
+                  type="email"
+                  placeholder="Email"
+                  autoComplete="off"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  aria-label="Customer email"
+                />
+                <input
+                  className="est-input"
+                  type="tel"
+                  placeholder="Phone"
+                  autoComplete="off"
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  aria-label="Customer phone"
+                />
+              </div>
+              <div className="est-customer-hint">
+                Add a phone number to save this estimate to a customer record.
+                Without one you can still share the link.
+              </div>
             </div>
 
             {estimate?.christmas.enabled &&
@@ -503,11 +556,18 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
             ) : null}
 
             {shareUrl ? (
-              <div className="est-share-link">
-                <input value={shareUrl} readOnly aria-label="Client link" />
-                <button className="est-btn" type="button" onClick={copyLink}>
-                  Copy
-                </button>
+              <div className="est-share">
+                {savedToCustomer ? (
+                  <div className="est-saved-note">
+                    ✓ Saved to customer{clientName.trim() ? ` · ${clientName.trim()}` : ""}
+                  </div>
+                ) : null}
+                <div className="est-share-link">
+                  <input value={shareUrl} readOnly aria-label="Client link" />
+                  <button className="est-btn" type="button" onClick={copyLink}>
+                    Copy
+                  </button>
+                </div>
               </div>
             ) : null}
 

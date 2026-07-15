@@ -376,6 +376,59 @@
   margin: 8px 0 0;
 }
 
+/* ---- Save to customer ---- */
+.est-customer {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  background: var(--s1);
+}
+
+.est-customer-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t4);
+  margin-bottom: 12px;
+}
+
+.est-customer-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.est-customer-fields .est-input {
+  width: 100%;
+}
+
+.est-customer-hint {
+  color: var(--t4);
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+@media (max-width: 620px) {
+  .est-customer-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.est-share {
+  margin-top: 16px;
+}
+
+.est-share .est-share-link {
+  margin-top: 8px;
+}
+
+.est-saved-note {
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* ---- Seasonal decor add-ons (trees / bushes / wreaths / garland) ---- */
 .est-decor {
   margin-top: 16px;

@@ -106,4 +106,27 @@ describe("RooflineEstimator photo upload", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/set the scale/i)).toBeInTheDocument();
   });
+
+  it("exposes the Save-to-customer fields once a photo is loaded", async () => {
+    const { container } = renderEstimator();
+
+    // No customer capture before a photo exists.
+    expect(screen.queryByLabelText(/Customer name/i)).toBeNull();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[type="file"]',
+    );
+    const file = new File(["x"], "house.png", { type: "image/png" });
+    fireEvent.change(input!, { target: { files: [file] } });
+
+    // After upload the rep can attach the estimate to a customer.
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Customer name/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Customer phone/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Save & share/i }),
+    ).toBeInTheDocument();
+  });
 });
