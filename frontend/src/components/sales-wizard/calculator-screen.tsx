@@ -2,7 +2,7 @@
 
 /**
  * The unified Quote Builder — a category-driven operator flow: Client → Product
- * Lines → (Design · Seasonal · Story · Add-ons for the selected lines) → Review.
+ * Lines → (Design · Seasonal · Add-ons for the selected lines) → Review.
  * The rep picks which product lines the quote covers; only the relevant sections
  * render. Every price comes from the server preview document; the review step
  * shows one combined all-in total across every selected line.
@@ -18,7 +18,6 @@ import {
 import { CategoryStep } from "./category-step";
 import { DesignStep, MiniTotals } from "./design-step";
 import { EnhancementsStep } from "./enhancements-step";
-import { StoryStep } from "./story-step";
 import { fmt, type ClientDraft, type UseSalesWizardReturn } from "./use-sales-wizard";
 
 export type WizardStepId =
@@ -26,7 +25,6 @@ export type WizardStepId =
   | "lines"
   | "design"
   | "seasonal"
-  | "story"
   | "enhancements"
   | "review";
 
@@ -154,7 +152,6 @@ export function CalculatorScreen({
     ];
     if (hasLandscape) list.push({ id: "design", label: "Design" });
     if (hasSeasonal) list.push({ id: "seasonal", label: "Seasonal" });
-    if (hasLandscape) list.push({ id: "story", label: "Story" });
     // Add-ons: mockups apply to every quote (care/bistro gate internally), so
     // this step is always available.
     list.push({ id: "enhancements", label: "Add-ons" });
@@ -391,32 +388,6 @@ export function CalculatorScreen({
               {wizard.hasCategory("christmas") ? (
                 <ChristmasSection wizard={wizard} />
               ) : null}
-              <div className="wizard-nav">
-                <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
-                  Back
-                </button>
-                <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                  Continue
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          {/* ── Story (landscape) ── */}
-          {hasLandscape ? (
-            <section className={`wizard-step${step === "story" ? " active" : ""}`}>
-              <div className="wizard-step-heading">
-                <div className="wizard-kicker">{stepOf("story")}</div>
-                <div className="wizard-title">
-                  <em>Sales</em>{" "}Story
-                </div>
-                <div className="wizard-copy">
-                  Use this as the in-home slideshow: set the agenda, teach the
-                  design, frame the value, then make Good / Better / Best feel
-                  like a simple decision.
-                </div>
-              </div>
-              <StoryStep wizard={wizard} />
               <div className="wizard-nav">
                 <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
                   Back
