@@ -242,6 +242,8 @@ export const queryKeys = {
   },
   contacts: {
     ...contacts,
+    stats: (workspaceId: string) =>
+      [...contacts.all(workspaceId), "stats"] as const,
     ids: (workspaceId: string, params: QueryKeyParams) =>
       [...contacts.all(workspaceId), "ids", normalizeQueryKeyParams(params)] as const,
     infinite: (workspaceId: string | null, filters: QueryKeyParams) =>

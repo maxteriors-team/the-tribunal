@@ -56,8 +56,8 @@ export const useContactStore = create<ContactStore>((set) => ({
   statusFilter: null,
   setStatusFilter: (status) => set({ statusFilter: status, contactsPage: 1 }),
 
-  // Sorting
-  sortBy: "created_at",
+  // Sorting — default mirrors Jobber's Clients list (most recent activity first).
+  sortBy: "last_activity_desc",
   setSortBy: (sortBy) => set({ sortBy, contactsPage: 1 }),
 
   // Advanced filters

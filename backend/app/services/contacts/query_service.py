@@ -3,13 +3,16 @@
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.pagination import PaginationResult
+from app.db.scope import apply_workspace_scope
+from app.models.contact import Contact
 from app.schemas.contact import ContactWithConversationResponse
 from app.schemas.tag import TagResponse
 from app.services.contacts.contact_repository import (
@@ -21,6 +24,21 @@ from app.services.contacts.contact_repository import (
 from app.services.contacts.exceptions import ContactValidationError
 
 logger = structlog.get_logger()
+
+
+def _pct_change(curr: int, prev: int) -> str:
+    """Format a period-over-period percentage change for the stat cards.
+
+    Returns a preformatted string (``"+N%"`` / ``"-N%"`` / ``"+0%"``) so the
+    frontend ``isTrendUp`` helper renders the trend badge without reparsing.
+    When the prior window is empty but the current one isn't, treat it as full
+    growth (``"+100%"``); when both windows are empty there is no change
+    (``"+0%"``).
+    """
+    if prev == 0:
+        return "+100%" if curr > 0 else "+0%"
+    pct = int(round((curr - prev) / prev * 100))
+    return f"{'+' if pct >= 0 else '-'}{abs(pct)}%"
 
 
 @dataclass(slots=True, frozen=True)
@@ -183,6 +201,55 @@ class ContactQueryService:
             page_size=page_size,
             pages=(total + page_size - 1) // page_size if total > 0 else 1,
         ).to_dict()
+
+    async def get_stats(self, *, workspace_id: uuid.UUID) -> dict[str, Any]:
+        """Compute workspace-scoped contact metrics for the stat cards.
+
+        Mirrors the Jobber Clients dashboard: "new leads" and "new clients"
+        over the trailing 30 days (with a period-over-period change vs the
+        prior 30-day window) plus year-to-date new clients. "Client" maps to
+        our ``converted`` status. All windows are UTC and workspace-scoped.
+        """
+        now = datetime.now(UTC)
+        window_30d = now - timedelta(days=30)
+        window_60d = now - timedelta(days=60)
+        year_start = datetime(now.year, 1, 1, tzinfo=UTC)
+
+        async def _count(*criteria: Any) -> int:
+            query = apply_workspace_scope(
+                select(func.count()).select_from(Contact), Contact, workspace_id
+            )
+            if criteria:
+                query = query.where(*criteria)
+            result = await self.db.execute(query)
+            return result.scalar_one() or 0
+
+        new_leads_30d = await _count(Contact.created_at >= window_30d)
+        new_leads_prev = await _count(
+            Contact.created_at >= window_60d,
+            Contact.created_at < window_30d,
+        )
+        new_clients_30d = await _count(
+            Contact.status == "converted",
+            Contact.created_at >= window_30d,
+        )
+        new_clients_prev = await _count(
+            Contact.status == "converted",
+            Contact.created_at >= window_60d,
+            Contact.created_at < window_30d,
+        )
+        total_new_clients_ytd = await _count(
+            Contact.status == "converted",
+            Contact.created_at >= year_start,
+        )
+
+        return {
+            "new_leads_30d": new_leads_30d,
+            "new_leads_change": _pct_change(new_leads_30d, new_leads_prev),
+            "new_clients_30d": new_clients_30d,
+            "new_clients_change": _pct_change(new_clients_30d, new_clients_prev),
+            "total_new_clients_ytd": total_new_clients_ytd,
+        }
 
     async def list_contact_ids(
         self,

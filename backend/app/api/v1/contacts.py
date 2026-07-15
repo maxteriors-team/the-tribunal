@@ -34,6 +34,7 @@ from app.schemas.contact import (
     ContactIdsResponse,
     ContactListResponse,
     ContactResponse,
+    ContactStatsResponse,
     ContactUpdate,
     CSVPreviewResponse,
     ImportResult,
@@ -164,6 +165,21 @@ async def list_contact_ids(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     return ContactIdsResponse(**result)
+
+
+# Registered before `/{contact_id}` so FastAPI matches the static "stats" path
+# instead of treating "stats" as a contact id (which would 422 on int parsing).
+@router.get("/stats", response_model=ContactStatsResponse)
+async def get_contact_stats(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ContactStatsResponse:
+    """Return aggregate contact metrics for the Contacts page stat cards."""
+    service = ContactQueryService(db)
+    result = await service.get_stats(workspace_id=workspace_id)
+    return ContactStatsResponse(**result)
 
 
 @router.post("", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)

@@ -1,18 +1,18 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Users, CheckSquare, X, Plus, Upload } from "lucide-react";
-import { AnimatePresence } from "motion/react";
+import { Users, CheckSquare, X, Plus, Upload, MoreHorizontal } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { BulkTagDialog } from "@/components/contacts/bulk-tag-dialog";
-import { ContactCard, ContactCardSkeleton } from "@/components/contacts/contact-card";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactsBulkActions } from "@/components/contacts/contacts-bulk-actions";
 import { ContactsEmptyState } from "@/components/contacts/contacts-empty-state";
-import { ContactsToolbar } from "@/components/contacts/contacts-toolbar";
+import { ContactsFilterBar } from "@/components/contacts/contacts-filter-bar";
+import { ContactsStatsCards } from "@/components/contacts/contacts-stats-cards";
+import { ContactsTable, ContactsTableSkeleton } from "@/components/contacts/contacts-table";
 import { ImportContactsDialog } from "@/components/contacts/import-contacts-dialog";
 import { ScrapeLeadsDialog } from "@/components/contacts/scrape-leads-dialog";
 import { ResourceListPagination } from "@/components/resource-list/resource-list-pagination";
@@ -28,15 +28,28 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageErrorState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { useBulkDeleteContacts, useBulkUpdateStatus, useContactIds, useContactsPaginated } from "@/hooks/useContacts";
+import {
+  useBulkDeleteContacts,
+  useBulkUpdateStatus,
+  useContactIds,
+  useContactsPaginated,
+  useContactStats,
+} from "@/hooks/useContacts";
 import { useRowSelection } from "@/hooks/useRowSelection";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import type { ContactIdsParams, ContactsListParams } from "@/lib/api/contacts";
 import { useContactStore } from "@/lib/contact-store";
 import { queryKeys } from "@/lib/query-keys";
+import { formatNumber } from "@/lib/utils/number";
 import type { Contact, ContactStatus } from "@/types";
 
 export function ContactsPage() {
@@ -133,6 +146,9 @@ export function ContactsPage() {
   const contacts = useMemo(() => contactsData?.items ?? [], [contactsData?.items]);
   const contactsTotal = contactsData?.total ?? 0;
   const contactsTotalPages = contactsData?.pages ?? 1;
+
+  // Stat cards (workspace-scoped metrics) — independent of the list query.
+  const { data: statsData, isPending: isLoadingStats } = useContactStats(workspaceId ?? "");
 
   // Standardized base row selection (single toggle, shift-range, clear).
   // `selectAllMatchingIds` overlays this as a server-side "all matching" set.
@@ -254,6 +270,7 @@ export function ContactsPage() {
   const someVisibleSelected = contacts.some((c: Contact) => effectiveSelectedIds.has(c.id));
   const hasActiveFilters = !!(searchQuery.trim() || statusFilter || filters);
   const showSelectAllMatching = allVisibleSelected && !selectAllMatchingIds && contactsTotal > contacts.length;
+  const showMoreActions = canWriteContacts || contacts.length > 0;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -264,31 +281,42 @@ export function ContactsPage() {
             <Users className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold">Contacts</h1>
             <Badge variant="secondary" className="text-sm">
-              {contactsTotal}
+              {formatNumber(contactsTotal)}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
             {!isSelectionMode && canWriteContacts && (
-              <>
-                <Button variant="outline" className="gap-2" onClick={() => setIsImportDialogOpen(true)}>
-                  <Upload className="h-4 w-4" />
-                  Import CSV
-                </Button>
-                <Button className="gap-2" onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Add Contact
-                </Button>
-              </>
-            )}
-            {contacts.length > 0 && (
-              <Button
-                variant={isSelectionMode ? "default" : "outline"}
-                className="gap-2"
-                onClick={handleToggleSelectionMode}
-              >
-                {isSelectionMode ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                {isSelectionMode ? "Done" : "Select"}
+              <Button className="gap-2" onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Add Contact
               </Button>
+            )}
+            {showMoreActions && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="More actions">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canWriteContacts && (
+                    <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Import CSV
+                    </DropdownMenuItem>
+                  )}
+                  {contacts.length > 0 && (
+                    <DropdownMenuItem onClick={handleToggleSelectionMode}>
+                      {isSelectionMode ? (
+                        <X className="mr-2 h-4 w-4" />
+                      ) : (
+                        <CheckSquare className="mr-2 h-4 w-4" />
+                      )}
+                      {isSelectionMode ? "Exit selection" : "Select"}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -315,58 +343,59 @@ export function ContactsPage() {
             onOpenDeleteDialog={() => setIsDeleteDialogOpen(true)}
           />
         )}
-
-        <ContactsToolbar
-          inputValue={inputValue}
-          onInputChange={setInputValue}
-          sortBy={sortBy}
-          onSortByChange={setSortBy}
-          workspaceId={workspaceId}
-          filters={filters}
-          onFiltersChange={setFilters}
-          statusFilter={statusFilter}
-          onStatusChange={setStatusFilter as (status: ContactStatus | null) => void}
-          statusCounts={statusCounts}
-        />
       </div>
 
-      {/* Contacts Grid */}
+      {/* Scrollable content: stats + results heading + filter bar + table */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-6">
-          {isLoadingContacts ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <ContactCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : isContactsError ? (
-            <PageErrorState
-              message="We couldn't load your contacts. Please try again."
-              onRetry={() => refetchContacts()}
-            />
-          ) : contacts.length === 0 ? (
-            <ContactsEmptyState
-              hasFilters={hasActiveFilters}
-              onAddContact={() => setIsCreateDialogOpen(true)}
-            />
-          ) : (
-            <AnimatePresence mode="popLayout">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {contacts.map((contact: Contact) => (
-                  <ContactCard
-                    key={contact.id}
-                    contact={contact}
-                    isSelected={effectiveSelectedIds.has(contact.id)}
-                    onSelectChange={(checked, shiftKey) => handleSelectContact(contact.id, checked, shiftKey)}
-                    isSelectionMode={isSelectionMode}
-                  />
-                ))}
-              </div>
-            </AnimatePresence>
-          )}
+        <div className="p-6 space-y-6">
+          <ContactsStatsCards stats={statsData} isPending={isLoadingStats} />
 
-          {contactsTotalPages > 1 && (
-            <div className="mt-6">
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">
+              Filtered contacts{" "}
+              <span className="text-muted-foreground font-normal">
+                ({formatNumber(contactsTotal)} result{contactsTotal === 1 ? "" : "s"})
+              </span>
+            </h2>
+
+            <ContactsFilterBar
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              statusFilter={statusFilter}
+              onStatusChange={setStatusFilter as (status: ContactStatus | null) => void}
+              statusCounts={statusCounts}
+              workspaceId={workspaceId}
+              filters={filters}
+              onFiltersChange={setFilters}
+            />
+
+            {isLoadingContacts ? (
+              <ContactsTableSkeleton />
+            ) : isContactsError ? (
+              <PageErrorState
+                message="We couldn't load your contacts. Please try again."
+                onRetry={() => refetchContacts()}
+              />
+            ) : contacts.length === 0 ? (
+              <ContactsEmptyState
+                hasFilters={hasActiveFilters}
+                onAddContact={() => setIsCreateDialogOpen(true)}
+              />
+            ) : (
+              <ContactsTable
+                contacts={contacts}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                isSelectionMode={isSelectionMode}
+                selectedIds={effectiveSelectedIds}
+                onSelectContact={handleSelectContact}
+                allVisibleSelected={allVisibleSelected}
+                someVisibleSelected={someVisibleSelected}
+                onSelectAllVisible={handleSelectAllVisible}
+              />
+            )}
+
+            {contactsTotalPages > 1 && (
               <ResourceListPagination
                 filteredCount={contacts.length}
                 totalCount={contactsTotal}
@@ -375,8 +404,8 @@ export function ContactsPage() {
                 totalPages={contactsTotalPages}
                 onPageChange={setContactsPage}
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </ScrollArea>
 

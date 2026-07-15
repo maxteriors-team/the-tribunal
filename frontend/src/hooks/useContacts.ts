@@ -40,6 +40,17 @@ export function useContactsPaginated(workspaceId: string, params: ContactsListPa
 }
 
 /**
+ * Fetch aggregate contact stats for the Contacts page stat cards
+ */
+export function useContactStats(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.contacts.stats(workspaceId),
+    queryFn: () => contactsApi.getStats(workspaceId),
+    enabled: !!workspaceId,
+  });
+}
+
+/**
  * Bulk delete contacts
  */
 export function useBulkDeleteContacts(workspaceId: string) {

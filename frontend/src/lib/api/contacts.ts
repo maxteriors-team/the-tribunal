@@ -14,7 +14,14 @@ import { apiClient, type Schemas } from "@/lib/api/_client";
 import { createApiClient, type FullApiClient } from "@/lib/api/create-api-client";
 import type { Contact, ContactStatus, TimelineItem } from "@/types";
 
-export type ContactSortBy = "created_at" | "last_conversation" | "unread_first";
+export type ContactSortBy =
+  | "created_at"
+  | "last_conversation"
+  | "unread_first"
+  | "name_asc"
+  | "name_desc"
+  | "last_activity_asc"
+  | "last_activity_desc";
 
 // ---------------------------------------------------------------------------
 // Re-exported schemas (canonical types from the OpenAPI spec).
@@ -30,6 +37,7 @@ export type ContactResponse = Schemas["ContactResponse"];
 export type ContactListResponse = Schemas["ContactListResponse"];
 /** Back-compat alias — prefer `ContactListResponse`. */
 export type ContactsListResponse = ContactListResponse;
+export type ContactStatsResponse = Schemas["ContactStatsResponse"];
 export type ContactIdsResponse = Schemas["ContactIdsResponse"];
 export type ContactEngagementSummary = Schemas["ContactEngagementSummary"];
 export type BulkDeleteResponse = Schemas["BulkDeleteResponse"];
@@ -184,6 +192,12 @@ export const contactsApi = {
     return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/ids", {
       path: { workspace_id: workspaceId },
       query: params,
+    });
+  },
+
+  getStats: async (workspaceId: string): Promise<ContactStatsResponse> => {
+    return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/stats", {
+      path: { workspace_id: workspaceId },
     });
   },
 

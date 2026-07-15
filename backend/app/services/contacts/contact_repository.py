@@ -52,7 +52,9 @@ async def list_contacts_paginated(
         page_size: Number of items per page
         status_filter: Optional status filter
         search: Optional search term
-        sort_by: Optional sort field (created_at, last_conversation, unread_first)
+        sort_by: Optional sort field. One of ``created_at`` (default),
+            ``last_conversation``, ``unread_first``, ``name_asc``,
+            ``name_desc``, ``last_activity_asc``, ``last_activity_desc``.
 
     Returns:
         Tuple of (rows, total_count) where rows contain contact data with conversation stats
@@ -121,6 +123,31 @@ async def list_contacts_paginated(
         )
     elif sort_by == "last_conversation":
         # Sort by most recent conversation first, contacts with no conversation go last
+        query = query.order_by(
+            conv_subquery.c.max_message_at.desc().nullslast(),
+            Contact.id.desc(),
+        )
+    elif sort_by == "name_asc":
+        # Alphabetical by name (A→Z), matching the Contacts table "Name ↑" header
+        query = query.order_by(
+            Contact.first_name.asc(),
+            Contact.last_name.asc(),
+            Contact.id.desc(),
+        )
+    elif sort_by == "name_desc":
+        query = query.order_by(
+            Contact.first_name.desc(),
+            Contact.last_name.desc(),
+            Contact.id.desc(),
+        )
+    elif sort_by == "last_activity_asc":
+        # Oldest activity first; contacts with no conversation sort last
+        query = query.order_by(
+            conv_subquery.c.max_message_at.asc().nullslast(),
+            Contact.id.desc(),
+        )
+    elif sort_by == "last_activity_desc":
+        # Most recent activity first; contacts with no conversation sort last
         query = query.order_by(
             conv_subquery.c.max_message_at.desc().nullslast(),
             Contact.id.desc(),

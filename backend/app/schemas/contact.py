@@ -176,6 +176,21 @@ class ContactListResponse(BaseModel):
     pages: int
 
 
+class ContactStatsResponse(BaseModel):
+    """Aggregate contact metrics for the Contacts page stat cards.
+
+    Windows are workspace-scoped and computed in UTC. ``*_change`` values are
+    returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
+    frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+    """
+
+    new_leads_30d: int
+    new_leads_change: str
+    new_clients_30d: int
+    new_clients_change: str
+    total_new_clients_ytd: int
+
+
 class BulkDeleteRequest(BaseModel):
     """Request schema for bulk contact deletion."""
 
