@@ -764,6 +764,78 @@ async def send_quote_email(
     return True
 
 
+async def send_estimate_email(
+    to_email: str,
+    workspace_name: str,
+    estimate_url: str,
+    client_name: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email a customer their roofline lighting estimate.
+
+    ``estimate_url`` is the client-facing permanent-vs-seasonal comparison page
+    (built server-side from ``settings.frontend_url`` + the comparison's own share
+    token, not user input). ``client_name`` is operator-authored free text and is
+    HTML-escaped. Returns True only when the provider accepted the send.
+    """
+    subject = f"Your lighting estimate from {workspace_name}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    button_style = (
+        "background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; "
+        "border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;"
+    )
+
+    greeting = f"Hi {html_escape(client_name)}," if client_name else "Hi there,"
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1a1a1a; margin-bottom: 5px;">Your Lighting Estimate</h1>
+    </div>
+    <p>{greeting}</p>
+    <p>
+        Your personalized lighting estimate from
+        <strong>{html_escape(workspace_name)}</strong> is ready. See how permanent
+        lighting compares to seasonal installs — and what you'd save over time.
+    </p>
+    <div style="text-align: center; margin: 32px 0;">
+        <a href="{html_escape(estimate_url)}" style="{button_style}">View your estimate</a>
+    </div>
+    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+    <p style="color: #999; font-size: 12px; text-align: center;">
+        Sent by {html_escape(workspace_name)} via The Tribunal
+    </p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "estimate_email_sent",
+        to_email=to_email,
+        email_id=response.get("id"),
+    )
+    return True
+
+
 async def send_appointment_booked_notification(
     to_email: str,
     owner_name: str,

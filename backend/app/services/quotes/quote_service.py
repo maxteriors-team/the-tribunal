@@ -30,6 +30,7 @@ from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
 from app.schemas.estimate import (
     ChristmasEstimate,
+    ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
     LinearFeetEstimateRequest,
@@ -1161,6 +1162,64 @@ class QuoteService:
             contact_id=contact_id,
             saved_to_customer=contact_id is not None,
         )
+
+    async def deliver_comparison(
+        self,
+        workspace_id: uuid.UUID,
+        token: str,
+        *,
+        to: str | None = None,
+    ) -> ComparisonDeliverResult:
+        """Email a saved estimate's client link to the customer.
+
+        Destination precedence: explicit ``to`` → the linked contact's email.
+        Raises ``ValidationError`` when there's no destination, and
+        ``NotFoundError`` for an unknown/other-workspace token.
+        """
+        from app.core.config import settings
+        from app.services.email import send_estimate_email
+
+        result = await self.db.execute(
+            select(RooflineComparison)
+            .where(
+                RooflineComparison.public_token == token,
+                RooflineComparison.workspace_id == workspace_id,
+            )
+            .options(
+                selectinload(RooflineComparison.workspace),
+                selectinload(RooflineComparison.contact),
+            )
+        )
+        comparison = result.scalar_one_or_none()
+        if comparison is None:
+            raise NotFoundError("Comparison not found")
+
+        email_to = (to or "").strip() or (comparison.contact.email if comparison.contact else None)
+        if not email_to:
+            raise ValidationError(
+                "No customer email for this estimate — add one or pass a destination."
+            )
+
+        workspace = comparison.workspace
+        business = workspace.name if workspace else "our team"
+        url = f"{settings.frontend_url.rstrip('/')}/p/compare/{comparison.public_token}"
+
+        sent = await send_estimate_email(
+            to_email=email_to,
+            workspace_name=business,
+            estimate_url=url,
+            client_name=comparison.client_name,
+            idempotency_key=comparison.id,
+        )
+        if not sent:
+            raise ValidationError("Could not send the estimate email. Please try again shortly.")
+
+        self.log.info(
+            "roofline_comparison_delivered",
+            comparison_id=str(comparison.id),
+            workspace_id=str(workspace_id),
+        )
+        return ComparisonDeliverResult(ok=True, to=email_to)
 
     async def get_public_comparison(self, token: str) -> PublicComparison:
         """Return the safe, feet-free comparison for a public token.

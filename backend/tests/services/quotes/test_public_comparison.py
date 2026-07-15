@@ -20,7 +20,7 @@ from app.models.contact import Contact
 from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
 from app.schemas.estimate import ComparisonShareRequest, PublicComparison
-from app.services.exceptions import NotFoundError
+from app.services.exceptions import NotFoundError, ValidationError
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -249,9 +249,7 @@ async def test_share_with_phone_saves_estimate_to_customer() -> None:
         # The persisted comparison points at that customer.
         comparison = (
             await db.execute(
-                select(RooflineComparison).where(
-                    RooflineComparison.public_token == share.token
-                )
+                select(RooflineComparison).where(RooflineComparison.public_token == share.token)
             )
         ).scalar_one()
         assert comparison.contact_id == share.contact_id
@@ -266,21 +264,93 @@ async def test_share_without_phone_stays_unlinked() -> None:
         # to create on; the estimate still shares, just unlinked.
         share = await svc.share_comparison(
             ws.id,
-            ComparisonShareRequest(
-                feet=90, client_name="No Phone", client_email="np@example.com"
-            ),
+            ComparisonShareRequest(feet=90, client_name="No Phone", client_email="np@example.com"),
         )
         assert share.saved_to_customer is False
         assert share.contact_id is None
 
         count = (
             await db.execute(
-                select(func.count())
-                .select_from(Contact)
-                .where(Contact.workspace_id == ws.id)
+                select(func.count()).select_from(Contact).where(Contact.workspace_id == ws.id)
             )
         ).scalar_one()
         assert count == 0
+
+
+async def test_deliver_comparison_emails_linked_contact(monkeypatch) -> None:  # noqa: ANN001
+    sent: list[dict] = []
+
+    async def fake_send_estimate_email(**kwargs):  # noqa: ANN003
+        sent.append(kwargs)
+        return True
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_estimate_email", fake_send_estimate_email)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=120,
+                client_name="Dana Homeowner",
+                client_email="dana@example.com",
+                client_phone="+15551230000",
+            ),
+        )
+
+        # No explicit destination: falls back to the linked contact's email.
+        result = await svc.deliver_comparison(ws.id, share.token, to=None)
+        assert result.ok is True
+        assert result.to == "dana@example.com"
+        assert sent and sent[0]["to_email"] == "dana@example.com"
+        assert f"/p/compare/{share.token}" in sent[0]["estimate_url"]
+
+
+async def test_deliver_comparison_uses_explicit_destination(monkeypatch) -> None:  # noqa: ANN001
+    sent: list[dict] = []
+
+    async def fake_send_estimate_email(**kwargs):  # noqa: ANN003
+        sent.append(kwargs)
+        return True
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_estimate_email", fake_send_estimate_email)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        # Shared without a phone -> no linked contact/email on file.
+        share = await svc.share_comparison(
+            ws.id, ComparisonShareRequest(feet=90, client_name="No Phone")
+        )
+        result = await svc.deliver_comparison(ws.id, share.token, to="buyer@example.com")
+        assert result.ok is True
+        assert result.to == "buyer@example.com"
+        assert sent[0]["to_email"] == "buyer@example.com"
+
+
+async def test_deliver_comparison_without_destination_raises() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        # No phone -> no contact -> no email anywhere.
+        share = await svc.share_comparison(ws.id, ComparisonShareRequest(feet=80))
+        with pytest.raises(ValidationError):
+            await svc.deliver_comparison(ws.id, share.token, to=None)
+
+
+async def test_deliver_comparison_unknown_token_404() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        with pytest.raises(NotFoundError):
+            await svc.deliver_comparison(ws.id, "does-not-exist", to="x@example.com")
 
 
 async def test_resharing_same_phone_reuses_one_customer() -> None:
@@ -307,9 +377,7 @@ async def test_resharing_same_phone_reuses_one_customer() -> None:
 
         count = (
             await db.execute(
-                select(func.count())
-                .select_from(Contact)
-                .where(Contact.workspace_id == ws.id)
+                select(func.count()).select_from(Contact).where(Contact.workspace_id == ws.id)
             )
         ).scalar_one()
         assert count == 1

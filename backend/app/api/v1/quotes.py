@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
 from app.schemas.estimate import (
+    ComparisonDeliverRequest,
+    ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
     LinearFeetEstimateRequest,
@@ -277,6 +279,23 @@ async def share_comparison(
     """Persist a comparison behind a token and return the client-facing link."""
     service = QuoteService(db)
     return await service.share_comparison(workspace_id, payload, created_by_id=current_user.id)
+
+
+@router.post(
+    "/estimate/comparison/{token}/send",
+    response_model=ComparisonDeliverResult,
+)
+async def deliver_comparison(
+    workspace_id: uuid.UUID,
+    token: str,
+    payload: ComparisonDeliverRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> ComparisonDeliverResult:
+    """Email a saved estimate's client link to the customer."""
+    service = QuoteService(db)
+    return await service.deliver_comparison(workspace_id, token, to=payload.to)
 
 
 # Line-item sub-resource. Mutations return the full quote because totals change.

@@ -129,6 +129,24 @@ class ComparisonShareResult(BaseModel):
     saved_to_customer: bool = False
 
 
+class ComparisonDeliverRequest(BaseModel):
+    """Email a saved estimate's client link to the customer.
+
+    ``to`` overrides the destination; otherwise the linked contact's email is
+    used. Contacts are phone-keyed, so an estimate saved without a phone has no
+    contact email — pass ``to`` explicitly in that case.
+    """
+
+    to: str | None = Field(default=None, max_length=320)
+
+
+class ComparisonDeliverResult(BaseModel):
+    """Outcome of emailing an estimate to the customer."""
+
+    ok: bool
+    to: str
+
+
 # --------------------------------------------------------------------------- #
 # Public client comparison (no-auth, token-keyed) — NO linear feet
 # --------------------------------------------------------------------------- #
