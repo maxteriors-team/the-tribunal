@@ -6,10 +6,11 @@
  * totals) and `save` (persist a draft quote + snapshot). No money is ever
  * computed on the client, matching `QuoteService`.
  */
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost, apiPut } from "@/lib/api";
 import type {
   CatalogItemResponse,
   PricingSettings,
+  PricingSettingsUpdate,
   ProposalDocument,
   ProposalWizardPayload,
   QuoteDetail,
@@ -30,6 +31,17 @@ export const salesWizardApi = {
   getPricing: (workspaceId: string): Promise<PricingSettings> =>
     apiGet<PricingSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/pricing`,
+    ),
+
+  /** Update the pricing config (shallow top-level block merge). Each provided
+   *  block replaces that whole block, so callers send a full sub-config. */
+  updatePricing: (
+    workspaceId: string,
+    data: PricingSettingsUpdate,
+  ): Promise<PricingSettings> =>
+    apiPut<PricingSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/pricing`,
+      data,
     ),
 
   /** Active catalog items (the fixture library) for the workspace. */

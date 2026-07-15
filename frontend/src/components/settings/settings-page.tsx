@@ -1,6 +1,6 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText } from "lucide-react";
+import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
@@ -11,6 +11,7 @@ import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
 import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab";
 import { ReviewSettingsTab } from "@/components/settings/review-settings-tab";
+import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
 import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-settings-tab";
 import { TeamSettingsTab } from "@/components/settings/team-settings-tab";
 import { TagManagement } from "@/components/tags/tag-management";
@@ -24,6 +25,7 @@ const settingsTabs = [
   { value: "nudges", label: "Nudges", icon: HandHeart },
   { value: "reviews", label: "Reviews", icon: Star },
   { value: "proposals", label: "Proposals", icon: FileText },
+  { value: "pricing", label: "Pricing", icon: DollarSign },
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
@@ -50,7 +52,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-11 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-12 lg:w-auto lg:inline-grid">
           {settingsTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
               <tab.icon className="size-4" />
@@ -92,6 +94,12 @@ export function SettingsPage() {
         <TabsContent value="proposals">
           <QueryErrorBoundary message="Failed to load proposal settings. Please try again.">
             <ProposalSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="pricing">
+          <QueryErrorBoundary message="Failed to load pricing settings. Please try again.">
+            <SeasonalPricingSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

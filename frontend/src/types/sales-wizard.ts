@@ -8,6 +8,7 @@ import type { components } from "@/lib/api/_generated";
 type Schemas = components["schemas"];
 
 export type PricingSettings = Schemas["PricingSettings"];
+export type PricingSettingsUpdate = Schemas["PricingSettingsUpdate"];
 export type TierConfig = Schemas["TierConfig"];
 export type CatalogItemResponse = Schemas["CatalogItemResponse"];
 export type PermanentConfig = Schemas["PermanentConfig"];
