@@ -3,14 +3,29 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
+import { estimatorApi } from "@/lib/api/estimator";
+import type { LinearFeetEstimateResult } from "@/types/estimate";
 
 // The estimator never calls the pricing API until feet > 0, but mock it so a
-// stray call can't hit the network during the upload interaction under test.
+// stray call can't hit the network during the interactions under test.
 vi.mock("@/lib/api/estimator", () => ({
   estimatorApi: {
     estimate: vi.fn().mockResolvedValue(null),
     share: vi.fn().mockResolvedValue({ url: "" }),
+    deliver: vi.fn().mockResolvedValue({ ok: true, to: "" }),
   },
+}));
+
+// Isolate the component from canvas geometry: jsdom can't produce real traced
+// points (getBoundingClientRect returns zeros), so force a positive measured
+// footage. The measurement math itself is unit-tested in measure.test.ts.
+// `pxPerFoot` stays 0 so `calibrated` is false — keeping the "set the scale"
+// hint the upload tests assert on.
+vi.mock("@/lib/estimator/measure", () => ({
+  REFERENCE_PRESETS: [{ key: "front_door", label: "Front door (single)", feet: 6.67 }],
+  rooflineFeet: () => 100,
+  pxPerFoot: () => 0,
+  polylineLength: () => 0,
 }));
 
 // jsdom ships no canvas 2D context; a minimal stub lets draw() run its path.
@@ -73,6 +88,20 @@ describe("RooflineEstimator photo upload", () => {
   beforeEach(() => {
     stubCanvas();
     stubImagePipeline();
+    // restoreAllMocks (below) resets the module mock fns, so re-establish safe
+    // async defaults each test. feet is forced positive by the measure mock, so
+    // the pricing query is always enabled and must resolve (not undefined). The
+    // component only reads `estimate?.…`, so a null estimate is a valid resolve.
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(
+      null as unknown as LinearFeetEstimateResult,
+    );
+    vi.mocked(estimatorApi.share).mockResolvedValue({
+      url: "",
+      token: "",
+      contact_id: null,
+      saved_to_customer: false,
+    });
+    vi.mocked(estimatorApi.deliver).mockResolvedValue({ ok: true, to: "" });
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -127,6 +156,57 @@ describe("RooflineEstimator photo upload", () => {
     expect(screen.getByLabelText(/Customer phone/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Save & share/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("emails the saved estimate to the entered customer", async () => {
+    vi.mocked(estimatorApi.share).mockResolvedValue({
+      url: "https://app.test/p/compare/tok_123",
+      token: "tok_123",
+      contact_id: 42,
+      saved_to_customer: true,
+    });
+    vi.mocked(estimatorApi.deliver).mockResolvedValue({
+      ok: true,
+      to: "buyer@example.com",
+    });
+
+    const { container } = renderEstimator();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[type="file"]',
+    );
+    fireEvent.change(input!, {
+      target: { files: [new File(["x"], "house.png", { type: "image/png" })] },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument(),
+    );
+
+    // Enter the customer's email, then save/share the estimate.
+    fireEvent.change(screen.getByLabelText(/Customer email/i), {
+      target: { value: "buyer@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save & share/i }));
+
+    // The email action only appears after a save; it targets the entered email.
+    const emailBtn = await screen.findByRole("button", {
+      name: /Email estimate to buyer@example\.com/i,
+    });
+    expect(emailBtn).toBeEnabled();
+
+    fireEvent.click(emailBtn);
+
+    // Sends to the saved comparison token + entered email, then confirms.
+    await waitFor(() =>
+      expect(estimatorApi.deliver).toHaveBeenCalledWith(
+        "ws_1",
+        "tok_123",
+        "buyer@example.com",
+      ),
+    );
+    expect(
+      await screen.findByText(/Sent to buyer@example\.com/i),
     ).toBeInTheDocument();
   });
 });
