@@ -9147,7 +9147,7 @@
         "type": "object"
       },
       "ComparisonShareRequest": {
-        "description": "Persist an estimate behind a token so the homeowner can view the savings.",
+        "description": "Persist an estimate behind a token so the homeowner can view the savings.\n\n``client_email`` / ``client_phone`` are optional: when provided, the estimate\nis saved onto a CRM customer (resolve-or-create by phone/email, same dedupe\nrules as the sales wizard). Without a phone the estimate is still shared, just\nnot attached to a contact — contacts in this CRM are phone-keyed.",
         "properties": {
           "channels": {
             "default": 0,
@@ -9177,6 +9177,18 @@
             ],
             "title": "Christmas Per Ft Override"
           },
+          "client_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Email"
+          },
           "client_name": {
             "anyOf": [
               {
@@ -9188,6 +9200,18 @@
               }
             ],
             "title": "Client Name"
+          },
+          "client_phone": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Phone"
           },
           "feet": {
             "minimum": 0.0,
@@ -9236,8 +9260,24 @@
         "type": "object"
       },
       "ComparisonShareResult": {
-        "description": "The share token plus the ready-to-send client URL.",
+        "description": "The share token plus the ready-to-send client URL.\n\n``contact_id`` is set when the estimate was saved onto a CRM customer;\n``saved_to_customer`` is a convenience flag for the rep tool to confirm the\nlink without inspecting the id.",
         "properties": {
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "saved_to_customer": {
+            "default": false,
+            "title": "Saved To Customer",
+            "type": "boolean"
+          },
           "token": {
             "title": "Token",
             "type": "string"

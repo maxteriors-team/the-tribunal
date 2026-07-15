@@ -11780,6 +11780,11 @@ export interface components {
         /**
          * ComparisonShareRequest
          * @description Persist an estimate behind a token so the homeowner can view the savings.
+         *
+         *     ``client_email`` / ``client_phone`` are optional: when provided, the estimate
+         *     is saved onto a CRM customer (resolve-or-create by phone/email, same dedupe
+         *     rules as the sales wizard). Without a phone the estimate is still shared, just
+         *     not attached to a contact — contacts in this CRM are phone-keyed.
          */
         ComparisonShareRequest: {
             /**
@@ -11795,8 +11800,12 @@ export interface components {
             };
             /** Christmas Per Ft Override */
             christmas_per_ft_override?: number | null;
+            /** Client Email */
+            client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
+            /** Client Phone */
+            client_phone?: string | null;
             /** Feet */
             feet: number;
             /** Label */
@@ -11817,8 +11826,19 @@ export interface components {
         /**
          * ComparisonShareResult
          * @description The share token plus the ready-to-send client URL.
+         *
+         *     ``contact_id`` is set when the estimate was saved onto a CRM customer;
+         *     ``saved_to_customer`` is a convenience flag for the rep tool to confirm the
+         *     link without inspecting the id.
          */
         ComparisonShareResult: {
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Saved To Customer
+             * @default false
+             */
+            saved_to_customer: boolean;
             /** Token */
             token: string;
             /** Url */
