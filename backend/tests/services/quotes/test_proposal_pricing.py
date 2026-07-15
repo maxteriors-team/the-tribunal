@@ -20,6 +20,7 @@ from app.schemas.pricing import (
     CarePlanTier,
     CashDiscountConfig,
     ChristmasConfig,
+    ChristmasPackage,
     CommissionConfig,
     FinancingConfig,
     PermanentConfig,
@@ -506,3 +507,105 @@ def test_christmas_legacy_rate_lists_upgrade_and_price_identically():
     assert costs["bushes"] == 79
     assert costs["wreaths"] == 96
     assert r.roofline_cost == 674
+
+
+# --------------------------------------------------------------------------- #
+# Christmas packages (Good/Better/Best seasonal service tiers)
+# --------------------------------------------------------------------------- #
+def _christmas_packages_config(**overrides) -> PricingSettings:
+    """Christmas config with three coverage tiers over the shared decor engine."""
+    cfg = _christmas_config(**overrides)
+    cfg.christmas.packages_enabled = True
+    cfg.christmas.package_order = ["essential", "middle", "premier"]
+    cfg.christmas.packages = [
+        ChristmasPackage(
+            key="essential",
+            label="Essential",
+            name="The Essential",
+            includes_roofline=False,
+            item_keys=["trees", "bushes"],
+        ),
+        ChristmasPackage(
+            key="middle",
+            label="Middle",
+            name="The Classic",
+            popular=True,
+            includes_roofline=True,
+            item_keys=["trees", "bushes"],
+        ),
+        ChristmasPackage(
+            key="premier",
+            label="Premier",
+            name="The Premier",
+            includes_roofline=True,
+            item_keys=["trees", "bushes", "wreaths", "garland"],
+        ),
+    ]
+    return cfg
+
+
+_PACKAGE_ITEMS = {
+    "trees": {"medium": 2, "large": 1},
+    "bushes": {"small": 4},
+    "wreaths": {"standard": 2},
+    "garland": {"standard": 80},
+}
+
+
+def test_christmas_package_scopes_decor_and_roofline_to_coverage():
+    cfg = _christmas_packages_config()
+    essential, middle, premier = (
+        p.pricing for p in pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
+    )
+    # Essential covers trees+bushes and excludes the roofline even with feet > 0.
+    assert essential.roofline_cost == 0
+    assert {i.key for i in essential.items} == {"trees", "bushes"}
+    # Middle adds the roofline but still no wreaths/garland.
+    assert middle.roofline_cost == 1011
+    assert {i.key for i in middle.items} == {"trees", "bushes"}
+    # Premier is the full display: roofline + every decor category.
+    assert premier.roofline_cost == 1011
+    assert {i.key for i in premier.items} == {"trees", "bushes", "wreaths", "garland"}
+
+
+def test_christmas_packages_are_monotonic_good_better_best():
+    cfg = _christmas_packages_config()
+    pkgs = pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
+    totals = [p.pricing.total for p in pkgs]
+    # Each higher tier is a superset of coverage, so totals never decrease.
+    assert totals == [1325, 2336, 3246]
+    assert totals[0] <= totals[1] <= totals[2]
+
+
+def test_christmas_packages_follow_package_order_and_carry_copy():
+    cfg = _christmas_packages_config()
+    pkgs = pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
+    assert [p.key for p in pkgs] == ["essential", "middle", "premier"]
+    assert [p.label for p in pkgs] == ["Essential", "Middle", "Premier"]
+    # Presentation copy (name, popular flag, roofline inclusion) rides along.
+    assert pkgs[1].name == "The Classic"
+    assert pkgs[1].popular is True
+    assert [p.includes_roofline for p in pkgs] == [False, True, True]
+
+
+def test_christmas_package_applies_job_minimum_per_package():
+    cfg = _christmas_packages_config(minimum=5000)
+    pkgs = pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
+    # The grossed job minimum (5000 -> 5618) floors every package independently.
+    for p in pkgs:
+        assert p.pricing.min_applied is True
+        assert p.pricing.total == 5618
+
+
+def test_price_christmas_package_direct_excludes_uncovered_selection():
+    cfg = _christmas_packages_config()
+    essential = cfg.christmas.packages[0]
+    # A wreaths/garland selection is ignored by a package that doesn't cover them.
+    r = pp.price_christmas_package(
+        cfg,
+        essential,
+        roofline_feet=150,
+        items={"trees": {"medium": 1}, "wreaths": {"standard": 5}, "garland": {"standard": 40}},
+    )
+    assert {i.key for i in r.items} == {"trees"}
+    assert r.roofline_cost == 0

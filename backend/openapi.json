@@ -8920,6 +8920,25 @@
             "title": "Minimum",
             "type": "number"
           },
+          "package_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Package Order",
+            "type": "array"
+          },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/ChristmasPackage"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "packages_enabled": {
+            "default": false,
+            "title": "Packages Enabled",
+            "type": "boolean"
+          },
           "perks": {
             "items": {
               "type": "string"
@@ -8984,6 +9003,117 @@
           "per_ft"
         ],
         "title": "ChristmasEstimate",
+        "type": "object"
+      },
+      "ChristmasPackage": {
+        "description": "A seasonal-Christmas service tier (Good/Better/Best for holiday decor).\n\nThe seasonal analog of :class:`TierConfig`: a named, presentable package that\n*includes a subset of the workspace's decor categories* plus (optionally) the\nroofline. One roofline+decor measurement prices every package by restricting\nthe shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the\nsame engine, gross-up, takedown, and job-minimum apply to each package subset\n(no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`\nkeys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the\nroofline is not itself a decor item.",
+        "properties": {
+          "card_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Tier"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "includes_roofline": {
+            "default": false,
+            "title": "Includes Roofline",
+            "type": "boolean"
+          },
+          "item_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Item Keys",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ChristmasPackage",
         "type": "object"
       },
       "ClockInRequest": {

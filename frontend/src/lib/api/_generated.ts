@@ -11681,6 +11681,15 @@ export interface components {
              * @default 0
              */
             minimum: number;
+            /** Package Order */
+            package_order?: string[];
+            /** Packages */
+            packages?: components["schemas"]["ChristmasPackage"][];
+            /**
+             * Packages Enabled
+             * @default false
+             */
+            packages_enabled: boolean;
             /** Perks */
             perks?: string[];
             /**
@@ -11720,6 +11729,51 @@ export interface components {
             per_ft: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ChristmasPackage
+         * @description A seasonal-Christmas service tier (Good/Better/Best for holiday decor).
+         *
+         *     The seasonal analog of :class:`TierConfig`: a named, presentable package that
+         *     *includes a subset of the workspace's decor categories* plus (optionally) the
+         *     roofline. One roofline+decor measurement prices every package by restricting
+         *     the shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the
+         *     same engine, gross-up, takedown, and job-minimum apply to each package subset
+         *     (no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`
+         *     keys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the
+         *     roofline is not itself a decor item.
+         */
+        ChristmasPackage: {
+            /** Card Tier */
+            card_tier?: string | null;
+            /** Experience */
+            experience?: string | null;
+            /**
+             * Includes Roofline
+             * @default false
+             */
+            includes_roofline: boolean;
+            /** Item Keys */
+            item_keys?: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /** Value Tag */
+            value_tag?: string | null;
+            /** Warranty */
+            warranty?: string | null;
         };
         /**
          * ClockInRequest
