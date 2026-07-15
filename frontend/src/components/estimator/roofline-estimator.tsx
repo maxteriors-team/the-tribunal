@@ -61,6 +61,10 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     {},
   );
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // Token of the last saved comparison, used to email the estimate to the
+  // customer without creating a duplicate comparison row.
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   // Optional customer this estimate is saved onto. A phone is the identity key
   // (contacts are phone-keyed), so without it the estimate still shares but stays
   // unlinked. `savedToCustomer` reflects the server's resolve/create result.
@@ -233,9 +237,36 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     mutationFn: () => estimatorApi.share(workspaceId, shareParams),
     onSuccess: (result) => {
       setShareUrl(result.url);
+      setShareToken(result.token);
       setSavedToCustomer(result.saved_to_customer);
+      setSentTo(null);
     },
   });
+
+  // Email the just-saved estimate to the customer. Uses the saved comparison's
+  // token so it never creates a duplicate; falls back server-side to the linked
+  // contact's email when the field is blank.
+  const deliverMutation = useMutation({
+    mutationFn: () =>
+      estimatorApi.deliver(
+        workspaceId,
+        shareToken ?? "",
+        clientEmail.trim() || null,
+      ),
+    onSuccess: (result) => setSentTo(result.to),
+  });
+
+  // Editing customer details invalidates the last save + link, matching how
+  // every other input in this tool clears a stale share link on change (so the
+  // "Saved to customer" confirmation can't read as current after an edit).
+  const editCustomer =
+    (setter: (value: string) => void) => (value: string) => {
+      setter(value);
+      setShareUrl(null);
+      setShareToken(null);
+      setSavedToCustomer(false);
+      setSentTo(null);
+    };
 
   const makeRateHandler =
     (setRate: (v: number | null) => void) => (raw: string) => {
@@ -475,7 +506,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                   placeholder="Customer name"
                   autoComplete="off"
                   value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
+                  onChange={(e) => editCustomer(setClientName)(e.target.value)}
                   aria-label="Customer name"
                 />
                 <input
@@ -484,7 +515,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                   placeholder="Email"
                   autoComplete="off"
                   value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
+                  onChange={(e) => editCustomer(setClientEmail)(e.target.value)}
                   aria-label="Customer email"
                 />
                 <input
@@ -493,7 +524,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                   placeholder="Phone"
                   autoComplete="off"
                   value={clientPhone}
-                  onChange={(e) => setClientPhone(e.target.value)}
+                  onChange={(e) => editCustomer(setClientPhone)(e.target.value)}
                   aria-label="Customer phone"
                 />
               </div>
@@ -567,6 +598,31 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                   <button className="est-btn" type="button" onClick={copyLink}>
                     Copy
                   </button>
+                </div>
+                <div className="est-send-row">
+                  <button
+                    className="est-btn primary"
+                    type="button"
+                    disabled={!clientEmail.trim() || deliverMutation.isPending}
+                    title={
+                      clientEmail.trim()
+                        ? undefined
+                        : "Add a customer email above to send the estimate"
+                    }
+                    onClick={() => deliverMutation.mutate()}
+                  >
+                    {deliverMutation.isPending
+                      ? "Sending…"
+                      : `✉ Email estimate to ${clientEmail.trim() || "customer"}`}
+                  </button>
+                  {sentTo ? (
+                    <span className="est-sent-note">✓ Sent to {sentTo}</span>
+                  ) : null}
+                  {deliverMutation.isError ? (
+                    <span className="est-send-error">
+                      Couldn’t send — check the email and try again.
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : null}

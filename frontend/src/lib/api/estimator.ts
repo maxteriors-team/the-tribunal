@@ -8,6 +8,7 @@
  */
 import { apiPost } from "@/lib/api";
 import type {
+  ComparisonDeliverResult,
   ComparisonShareRequest,
   ComparisonShareResult,
   LinearFeetEstimateRequest,
@@ -35,5 +36,16 @@ export const estimatorApi = {
     apiPost<ComparisonShareResult>(
       `${base(workspaceId)}/quotes/estimate/share`,
       payload,
+    ),
+
+  /** Email a saved estimate's client link to the customer. */
+  deliver: (
+    workspaceId: string,
+    token: string,
+    to?: string | null,
+  ): Promise<ComparisonDeliverResult> =>
+    apiPost<ComparisonDeliverResult>(
+      `${base(workspaceId)}/quotes/estimate/comparison/${token}/send`,
+      { to: to ?? null },
     ),
 };

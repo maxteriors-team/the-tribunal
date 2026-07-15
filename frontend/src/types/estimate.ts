@@ -10,6 +10,8 @@ export type LinearFeetEstimateRequest = Schemas["LinearFeetEstimateRequest"];
 export type LinearFeetEstimateResult = Schemas["LinearFeetEstimateResult"];
 export type ComparisonShareRequest = Schemas["ComparisonShareRequest"];
 export type ComparisonShareResult = Schemas["ComparisonShareResult"];
+export type ComparisonDeliverRequest = Schemas["ComparisonDeliverRequest"];
+export type ComparisonDeliverResult = Schemas["ComparisonDeliverResult"];
 export type PublicComparison = Schemas["PublicComparison"];
 
 // Standardized seasonal decor catalog (trees/bushes/wreaths/garland/…).

@@ -429,6 +429,25 @@
   font-weight: 600;
 }
 
+.est-send-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.est-sent-note {
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.est-send-error {
+  color: #e5675f;
+  font-size: 13px;
+}
+
 /* ---- Seasonal decor add-ons (trees / bushes / wreaths / garland) ---- */
 .est-decor {
   margin-top: 16px;
