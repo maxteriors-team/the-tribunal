@@ -9146,6 +9146,44 @@
         "title": "CompanyCamProjectPhotos",
         "type": "object"
       },
+      "ComparisonDeliverRequest": {
+        "description": "Email a saved estimate's client link to the customer.\n\n``to`` overrides the destination; otherwise the linked contact's email is\nused. Contacts are phone-keyed, so an estimate saved without a phone has no\ncontact email — pass ``to`` explicitly in that case.",
+        "properties": {
+          "to": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "title": "ComparisonDeliverRequest",
+        "type": "object"
+      },
+      "ComparisonDeliverResult": {
+        "description": "Outcome of emailing an estimate to the customer.",
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "to"
+        ],
+        "title": "ComparisonDeliverResult",
+        "type": "object"
+      },
       "ComparisonShareRequest": {
         "description": "Persist an estimate behind a token so the homeowner can view the savings.\n\n``client_email`` / ``client_phone`` are optional: when provided, the estimate\nis saved onto a CRM customer (resolve-or-create by phone/email, same dedupe\nrules as the sales wizard). Without a phone the estimate is still shared, just\nnot attached to a contact — contacts in this CRM are phone-keyed.",
         "properties": {
@@ -65068,6 +65106,74 @@
           }
         ],
         "summary": "Estimate Linear Feet",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/comparison/{token}/send": {
+      "post": {
+        "description": "Email a saved estimate's client link to the customer.",
+        "operationId": "deliver_comparison_api_v1_workspaces__workspace_id__quotes_estimate_comparison__token__send_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonDeliverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonDeliverResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deliver Comparison",
         "tags": [
           "Quotes"
         ]

@@ -6482,6 +6482,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/comparison/{token}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver Comparison
+         * @description Email a saved estimate's client link to the customer.
+         */
+        post: operations["deliver_comparison_api_v1_workspaces__workspace_id__quotes_estimate_comparison__token__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/estimate/share": {
         parameters: {
             query?: never;
@@ -11776,6 +11796,28 @@ export interface components {
             project_name: string;
             /** Project Url */
             project_url: string;
+        };
+        /**
+         * ComparisonDeliverRequest
+         * @description Email a saved estimate's client link to the customer.
+         *
+         *     ``to`` overrides the destination; otherwise the linked contact's email is
+         *     used. Contacts are phone-keyed, so an estimate saved without a phone has no
+         *     contact email — pass ``to`` explicitly in that case.
+         */
+        ComparisonDeliverRequest: {
+            /** To */
+            to?: string | null;
+        };
+        /**
+         * ComparisonDeliverResult
+         * @description Outcome of emailing an estimate to the customer.
+         */
+        ComparisonDeliverResult: {
+            /** Ok */
+            ok: boolean;
+            /** To */
+            to: string;
         };
         /**
          * ComparisonShareRequest
@@ -36453,6 +36495,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinearFeetEstimateResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deliver_comparison_api_v1_workspaces__workspace_id__quotes_estimate_comparison__token__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComparisonDeliverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonDeliverResult"];
                 };
             };
             /** @description Validation Error */
