@@ -22,6 +22,7 @@ import {
 } from "@/lib/estimator/measure";
 import { queryKeys } from "@/lib/query-keys";
 import { formatCurrency } from "@/lib/utils/number";
+import type { ChristmasItemsSelection } from "@/types/estimate";
 
 import { ComparisonCard, type ComparisonView } from "./comparison-card";
 import "./estimator.css";
@@ -54,6 +55,11 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<
     number | null
   >(null);
+  // Seasonal decor selection: category key -> { option key -> value } (count for
+  // `each` items, linear feet for `per_ft` items like garland).
+  const [christmasItems, setChristmasItems] = useState<ChristmasItemsSelection>(
+    {},
+  );
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   const referenceFeet = useMemo(
@@ -122,6 +128,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
         setRooflinePts([]);
         setPerFtOverride(null);
         setChristmasPerFtOverride(null);
+        setChristmasItems({});
         setShareUrl(null);
         setDrawMode("reference");
         setHasImage(true);
@@ -163,6 +170,20 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     setRooflinePts([]);
     setPerFtOverride(null);
     setChristmasPerFtOverride(null);
+    setChristmasItems({});
+    setShareUrl(null);
+  };
+
+  const setSeasonalItem = (
+    categoryKey: string,
+    optionKey: string,
+    value: number,
+  ) => {
+    const clamped = Number.isFinite(value) ? Math.max(0, value) : 0;
+    setChristmasItems((prev) => ({
+      ...prev,
+      [categoryKey]: { ...(prev[categoryKey] ?? {}), [optionKey]: clamped },
+    }));
     setShareUrl(null);
   };
 
@@ -174,6 +195,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     storage,
     per_ft_override: perFtOverride,
     christmas_per_ft_override: christmasPerFtOverride,
+    christmas_items: christmasItems,
   };
   const { data: estimate, isFetching } = useQuery({
     queryKey: queryKeys.estimator.compute(workspaceId, estimateParams),
@@ -416,6 +438,58 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                 {shareMutation.isPending ? "Creating link…" : "Share with client"}
               </button>
             </div>
+
+            {estimate?.christmas.enabled &&
+            (estimate.christmas_catalog ?? []).length > 0 ? (
+              <div className="est-decor">
+                <div className="est-decor-title">Seasonal add-ons</div>
+                <div className="est-decor-groups">
+                  {(estimate.christmas_catalog ?? []).map((cat) => (
+                    <div className="est-decor-group" key={cat.key}>
+                      <div className="est-decor-group-title">{cat.label}</div>
+                      {(cat.options ?? []).map((opt) => {
+                        const perFt = cat.unit === "per_ft";
+                        const value =
+                          christmasItems[cat.key]?.[opt.key] ?? 0;
+                        return (
+                          <label className="est-decor-row" key={opt.key}>
+                            <span className="est-decor-name">
+                              {opt.name}
+                              <span className="est-decor-unit">
+                                {formatCurrency(opt.price)}{" "}
+                                {perFt ? "/ ft" : "/ ea"}
+                              </span>
+                            </span>
+                            <input
+                              className="est-input"
+                              style={{ width: 84 }}
+                              type="number"
+                              min={0}
+                              step={1}
+                              inputMode={perFt ? "decimal" : "numeric"}
+                              value={value || ""}
+                              placeholder={perFt ? "ft" : "0"}
+                              aria-label={`${cat.label} ${opt.name} ${
+                                perFt ? "linear feet" : "quantity"
+                              }`}
+                              onChange={(e) =>
+                                setSeasonalItem(
+                                  cat.key,
+                                  opt.key,
+                                  perFt
+                                    ? Number.parseFloat(e.target.value) || 0
+                                    : Number.parseInt(e.target.value, 10) || 0,
+                                )
+                              }
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {shareUrl ? (
               <div className="est-share-link">

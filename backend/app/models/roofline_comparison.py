@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -67,6 +67,14 @@ class RooflineComparison(Base):
     # on each public view.
     per_ft_override: Mapped[float | None] = mapped_column(Float, nullable=True)
     christmas_per_ft_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Seasonal decor selection (category key -> {option key -> value}). Stored so
+    # a shared comparison persists the rep's trees/bushes/wreaths/garland picks;
+    # prices are recomputed from live config on each public view. NULL/{} means
+    # roofline-only. Only totals reach the public payload, never this selection.
+    christmas_items: Mapped[dict[str, dict[str, float]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     # Optional presentation context shown to the client / used internally.
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)

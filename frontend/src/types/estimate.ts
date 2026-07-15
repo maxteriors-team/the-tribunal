@@ -11,3 +11,10 @@ export type LinearFeetEstimateResult = Schemas["LinearFeetEstimateResult"];
 export type ComparisonShareRequest = Schemas["ComparisonShareRequest"];
 export type ComparisonShareResult = Schemas["ComparisonShareResult"];
 export type PublicComparison = Schemas["PublicComparison"];
+
+// Standardized seasonal decor catalog (trees/bushes/wreaths/garland/…).
+export type SeasonalItem = Schemas["SeasonalItem"];
+export type SeasonalItemCost = Schemas["SeasonalItemCost"];
+export type SizeRate = Schemas["SizeRate"];
+// Decor selection: category key -> { option key -> value } (count or feet).
+export type ChristmasItemsSelection = Record<string, Record<string, number>>;

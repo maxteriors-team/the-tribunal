@@ -25,6 +25,7 @@ from app.schemas.pricing import (
     PermanentConfig,
     PricingSettings,
     SavingsConfig,
+    SeasonalItem,
     SizeRate,
     TaxConfig,
 )
@@ -333,16 +334,39 @@ def _christmas_config(**overrides) -> PricingSettings:
         christmas=ChristmasConfig(
             enabled=True,
             roofline_per_ft=6,
-            tree_rates=[
-                SizeRate(key="small", name="Small tree", price=120),
-                SizeRate(key="medium", name="Medium tree", price=260),
-                SizeRate(key="large", name="Large tree", price=520),
+            items=[
+                SeasonalItem(
+                    key="trees",
+                    label="Trees",
+                    unit="each",
+                    options=[
+                        SizeRate(key="small", name="Small tree", price=120),
+                        SizeRate(key="medium", name="Medium tree", price=260),
+                        SizeRate(key="large", name="Large tree", price=520),
+                    ],
+                ),
+                SeasonalItem(
+                    key="bushes",
+                    label="Bushes",
+                    unit="each",
+                    options=[
+                        SizeRate(key="small", name="Small bush", price=35),
+                        SizeRate(key="large", name="Large bush", price=65),
+                    ],
+                ),
+                SeasonalItem(
+                    key="wreaths",
+                    label="Wreaths",
+                    unit="each",
+                    options=[SizeRate(key="standard", name="Wreath", price=85)],
+                ),
+                SeasonalItem(
+                    key="garland",
+                    label="Garland",
+                    unit="per_ft",
+                    options=[SizeRate(key="standard", name="Garland", price=8)],
+                ),
             ],
-            bush_rates=[
-                SizeRate(key="small", name="Small bush", price=35),
-                SizeRate(key="large", name="Large bush", price=65),
-            ],
-            wreath_rates=[SizeRate(key="standard", name="Wreath", price=85)],
             takedown_rate=0.25,
             storage_price=200,
             **overrides,
@@ -355,9 +379,11 @@ def test_christmas_prices_roofline_decor_takedown_and_storage():
     r = pp.price_christmas(
         cfg,
         roofline_feet=150,
-        trees={"medium": 2, "large": 1},
-        bushes={"small": 4},
-        wreaths={"standard": 2},
+        items={
+            "trees": {"medium": 2, "large": 1},
+            "bushes": {"small": 4},
+            "wreaths": {"standard": 2},
+        },
         takedown=True,
         storage=True,
     )
@@ -365,9 +391,12 @@ def test_christmas_prices_roofline_decor_takedown_and_storage():
     # bushes 4*35=140 -> 157; wreaths 2*85=170 -> 191;
     # takedown 0.25*(900+1040+140+170=2250)=562.5 -> 632; storage 200 -> 225.
     assert r.roofline_cost == 1011
-    assert r.trees_cost == 1168
-    assert r.bushes_cost == 157
-    assert r.wreaths_cost == 191
+    costs = {i.key: i.cost for i in r.items}
+    assert costs["trees"] == 1168
+    assert costs["bushes"] == 157
+    assert costs["wreaths"] == 191
+    # Categories with no selection are absent from the breakdown.
+    assert "garland" not in costs
     assert r.takedown_cost == 632
     assert r.storage_cost == 225
     assert r.raw_total == 3384
@@ -375,22 +404,63 @@ def test_christmas_prices_roofline_decor_takedown_and_storage():
     assert sum(line.line_total for line in r.lines) == 3384
 
 
+def test_christmas_prices_garland_per_linear_foot():
+    cfg = _christmas_config()
+    # Garland is per_ft: 80 ft * $8 = $640 net -> grossed. Folds into takedown base.
+    r = pp.price_christmas(cfg, roofline_feet=0, items={"garland": {"standard": 80}})
+    costs = {i.key: i.cost for i in r.items}
+    garland = next(i for i in r.items if i.key == "garland")
+    assert garland.unit == "per_ft"
+    # 640 net grossed at 0.11 buffer -> round(640 / 0.89) = 719.
+    assert costs["garland"] == 719
+    assert r.total == 719
+    assert any("ft Garland" in line.label for line in r.lines)
+
+
 def test_christmas_ignores_unknown_and_zero_counts():
     cfg = _christmas_config()
     r = pp.price_christmas(
         cfg,
         roofline_feet=0,
-        trees={"medium": 0, "nope": 5},
+        items={"trees": {"medium": 0, "nope": 5}, "missing_category": {"x": 3}},
         takedown=False,
         storage=False,
     )
     assert r.total == 0
+    assert r.items == []
     assert r.lines == []
 
 
 def test_christmas_takedown_requires_config_enabled():
     cfg = _christmas_config(takedown_enabled=False)
-    r = pp.price_christmas(cfg, trees={"small": 1}, takedown=True)
+    r = pp.price_christmas(cfg, items={"trees": {"small": 1}}, takedown=True)
     # 120 -> gross 135; no takedown line because config disables it.
     assert r.takedown_cost == 0
     assert r.total == 135
+
+
+def test_christmas_legacy_rate_lists_upgrade_and_price_identically():
+    # A pre-standardization stored blob (tree_rates/bush_rates/wreath_rates) must
+    # upgrade to items and price the same as the equivalent items config.
+    legacy = _landscape_config(
+        christmas=ChristmasConfig.model_validate(
+            {
+                "enabled": True,
+                "roofline_per_ft": 6,
+                "tree_rates": [{"key": "medium", "name": "Medium tree", "price": 260}],
+                "bush_rates": [{"key": "small", "name": "Small bush", "price": 35}],
+                "wreath_rates": [{"key": "standard", "name": "Wreath", "price": 85}],
+            }
+        )
+    )
+    r = pp.price_christmas(
+        legacy,
+        roofline_feet=100,
+        items={"trees": {"medium": 1}, "bushes": {"small": 2}, "wreaths": {"standard": 1}},
+    )
+    costs = {i.key: i.cost for i in r.items}
+    # trees 260 -> 292; bushes 2*35=70 -> 79; wreaths 85 -> 96; roofline 600 -> 674.
+    assert costs["trees"] == 292
+    assert costs["bushes"] == 79
+    assert costs["wreaths"] == 96
+    assert r.roofline_cost == 674

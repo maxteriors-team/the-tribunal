@@ -6,13 +6,9 @@
  * document (`category_sections` / `grand_*`); these components only collect the
  * rep's raw inputs and render the server's numbers.
  */
-import type { SizeRate } from "@/types/sales-wizard";
+import type { SeasonalItem } from "@/types/sales-wizard";
 
-import {
-  fmt,
-  type ChristmasGroup,
-  type UseSalesWizardReturn,
-} from "./use-sales-wizard";
+import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
 
 function section(wizard: UseSalesWizardReturn, key: string) {
   return wizard.document?.category_sections.find((s) => s.key === key) ?? null;
@@ -111,70 +107,100 @@ export function PermanentSection({ wizard }: { wizard: UseSalesWizardReturn }) {
 }
 
 // ─── Seasonal Christmas ────────────────────────────────────────────────────
-function CountGroup({
+// One decor category (trees/bushes/wreaths/garland/…). `each` items render
+// steppers; `per_ft` items (garland) render a linear-feet input. Driven entirely
+// by the workspace pricing config so a new add-on needs no code here.
+function SeasonalItemGroup({
   wizard,
-  group,
-  title,
-  rates,
+  item,
 }: {
   wizard: UseSalesWizardReturn;
-  group: ChristmasGroup;
-  title: string;
-  rates: SizeRate[];
+  item: SeasonalItem;
 }) {
-  if (!rates.length) return null;
-  const counts = wizard.christmas[group];
+  const options = item.options ?? [];
+  if (!options.length) return null;
+  const selection = wizard.christmas.items[item.key] ?? {};
+  const isPerFt = item.unit === "per_ft";
+  const unitLabel = isPerFt ? "/ ft" : "/ ea";
   return (
     <div className="fixture-section">
       <div className="fixture-section-header">
-        <div className="fixture-section-title">{title}</div>
+        <div className="fixture-section-title">{item.label}</div>
       </div>
       <div className="fixture-rows">
-        {rates.map((rate) => {
-          const qty = counts[rate.key] ?? 0;
+        {options.map((rate) => {
+          const value = selection[rate.key] ?? 0;
           return (
             <div
-              className={`fix-row${qty > 0 ? " active-row" : ""}`}
+              className={`fix-row${value > 0 ? " active-row" : ""}`}
               key={rate.key}
             >
               <div className="fix-name-wrap">
                 <div className="fix-name">{rate.name}</div>
-                <div className="fix-price">{fmt(rate.price)} / ea</div>
+                <div className="fix-price">
+                  {fmt(rate.price)} {unitLabel}
+                </div>
               </div>
               <div className="fix-controls">
-                <div className="stepper">
-                  <button
-                    type="button"
-                    className="step-btn"
-                    onClick={() =>
-                      wizard.setChristmasCount(group, rate.key, qty - 1)
-                    }
-                  >
-                    &#8722;
-                  </button>
+                {isPerFt ? (
                   <input
                     className="step-val"
                     type="number"
                     min={0}
-                    value={qty}
+                    placeholder="0"
+                    aria-label={`${rate.name} linear feet`}
+                    value={value || ""}
                     onChange={(e) =>
-                      wizard.setChristmasCount(
-                        group,
+                      wizard.setSeasonalItem(
+                        item.key,
                         rate.key,
-                        Number.parseInt(e.target.value, 10) || 0,
+                        Number.parseFloat(e.target.value) || 0,
                       )
                     }
                   />
-                  <button
-                    type="button"
-                    className="step-btn"
-                    onClick={() =>
-                      wizard.setChristmasCount(group, rate.key, qty + 1)
-                    }
-                  >
-                    +
-                  </button>
-                </div>
+                ) : (
+                  <div className="stepper">
+                    <button
+                      type="button"
+                      className="step-btn"
+                      onClick={() =>
+                        wizard.setSeasonalItem(
+                          item.key,
+                          rate.key,
+                          Math.floor(value) - 1,
+                        )
+                      }
+                    >
+                      &#8722;
+                    </button>
+                    <input
+                      className="step-val"
+                      type="number"
+                      min={0}
+                      value={value}
+                      onChange={(e) =>
+                        wizard.setSeasonalItem(
+                          item.key,
+                          rate.key,
+                          Number.parseInt(e.target.value, 10) || 0,
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="step-btn"
+                      onClick={() =>
+                        wizard.setSeasonalItem(
+                          item.key,
+                          rate.key,
+                          Math.floor(value) + 1,
+                        )
+                      }
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -198,8 +224,8 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
         </div>
       </div>
       <div className="bistro-subtitle">
-        Professional roofline, trees, bushes and wreaths — installed, maintained
-        all season, with optional takedown &amp; storage.
+        Professional roofline, trees, bushes, wreaths and garland — installed,
+        maintained all season, with optional takedown &amp; storage.
       </div>
 
       <div className="bistro-feet-wrap">
@@ -217,24 +243,9 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
         />
       </div>
 
-      <CountGroup
-        wizard={wizard}
-        group="trees"
-        title="Trees"
-        rates={cfg?.tree_rates ?? []}
-      />
-      <CountGroup
-        wizard={wizard}
-        group="bushes"
-        title="Bushes & Shrubs"
-        rates={cfg?.bush_rates ?? []}
-      />
-      <CountGroup
-        wizard={wizard}
-        group="wreaths"
-        title="Wreaths & Garland"
-        rates={cfg?.wreath_rates ?? []}
-      />
+      {(cfg?.items ?? []).map((item) => (
+        <SeasonalItemGroup key={item.key} wizard={wizard} item={item} />
+      ))}
 
       <div className="xmas-toggles">
         {cfg?.takedown_enabled ? (

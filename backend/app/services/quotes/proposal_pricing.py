@@ -19,6 +19,7 @@ Ported reference (``Sales-tools/index.html``):
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.schemas.pricing import (
@@ -31,7 +32,8 @@ from app.schemas.pricing import (
     ChristmasPricing,
     PermanentPricing,
     PricingSettings,
-    SizeRate,
+    SeasonalItem,
+    SeasonalItemCost,
     TierPricing,
 )
 
@@ -480,27 +482,36 @@ def price_permanent(
 
 
 # --------------------------------------------------------------------------- #
-# Christmas (seasonal) — roofline + trees/bushes/wreaths + takedown/storage
+# Christmas (seasonal) — roofline + generic decor items + takedown/storage
 # --------------------------------------------------------------------------- #
-def _price_size_group(
-    rates: list[SizeRate],
-    counts: dict[str, float],
+def _price_seasonal_item(
+    item: SeasonalItem,
+    selection: Mapping[str, float],
     config: PricingSettings,
 ) -> tuple[Decimal, Decimal, list[CategoryLine]]:
-    """Gross each selected size line; return (net_subtotal, grossed_subtotal, lines)."""
-    by_key = {r.key: r for r in rates}
+    """Gross each selected option of one decor category.
+
+    ``each`` options price per selected item (value = quantity); ``per_ft``
+    options price per linear foot of the measured run (value = feet). Returns
+    ``(net_subtotal, grossed_subtotal, lines)`` so the caller can fold the net
+    into the takedown base and the gross into the total.
+    """
+    by_key = {o.key: o for o in item.options}
     net = _ZERO
     gross = _ZERO
     lines: list[CategoryLine] = []
-    for key, qty in counts.items():
-        rate = by_key.get(key)
-        q = max(0.0, float(qty or 0))
-        if rate is None or q <= 0:
+    for key, value in selection.items():
+        option = by_key.get(key)
+        v = max(0.0, float(value or 0))
+        if option is None or v <= 0:
             continue
-        net += _d(q) * _d(rate.price)
-        line_total = gross_up_price(_d(q) * _d(rate.price), config)
+        line_net = _d(v) * _d(option.price)
+        net += line_net
+        line_total = gross_up_price(line_net, config)
         gross += line_total
-        lines.append(_category_line(rate.name, q, line_total))
+        # per-ft categories read as "80 ft Garland"; each categories as the option name.
+        label = f"{v:g} ft {option.name}" if item.unit == "per_ft" else option.name
+        lines.append(_category_line(label, v, line_total))
     return net, gross, lines
 
 
@@ -508,21 +519,22 @@ def price_christmas(
     config: PricingSettings,
     *,
     roofline_feet: float = 0,
-    trees: dict[str, float] | None = None,
-    bushes: dict[str, float] | None = None,
-    wreaths: dict[str, float] | None = None,
+    items: Mapping[str, Mapping[str, float]] | None = None,
     takedown: bool = False,
     storage: bool = False,
 ) -> ChristmasPricing:
     """Price a seasonal Christmas job.
 
-    Roofline, each tree/bush/wreath size, takedown, and storage are grossed up
-    individually so the display lines sum exactly to ``raw_total``. Takedown is a
-    fraction of the *net* install subtotal (roofline + decor) then grossed.
+    Roofline, every configured decor category (trees/bushes/wreaths/garland/…),
+    takedown, and storage are grossed up individually so the display lines sum
+    exactly to ``raw_total``. ``items`` maps a category key to its selection
+    (option key → quantity for ``each`` items, → linear feet for ``per_ft``).
+    Takedown is a fraction of the *net* install subtotal (roofline + decor).
     """
     c = config.christmas
     ft = max(0.0, roofline_feet or 0.0)
     gross_minimum = gross_up_price(_d(c.minimum), config)
+    selections = items or {}
 
     lines: list[CategoryLine] = []
     roofline_net = _d(ft) * _d(c.roofline_per_ft)
@@ -537,16 +549,24 @@ def price_christmas(
             )
         )
 
-    trees_net, trees_cost, tree_lines = _price_size_group(c.tree_rates, trees or {}, config)
-    bushes_net, bushes_cost, bush_lines = _price_size_group(c.bush_rates, bushes or {}, config)
-    wreaths_net, wreaths_cost, wreath_lines = _price_size_group(
-        c.wreath_rates, wreaths or {}, config
-    )
-    lines.extend(tree_lines)
-    lines.extend(bush_lines)
-    lines.extend(wreath_lines)
+    item_costs: list[SeasonalItemCost] = []
+    decor_net = _ZERO
+    decor_gross = _ZERO
+    for item in c.items:
+        net, gross, item_lines = _price_seasonal_item(
+            item, selections.get(item.key) or {}, config
+        )
+        lines.extend(item_lines)
+        decor_net += net
+        decor_gross += gross
+        if gross > 0:
+            item_costs.append(
+                SeasonalItemCost(
+                    key=item.key, label=item.label, unit=item.unit, cost=float(gross)
+                )
+            )
 
-    install_net = roofline_net + trees_net + bushes_net + wreaths_net
+    install_net = roofline_net + decor_net
     takedown_net = install_net * _d(c.takedown_rate) if (takedown and c.takedown_enabled) else _ZERO
     takedown_cost = gross_up_price(takedown_net, config)
     if takedown_cost > 0:
@@ -555,16 +575,12 @@ def price_christmas(
     if storage_cost > 0:
         lines.append(_category_line("Off-season storage", 1, storage_cost))
 
-    raw_total = (
-        roofline_cost + trees_cost + bushes_cost + wreaths_cost + takedown_cost + storage_cost
-    )
+    raw_total = roofline_cost + decor_gross + takedown_cost + storage_cost
     total = max(raw_total, gross_minimum) if raw_total > 0 else _ZERO
     return ChristmasPricing(
         roofline_feet=ft,
         roofline_cost=float(roofline_cost),
-        trees_cost=float(trees_cost),
-        bushes_cost=float(bushes_cost),
-        wreaths_cost=float(wreaths_cost),
+        items=item_costs,
         takedown_cost=float(takedown_cost),
         storage_cost=float(storage_cost),
         minimum=float(gross_minimum),

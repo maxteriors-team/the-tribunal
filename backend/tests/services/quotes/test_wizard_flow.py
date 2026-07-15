@@ -380,9 +380,11 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
             permanent=WizardPermanentSelection(feet=100, channels=5),
             christmas=WizardChristmasSelection(
                 roofline_feet=150,
-                trees=[WizardCategoryCount(key="medium", quantity=2)],
-                bushes=[WizardCategoryCount(key="small", quantity=4)],
-                wreaths=[WizardCategoryCount(key="standard", quantity=2)],
+                items={
+                    "trees": [WizardCategoryCount(key="medium", quantity=2)],
+                    "bushes": [WizardCategoryCount(key="small", quantity=4)],
+                    "wreaths": [WizardCategoryCount(key="standard", quantity=2)],
+                },
                 takedown=True,
                 storage=False,
             ),
@@ -425,7 +427,7 @@ async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
             categories=["christmas"],
             christmas=WizardChristmasSelection(
                 roofline_feet=200,
-                trees=[WizardCategoryCount(key="medium", quantity=1)],
+                items={"trees": [WizardCategoryCount(key="medium", quantity=1)]},
             ),
         )
         doc = await svc.preview_from_wizard(ws.id, payload)

@@ -8895,19 +8895,19 @@
         "type": "object"
       },
       "ChristmasConfig": {
-        "description": "Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.\n\nRates are *net* placeholders (operator's tool not provided) tuned later in\nSettings → Pricing. ``takedown_rate`` is a fraction of the install subtotal\nadded when the client opts into post-season takedown; ``storage_price`` is a\nflat fee for off-season storage.",
+        "description": "Seasonal Christmas lighting: roofline + generic decor items + takedown.\n\nRates are *net* placeholders (operator's tool not provided) tuned later in\nSettings → Pricing. ``takedown_rate`` is a fraction of the install subtotal\nadded when the client opts into post-season takedown; ``storage_price`` is a\nflat fee for off-season storage. ``items`` is the standardized decor catalog\n(trees/bushes/wreaths/garland/…); adding an add-on is a config edit only.",
         "properties": {
-          "bush_rates": {
-            "items": {
-              "$ref": "#/components/schemas/SizeRate"
-            },
-            "title": "Bush Rates",
-            "type": "array"
-          },
           "enabled": {
             "default": false,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalItem"
+            },
+            "title": "Items",
+            "type": "array"
           },
           "label": {
             "default": "Christmas Lighting",
@@ -8950,31 +8950,24 @@
             "minimum": 0.0,
             "title": "Takedown Rate",
             "type": "number"
-          },
-          "tree_rates": {
-            "items": {
-              "$ref": "#/components/schemas/SizeRate"
-            },
-            "title": "Tree Rates",
-            "type": "array"
-          },
-          "wreath_rates": {
-            "items": {
-              "$ref": "#/components/schemas/SizeRate"
-            },
-            "title": "Wreath Rates",
-            "type": "array"
           }
         },
         "title": "ChristmasConfig",
         "type": "object"
       },
       "ChristmasEstimate": {
-        "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).",
+        "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).\n\n``items`` is the priced decor breakdown (one entry per selected category) so\nthe rep can see what makes up the seasonal total.",
         "properties": {
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalItemCost"
+            },
+            "title": "Items",
+            "type": "array"
           },
           "per_ft": {
             "title": "Per Ft",
@@ -9161,6 +9154,16 @@
             "minimum": 0.0,
             "title": "Channels",
             "type": "integer"
+          },
+          "christmas_items": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Christmas Items",
+            "type": "object"
           },
           "christmas_per_ft_override": {
             "anyOf": [
@@ -19209,6 +19212,16 @@
             "title": "Channels",
             "type": "integer"
           },
+          "christmas_items": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Christmas Items",
+            "type": "object"
+          },
           "christmas_per_ft_override": {
             "anyOf": [
               {
@@ -19260,6 +19273,13 @@
         "properties": {
           "christmas": {
             "$ref": "#/components/schemas/ChristmasEstimate"
+          },
+          "christmas_catalog": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalItem"
+            },
+            "title": "Christmas Catalog",
+            "type": "array"
           },
           "christmas_perks": {
             "items": {
@@ -33973,6 +33993,76 @@
         "title": "SearchPhoneNumbersRequest",
         "type": "object"
       },
+      "SeasonalItem": {
+        "description": "One seasonal-decor category — the unit of standardization.\n\nTrees, bushes, wreaths, garland, and anything added later (bows, stakes,\nmini-trees) are all just a :class:`SeasonalItem`: a keyed category with a\npricing ``unit`` and a list of priced ``options``. Adding a new add-on is a\nconfig edit, never a code change — the pricing loop and the wizard/estimator\nUI render every category the same way.",
+        "properties": {
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SizeRate"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "unit": {
+            "default": "each",
+            "enum": [
+              "each",
+              "per_ft"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "SeasonalItem",
+        "type": "object"
+      },
+      "SeasonalItemCost": {
+        "description": "Grossed cost of one seasonal-decor category in a computed christmas price.",
+        "properties": {
+          "cost": {
+            "title": "Cost",
+            "type": "number"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "each",
+              "per_ft"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "unit",
+          "cost"
+        ],
+        "title": "SeasonalItemCost",
+        "type": "object"
+      },
       "SegmentContactsResponse": {
         "description": "Schema for segment contacts resolution.",
         "properties": {
@@ -34723,7 +34813,7 @@
         "type": "object"
       },
       "SizeRate": {
-        "description": "A size/wrap option (e.g. a tree size) with its own net install price.",
+        "description": "A size/variant option (e.g. a tree size) with its own net install price.",
         "properties": {
           "key": {
             "maxLength": 60,
@@ -38511,7 +38601,7 @@
         "type": "object"
       },
       "WizardCategoryCount": {
-        "description": "A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty).",
+        "description": "A selected decor option: ``key`` -> value (quantity for ``each`` items,\nlinear feet for ``per_ft`` items like garland).",
         "properties": {
           "key": {
             "maxLength": 60,
@@ -38558,14 +38648,17 @@
         "type": "object"
       },
       "WizardChristmasSelection": {
-        "description": "Seasonal Christmas selection: roofline + decor counts + takedown/storage.",
+        "description": "Seasonal Christmas selection: roofline + decor items + takedown/storage.\n\n``items`` maps a decor category key (\"trees\", \"garland\", …) to the selected\noptions for that category, matching the standardized ``ChristmasConfig.items``\ncatalog so any add-on is data, not a new field.",
         "properties": {
-          "bushes": {
-            "items": {
-              "$ref": "#/components/schemas/WizardCategoryCount"
+          "items": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/WizardCategoryCount"
+              },
+              "type": "array"
             },
-            "title": "Bushes",
-            "type": "array"
+            "title": "Items",
+            "type": "object"
           },
           "roofline_feet": {
             "default": 0,
@@ -38582,20 +38675,6 @@
             "default": false,
             "title": "Takedown",
             "type": "boolean"
-          },
-          "trees": {
-            "items": {
-              "$ref": "#/components/schemas/WizardCategoryCount"
-            },
-            "title": "Trees",
-            "type": "array"
-          },
-          "wreaths": {
-            "items": {
-              "$ref": "#/components/schemas/WizardCategoryCount"
-            },
-            "title": "Wreaths",
-            "type": "array"
           }
         },
         "title": "WizardChristmasSelection",

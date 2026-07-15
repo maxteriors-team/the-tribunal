@@ -116,6 +116,31 @@ def test_christmas_disabled_zeros_that_side() -> None:
     assert result.difference == 0
 
 
+def test_seasonal_decor_adds_to_christmas_total() -> None:
+    # Default config ships trees/bushes/wreaths (each) + garland (per_ft).
+    result = _estimate(
+        _config(),
+        100,
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    # roofline 100*6=600; trees 2*260=520; garland 50*8=400 -> 1520.
+    assert result.christmas.total == 1520
+    costs = {i.key: i.cost for i in result.christmas.items}
+    assert costs["trees"] == 520
+    assert costs["garland"] == 400
+
+
+def test_estimate_exposes_seasonal_catalog() -> None:
+    result = _estimate(_config(), 100)
+    catalog = {i.key: i.unit for i in result.christmas_catalog}
+    # The rep tool renders decor controls from this catalog.
+    assert catalog["trees"] == "each"
+    assert catalog["garland"] == "per_ft"
+    # No decor selected -> empty priced breakdown, roofline-only total.
+    assert result.christmas.items == []
+    assert result.christmas.total == 600
+
+
 def test_permanent_minimum_applied() -> None:
     config = _config(
         permanent=PermanentConfig(

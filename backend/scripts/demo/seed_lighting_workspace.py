@@ -401,18 +401,43 @@ PRICING: dict = {
     "christmas": {
         "enabled": True,
         "roofline_per_ft": 6,
-        "tree_rates": [
-            {"key": "small", "name": "Small tree (up to 8 ft)", "price": 120},
-            {"key": "medium", "name": "Medium tree (8\u201315 ft)", "price": 260},
-            {"key": "large", "name": "Large tree (15\u201325 ft)", "price": 520},
-        ],
-        "bush_rates": [
-            {"key": "small", "name": "Small bush / shrub", "price": 35},
-            {"key": "large", "name": "Large bush / shrub", "price": 65},
-        ],
-        "wreath_rates": [
-            {"key": "standard", "name": "Wreath (up to 36 in)", "price": 85},
-            {"key": "large", "name": "Large wreath (over 36 in)", "price": 150},
+        "items": [
+            {
+                "key": "trees",
+                "label": "Trees",
+                "unit": "each",
+                "options": [
+                    {"key": "small", "name": "Small tree (up to 8 ft)", "price": 120},
+                    {"key": "medium", "name": "Medium tree (8–15 ft)", "price": 260},
+                    {"key": "large", "name": "Large tree (15–25 ft)", "price": 520},
+                ],
+            },
+            {
+                "key": "bushes",
+                "label": "Bushes & Shrubs",
+                "unit": "each",
+                "options": [
+                    {"key": "small", "name": "Small bush / shrub", "price": 35},
+                    {"key": "large", "name": "Large bush / shrub", "price": 65},
+                ],
+            },
+            {
+                "key": "wreaths",
+                "label": "Wreaths",
+                "unit": "each",
+                "options": [
+                    {"key": "standard", "name": "Wreath (up to 36 in)", "price": 85},
+                    {"key": "large", "name": "Large wreath (over 36 in)", "price": 150},
+                ],
+            },
+            {
+                "key": "garland",
+                "label": "Garland",
+                "unit": "per_ft",
+                "options": [
+                    {"key": "standard", "name": "Garland (installed)", "price": 8},
+                ],
+            },
         ],
         "takedown_enabled": True,
         "takedown_rate": 0.25,

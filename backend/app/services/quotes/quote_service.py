@@ -848,6 +848,7 @@ class QuoteService:
         xmas = price_christmas(
             xmas_config,
             roofline_feet=req.feet,
+            items=req.christmas_items,
             takedown=req.takedown,
             storage=req.storage,
         )
@@ -878,6 +879,7 @@ class QuoteService:
                 enabled=xmas_enabled,
                 total=xmas_total,
                 per_ft=float(xmas_config.christmas.roofline_per_ft),
+                items=list(xmas.items) if xmas_enabled else [],
             ),
             difference=difference,
             years=years,
@@ -886,6 +888,7 @@ class QuoteService:
             multi_year_savings=multi_year_savings,
             permanent_perks=list(config.permanent.perks),
             christmas_perks=list(config.christmas.perks),
+            christmas_catalog=list(config.christmas.items),
         )
 
     async def estimate_linear_feet(
@@ -929,6 +932,7 @@ class QuoteService:
                 if req.christmas_per_ft_override is not None
                 else None
             ),
+            christmas_items=req.christmas_items or None,
             client_name=req.client_name,
             label=req.label,
             created_by_id=created_by_id,
@@ -974,6 +978,7 @@ class QuoteService:
                 storage=comparison.storage,
                 per_ft_override=comparison.per_ft_override,
                 christmas_per_ft_override=comparison.christmas_per_ft_override,
+                christmas_items=comparison.christmas_items or {},
             ),
         )
 

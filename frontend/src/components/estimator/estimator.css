@@ -375,3 +375,53 @@
   font-size: 13px;
   margin: 8px 0 0;
 }
+
+/* ---- Seasonal decor add-ons (trees / bushes / wreaths / garland) ---- */
+.est-decor {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  background: var(--s1);
+}
+
+.est-decor-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t4);
+  margin-bottom: 12px;
+}
+
+.est-decor-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.est-decor-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t1);
+  margin-bottom: 8px;
+}
+
+.est-decor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.est-decor-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--t2);
+}
+
+.est-decor-unit {
+  font-size: 11px;
+  color: var(--t4);
+}

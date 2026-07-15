@@ -63,22 +63,19 @@ export interface PermanentDraft {
   channels: string;
 }
 
-export type ChristmasGroup = "trees" | "bushes" | "wreaths";
-
 export interface ChristmasDraft {
   roofline_feet: string;
-  trees: Record<string, number>;
-  bushes: Record<string, number>;
-  wreaths: Record<string, number>;
+  // Standardized decor selection: category key -> { option key -> value }. Value
+  // is a count for `each` items (trees/bushes/wreaths) and linear feet for
+  // `per_ft` items (garland). Categories come from the workspace pricing config.
+  items: Record<string, Record<string, number>>;
   takedown: boolean;
   storage: boolean;
 }
 
 const EMPTY_CHRISTMAS: ChristmasDraft = {
   roofline_feet: "",
-  trees: {},
-  bushes: {},
-  wreaths: {},
+  items: {},
   takedown: false,
   storage: false,
 };
@@ -188,7 +185,11 @@ export interface UseSalesWizardReturn {
   setPermanent: (patch: Partial<PermanentDraft>) => void;
   christmas: ChristmasDraft;
   setChristmas: (patch: Partial<ChristmasDraft>) => void;
-  setChristmasCount: (group: ChristmasGroup, key: string, qty: number) => void;
+  setSeasonalItem: (
+    categoryKey: string,
+    optionKey: string,
+    value: number,
+  ) => void;
   night: NightPreviewState;
   setNight: (patch: Partial<NightPreviewState>) => void;
   // Server-computed document (live preview)
@@ -372,12 +373,17 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
   const setChristmas = useCallback((patch: Partial<ChristmasDraft>) => {
     setChristmasState((prev) => ({ ...prev, ...patch }));
   }, []);
-  const setChristmasCount = useCallback(
-    (group: ChristmasGroup, key: string, qty: number) => {
-      const clamped = Math.max(0, Math.min(999, Math.floor(qty)));
+  const setSeasonalItem = useCallback(
+    (categoryKey: string, optionKey: string, value: number) => {
+      // `each` steppers pass integers; `per_ft` (garland) passes linear feet.
+      // Clamp non-negative only; the UI floors counts where appropriate.
+      const clamped = Number.isFinite(value) ? Math.max(0, value) : 0;
       setChristmasState((prev) => ({
         ...prev,
-        [group]: { ...prev[group], [key]: clamped },
+        items: {
+          ...prev.items,
+          [categoryKey]: { ...(prev.items[categoryKey] ?? {}), [optionKey]: clamped },
+        },
       }));
     },
     [],
@@ -426,9 +432,11 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
       christmas: hasChristmas
         ? {
             roofline_feet: Number.parseFloat(christmas.roofline_feet) || 0,
-            trees: countsToList(christmas.trees),
-            bushes: countsToList(christmas.bushes),
-            wreaths: countsToList(christmas.wreaths),
+            items: Object.fromEntries(
+              Object.entries(christmas.items)
+                .map(([key, counts]) => [key, countsToList(counts)] as const)
+                .filter(([, list]) => list.length > 0),
+            ),
             takedown: christmas.takedown,
             storage: christmas.storage,
           }
@@ -569,7 +577,7 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     setPermanent,
     christmas,
     setChristmas,
-    setChristmasCount,
+    setSeasonalItem,
     night,
     setNight,
     document,

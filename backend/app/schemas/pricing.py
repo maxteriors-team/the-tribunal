@@ -16,9 +16,9 @@ the quote/invoice schemas; the server recomputes canonical totals with
 ``Numeric`` in :mod:`app.services.quotes.proposal_pricing`.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --------------------------------------------------------------------------- #
 # Money / financing knobs
@@ -204,36 +204,86 @@ class PermanentConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Christmas (seasonal) — roofline + trees/bushes/wreaths by size + takedown
+# Christmas (seasonal) — roofline + generic decor items (each / per-ft) + takedown
 # --------------------------------------------------------------------------- #
 class SizeRate(BaseModel):
-    """A size/wrap option (e.g. a tree size) with its own net install price."""
+    """A size/variant option (e.g. a tree size) with its own net install price."""
 
     key: str = Field(min_length=1, max_length=60)
     name: str
     price: float = Field(default=0, ge=0)
 
 
-def _default_tree_rates() -> list[SizeRate]:
+# ``each`` = priced per selected item (trees, bushes, wreaths); ``per_ft`` =
+# priced per linear foot of the measured run (garland, like the roofline).
+SeasonalUnit = Literal["each", "per_ft"]
+
+
+class SeasonalItem(BaseModel):
+    """One seasonal-decor category — the unit of standardization.
+
+    Trees, bushes, wreaths, garland, and anything added later (bows, stakes,
+    mini-trees) are all just a :class:`SeasonalItem`: a keyed category with a
+    pricing ``unit`` and a list of priced ``options``. Adding a new add-on is a
+    config edit, never a code change — the pricing loop and the wizard/estimator
+    UI render every category the same way.
+    """
+
+    key: str = Field(min_length=1, max_length=60)  # "trees", "garland", …
+    label: str  # "Trees", "Garland"
+    unit: SeasonalUnit = "each"
+    options: list[SizeRate] = Field(default_factory=list)
+
+
+def _default_seasonal_items() -> list[SeasonalItem]:
+    """Placeholder decor catalog: trees/bushes/wreaths per-item + garland per-ft."""
     return [
-        SizeRate(key="small", name="Small tree (up to 8 ft)", price=120),
-        SizeRate(key="medium", name="Medium tree (8–15 ft)", price=260),
-        SizeRate(key="large", name="Large tree (15–25 ft)", price=520),
+        SeasonalItem(
+            key="trees",
+            label="Trees",
+            unit="each",
+            options=[
+                SizeRate(key="small", name="Small tree (up to 8 ft)", price=120),
+                SizeRate(key="medium", name="Medium tree (8–15 ft)", price=260),
+                SizeRate(key="large", name="Large tree (15–25 ft)", price=520),
+            ],
+        ),
+        SeasonalItem(
+            key="bushes",
+            label="Bushes & Shrubs",
+            unit="each",
+            options=[
+                SizeRate(key="small", name="Small bush / shrub", price=35),
+                SizeRate(key="large", name="Large bush / shrub", price=65),
+            ],
+        ),
+        SeasonalItem(
+            key="wreaths",
+            label="Wreaths",
+            unit="each",
+            options=[
+                SizeRate(key="standard", name="Wreath (up to 36 in)", price=85),
+                SizeRate(key="large", name="Large wreath (over 36 in)", price=150),
+            ],
+        ),
+        SeasonalItem(
+            key="garland",
+            label="Garland",
+            unit="per_ft",
+            options=[SizeRate(key="standard", name="Garland (installed)", price=8)],
+        ),
     ]
 
 
-def _default_bush_rates() -> list[SizeRate]:
-    return [
-        SizeRate(key="small", name="Small bush / shrub", price=35),
-        SizeRate(key="large", name="Large bush / shrub", price=65),
-    ]
-
-
-def _default_wreath_rates() -> list[SizeRate]:
-    return [
-        SizeRate(key="standard", name="Wreath (up to 36 in)", price=85),
-        SizeRate(key="large", name="Large wreath (over 36 in)", price=150),
-    ]
+# Legacy per-category rate keys (pre-standardization) → (item key, label). Old
+# stored ``pricing.christmas`` blobs and in-flight wizard payloads used these
+# three fixed lists; the ``mode="before"`` validator upgrades them to ``items``
+# so nothing reprices.
+_LEGACY_SEASONAL_RATE_KEYS: tuple[tuple[str, str, str], ...] = (
+    ("tree_rates", "trees", "Trees"),
+    ("bush_rates", "bushes", "Bushes & Shrubs"),
+    ("wreath_rates", "wreaths", "Wreaths"),
+)
 
 
 def _default_christmas_perks() -> list[str]:
@@ -248,19 +298,18 @@ def _default_christmas_perks() -> list[str]:
 
 
 class ChristmasConfig(BaseModel):
-    """Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.
+    """Seasonal Christmas lighting: roofline + generic decor items + takedown.
 
     Rates are *net* placeholders (operator's tool not provided) tuned later in
     Settings → Pricing. ``takedown_rate`` is a fraction of the install subtotal
     added when the client opts into post-season takedown; ``storage_price`` is a
-    flat fee for off-season storage.
+    flat fee for off-season storage. ``items`` is the standardized decor catalog
+    (trees/bushes/wreaths/garland/…); adding an add-on is a config edit only.
     """
 
     enabled: bool = False
     roofline_per_ft: float = Field(default=6, ge=0)  # net $/linear ft installed
-    tree_rates: list[SizeRate] = Field(default_factory=_default_tree_rates)
-    bush_rates: list[SizeRate] = Field(default_factory=_default_bush_rates)
-    wreath_rates: list[SizeRate] = Field(default_factory=_default_wreath_rates)
+    items: list[SeasonalItem] = Field(default_factory=_default_seasonal_items)
     takedown_enabled: bool = True
     takedown_rate: float = Field(default=0.25, ge=0, le=1)  # of install subtotal
     storage_price: float = Field(default=0, ge=0)  # flat off-season storage fee
@@ -268,6 +317,29 @@ class ChristmasConfig(BaseModel):
     label: str = "Christmas Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
     perks: list[str] = Field(default_factory=_default_christmas_perks)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_rate_lists(cls, data: Any) -> Any:
+        """Build ``items`` from legacy ``tree_rates``/``bush_rates``/``wreath_rates``.
+
+        A workspace persisted before decor was standardized stores the three
+        fixed rate lists instead of ``items``. When ``items`` is absent but any
+        legacy list is present, synthesize an equivalent ``each`` catalog so old
+        blobs (and any in-flight wizard payloads) price identically.
+        """
+        if not isinstance(data, dict) or data.get("items") is not None:
+            return data
+        legacy = [
+            SeasonalItem(key=item_key, label=label, unit="each", options=data[rate_key])
+            for rate_key, item_key, label in _LEGACY_SEASONAL_RATE_KEYS
+            if data.get(rate_key)
+        ]
+        if legacy:
+            legacy_keys = {rate_key for rate_key, _, _ in _LEGACY_SEASONAL_RATE_KEYS}
+            data = {k: v for k, v in data.items() if k not in legacy_keys}
+            data["items"] = [i.model_dump() for i in legacy]
+        return data
 
 
 # --------------------------------------------------------------------------- #
@@ -389,14 +461,26 @@ class PermanentPricing(BaseModel):
     lines: list[CategoryLine] = Field(default_factory=list)
 
 
+class SeasonalItemCost(BaseModel):
+    """Grossed cost of one seasonal-decor category in a computed christmas price."""
+
+    key: str  # matches the SeasonalItem key ("trees", "garland", …)
+    label: str
+    unit: SeasonalUnit
+    cost: float
+
+
 class ChristmasPricing(BaseModel):
-    """Computed seasonal-Christmas price + component breakdown."""
+    """Computed seasonal-Christmas price + component breakdown.
+
+    Per-category decor costs live in ``items`` (one :class:`SeasonalItemCost`
+    each) so trees/bushes/wreaths/garland/… are uniform; ``lines`` remains the
+    authoritative display breakdown that sums to ``raw_total``.
+    """
 
     roofline_feet: float
     roofline_cost: float
-    trees_cost: float
-    bushes_cost: float
-    wreaths_cost: float
+    items: list[SeasonalItemCost] = Field(default_factory=list)
     takedown_cost: float
     storage_cost: float
     minimum: float

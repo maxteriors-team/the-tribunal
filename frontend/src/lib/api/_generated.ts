@@ -11611,21 +11611,22 @@ export interface components {
         };
         /**
          * ChristmasConfig
-         * @description Seasonal Christmas lighting: roofline + trees/bushes/wreaths + takedown.
+         * @description Seasonal Christmas lighting: roofline + generic decor items + takedown.
          *
          *     Rates are *net* placeholders (operator's tool not provided) tuned later in
          *     Settings → Pricing. ``takedown_rate`` is a fraction of the install subtotal
          *     added when the client opts into post-season takedown; ``storage_price`` is a
-         *     flat fee for off-season storage.
+         *     flat fee for off-season storage. ``items`` is the standardized decor catalog
+         *     (trees/bushes/wreaths/garland/…); adding an add-on is a config edit only.
          */
         ChristmasConfig: {
-            /** Bush Rates */
-            bush_rates?: components["schemas"]["SizeRate"][];
             /**
              * Enabled
              * @default false
              */
             enabled: boolean;
+            /** Items */
+            items?: components["schemas"]["SeasonalItem"][];
             /**
              * Label
              * @default Christmas Lighting
@@ -11658,18 +11659,19 @@ export interface components {
              * @default 0.25
              */
             takedown_rate: number;
-            /** Tree Rates */
-            tree_rates?: components["schemas"]["SizeRate"][];
-            /** Wreath Rates */
-            wreath_rates?: components["schemas"]["SizeRate"][];
         };
         /**
          * ChristmasEstimate
          * @description Seasonal-lighting side of the estimate (rep view — includes per_ft).
+         *
+         *     ``items`` is the priced decor breakdown (one entry per selected category) so
+         *     the rep can see what makes up the seasonal total.
          */
         ChristmasEstimate: {
             /** Enabled */
             enabled: boolean;
+            /** Items */
+            items?: components["schemas"]["SeasonalItemCost"][];
             /** Per Ft */
             per_ft: number;
             /** Total */
@@ -11761,6 +11763,12 @@ export interface components {
              * @default 0
              */
             channels: number;
+            /** Christmas Items */
+            christmas_items?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Christmas Per Ft Override */
             christmas_per_ft_override?: number | null;
             /** Client Name */
@@ -15549,6 +15557,12 @@ export interface components {
              * @default 0
              */
             channels: number;
+            /** Christmas Items */
+            christmas_items?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Christmas Per Ft Override */
             christmas_per_ft_override?: number | null;
             /** Feet */
@@ -15576,6 +15590,8 @@ export interface components {
          */
         LinearFeetEstimateResult: {
             christmas: components["schemas"]["ChristmasEstimate"];
+            /** Christmas Catalog */
+            christmas_catalog?: components["schemas"]["SeasonalItem"][];
             /** Christmas Perks */
             christmas_perks?: string[];
             /** Difference */
@@ -20848,6 +20864,47 @@ export interface components {
             limit: number;
         };
         /**
+         * SeasonalItem
+         * @description One seasonal-decor category — the unit of standardization.
+         *
+         *     Trees, bushes, wreaths, garland, and anything added later (bows, stakes,
+         *     mini-trees) are all just a :class:`SeasonalItem`: a keyed category with a
+         *     pricing ``unit`` and a list of priced ``options``. Adding a new add-on is a
+         *     config edit, never a code change — the pricing loop and the wizard/estimator
+         *     UI render every category the same way.
+         */
+        SeasonalItem: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Options */
+            options?: components["schemas"]["SizeRate"][];
+            /**
+             * Unit
+             * @default each
+             * @enum {string}
+             */
+            unit: "each" | "per_ft";
+        };
+        /**
+         * SeasonalItemCost
+         * @description Grossed cost of one seasonal-decor category in a computed christmas price.
+         */
+        SeasonalItemCost: {
+            /** Cost */
+            cost: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "each" | "per_ft";
+        };
+        /**
          * SegmentContactsResponse
          * @description Schema for segment contacts resolution.
          */
@@ -21107,7 +21164,7 @@ export interface components {
         };
         /**
          * SizeRate
-         * @description A size/wrap option (e.g. a tree size) with its own net install price.
+         * @description A size/variant option (e.g. a tree size) with its own net install price.
          */
         SizeRate: {
             /** Key */
@@ -22586,7 +22643,8 @@ export interface components {
         };
         /**
          * WizardCategoryCount
-         * @description A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty).
+         * @description A selected decor option: ``key`` -> value (quantity for ``each`` items,
+         *     linear feet for ``per_ft`` items like garland).
          */
         WizardCategoryCount: {
             /** Key */
@@ -22613,11 +22671,17 @@ export interface components {
         };
         /**
          * WizardChristmasSelection
-         * @description Seasonal Christmas selection: roofline + decor counts + takedown/storage.
+         * @description Seasonal Christmas selection: roofline + decor items + takedown/storage.
+         *
+         *     ``items`` maps a decor category key ("trees", "garland", …) to the selected
+         *     options for that category, matching the standardized ``ChristmasConfig.items``
+         *     catalog so any add-on is data, not a new field.
          */
         WizardChristmasSelection: {
-            /** Bushes */
-            bushes?: components["schemas"]["WizardCategoryCount"][];
+            /** Items */
+            items?: {
+                [key: string]: components["schemas"]["WizardCategoryCount"][];
+            };
             /**
              * Roofline Feet
              * @default 0
@@ -22633,10 +22697,6 @@ export interface components {
              * @default false
              */
             takedown: boolean;
-            /** Trees */
-            trees?: components["schemas"]["WizardCategoryCount"][];
-            /** Wreaths */
-            wreaths?: components["schemas"]["WizardCategoryCount"][];
         };
         /**
          * WizardClient

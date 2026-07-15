@@ -17,6 +17,8 @@ Two boundaries live here:
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pricing import SeasonalItem, SeasonalItemCost
+
 # --------------------------------------------------------------------------- #
 # Rep estimate (authenticated)
 # --------------------------------------------------------------------------- #
@@ -43,6 +45,10 @@ class LinearFeetEstimateRequest(BaseModel):
     storage: bool = False  # christmas off-season storage
     per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL permanent rate
     christmas_per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL seasonal rate
+    # Seasonal decor selection: category key -> {option key -> value}. Value is a
+    # count for ``each`` items (trees/bushes/wreaths) and linear feet for
+    # ``per_ft`` items (garland). Empty => roofline-only seasonal pricing.
+    christmas_items: dict[str, dict[str, float]] = Field(default_factory=dict)
 
 
 class PermanentEstimate(BaseModel):
@@ -54,11 +60,16 @@ class PermanentEstimate(BaseModel):
 
 
 class ChristmasEstimate(BaseModel):
-    """Seasonal-lighting side of the estimate (rep view — includes per_ft)."""
+    """Seasonal-lighting side of the estimate (rep view — includes per_ft).
+
+    ``items`` is the priced decor breakdown (one entry per selected category) so
+    the rep can see what makes up the seasonal total.
+    """
 
     enabled: bool
     total: float
     per_ft: float
+    items: list[SeasonalItemCost] = Field(default_factory=list)
 
 
 class LinearFeetEstimateResult(BaseModel):
@@ -79,6 +90,9 @@ class LinearFeetEstimateResult(BaseModel):
     multi_year_savings: float
     permanent_perks: list[str] = Field(default_factory=list)
     christmas_perks: list[str] = Field(default_factory=list)
+    # The workspace's seasonal decor catalog (feet-free, safe) so the rep tool
+    # can render add-on controls without a second request.
+    christmas_catalog: list[SeasonalItem] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #

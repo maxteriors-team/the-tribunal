@@ -53,6 +53,17 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
                 "christmas": {
                     "enabled": True,
                     "roofline_per_ft": 6,
+                    # Distinctive garland rate so a leak is string-searchable.
+                    "items": [
+                        {
+                            "key": "garland",
+                            "label": "Garland",
+                            "unit": "per_ft",
+                            "options": [
+                                {"key": "standard", "name": "Garland", "price": 13},
+                            ],
+                        },
+                    ],
                     "takedown_enabled": True,
                     "takedown_rate": 0.25,
                     "storage_price": 0,
@@ -168,6 +179,31 @@ async def test_internal_christmas_per_ft_override_recomputes_public_total_withou
         dumped = public.model_dump()
         assert "per_ft" not in dumped
         assert "christmas_per_ft_override" not in dumped
+
+
+async def test_seasonal_decor_recomputes_public_total_without_leaking_rate() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        # Homeowner selects 40 ft of garland ($13/ft internal rate).
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(feet=100, christmas_items={"garland": {"standard": 40}}),
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # Seasonal total = roofline 100*6=600 + garland 40*13=520 = 1120.
+        assert public.christmas.total == 1120
+
+        # The client payload shows totals only: neither the per-foot garland rate
+        # (13) nor the selected feet (40) nor any per_ft field may appear.
+        dumped = public.model_dump()
+        assert "per_ft" not in dumped
+        assert "christmas_items" not in dumped
+        raw_json = public.model_dump_json()
+        assert "13" not in raw_json  # the internal $/ft rate must not leak
+        assert "40" not in raw_json  # the selected garland feet must not leak
 
 
 async def test_unknown_comparison_token_404() -> None:

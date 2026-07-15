@@ -221,9 +221,10 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         christmas_pricing = pp.price_christmas(
             config,
             roofline_feet=payload.christmas.roofline_feet,
-            trees=_counts(payload.christmas.trees),
-            bushes=_counts(payload.christmas.bushes),
-            wreaths=_counts(payload.christmas.wreaths),
+            items={
+                key: _counts(rows)
+                for key, rows in payload.christmas.items.items()
+            },
             takedown=payload.christmas.takedown,
             storage=payload.christmas.storage,
         )

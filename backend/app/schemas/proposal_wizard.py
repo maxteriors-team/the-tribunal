@@ -72,19 +72,23 @@ class WizardPermanentSelection(BaseModel):
 
 
 class WizardCategoryCount(BaseModel):
-    """A size-keyed count for Christmas trees/bushes/wreaths (``key`` -> qty)."""
+    """A selected decor option: ``key`` -> value (quantity for ``each`` items,
+    linear feet for ``per_ft`` items like garland)."""
 
     key: str = Field(min_length=1, max_length=60)
     quantity: float = Field(default=0, ge=0)
 
 
 class WizardChristmasSelection(BaseModel):
-    """Seasonal Christmas selection: roofline + decor counts + takedown/storage."""
+    """Seasonal Christmas selection: roofline + decor items + takedown/storage.
+
+    ``items`` maps a decor category key ("trees", "garland", …) to the selected
+    options for that category, matching the standardized ``ChristmasConfig.items``
+    catalog so any add-on is data, not a new field.
+    """
 
     roofline_feet: float = Field(default=0, ge=0)
-    trees: list[WizardCategoryCount] = Field(default_factory=list)
-    bushes: list[WizardCategoryCount] = Field(default_factory=list)
-    wreaths: list[WizardCategoryCount] = Field(default_factory=list)
+    items: dict[str, list[WizardCategoryCount]] = Field(default_factory=dict)
     takedown: bool = False
     storage: bool = False
 
