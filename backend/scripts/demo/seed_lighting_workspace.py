@@ -452,6 +452,70 @@ PRICING: dict = {
         "storage_price": 0,
         "minimum": 0,
         "label": "Christmas Lighting",
+        # Seasonal service tiers (Good/Better/Best). One roofline+decor
+        # measurement prices all three; coverage widens Essential → Middle →
+        # Premier so totals stay monotonic. item_keys reference the decor
+        # categories above; includes_roofline gates the roofline_per_ft run.
+        "packages_enabled": True,
+        "package_order": ["essential", "middle", "premier"],
+        "packages": [
+            {
+                "key": "essential",
+                "label": "Essential — Trees & Bushes",
+                "name": "The Essential",
+                "marker": "\u25cf",
+                "card_tier": "Good",
+                "experience": (
+                    "A festive first impression. Your trees and bushes wrapped "
+                    "and glowing — a clean, cheerful look without the roofline."
+                ),
+                "points": [
+                    "Trees and bushes professionally wrapped",
+                    "Warm, welcoming curb appeal",
+                    "Lowest-cost way to get a holiday look",
+                ],
+                "includes_roofline": False,
+                "item_keys": ["trees", "bushes"],
+            },
+            {
+                "key": "middle",
+                "label": "Middle — Roofline + Trees & Bushes",
+                "name": "The Classic",
+                "marker": "\u25c6",
+                "card_tier": "Better",
+                "experience": (
+                    "The complete outline. A crisp roofline plus wrapped trees "
+                    "and bushes — the look most homes are known for."
+                ),
+                "points": [
+                    "Full roofline outlined in seasonal lighting",
+                    "Trees and bushes wrapped to match",
+                    "The classic, balanced holiday display",
+                ],
+                "popular": True,
+                "includes_roofline": True,
+                "item_keys": ["trees", "bushes"],
+            },
+            {
+                "key": "premier",
+                "label": "Premier — The Full Display",
+                "name": "The Premier",
+                "marker": "\u2605",
+                "card_tier": "Best",
+                "experience": (
+                    "The whole property, transformed. Roofline, trees, bushes, "
+                    "wreaths, and garland — nothing left dark."
+                ),
+                "points": [
+                    "Everything in Middle, fully dressed",
+                    "Wreaths and garland on entries and railings",
+                    "The magazine-cover holiday home",
+                ],
+                "value_tag": "\u2605 The Full Display",
+                "includes_roofline": True,
+                "item_keys": ["trees", "bushes", "wreaths", "garland"],
+            },
+        ],
     },
 }
 

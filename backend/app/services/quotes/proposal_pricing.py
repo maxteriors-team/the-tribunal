@@ -29,6 +29,8 @@ from app.schemas.pricing import (
     CarePlanPricing,
     CarePlanTier,
     CategoryLine,
+    ChristmasPackage,
+    ChristmasPackagePricing,
     ChristmasPricing,
     PermanentPricing,
     PricingSettings,
@@ -585,3 +587,82 @@ def price_christmas(
         min_applied=raw_total < gross_minimum,
         lines=lines,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Christmas packages (Good/Better/Best seasonal service tiers)
+# --------------------------------------------------------------------------- #
+def price_christmas_package(
+    config: PricingSettings,
+    package: ChristmasPackage,
+    *,
+    roofline_feet: float = 0,
+    items: Mapping[str, Mapping[str, float]] | None = None,
+    takedown: bool = False,
+    storage: bool = False,
+) -> ChristmasPricing:
+    """Price one seasonal package: the shared engine restricted to its coverage.
+
+    Only the decor categories in ``package.item_keys`` are priced, and the
+    roofline run is included only when ``package.includes_roofline``. Everything
+    else — gross-up, takedown (a fraction of *this package's* install subtotal),
+    storage, and the job minimum — is delegated to :func:`price_christmas`, so a
+    package is simply the à la carte price of its covered subset. No new math.
+    """
+    allowed = set(package.item_keys)
+    selections = items or {}
+    scoped = {k: v for k, v in selections.items() if k in allowed}
+    feet = roofline_feet if package.includes_roofline else 0
+    return price_christmas(
+        config,
+        roofline_feet=feet,
+        items=scoped,
+        takedown=takedown,
+        storage=storage,
+    )
+
+
+def price_christmas_packages(
+    config: PricingSettings,
+    *,
+    roofline_feet: float = 0,
+    items: Mapping[str, Mapping[str, float]] | None = None,
+    takedown: bool = False,
+    storage: bool = False,
+) -> list[ChristmasPackagePricing]:
+    """Price every configured seasonal package in ``package_order`` (low→high).
+
+    One roofline+decor measurement prices all packages; each card carries its own
+    :class:`ChristmasPricing` for the covered subset. Falls back to the declared
+    ``packages`` order when ``package_order`` is empty or partial.
+    """
+    c = config.christmas
+    by_key = {p.key: p for p in c.packages}
+    ordered_keys = [k for k in c.package_order if k in by_key]
+    ordered_keys += [p.key for p in c.packages if p.key not in ordered_keys]
+    out: list[ChristmasPackagePricing] = []
+    for key in ordered_keys:
+        package = by_key[key]
+        pricing = price_christmas_package(
+            config,
+            package,
+            roofline_feet=roofline_feet,
+            items=items,
+            takedown=takedown,
+            storage=storage,
+        )
+        out.append(
+            ChristmasPackagePricing(
+                key=package.key,
+                label=package.label,
+                name=package.name,
+                marker=package.marker,
+                experience=package.experience,
+                points=list(package.points),
+                value_tag=package.value_tag,
+                popular=package.popular,
+                includes_roofline=package.includes_roofline,
+                pricing=pricing,
+            )
+        )
+    return out

@@ -319,6 +319,102 @@ def _default_christmas_perks() -> list[str]:
     ]
 
 
+class ChristmasPackage(BaseModel):
+    """A seasonal-Christmas service tier (Good/Better/Best for holiday decor).
+
+    The seasonal analog of :class:`TierConfig`: a named, presentable package that
+    *includes a subset of the workspace's decor categories* plus (optionally) the
+    roofline. One roofline+decor measurement prices every package by restricting
+    the shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the
+    same engine, gross-up, takedown, and job-minimum apply to each package subset
+    (no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`
+    keys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the
+    roofline is not itself a decor item.
+    """
+
+    key: str = Field(min_length=1, max_length=60)  # "essential" | "middle" | "premier"
+    label: str
+    name: str | None = None
+    marker: str | None = None
+    card_tier: str | None = None
+    experience: str | None = None
+    warranty: str | None = None
+    points: list[str] = Field(default_factory=list)
+    value_tag: str | None = None
+    popular: bool = False
+    includes_roofline: bool = False
+    item_keys: list[str] = Field(default_factory=list)  # SeasonalItem keys covered
+
+
+def _default_christmas_packages() -> list[ChristmasPackage]:
+    """Placeholder Good/Better/Best seasonal packages (operator tunes coverage).
+
+    Coverage widens Essential → Middle → Premier so totals stay monotonic:
+      * Essential — minimal decor: trees + bushes, no roofline.
+      * Middle    — roofline plus trees + bushes.
+      * Premier   — roofline plus trees, bushes, wreaths, and garland.
+    Keys reference the default decor categories in ``_default_seasonal_items``.
+    """
+    return [
+        ChristmasPackage(
+            key="essential",
+            label="Essential — Trees & Bushes",
+            name="The Essential",
+            marker="\u25cf",  # ●
+            card_tier="Good",
+            experience=(
+                "A festive first impression. Your trees and bushes wrapped and "
+                "glowing — a clean, cheerful look without the roofline."
+            ),
+            points=[
+                "Trees and bushes professionally wrapped",
+                "Warm, welcoming curb appeal",
+                "Lowest-cost way to get a holiday look",
+            ],
+            includes_roofline=False,
+            item_keys=["trees", "bushes"],
+        ),
+        ChristmasPackage(
+            key="middle",
+            label="Middle — Roofline + Trees & Bushes",
+            name="The Classic",
+            marker="\u25c6",  # ◆
+            card_tier="Better",
+            experience=(
+                "The complete outline. A crisp roofline plus wrapped trees and "
+                "bushes — the look most homes are known for."
+            ),
+            points=[
+                "Full roofline outlined in seasonal lighting",
+                "Trees and bushes wrapped to match",
+                "The classic, balanced holiday display",
+            ],
+            popular=True,
+            includes_roofline=True,
+            item_keys=["trees", "bushes"],
+        ),
+        ChristmasPackage(
+            key="premier",
+            label="Premier — The Full Display",
+            name="The Premier",
+            marker="\u2605",  # ★
+            card_tier="Best",
+            experience=(
+                "The whole property, transformed. Roofline, trees, bushes, "
+                "wreaths, and garland — nothing left dark."
+            ),
+            points=[
+                "Everything in Middle, fully dressed",
+                "Wreaths and garland on entries and railings",
+                "The magazine-cover holiday home",
+            ],
+            value_tag="\u2605 The Full Display",
+            includes_roofline=True,
+            item_keys=["trees", "bushes", "wreaths", "garland"],
+        ),
+    ]
+
+
 class ChristmasConfig(BaseModel):
     """Seasonal Christmas lighting: roofline + generic decor items + takedown.
 
@@ -339,6 +435,13 @@ class ChristmasConfig(BaseModel):
     label: str = "Christmas Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
     perks: list[str] = Field(default_factory=_default_christmas_perks)
+    # Seasonal service tiers (Good/Better/Best). When ``packages_enabled`` the
+    # wizard/estimator sell Christmas as packages (a subset of ``items`` +
+    # roofline priced by the shared engine); when False the current à la carte
+    # decor flow is unchanged. ``package_order`` lists package keys low→high.
+    packages_enabled: bool = False
+    package_order: list[str] = Field(default_factory=list)
+    packages: list[ChristmasPackage] = Field(default_factory=_default_christmas_packages)
 
     @model_validator(mode="before")
     @classmethod
@@ -511,6 +614,27 @@ class ChristmasPricing(BaseModel):
     total: float
     min_applied: bool
     lines: list[CategoryLine] = Field(default_factory=list)
+
+
+class ChristmasPackagePricing(BaseModel):
+    """One priced seasonal-Christmas package (a tier card + its computed price).
+
+    ``pricing`` is the standard :class:`ChristmasPricing` breakdown for this
+    package's included categories (+ roofline when ``includes_roofline``), so the
+    display lines and totals reuse the same engine as the à la carte flow. The
+    copy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.
+    """
+
+    key: str
+    label: str
+    name: str | None = None
+    marker: str | None = None
+    experience: str | None = None
+    points: list[str] = Field(default_factory=list)
+    value_tag: str | None = None
+    popular: bool = False
+    includes_roofline: bool = False
+    pricing: ChristmasPricing
 
 
 class PricingSettingsUpdate(BaseModel):
