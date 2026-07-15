@@ -274,7 +274,7 @@ async def test_email_delivery_forwards_resend_idempotency_key() -> None:
     assert email_provider.calls == [
         (
             {
-                "from": "AI CRM <noreply@example.com>",
+                "from": "Maxteriors <noreply@example.com>",
                 "to": ["owner@example.com"],
                 "subject": "Booked",
                 "html": "<p>Booked</p>",
