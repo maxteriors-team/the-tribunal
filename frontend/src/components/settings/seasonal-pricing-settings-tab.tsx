@@ -107,6 +107,13 @@ export function SeasonalPricingSettingsTab() {
     queryKey: queryKeys.salesWizard.pricing(workspaceId ?? ""),
     queryFn: () => salesWizardApi.getPricing(workspaceId!),
     enabled: !!workspaceId,
+    // The editable draft re-seeds whenever the fetched config's identity changes
+    // (initial load + post-save). Keep the query stable so a background refetch
+    // (window refocus, remount) can't return a fresh object and silently wipe an
+    // operator's unsaved edits — this editor is the only writer and updates the
+    // cache directly on save.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   const [rooflineRate, setRooflineRate] = useState("");
