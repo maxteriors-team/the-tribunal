@@ -2,8 +2,9 @@
 
 /**
  * Screen 2 — the client-facing presentation, rendered entirely from the
- * server-computed ProposalDocument (cash/check-led package cards, financing
- * with a 0% APR term picker, Care Plan + bistro upsells, night preview).
+ * server-computed ProposalDocument (financed all-inclusive package cards,
+ * financing with a 0% APR term picker, Care Plan + bistro upsells, night
+ * preview). Cash/check figures stay internal to the builder.
  */
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -49,10 +50,9 @@ export function PresentationScreen({
   const lowMonthly = monthlyAt(term);
   const terms = financing?.terms ?? [];
 
-  const cashEnabled = wizard.pricing?.cash_discount?.enabled ?? true;
-  const priceLabel = cashEnabled
-    ? "Cash/check \u00b7 Installed all-inclusive"
-    : "Installed \u00b7 All-inclusive";
+  // Presentation mirrors the client proposal: financed (all-inclusive) price
+  // only — cash/check figures stay internal to the builder.
+  const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc?.care_plan ?? null;
   const careSelected =
@@ -212,7 +212,9 @@ export function PresentationScreen({
           {doc.tiers.map((tier) => {
             const cfg = wizard.tierConfig(tier.key);
             const hasValue = tier.pricing.base > 0;
-            const lead = hasValue ? fmt(tier.pricing.cash_total) : "Custom Quote";
+            const lead = hasValue
+              ? fmt(tier.pricing.financed_total)
+              : "Custom Quote";
             const monthly = tier.pricing.monthly_payment;
             return (
               <div className={`pkg-card ${tier.key}`} key={tier.key}>
@@ -328,7 +330,7 @@ export function PresentationScreen({
                   Bistro Lighting
                 </div>
                 <div className="pcare-price">
-                  {fmt(bistro.total)} <span>cash/check one-time</span>
+                  {fmt(bistro.total)} <span>one-time</span>
                 </div>
                 <div className="pcare-points">
                   {[
@@ -528,9 +530,8 @@ export function PresentationScreen({
               </div>
             ) : null}
             <div className="fin-body">
-              Cash/check prices are shown first above. If monthly payments fit
-              better, financing is available on the full all-inclusive project
-              total through {financing.provider}.
+              If monthly payments fit better, financing is available on the full
+              all-inclusive project total through {financing.provider}.
             </div>
             <div className="fin-points">
               {(financing.points ?? []).map((point, i) => (

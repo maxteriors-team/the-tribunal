@@ -82,17 +82,9 @@ export function ClientProposalView({
   const terms = financing?.terms ?? [];
   const showTermToggle = hasTiers && lowMonthly > 0 && terms.length > 1;
 
-  const cashEnabled =
-    doc.tiers.some(
-      (t) =>
-        t.pricing.base > 0 && t.pricing.cash_total < t.pricing.financed_total,
-    ) ||
-    doc.category_sections.some((s) => s.cash_total < s.financed_total) ||
-    (doc.grand_cash_total > 0 &&
-      doc.grand_cash_total < doc.grand_financed_total);
-  const priceLabel = cashEnabled
-    ? "Cash/check \u00b7 Installed all-inclusive"
-    : "Installed \u00b7 All-inclusive";
+  // The client proposal shows the financed (all-inclusive) price only — cash /
+  // check figures are internal and never surface here.
+  const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc.care_plan;
   const careSelected = carePlan
@@ -217,7 +209,7 @@ export function ClientProposalView({
             {doc.tiers.map((tier) => {
               const hasValue = tier.pricing.base > 0;
               const lead = hasValue
-                ? fmt(tier.pricing.cash_total)
+                ? fmt(tier.pricing.financed_total)
                 : "Custom Quote";
               const isSelected = hasValue && tier.key === doc.selected_tier;
               return (
@@ -343,7 +335,7 @@ export function ClientProposalView({
                 </div>
                 <div className="pcare-price">
                   {fmt(bistro.total)}{" "}
-                  <span>{cashEnabled ? "cash/check one-time" : "one-time"}</span>
+                  <span>one-time</span>
                 </div>
                 <div className="pcare-points">
                   {[
@@ -390,10 +382,8 @@ export function ClientProposalView({
                     <div className="pcare-eyebrow">Your Quote</div>
                     <div className="pcare-name">{sec.label}</div>
                     <div className="pcare-price">
-                      {fmt(cashEnabled ? sec.cash_total : sec.financed_total)}{" "}
-                      <span>
-                        {cashEnabled ? "cash/check one-time" : "one-time"}
-                      </span>
+                      {fmt(sec.financed_total)}{" "}
+                      <span>one-time</span>
                     </div>
                     <div className="pcare-points">
                       {(sec.lines ?? []).map((line, i) => (
@@ -432,21 +422,9 @@ export function ClientProposalView({
                 <div className="grand-panel-title">All-In Project Total</div>
                 <div className="grand-rows">
                   <div className="grand-row lead">
-                    <span>{cashEnabled ? "Cash / Check" : "Total"}</span>
-                    <strong>
-                      {fmt(
-                        cashEnabled
-                          ? doc.grand_cash_total
-                          : doc.grand_financed_total,
-                      )}
-                    </strong>
+                    <span>Total</span>
+                    <strong>{fmt(doc.grand_financed_total)}</strong>
                   </div>
-                  {cashEnabled ? (
-                    <div className="grand-row">
-                      <span>Financed total</span>
-                      <strong>{fmt(doc.grand_financed_total)}</strong>
-                    </div>
-                  ) : null}
                   {doc.grand_monthly_payment > 0 ? (
                     <div className="grand-row muted">
                       <span>As low as</span>
@@ -626,9 +604,7 @@ export function ClientProposalView({
               </div>
             ) : null}
             <div className="fin-body">
-              {cashEnabled
-                ? `Cash/check prices are shown first above. If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`
-                : `If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`}
+              {`If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`}
             </div>
             <div className="fin-points">
               {financing.points.map((point, i) => (
