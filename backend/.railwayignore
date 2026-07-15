@@ -1,0 +1,13 @@
+# Keep `railway up` uploads to source only. The Railway CLI does not reliably
+# honor .gitignore, so without this it tars the ~488M local .venv (plus caches
+# and DB backups) and the upload fails mid-stream. The builder recreates the
+# environment from pyproject/uv.lock, so none of this is needed remotely.
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+backups/
+.git/
