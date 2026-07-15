@@ -5,9 +5,10 @@ per-workspace data model:
 
   * ``workspace.settings["pricing"]`` — tax, Wisetack financing, cash/check
     pricing, commission, Good/Better/Best tiers, Care Plan, savings, bistro.
-  * ``catalog_items`` — the 20-fixture price book, keyed by the wizard's stable
-    fixture ids (stored as ``sku``), each carrying its ``transformer`` attribute
-    and internal SKU bill-of-materials for the fulfillment sheet.
+  * ``catalog_items`` — the price book: the 20 fixtures (keyed by the wizard's
+    stable fixture ids, stored as ``sku``, each carrying its ``transformer``
+    attribute and internal SKU bill-of-materials) plus the two per-linear-foot
+    bistro string-lighting services from the wizard's ``CONFIG.bistro``.
 
 Idempotent: re-running updates catalog items in place (matched by sku) and
 overwrites the ``pricing`` settings block. Nothing else in the workspace is
@@ -169,6 +170,53 @@ FIXTURES: dict[str, dict] = {
         "name": "Pathway Light",
         "price": 376,
         "parts": [("59205842", "TM Path Light Body", 1)],
+    },
+}
+
+# ─── Bistro / patio string-lighting price-book items ─────────────────────────
+# The wizard's CONFIG.bistro is priced per linear foot (see PRICING["bistro"]),
+# not as a flat fixture — so these live outside FIXTURES. Each is seeded as a
+# ``service`` price-book entry whose ``unit_price`` is the representative Medium
+# install rate PER LINEAR FOOT, with the full tier/hardware/minimum detail kept
+# in ``attributes`` so nothing from the index is lost. ``per_linear_foot`` flags
+# the rate as per-ft for the line-item picker.
+BISTRO_ITEMS: dict[str, dict] = {
+    "bistro-color": {
+        "name": "Color Changing Bistro Lights",
+        "description": (
+            "Minleon RGBW+2 · color-changing string lights for patios, pergolas "
+            "& entertaining areas. Priced per linear foot (Medium install); "
+            "$577 hardware and a $2,307 job minimum apply."
+        ),
+        "unit_price": 18.11,
+        "attributes": {
+            "per_linear_foot": True,
+            "hardware": 577,
+            "minimum": 2307,
+            "per_ft_by_tier": {"easy": 14.86, "medium": 18.11, "complex": 28.22},
+            "strand_lengths": [50, 40, 20, 10, 4, 2],
+        },
+    },
+    "bistro-classic": {
+        "name": "Classic Bistro Lights",
+        "description": (
+            "S14 vintage warm-white LED · remote-controlled dimmable string "
+            "lights. Priced per linear foot (Medium install); $35 hardware, a "
+            "200 ft minimum footage and a $2,307 job minimum apply."
+        ),
+        "unit_price": 15.50,
+        "attributes": {
+            "per_linear_foot": True,
+            "hardware": 35,
+            "minimum": 2307,
+            "per_ft_by_tier": {"easy": 11.63, "medium": 15.50, "complex": 20.68},
+            "min_footage": 200,
+            "bulb_spacing_ft": 2,
+            "packaging": {
+                "pack": {"size": 25, "sku": "514P"},
+                "case": {"size": 250, "sku": "514C"},
+            },
+        },
     },
 }
 
@@ -556,7 +604,7 @@ async def seed(workspace_ref: str) -> None:
                 await db.execute(
                     select(CatalogItem).where(
                         CatalogItem.workspace_id == workspace.id,
-                        CatalogItem.sku.in_(FIXTURES.keys()),
+                        CatalogItem.sku.in_({*FIXTURES.keys(), *BISTRO_ITEMS.keys()}),
                     )
                 )
             ).scalars()
@@ -590,6 +638,33 @@ async def seed(workspace_ref: str) -> None:
                 item.is_active = True
                 item.attributes = attributes
                 item.components = components
+                updated += 1
+
+        # ── Bistro string-lighting upsert (per-linear-foot service items) ──
+        for key, bx in BISTRO_ITEMS.items():
+            item = existing.get(key)
+            if item is None:
+                db.add(
+                    CatalogItem(
+                        workspace_id=workspace.id,
+                        name=bx["name"],
+                        description=bx["description"],
+                        sku=key,
+                        kind="service",
+                        unit_price=bx["unit_price"],
+                        taxable=True,
+                        is_active=True,
+                        attributes=bx["attributes"],
+                    )
+                )
+                created += 1
+            else:
+                item.name = bx["name"]
+                item.description = bx["description"]
+                item.kind = "service"
+                item.unit_price = bx["unit_price"]
+                item.is_active = True
+                item.attributes = bx["attributes"]
                 updated += 1
 
         # ── Pricing settings ──
