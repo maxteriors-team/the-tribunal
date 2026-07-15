@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     # Resend
     resend_api_key: str = ""
     resend_from_email: str = "noreply@example.com"
-    resend_from_name: str = "AI CRM"
+    resend_from_name: str = "Maxteriors"
     resend_webhook_secret: str = ""
 
     # Expo Push Notifications

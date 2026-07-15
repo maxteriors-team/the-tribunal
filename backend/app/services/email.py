@@ -36,7 +36,7 @@ class _ResendModule(Protocol):
 
 
 def _from_address() -> str:
-    name = settings.resend_from_name or "AI CRM"
+    name = settings.resend_from_name or "Maxteriors"
     email = settings.resend_from_email or "noreply@example.com"
     return f"{name} <{email}>"
 
@@ -139,7 +139,7 @@ async def send_event_notification_email(
     {detail_rows}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by The Tribunal
+        Sent by Maxteriors
     </p>
 </body>
 </html>"""
@@ -319,7 +319,7 @@ async def send_invitation_email(
     </p>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent from AI CRM
+        Sent from Maxteriors
     </p>
 </body>
 </html>"""
@@ -635,7 +635,7 @@ async def send_invoice_email(
     {notes_block}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via The Tribunal
+        Sent by {html_escape(workspace_name)} via Maxteriors
     </p>
 </body>
 </html>"""
@@ -739,7 +739,7 @@ async def send_quote_email(
     {notes_block}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via The Tribunal
+        Sent by {html_escape(workspace_name)} via Maxteriors
     </p>
 </body>
 </html>"""
@@ -812,7 +812,7 @@ async def send_estimate_email(
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via The Tribunal
+        Sent by {html_escape(workspace_name)} via Maxteriors
     </p>
 </body>
 </html>"""
