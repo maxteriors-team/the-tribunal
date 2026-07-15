@@ -300,6 +300,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/onboarding/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Campaign
+         * @description Upload a CSV and launch a lead-reactivation campaign.
+         */
+        post: operations["create_campaign_api_v1_onboarding_campaigns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/onboarding/onboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Onboard
+         * @description Complete onboarding in a single call.
+         */
+        post: operations["onboard_api_v1_onboarding_onboard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/onboarding/parse-calcom-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Parse Calcom Url
+         * @description Parse a Cal.com booking URL and resolve the event_type_id.
+         */
+        post: operations["parse_calcom_url_api_v1_onboarding_parse_calcom_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/onboarding/verify-calcom": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Calcom
+         * @description Verify a Cal.com API key by calling the /me endpoint.
+         */
+        get: operations["verify_calcom_api_v1_onboarding_verify_calcom_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/compare/{token}": {
         parameters: {
             query?: never;
@@ -708,6 +788,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/quotes/{token}/deposit-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Deposit Status
+         * @description Reconcile a proposal's deposit against Stripe on return from checkout.
+         *
+         *     A webhook backstop: verifies the stored Checkout Session and marks the
+         *     deposit paid if Stripe confirms it, so a delayed/absent webhook never leaves
+         *     a paid deposit showing unpaid. Idempotent.
+         */
+        post: operations["reconcile_deposit_status_api_v1_p_quotes__token__deposit_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/reviews/{token}": {
         parameters: {
             query?: never;
@@ -786,86 +890,6 @@ export interface paths {
          * @description Create an authenticated OpenAI Realtime client secret for voice testing.
          */
         post: operations["create_realtime_token_api_v1_realtime_token__agent_id__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/campaigns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Realtor Campaign
-         * @description Upload a CSV and launch a realtor lead-reactivation campaign.
-         */
-        post: operations["create_realtor_campaign_api_v1_realtor_campaigns_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/onboard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Realtor Onboard
-         * @description Complete realtor onboarding in a single call.
-         */
-        post: operations["realtor_onboard_api_v1_realtor_onboard_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/parse-calcom-url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Parse Calcom Url
-         * @description Parse a Cal.com booking URL and resolve the event_type_id.
-         */
-        post: operations["parse_calcom_url_api_v1_realtor_parse_calcom_url_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/realtor/verify-calcom": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Verify Calcom
-         * @description Verify a Cal.com API key by calling the /me endpoint.
-         */
-        get: operations["verify_calcom_api_v1_realtor_verify_calcom_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3054,6 +3078,26 @@ export interface paths {
          *     This is useful for batch processing leads that need qualification.
          */
         post: operations["batch_qualify_contacts_api_v1_workspaces__workspace_id__contacts_qualify_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact Stats
+         * @description Return aggregate contact metrics for the Contacts page stat cards.
+         */
+        get: operations["get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6674,26 +6718,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/realtor/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Realtor Stats
-         * @description Get realtor dashboard statistics for a workspace.
-         */
-        get: operations["get_realtor_stats_api_v1_workspaces__workspace_id__realtor_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/recurring-jobs": {
         parameters: {
             query?: never;
@@ -9948,8 +9972,8 @@ export interface components {
              */
             per_ft: number;
         };
-        /** Body_create_realtor_campaign_api_v1_realtor_campaigns_post */
-        Body_create_realtor_campaign_api_v1_realtor_campaigns_post: {
+        /** Body_create_campaign_api_v1_onboarding_campaigns_post */
+        Body_create_campaign_api_v1_onboarding_campaigns_post: {
             /** Campaign Name */
             campaign_name?: string | null;
             /** File */
@@ -12117,6 +12141,26 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * ContactStatsResponse
+         * @description Aggregate contact metrics for the Contacts page stat cards.
+         *
+         *     Windows are workspace-scoped and computed in UTC. ``*_change`` values are
+         *     returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
+         *     frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+         */
+        ContactStatsResponse: {
+            /** New Clients 30D */
+            new_clients_30d: number;
+            /** New Clients Change */
+            new_clients_change: string;
+            /** New Leads 30D */
+            new_leads_30d: number;
+            /** New Leads Change */
+            new_leads_change: string;
+            /** Total New Clients Ytd */
+            total_new_clients_ytd: number;
+        };
+        /**
          * ContactSummary
          * @description Minimal contact info for appointments.
          */
@@ -12800,6 +12844,33 @@ export interface components {
         DemoTextRequest: {
             /** Phone Number */
             phone_number: string;
+        };
+        /**
+         * DepositConfig
+         * @description Workspace default upfront deposit applied to new quotes.
+         *
+         *     When ``enabled`` a saved quote inherits this deposit unless the operator sets
+         *     one explicitly. ``mode`` picks how ``value`` is read: ``percentage`` (0-100
+         *     of the total) or ``fixed`` (a flat amount in major units). Disabled by
+         *     default so nothing changes for a workspace that never configures a deposit.
+         */
+        DepositConfig: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Mode
+             * @default percentage
+             * @enum {string}
+             */
+            mode: "percentage" | "fixed";
+            /**
+             * Value
+             * @default 50
+             */
+            value: number;
         };
         /**
          * DiscountType
@@ -14837,6 +14908,36 @@ export interface components {
             title?: string | null;
         };
         /**
+         * LaunchCampaignResponse
+         * @description Response from the onboarding CSV-to-campaign endpoint.
+         */
+        LaunchCampaignResponse: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** Campaign Name */
+            campaign_name: string;
+            /** Campaign Status */
+            campaign_status: string;
+            /** Contacts Failed */
+            contacts_failed: number;
+            /** Contacts Imported */
+            contacts_imported: number;
+            /** Contacts Skipped */
+            contacts_skipped: number;
+            /** Phone Number Used */
+            phone_number_used: string;
+            /** Started At */
+            started_at: string | null;
+        };
+        /**
          * LeadDiscoveryJobResponse
          * @description Response for a discovery job.
          */
@@ -16579,6 +16680,56 @@ export interface components {
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
         };
         /**
+         * OnboardRequest
+         * @description Request body for the onboarding endpoint.
+         */
+        OnboardRequest: {
+            /**
+             * Area Code
+             * @description Optional 3-digit US area code for phone number provisioning
+             */
+            area_code?: string | null;
+            /**
+             * Calcom Api Key
+             * @description Cal.com API key
+             */
+            calcom_api_key: string;
+            /**
+             * Calcom Event Type Id
+             * @description Cal.com event type ID
+             */
+            calcom_event_type_id: number;
+        };
+        /**
+         * OnboardResponse
+         * @description Response from the onboarding endpoint.
+         */
+        OnboardResponse: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Calcom Connected */
+            calcom_connected: boolean;
+            /** Message */
+            message: string;
+            /** Phone Number */
+            phone_number: string | null;
+            /** Phone Number Id */
+            phone_number_id: string | null;
+            /**
+             * Phone Provisioned
+             * @description True when an SMS-capable phone number was provisioned during onboarding. When false, the workspace cannot launch SMS/voice campaigns until a number is added.
+             */
+            phone_provisioned: boolean;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * OpenAIOAuthDevicePollRequest
          * @description Encrypted device-code polling token from the start response.
          */
@@ -18266,6 +18417,7 @@ export interface components {
              * @default 5
              */
             comparison_years: number;
+            deposit?: components["schemas"]["DepositConfig"];
             financing?: components["schemas"]["FinancingConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
             savings?: components["schemas"]["SavingsConfig"];
@@ -18291,6 +18443,7 @@ export interface components {
             commission?: components["schemas"]["CommissionConfig"] | null;
             /** Comparison Years */
             comparison_years?: number | null;
+            deposit?: components["schemas"]["DepositConfig"] | null;
             financing?: components["schemas"]["FinancingConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
             savings?: components["schemas"]["SavingsConfig"] | null;
@@ -18555,6 +18708,18 @@ export interface components {
             /** Category Sections */
             category_sections?: components["schemas"]["ProposalCategorySection"][];
             client?: components["schemas"]["WizardClient"] | null;
+            /**
+             * Deposit Amount
+             * @default 0
+             */
+            deposit_amount: number;
+            /** Deposit Mode */
+            deposit_mode?: string | null;
+            /**
+             * Deposit Value
+             * @default 0
+             */
+            deposit_value: number;
             financing?: components["schemas"]["ProposalFinancing"] | null;
             /** Fulfillment */
             fulfillment?: components["schemas"]["FulfillmentPart"][];
@@ -18786,6 +18951,7 @@ export interface components {
             client?: components["schemas"]["WizardClient"] | null;
             /** Contact Id */
             contact_id?: number | null;
+            deposit?: components["schemas"]["WizardDepositSelection"] | null;
             /** Mockups */
             mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
@@ -19121,6 +19287,11 @@ export interface components {
             deposit_paid: boolean;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
+            /**
+             * Deposit Required
+             * @default false
+             */
+            deposit_required: boolean;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -19167,8 +19338,18 @@ export interface components {
         /**
          * PublicProposalActionResult
          * @description Result of a client approve/decline on the public proposal page.
+         *
+         *     On approval, ``deposit_required``/``deposit_amount`` let the client page chain
+         *     straight into the Stripe deposit checkout when money is owed.
          */
         PublicProposalActionResult: {
+            /** Deposit Amount */
+            deposit_amount?: number | null;
+            /**
+             * Deposit Required
+             * @default false
+             */
+            deposit_required: boolean;
             /** Message */
             message: string;
             /** Status */
@@ -19223,6 +19404,18 @@ export interface components {
             currency: string;
             /** Url */
             url: string;
+        };
+        /**
+         * PublicProposalDepositStatus
+         * @description Reconciled deposit state after the client returns from Stripe checkout.
+         */
+        PublicProposalDepositStatus: {
+            /** Currency */
+            currency: string;
+            /** Deposit Amount */
+            deposit_amount?: number | null;
+            /** Deposit Paid */
+            deposit_paid: boolean;
         };
         /**
          * PublicProposalLineItem
@@ -19454,6 +19647,9 @@ export interface components {
         /**
          * QuoteConvertRequest
          * @description Choose what an approved quote converts into. Defaults to both.
+         *
+         *     An optional ``scheduled_start``/``scheduled_end`` window schedules the created
+         *     job on the calendar in one step; omit both to land the job unscheduled.
          */
         QuoteConvertRequest: {
             /**
@@ -19466,6 +19662,10 @@ export interface components {
              * @default true
              */
             create_job: boolean;
+            /** Scheduled End */
+            scheduled_end?: string | null;
+            /** Scheduled Start */
+            scheduled_start?: string | null;
         };
         /**
          * QuoteConvertResponse
@@ -19490,6 +19690,8 @@ export interface components {
              * @default USD
              */
             currency: string;
+            /** Deposit Amount Fixed */
+            deposit_amount_fixed?: number | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
             /**
@@ -19582,10 +19784,22 @@ export interface components {
             decline_reason?: string | null;
             /** Declined At */
             declined_at?: string | null;
+            /**
+             * Deposit Amount
+             * @description Effective deposit in major units (fixed wins, clamped to total).
+             */
+            readonly deposit_amount: number | null;
+            /** Deposit Amount Fixed */
+            deposit_amount_fixed?: number | null;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
+            /**
+             * Deposit Required
+             * @description True when a deposit is owed and not yet paid.
+             */
+            readonly deposit_required: boolean;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -19747,10 +19961,22 @@ export interface components {
             decline_reason?: string | null;
             /** Declined At */
             declined_at?: string | null;
+            /**
+             * Deposit Amount
+             * @description Effective deposit in major units (fixed wins, clamped to total).
+             */
+            readonly deposit_amount: number | null;
+            /** Deposit Amount Fixed */
+            deposit_amount_fixed?: number | null;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
+            /**
+             * Deposit Required
+             * @description True when a deposit is owed and not yet paid.
+             */
+            readonly deposit_required: boolean;
             /** Discount Amount */
             discount_amount: number;
             /** Expiry Date */
@@ -19810,6 +20036,8 @@ export interface components {
             contact_id?: number | null;
             /** Currency */
             currency?: string | null;
+            /** Deposit Amount Fixed */
+            deposit_amount_fixed?: number | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
             /** Discount Amount */
@@ -19876,100 +20104,6 @@ export interface components {
             tools: {
                 [key: string]: unknown;
             }[];
-        };
-        /**
-         * RealtorCampaignResponse
-         * @description Response from the realtor CSV-to-campaign endpoint.
-         */
-        RealtorCampaignResponse: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
-            /**
-             * Campaign Id
-             * Format: uuid
-             */
-            campaign_id: string;
-            /** Campaign Name */
-            campaign_name: string;
-            /** Campaign Status */
-            campaign_status: string;
-            /** Contacts Failed */
-            contacts_failed: number;
-            /** Contacts Imported */
-            contacts_imported: number;
-            /** Contacts Skipped */
-            contacts_skipped: number;
-            /** Phone Number Used */
-            phone_number_used: string;
-            /** Started At */
-            started_at: string | null;
-        };
-        /**
-         * RealtorOnboardRequest
-         * @description Request body for the realtor onboarding endpoint.
-         */
-        RealtorOnboardRequest: {
-            /**
-             * Area Code
-             * @description Optional 3-digit US area code for phone number provisioning
-             */
-            area_code?: string | null;
-            /**
-             * Calcom Api Key
-             * @description Cal.com API key
-             */
-            calcom_api_key: string;
-            /**
-             * Calcom Event Type Id
-             * @description Cal.com event type ID
-             */
-            calcom_event_type_id: number;
-        };
-        /**
-         * RealtorOnboardResponse
-         * @description Response from the realtor onboarding endpoint.
-         */
-        RealtorOnboardResponse: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
-            /** Calcom Connected */
-            calcom_connected: boolean;
-            /** Message */
-            message: string;
-            /** Phone Number */
-            phone_number: string | null;
-            /** Phone Number Id */
-            phone_number_id: string | null;
-            /**
-             * Phone Provisioned
-             * @description True when an SMS-capable phone number was provisioned during onboarding. When false, the workspace cannot launch SMS/voice campaigns until a number is added.
-             */
-            phone_provisioned: boolean;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
-         * RealtorStatsResponse
-         * @description Realtor dashboard stats.
-         */
-        RealtorStatsResponse: {
-            /** Appointments Booked */
-            appointments_booked: number;
-            /** Leads Uploaded */
-            leads_uploaded: number;
-            /** Replies Received */
-            replies_received: number;
-            /** Texts Sent */
-            texts_sent: number;
         };
         /**
          * RecentActivity
@@ -22723,6 +22857,27 @@ export interface components {
             zip?: string | null;
         };
         /**
+         * WizardDepositSelection
+         * @description Optional upfront deposit the rep sets on the quote.
+         *
+         *     ``mode`` picks how ``value`` is read: ``percentage`` (0-100 of the total) or
+         *     ``fixed`` (a flat amount in major units). Omitting this object falls back to
+         *     the workspace's default deposit config.
+         */
+        WizardDepositSelection: {
+            /**
+             * Mode
+             * @default percentage
+             * @enum {string}
+             */
+            mode: "percentage" | "fixed";
+            /**
+             * Value
+             * @default 0
+             */
+            value: number;
+        };
+        /**
          * WizardFixtureQty
          * @description Quantity for one catalog item, keyed by its stable id (``sku`` or key).
          */
@@ -23389,6 +23544,137 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationAcceptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_campaign_api_v1_onboarding_campaigns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_campaign_api_v1_onboarding_campaigns_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LaunchCampaignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    onboard_api_v1_onboarding_onboard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_calcom_url_api_v1_onboarding_parse_calcom_url_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParseCalcomUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParseCalcomUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_calcom_api_v1_onboarding_verify_calcom_get: {
+        parameters: {
+            query: {
+                /** @description Cal.com API key to verify */
+                api_key: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyCalcomResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24095,6 +24381,37 @@ export interface operations {
             };
         };
     };
+    reconcile_deposit_status_api_v1_p_quotes__token__deposit_status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalDepositStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_public_review_request_api_v1_p_reviews__token__get: {
         parameters: {
             query?: never;
@@ -24253,137 +24570,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RealtimeTokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_realtor_campaign_api_v1_realtor_campaigns_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_create_realtor_campaign_api_v1_realtor_campaigns_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RealtorCampaignResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    realtor_onboard_api_v1_realtor_onboard_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RealtorOnboardRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RealtorOnboardResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    parse_calcom_url_api_v1_realtor_parse_calcom_url_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ParseCalcomUrlRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParseCalcomUrlResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    verify_calcom_api_v1_realtor_verify_calcom_get: {
-        parameters: {
-            query: {
-                /** @description Cal.com API key to verify */
-                api_key: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VerifyCalcomResponse"];
                 };
             };
             /** @description Validation Error */
@@ -29102,6 +29288,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchQualifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactStatsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -36697,37 +36914,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_realtor_stats_api_v1_workspaces__workspace_id__realtor_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RealtorStatsResponse"];
                 };
             };
             /** @description Validation Error */

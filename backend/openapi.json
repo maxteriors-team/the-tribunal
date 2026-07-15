@@ -4739,7 +4739,7 @@
         "title": "BistroTier",
         "type": "object"
       },
-      "Body_create_realtor_campaign_api_v1_realtor_campaigns_post": {
+      "Body_create_campaign_api_v1_onboarding_campaigns_post": {
         "properties": {
           "campaign_name": {
             "anyOf": [
@@ -4766,7 +4766,7 @@
         "required": [
           "file"
         ],
-        "title": "Body_create_realtor_campaign_api_v1_realtor_campaigns_post",
+        "title": "Body_create_campaign_api_v1_onboarding_campaigns_post",
         "type": "object"
       },
       "Body_import_contacts_csv_api_v1_workspaces__workspace_id__contacts_import_post": {
@@ -10427,6 +10427,40 @@
         "title": "ContactResponse",
         "type": "object"
       },
+      "ContactStatsResponse": {
+        "description": "Aggregate contact metrics for the Contacts page stat cards.\n\nWindows are workspace-scoped and computed in UTC. ``*_change`` values are\nreturned preformatted (e.g. ``\"+24%\"``, ``\"-10%\"``, ``\"+0%\"``) so the\nfrontend ``isTrendUp`` helper can render the trend badge without reparsing.",
+        "properties": {
+          "new_clients_30d": {
+            "title": "New Clients 30D",
+            "type": "integer"
+          },
+          "new_clients_change": {
+            "title": "New Clients Change",
+            "type": "string"
+          },
+          "new_leads_30d": {
+            "title": "New Leads 30D",
+            "type": "integer"
+          },
+          "new_leads_change": {
+            "title": "New Leads Change",
+            "type": "string"
+          },
+          "total_new_clients_ytd": {
+            "title": "Total New Clients Ytd",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "new_leads_30d",
+          "new_leads_change",
+          "new_clients_30d",
+          "new_clients_change",
+          "total_new_clients_ytd"
+        ],
+        "title": "ContactStatsResponse",
+        "type": "object"
+      },
       "ContactSummary": {
         "description": "Minimal contact info for appointments.",
         "properties": {
@@ -12443,6 +12477,33 @@
           "phone_number"
         ],
         "title": "DemoTextRequest",
+        "type": "object"
+      },
+      "DepositConfig": {
+        "description": "Workspace default upfront deposit applied to new quotes.\n\nWhen ``enabled`` a saved quote inherits this deposit unless the operator sets\none explicitly. ``mode`` picks how ``value`` is read: ``percentage`` (0-100\nof the total) or ``fixed`` (a flat amount in major units). Disabled by\ndefault so nothing changes for a workspace that never configures a deposit.",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "percentage",
+            "enum": [
+              "percentage",
+              "fixed"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "value": {
+            "default": 50,
+            "minimum": 0.0,
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "title": "DepositConfig",
         "type": "object"
       },
       "DiscountType": {
@@ -17360,6 +17421,70 @@
           }
         },
         "title": "KnowledgeDocumentUpdate",
+        "type": "object"
+      },
+      "LaunchCampaignResponse": {
+        "description": "Response from the onboarding CSV-to-campaign endpoint.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "campaign_name": {
+            "title": "Campaign Name",
+            "type": "string"
+          },
+          "campaign_status": {
+            "title": "Campaign Status",
+            "type": "string"
+          },
+          "contacts_failed": {
+            "title": "Contacts Failed",
+            "type": "integer"
+          },
+          "contacts_imported": {
+            "title": "Contacts Imported",
+            "type": "integer"
+          },
+          "contacts_skipped": {
+            "title": "Contacts Skipped",
+            "type": "integer"
+          },
+          "phone_number_used": {
+            "title": "Phone Number Used",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "campaign_name",
+          "campaign_status",
+          "contacts_imported",
+          "contacts_skipped",
+          "contacts_failed",
+          "phone_number_used",
+          "agent_id",
+          "started_at"
+        ],
+        "title": "LaunchCampaignResponse",
         "type": "object"
       },
       "LeadDiscoveryJobResponse": {
@@ -22393,6 +22518,105 @@
         "title": "OfferUpdate",
         "type": "object"
       },
+      "OnboardRequest": {
+        "description": "Request body for the onboarding endpoint.",
+        "properties": {
+          "area_code": {
+            "anyOf": [
+              {
+                "maxLength": 3,
+                "minLength": 3,
+                "pattern": "^\\d{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional 3-digit US area code for phone number provisioning",
+            "title": "Area Code"
+          },
+          "calcom_api_key": {
+            "description": "Cal.com API key",
+            "minLength": 1,
+            "title": "Calcom Api Key",
+            "type": "string"
+          },
+          "calcom_event_type_id": {
+            "description": "Cal.com event type ID",
+            "title": "Calcom Event Type Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calcom_api_key",
+          "calcom_event_type_id"
+        ],
+        "title": "OnboardRequest",
+        "type": "object"
+      },
+      "OnboardResponse": {
+        "description": "Response from the onboarding endpoint.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "calcom_connected": {
+            "title": "Calcom Connected",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
+          },
+          "phone_number_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number Id"
+          },
+          "phone_provisioned": {
+            "description": "True when an SMS-capable phone number was provisioned during onboarding. When false, the workspace cannot launch SMS/voice campaigns until a number is added.",
+            "title": "Phone Provisioned",
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "agent_id",
+          "phone_number_id",
+          "phone_number",
+          "phone_provisioned",
+          "calcom_connected",
+          "message"
+        ],
+        "title": "OnboardResponse",
+        "type": "object"
+      },
       "OpenAIOAuthDevicePollRequest": {
         "description": "Encrypted device-code polling token from the start response.",
         "properties": {
@@ -26889,6 +27113,9 @@
             "title": "Comparison Years",
             "type": "integer"
           },
+          "deposit": {
+            "$ref": "#/components/schemas/DepositConfig"
+          },
           "financing": {
             "$ref": "#/components/schemas/FinancingConfig"
           },
@@ -26984,6 +27211,16 @@
               }
             ],
             "title": "Comparison Years"
+          },
+          "deposit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DepositConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "financing": {
             "anyOf": [
@@ -27754,6 +27991,27 @@
               }
             ]
           },
+          "deposit_amount": {
+            "default": 0,
+            "title": "Deposit Amount",
+            "type": "number"
+          },
+          "deposit_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Mode"
+          },
+          "deposit_value": {
+            "default": 0,
+            "title": "Deposit Value",
+            "type": "number"
+          },
           "financing": {
             "anyOf": [
               {
@@ -28440,6 +28698,16 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "deposit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WizardDepositSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "mockups": {
             "items": {
@@ -29404,6 +29672,11 @@
             ],
             "title": "Deposit Percentage"
           },
+          "deposit_required": {
+            "default": false,
+            "title": "Deposit Required",
+            "type": "boolean"
+          },
           "discount_amount": {
             "title": "Discount Amount",
             "type": "number"
@@ -29545,8 +29818,24 @@
         "type": "object"
       },
       "PublicProposalActionResult": {
-        "description": "Result of a client approve/decline on the public proposal page.",
+        "description": "Result of a client approve/decline on the public proposal page.\n\nOn approval, ``deposit_required``/``deposit_amount`` let the client page chain\nstraight into the Stripe deposit checkout when money is owed.",
         "properties": {
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "deposit_required": {
+            "default": false,
+            "title": "Deposit Required",
+            "type": "boolean"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -29688,6 +29977,36 @@
           "currency"
         ],
         "title": "PublicProposalDepositCheckout",
+        "type": "object"
+      },
+      "PublicProposalDepositStatus": {
+        "description": "Reconciled deposit state after the client returns from Stripe checkout.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "deposit_paid": {
+            "title": "Deposit Paid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deposit_paid",
+          "currency"
+        ],
+        "title": "PublicProposalDepositStatus",
         "type": "object"
       },
       "PublicProposalLineItem": {
@@ -30192,7 +30511,7 @@
         "type": "object"
       },
       "QuoteConvertRequest": {
-        "description": "Choose what an approved quote converts into. Defaults to both.",
+        "description": "Choose what an approved quote converts into. Defaults to both.\n\nAn optional ``scheduled_start``/``scheduled_end`` window schedules the created\njob on the calendar in one step; omit both to land the job unscheduled.",
         "properties": {
           "create_invoice": {
             "default": true,
@@ -30203,6 +30522,30 @@
             "default": true,
             "title": "Create Job",
             "type": "boolean"
+          },
+          "scheduled_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled End"
+          },
+          "scheduled_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start"
           }
         },
         "title": "QuoteConvertRequest",
@@ -30263,6 +30606,18 @@
             "default": "USD",
             "title": "Currency",
             "type": "string"
+          },
+          "deposit_amount_fixed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount Fixed"
           },
           "deposit_percentage": {
             "anyOf": [
@@ -30541,6 +30896,30 @@
             ],
             "title": "Declined At"
           },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Effective deposit in major units (fixed wins, clamped to total).",
+            "readOnly": true,
+            "title": "Deposit Amount"
+          },
+          "deposit_amount_fixed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount Fixed"
+          },
           "deposit_paid_at": {
             "anyOf": [
               {
@@ -30563,6 +30942,12 @@
               }
             ],
             "title": "Deposit Percentage"
+          },
+          "deposit_required": {
+            "description": "True when a deposit is owed and not yet paid.",
+            "readOnly": true,
+            "title": "Deposit Required",
+            "type": "boolean"
           },
           "discount_amount": {
             "title": "Discount Amount",
@@ -30745,7 +31130,9 @@
           "total",
           "currency",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "deposit_amount",
+          "deposit_required"
         ],
         "title": "QuoteDetailResponse",
         "type": "object"
@@ -31012,6 +31399,30 @@
             ],
             "title": "Declined At"
           },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Effective deposit in major units (fixed wins, clamped to total).",
+            "readOnly": true,
+            "title": "Deposit Amount"
+          },
+          "deposit_amount_fixed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount Fixed"
+          },
           "deposit_paid_at": {
             "anyOf": [
               {
@@ -31034,6 +31445,12 @@
               }
             ],
             "title": "Deposit Percentage"
+          },
+          "deposit_required": {
+            "description": "True when a deposit is owed and not yet paid.",
+            "readOnly": true,
+            "title": "Deposit Required",
+            "type": "boolean"
           },
           "discount_amount": {
             "title": "Discount Amount",
@@ -31197,7 +31614,9 @@
           "total",
           "currency",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "deposit_amount",
+          "deposit_required"
         ],
         "title": "QuoteResponse",
         "type": "object"
@@ -31226,6 +31645,18 @@
               }
             ],
             "title": "Currency"
+          },
+          "deposit_amount_fixed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount Fixed"
           },
           "deposit_percentage": {
             "anyOf": [
@@ -31479,198 +31910,6 @@
           "tools"
         ],
         "title": "RealtimeTokenResponse",
-        "type": "object"
-      },
-      "RealtorCampaignResponse": {
-        "description": "Response from the realtor CSV-to-campaign endpoint.",
-        "properties": {
-          "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "campaign_id": {
-            "format": "uuid",
-            "title": "Campaign Id",
-            "type": "string"
-          },
-          "campaign_name": {
-            "title": "Campaign Name",
-            "type": "string"
-          },
-          "campaign_status": {
-            "title": "Campaign Status",
-            "type": "string"
-          },
-          "contacts_failed": {
-            "title": "Contacts Failed",
-            "type": "integer"
-          },
-          "contacts_imported": {
-            "title": "Contacts Imported",
-            "type": "integer"
-          },
-          "contacts_skipped": {
-            "title": "Contacts Skipped",
-            "type": "integer"
-          },
-          "phone_number_used": {
-            "title": "Phone Number Used",
-            "type": "string"
-          },
-          "started_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started At"
-          }
-        },
-        "required": [
-          "campaign_id",
-          "campaign_name",
-          "campaign_status",
-          "contacts_imported",
-          "contacts_skipped",
-          "contacts_failed",
-          "phone_number_used",
-          "agent_id",
-          "started_at"
-        ],
-        "title": "RealtorCampaignResponse",
-        "type": "object"
-      },
-      "RealtorOnboardRequest": {
-        "description": "Request body for the realtor onboarding endpoint.",
-        "properties": {
-          "area_code": {
-            "anyOf": [
-              {
-                "maxLength": 3,
-                "minLength": 3,
-                "pattern": "^\\d{3}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Optional 3-digit US area code for phone number provisioning",
-            "title": "Area Code"
-          },
-          "calcom_api_key": {
-            "description": "Cal.com API key",
-            "minLength": 1,
-            "title": "Calcom Api Key",
-            "type": "string"
-          },
-          "calcom_event_type_id": {
-            "description": "Cal.com event type ID",
-            "title": "Calcom Event Type Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "calcom_api_key",
-          "calcom_event_type_id"
-        ],
-        "title": "RealtorOnboardRequest",
-        "type": "object"
-      },
-      "RealtorOnboardResponse": {
-        "description": "Response from the realtor onboarding endpoint.",
-        "properties": {
-          "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "calcom_connected": {
-            "title": "Calcom Connected",
-            "type": "boolean"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "phone_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number"
-          },
-          "phone_number_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number Id"
-          },
-          "phone_provisioned": {
-            "description": "True when an SMS-capable phone number was provisioned during onboarding. When false, the workspace cannot launch SMS/voice campaigns until a number is added.",
-            "title": "Phone Provisioned",
-            "type": "boolean"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "workspace_id",
-          "agent_id",
-          "phone_number_id",
-          "phone_number",
-          "phone_provisioned",
-          "calcom_connected",
-          "message"
-        ],
-        "title": "RealtorOnboardResponse",
-        "type": "object"
-      },
-      "RealtorStatsResponse": {
-        "description": "Realtor dashboard stats.",
-        "properties": {
-          "appointments_booked": {
-            "title": "Appointments Booked",
-            "type": "integer"
-          },
-          "leads_uploaded": {
-            "title": "Leads Uploaded",
-            "type": "integer"
-          },
-          "replies_received": {
-            "title": "Replies Received",
-            "type": "integer"
-          },
-          "texts_sent": {
-            "title": "Texts Sent",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "leads_uploaded",
-          "texts_sent",
-          "replies_received",
-          "appointments_booked"
-        ],
-        "title": "RealtorStatsResponse",
         "type": "object"
       },
       "RecentActivity": {
@@ -38795,6 +39034,28 @@
         "title": "WizardClient",
         "type": "object"
       },
+      "WizardDepositSelection": {
+        "description": "Optional upfront deposit the rep sets on the quote.\n\n``mode`` picks how ``value`` is read: ``percentage`` (0-100 of the total) or\n``fixed`` (a flat amount in major units). Omitting this object falls back to\nthe workspace's default deposit config.",
+        "properties": {
+          "mode": {
+            "default": "percentage",
+            "enum": [
+              "percentage",
+              "fixed"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "value": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "title": "WizardDepositSelection",
+        "type": "object"
+      },
       "WizardFixtureQty": {
         "description": "Quantity for one catalog item, keyed by its stable id (``sku`` or key).",
         "properties": {
@@ -40104,6 +40365,198 @@
         ]
       }
     },
+    "/api/v1/onboarding/campaigns": {
+      "post": {
+        "description": "Upload a CSV and launch a lead-reactivation campaign.",
+        "operationId": "create_campaign_api_v1_onboarding_campaigns_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_campaign_api_v1_onboarding_campaigns_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LaunchCampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Campaign",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/v1/onboarding/onboard": {
+      "post": {
+        "description": "Complete onboarding in a single call.",
+        "operationId": "onboard_api_v1_onboarding_onboard_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Onboard",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/v1/onboarding/parse-calcom-url": {
+      "post": {
+        "description": "Parse a Cal.com booking URL and resolve the event_type_id.",
+        "operationId": "parse_calcom_url_api_v1_onboarding_parse_calcom_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseCalcomUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseCalcomUrlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Parse Calcom Url",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
+    "/api/v1/onboarding/verify-calcom": {
+      "get": {
+        "description": "Verify a Cal.com API key by calling the /me endpoint.",
+        "operationId": "verify_calcom_api_v1_onboarding_verify_calcom_get",
+        "parameters": [
+          {
+            "description": "Cal.com API key to verify",
+            "in": "query",
+            "name": "api_key",
+            "required": true,
+            "schema": {
+              "description": "Cal.com API key to verify",
+              "minLength": 1,
+              "title": "Api Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyCalcomResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Verify Calcom",
+        "tags": [
+          "Onboarding"
+        ]
+      }
+    },
     "/api/v1/p/compare/{token}": {
       "get": {
         "description": "Render a client's permanent-vs-temporary savings comparison by token.\n\nPrices are recomputed from the workspace's live pricing config; the payload\nnever includes the internal linear-feet measurement. Unknown tokens 404.",
@@ -41093,6 +41546,49 @@
         ]
       }
     },
+    "/api/v1/p/quotes/{token}/deposit-status": {
+      "post": {
+        "description": "Reconcile a proposal's deposit against Stripe on return from checkout.\n\nA webhook backstop: verifies the stored Checkout Session and marks the\ndeposit paid if Stripe confirms it, so a delayed/absent webhook never leaves\na paid deposit showing unpaid. Idempotent.",
+        "operationId": "reconcile_deposit_status_api_v1_p_quotes__token__deposit_status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalDepositStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Deposit Status",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
     "/api/v1/p/reviews/{token}": {
       "get": {
         "description": "Public landing-page data for a review-request token.",
@@ -41365,198 +41861,6 @@
         "summary": "Create Realtime Token",
         "tags": [
           "Realtime"
-        ]
-      }
-    },
-    "/api/v1/realtor/campaigns": {
-      "post": {
-        "description": "Upload a CSV and launch a realtor lead-reactivation campaign.",
-        "operationId": "create_realtor_campaign_api_v1_realtor_campaigns_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_create_realtor_campaign_api_v1_realtor_campaigns_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RealtorCampaignResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Create Realtor Campaign",
-        "tags": [
-          "Realtor Onboarding"
-        ]
-      }
-    },
-    "/api/v1/realtor/onboard": {
-      "post": {
-        "description": "Complete realtor onboarding in a single call.",
-        "operationId": "realtor_onboard_api_v1_realtor_onboard_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RealtorOnboardRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RealtorOnboardResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Realtor Onboard",
-        "tags": [
-          "Realtor Onboarding"
-        ]
-      }
-    },
-    "/api/v1/realtor/parse-calcom-url": {
-      "post": {
-        "description": "Parse a Cal.com booking URL and resolve the event_type_id.",
-        "operationId": "parse_calcom_url_api_v1_realtor_parse_calcom_url_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParseCalcomUrlRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParseCalcomUrlResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Parse Calcom Url",
-        "tags": [
-          "Realtor Onboarding"
-        ]
-      }
-    },
-    "/api/v1/realtor/verify-calcom": {
-      "get": {
-        "description": "Verify a Cal.com API key by calling the /me endpoint.",
-        "operationId": "verify_calcom_api_v1_realtor_verify_calcom_get",
-        "parameters": [
-          {
-            "description": "Cal.com API key to verify",
-            "in": "query",
-            "name": "api_key",
-            "required": true,
-            "schema": {
-              "description": "Cal.com API key to verify",
-              "minLength": 1,
-              "title": "Api Key",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyCalcomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Verify Calcom",
-        "tags": [
-          "Realtor Onboarding"
         ]
       }
     },
@@ -50693,6 +50997,55 @@
           }
         ],
         "summary": "Batch Qualify Contacts",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/stats": {
+      "get": {
+        "description": "Return aggregate contact metrics for the Contacts page stat cards.",
+        "operationId": "get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Contact Stats",
         "tags": [
           "Contacts"
         ]
@@ -65570,55 +65923,6 @@
         "summary": "Send Quote",
         "tags": [
           "Quotes"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/realtor/stats": {
-      "get": {
-        "description": "Get realtor dashboard statistics for a workspace.",
-        "operationId": "get_realtor_stats_api_v1_workspaces__workspace_id__realtor_stats_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RealtorStatsResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Realtor Stats",
-        "tags": [
-          "Realtor Onboarding"
         ]
       }
     },
