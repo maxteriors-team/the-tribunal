@@ -79,6 +79,20 @@ logger = structlog.get_logger()
 _LOCKED_STATUSES = frozenset({"approved", "declined", "expired"})
 
 
+def _split_name(full_name: str | None) -> tuple[str | None, str | None]:
+    """Split a free-text name into (first, last); either may be None.
+
+    Used to seed a new contact from the estimator's single ``client_name`` field.
+    A lone token becomes the first name; everything after the first space is the
+    last name. Blank/None yields ``(None, None)`` so the caller's own default
+    first name applies.
+    """
+    parts = (full_name or "").strip().split(" ", 1)
+    first = parts[0] if parts and parts[0] else None
+    last = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+    return first, last
+
+
 class QuoteService:
     """Service for quote CRUD, lifecycle, and conversion to job/invoice."""
 
@@ -167,19 +181,42 @@ class QuoteService:
         workspace_id: uuid.UUID,
         payload: ProposalWizardPayload,
     ) -> int | None:
-        """Find or create the quote-to contact from the wizard's client details.
-
-        Contacts are phone-keyed in this CRM (``phone_hash`` is required), so a
-        new contact is only created when a phone is present. Matching prefers a
-        hashed email, then a hashed phone, so re-quoting the same client never
-        duplicates them. Returns None when there's nothing to match or create on
-        (e.g. an email-only client) — the quote is still saved, just unlinked.
-        """
+        """Find or create the quote-to contact from the wizard's client details."""
         client = payload.client
         if client is None:
             return None
-        email = (client.email or "").strip() or None
-        phone = (client.phone or "").strip() or None
+        return await self._resolve_or_create_contact(
+            workspace_id,
+            first_name=client.first_name,
+            last_name=client.last_name,
+            email=client.email,
+            phone=client.phone,
+            source="sales_wizard",
+        )
+
+    async def _resolve_or_create_contact(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+        phone: str | None,
+        source: str,
+    ) -> int | None:
+        """Find or create a workspace contact from loose client details.
+
+        Contacts are phone-keyed in this CRM (``phone_hash`` is required), so a
+        new contact is only created when a phone is present. Matching prefers a
+        hashed email, then a hashed phone, so re-saving the same client never
+        duplicates them. Returns None when there's nothing to match or create on
+        (e.g. an email-only client) — the caller stays saved, just unlinked.
+
+        Shared by the sales wizard and the roofline estimator so both attach
+        their output to the same customer record with identical dedupe rules.
+        """
+        email = (email or "").strip() or None
+        phone = (phone or "").strip() or None
 
         from app.core.encryption import hash_phone, hash_value
         from app.models.contact import Contact
@@ -213,11 +250,11 @@ class QuoteService:
         service = ContactService(self.db)
         contact = await service.create_contact(
             workspace_id,
-            first_name=(client.first_name or "").strip() or "Client",
-            last_name=(client.last_name or "").strip() or None,
+            first_name=(first_name or "").strip() or "Client",
+            last_name=(last_name or "").strip() or None,
             email=email,
             phone_number=phone,
-            source="sales_wizard",
+            source=source,
         )
         return contact.id
 
@@ -1071,6 +1108,20 @@ class QuoteService:
         on every public view so a rate change is always reflected.
         """
         await get_or_404(self.db, Workspace, workspace_id)
+
+        # Save onto a CRM customer when the rep supplied contact details. Splits
+        # the free-text client name into first/last for a new contact; resolve/
+        # dedupe rules match the sales wizard. Stays None (unlinked) otherwise.
+        first_name, last_name = _split_name(req.client_name)
+        contact_id = await self._resolve_or_create_contact(
+            workspace_id,
+            first_name=first_name,
+            last_name=last_name,
+            email=req.client_email,
+            phone=req.client_phone,
+            source="roofline_estimator",
+        )
+
         comparison = RooflineComparison(
             workspace_id=workspace_id,
             feet=float(req.feet),
@@ -1088,6 +1139,7 @@ class QuoteService:
             christmas_items=req.christmas_items or None,
             client_name=req.client_name,
             label=req.label,
+            contact_id=contact_id,
             created_by_id=created_by_id,
         )
         self.db.add(comparison)
@@ -1101,8 +1153,14 @@ class QuoteService:
             "roofline_comparison_shared",
             comparison_id=str(comparison.id),
             workspace_id=str(workspace_id),
+            contact_id=contact_id,
         )
-        return ComparisonShareResult(token=comparison.public_token, url=url)
+        return ComparisonShareResult(
+            token=comparison.public_token,
+            url=url,
+            contact_id=contact_id,
+            saved_to_customer=contact_id is not None,
+        )
 
     async def get_public_comparison(self, token: str) -> PublicComparison:
         """Return the safe, feet-free comparison for a public token.

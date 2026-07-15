@@ -12,9 +12,12 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal, engine
+from app.models.contact import Contact
+from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
 from app.schemas.estimate import ComparisonShareRequest, PublicComparison
 from app.services.exceptions import NotFoundError
@@ -211,3 +214,102 @@ async def test_unknown_comparison_token_404() -> None:
         svc = QuoteService(db)
         with pytest.raises(NotFoundError):
             await svc.get_public_comparison("does-not-exist")
+
+
+async def test_share_with_phone_saves_estimate_to_customer() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=120,
+                client_name="Dana Homeowner",
+                client_email="dana@example.com",
+                client_phone="+15551230000",
+            ),
+            created_by_id=None,
+        )
+
+        # The estimate is saved onto a resolved/created customer.
+        assert share.saved_to_customer is True
+        assert share.contact_id is not None
+
+        # The contact was created from the loose name split into first/last, with
+        # the estimator as its source.
+        contact = (
+            await db.execute(select(Contact).where(Contact.id == share.contact_id))
+        ).scalar_one()
+        assert contact.workspace_id == ws.id
+        assert contact.first_name == "Dana"
+        assert contact.last_name == "Homeowner"
+        assert contact.source == "roofline_estimator"
+
+        # The persisted comparison points at that customer.
+        comparison = (
+            await db.execute(
+                select(RooflineComparison).where(
+                    RooflineComparison.public_token == share.token
+                )
+            )
+        ).scalar_one()
+        assert comparison.contact_id == share.contact_id
+
+
+async def test_share_without_phone_stays_unlinked() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        # Name + email but no phone. Contacts are phone-keyed, so there's nothing
+        # to create on; the estimate still shares, just unlinked.
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=90, client_name="No Phone", client_email="np@example.com"
+            ),
+        )
+        assert share.saved_to_customer is False
+        assert share.contact_id is None
+
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Contact)
+                .where(Contact.workspace_id == ws.id)
+            )
+        ).scalar_one()
+        assert count == 0
+
+
+async def test_resharing_same_phone_reuses_one_customer() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        first = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100, client_name="Repeat Client", client_phone="+15551230000"
+            ),
+        )
+        second = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=140, client_name="Repeat Client", client_phone="+15551230000"
+            ),
+        )
+
+        # Both estimates resolve to the same customer (dedupe on phone hash).
+        assert first.contact_id is not None
+        assert first.contact_id == second.contact_id
+
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Contact)
+                .where(Contact.workspace_id == ws.id)
+            )
+        ).scalar_one()
+        assert count == 1

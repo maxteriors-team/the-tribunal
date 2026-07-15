@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.contact import Contact
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -80,6 +81,15 @@ class RooflineComparison(Base):
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     label: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    # Optional link to the CRM customer this estimate was saved for. Nullable so
+    # anonymous "just share a link" estimates still work; SET NULL keeps the
+    # comparison if the contact is later deleted. ``contacts.id`` is a BigInteger.
+    contact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("contacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_by_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -93,6 +103,7 @@ class RooflineComparison(Base):
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+    contact: Mapped["Contact | None"] = relationship("Contact", foreign_keys=[contact_id])
 
     def __repr__(self) -> str:
         return f"<RooflineComparison(id={self.id}, token={self.public_token}, feet={self.feet})>"

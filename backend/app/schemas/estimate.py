@@ -101,17 +101,32 @@ class LinearFeetEstimateResult(BaseModel):
 
 
 class ComparisonShareRequest(LinearFeetEstimateRequest):
-    """Persist an estimate behind a token so the homeowner can view the savings."""
+    """Persist an estimate behind a token so the homeowner can view the savings.
+
+    ``client_email`` / ``client_phone`` are optional: when provided, the estimate
+    is saved onto a CRM customer (resolve-or-create by phone/email, same dedupe
+    rules as the sales wizard). Without a phone the estimate is still shared, just
+    not attached to a contact — contacts in this CRM are phone-keyed.
+    """
 
     client_name: str | None = Field(default=None, max_length=200)
+    client_email: str | None = Field(default=None, max_length=320)
+    client_phone: str | None = Field(default=None, max_length=40)
     label: str | None = Field(default=None, max_length=200)
 
 
 class ComparisonShareResult(BaseModel):
-    """The share token plus the ready-to-send client URL."""
+    """The share token plus the ready-to-send client URL.
+
+    ``contact_id`` is set when the estimate was saved onto a CRM customer;
+    ``saved_to_customer`` is a convenience flag for the rep tool to confirm the
+    link without inspecting the id.
+    """
 
     token: str
     url: str
+    contact_id: int | None = None
+    saved_to_customer: bool = False
 
 
 # --------------------------------------------------------------------------- #
