@@ -1,7 +1,14 @@
 "use client";
 
+/**
+ * New Email Campaign — styled to match the sales/quote builder ("index") look:
+ * the scoped `.sales-wizard` dark/gold theme (Cormorant + Montserrat) for the
+ * hand-built header, message fields, and action buttons. The shared
+ * `VirtualContactSelector` is shadcn-based and can't live inside `.sales-wizard`
+ * (its universal padding reset would break the component), so it renders in the
+ * app's own `dark` theme on the same near-black surface for a cohesive result.
+ */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Mail, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,17 +16,7 @@ import { toast } from "sonner";
 
 import { VirtualContactSelector } from "@/components/campaigns/virtual-contact-selector";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   emailCampaignsApi,
@@ -28,6 +25,8 @@ import {
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+
+import "@/components/sales-wizard/theme.css";
 
 export default function NewEmailCampaignPage() {
   const router = useRouter();
@@ -79,106 +78,151 @@ export default function NewEmailCampaignPage() {
     body.trim().length > 0 &&
     !createMutation.isPending;
 
+  const recipientCopy =
+    selectedIds.size > 0
+      ? `${selectedIds.size} contact${selectedIds.size === 1 ? "" : "s"} selected`
+      : "Choose who should receive this email";
+
   return (
     <AppSidebar>
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/campaigns" aria-label="Back to campaigns">
-              <ArrowLeft className="size-5" />
+      <div
+        className={`dark h-full overflow-y-auto ${salesWizardFontVars}`}
+        style={{ background: "#0a0a0a" }}
+      >
+        {/* Themed top nav */}
+        <div className="sales-wizard" style={{ minHeight: 0 }}>
+          <div className="present-nav">
+            <Link href="/campaigns" className="back-btn">
+              &#8592;&nbsp; Campaigns
             </Link>
-          </Button>
-          <div className="flex items-center gap-2">
-            <Mail className="size-5 text-primary" />
-            <div>
-              <h1 className="text-xl font-semibold">Create Email Campaign</h1>
-              <p className="text-sm text-muted-foreground">
-                Send a broadcast email to selected contacts via Resend
-              </p>
-            </div>
+            <div className="present-nav-brand">Email Campaign</div>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-6">
-          <div className="mx-auto max-w-3xl space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Message</CardTitle>
-                <CardDescription>
-                  Use {"{first_name}"} and {"{company_name}"} to personalize the subject and body.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Campaign Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g., July Newsletter"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subject">Subject Line</Label>
-                  <Input
-                    id="subject"
-                    placeholder="Hi {first_name}, an update from Maxteriors"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="body">Email Body</Label>
-                  <Textarea
-                    id="body"
-                    placeholder="Write your message here…"
-                    rows={10}
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    An unsubscribe link is added automatically to every email (required for
-                    marketing mail).
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+        <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px 100px" }}>
+          {/* Header + message fields (hand-built → safe inside .sales-wizard) */}
+          <div className="sales-wizard" style={{ minHeight: 0 }}>
+            <div className="calc-header" style={{ marginBottom: 32 }}>
+              <div className="calc-wordmark">
+                <div className="calc-wordmark-line" />
+                <div className="calc-wordmark-text">Maxteriors</div>
+                <div className="calc-wordmark-line" />
+              </div>
+              <div className="calc-title">
+                <em>Email</em>&nbsp;Campaign
+              </div>
+              <div className="calc-rule" />
+              <div className="calc-sub">
+                Compose the broadcast, choose recipients, then send
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recipients</CardTitle>
-                <CardDescription>
-                  {selectedIds.size > 0
-                    ? `${selectedIds.size} contact${selectedIds.size === 1 ? "" : "s"} selected`
-                    : "Select the contacts who should receive this email"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {workspaceId ? (
-                  <VirtualContactSelector
-                    workspaceId={workspaceId}
-                    selectedIds={selectedIds}
-                    onSelectionChange={setSelectedIds}
-                  />
-                ) : null}
-              </CardContent>
-            </Card>
+            <div className="fields-block">
+              <div className="fields-block-label">Message</div>
 
-            <div className="flex items-center justify-end gap-3">
-              <Button
-                variant="outline"
+              <div className="field-wrap" style={{ marginBottom: 18 }}>
+                <label className="field-label" htmlFor="name">
+                  Campaign Name
+                </label>
+                <input
+                  id="name"
+                  className="field-input"
+                  placeholder="July Newsletter"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              <div className="field-wrap" style={{ marginBottom: 18 }}>
+                <label className="field-label" htmlFor="subject">
+                  Subject Line
+                </label>
+                <input
+                  id="subject"
+                  className="field-input"
+                  placeholder="Hi {first_name}, an update from Maxteriors"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                />
+              </div>
+
+              <div className="field-wrap">
+                <label className="field-label" htmlFor="body">
+                  Email Body
+                </label>
+                <textarea
+                  id="body"
+                  className="field-input"
+                  rows={10}
+                  placeholder="Write your message here…"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  style={{
+                    border: "1px solid var(--bdr)",
+                    background: "var(--black)",
+                    padding: "12px 14px",
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                  }}
+                />
+                <div className="wizard-copy" style={{ marginTop: 10 }}>
+                  Use {"{first_name}"} and {"{company_name}"} to personalize the
+                  subject and body. An unsubscribe link is added automatically to
+                  every email (required for marketing mail).
+                </div>
+              </div>
+            </div>
+
+            {/* Recipients heading (themed); the selector itself sits below in dark */}
+            <div style={{ marginTop: 20 }}>
+              <div className="fields-block-label" style={{ marginBottom: 6 }}>
+                Recipients
+              </div>
+              <div className="wizard-copy" style={{ marginBottom: 14 }}>
+                {recipientCopy}
+              </div>
+            </div>
+          </div>
+
+          {/* Recipients selector — app dark theme (shadcn), outside .sales-wizard */}
+          {workspaceId ? (
+            <VirtualContactSelector
+              workspaceId={workspaceId}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
+            />
+          ) : null}
+
+          {/* Themed action buttons */}
+          <div className="sales-wizard" style={{ minHeight: 0 }}>
+            <div className="wizard-nav" style={{ marginTop: 24 }}>
+              <button
+                type="button"
+                className="wizard-nav-btn secondary"
                 onClick={() => createMutation.mutate({ startNow: false })}
                 disabled={!canSubmit}
+                style={{
+                  opacity: canSubmit ? 1 : 0.5,
+                  cursor: canSubmit ? "pointer" : "not-allowed",
+                }}
               >
                 Save as Draft
-              </Button>
-              <Button
+              </button>
+              <button
+                type="button"
+                className="wizard-nav-btn primary"
                 onClick={() => createMutation.mutate({ startNow: true })}
                 disabled={!canSubmit || selectedIds.size === 0}
+                style={{
+                  opacity: !canSubmit || selectedIds.size === 0 ? 0.5 : 1,
+                  cursor:
+                    !canSubmit || selectedIds.size === 0
+                      ? "not-allowed"
+                      : "pointer",
+                }}
               >
-                <Send className="size-4" />
                 Create &amp; Send
-              </Button>
+              </button>
             </div>
           </div>
         </div>
