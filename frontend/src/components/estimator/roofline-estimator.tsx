@@ -80,6 +80,19 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     const ctx = canvas?.getContext("2d");
     const img = imgRef.current;
     if (!canvas || !ctx) return;
+    // Size the canvas from the image here (not in the upload handler): the canvas
+    // only mounts once `hasImage` is true, so the first upload has no canvas to
+    // measure into yet. Re-size only when it actually changes to avoid clearing
+    // the drawing on every redraw.
+    if (img) {
+      const scale = Math.min(1, MAX_CANVAS_W / img.width);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+    }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!img) return;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -118,11 +131,9 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const scale = Math.min(1, MAX_CANVAS_W / img.width);
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
+        // Just stash the image and flip state; the canvas mounts on `hasImage`
+        // and sizes/draws itself in the `draw` effect. Don't touch the canvas
+        // here — on the first upload it isn't in the DOM yet.
         imgRef.current = img;
         setReferencePts([]);
         setRooflinePts([]);
