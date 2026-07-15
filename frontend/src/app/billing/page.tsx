@@ -23,7 +23,7 @@ const PLAN_FEATURES = [
   "Automatic appointment booking directly on your Cal.com calendar",
   "Unlimited lead uploads via CSV",
   "Smart follow-up sequences — 2-touch cadence, fully automated",
-  "Realtor-focused messaging templates designed to get replies",
+  "Home-service messaging templates designed to get replies",
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ function BillingContent() {
           </div>
         </div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Realtor Lead Reactivation
+          Lead Reactivation
         </h1>
         <p className="text-muted-foreground max-w-md mx-auto">
           Let AI text your cold leads, provide value, and book appointments on your

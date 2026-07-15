@@ -766,14 +766,14 @@ async def send_quote_email(
 
 async def send_appointment_booked_notification(
     to_email: str,
-    realtor_name: str,
+    owner_name: str,
     contact_name: str,
     contact_phone: str,
     appointment_time: datetime,
     calcom_booking_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
 ) -> bool:
-    """Send an email notification to the realtor when an appointment is booked."""
+    """Send an email notification to the workspace owner when an appointment is booked."""
     subject = f"New Appointment Booked — {contact_name}"
 
     formatted_time = appointment_time.strftime("%A, %B %-d at %-I:%M %p UTC")
@@ -808,7 +808,7 @@ async def send_appointment_booked_notification(
     <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="color: #1a1a1a; margin-bottom: 5px;">New Appointment Booked!</h1>
     </div>
-    <p>Hi {realtor_name},</p>
+    <p>Hi {owner_name},</p>
     <p>
         Great news! Your AI agent just booked an appointment with one of your leads.
     </p>

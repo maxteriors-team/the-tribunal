@@ -2,13 +2,13 @@ import api, { apiGet, apiPost } from "@/lib/api";
 
 // ---- Request / Response Types ----
 
-export interface RealtorOnboardRequest {
+export interface OnboardRequest {
   calcom_api_key: string;
   calcom_event_type_id: number;
   area_code?: string;
 }
 
-export interface RealtorOnboardResponse {
+export interface OnboardResponse {
   workspace_id: string;
   agent_id: string;
   phone_number_id: string | null;
@@ -19,7 +19,7 @@ export interface RealtorOnboardResponse {
   message: string;
 }
 
-export interface RealtorCampaignResponse {
+export interface LaunchCampaignResponse {
   campaign_id: string;
   campaign_name: string;
   campaign_status: string;
@@ -41,21 +41,10 @@ export interface ParseCalcomUrlResponse {
   slug: string;
 }
 
-export interface RealtorStats {
-  leads_uploaded: number;
-  texts_sent: number;
-  replies_received: number;
-  appointments_booked: number;
-}
-
 // ---- API Functions ----
 
-export function getRealtorStats(workspaceId: string): Promise<RealtorStats> {
-  return apiGet<RealtorStats>(`/api/v1/workspaces/${workspaceId}/realtor/stats`);
-}
-
 export function verifyCalcom(apiKey: string): Promise<VerifyCalcomResponse> {
-  return apiGet<VerifyCalcomResponse>("/api/v1/realtor/verify-calcom", {
+  return apiGet<VerifyCalcomResponse>("/api/v1/onboarding/verify-calcom", {
     params: { api_key: apiKey },
   });
 }
@@ -64,14 +53,14 @@ export function parseCalcomUrl(
   url: string,
   apiKey?: string
 ): Promise<ParseCalcomUrlResponse> {
-  return apiPost<ParseCalcomUrlResponse>("/api/v1/realtor/parse-calcom-url", {
+  return apiPost<ParseCalcomUrlResponse>("/api/v1/onboarding/parse-calcom-url", {
     url,
     api_key: apiKey,
   });
 }
 
-export function onboard(data: RealtorOnboardRequest): Promise<RealtorOnboardResponse> {
-  return apiPost<RealtorOnboardResponse>("/api/v1/realtor/onboard", data);
+export function onboard(data: OnboardRequest): Promise<OnboardResponse> {
+  return apiPost<OnboardResponse>("/api/v1/onboarding/onboard", data);
 }
 
 export function createCampaignFromCsv(
@@ -82,7 +71,7 @@ export function createCampaignFromCsv(
     campaignName?: string;
     areaCode?: string;
   } = {}
-): Promise<RealtorCampaignResponse> {
+): Promise<LaunchCampaignResponse> {
   const formData = new FormData();
   formData.append("file", file);
   if (options.skipDuplicates !== undefined) {
@@ -96,8 +85,8 @@ export function createCampaignFromCsv(
   }
 
   return api
-    .post<RealtorCampaignResponse>(
-      `/api/v1/workspaces/${workspaceId}/realtor/campaigns`,
+    .post<LaunchCampaignResponse>(
+      `/api/v1/onboarding/campaigns`,
       formData,
       { headers: { "Content-Type": "multipart/form-data" } }
     )

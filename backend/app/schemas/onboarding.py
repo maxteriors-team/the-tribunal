@@ -1,4 +1,4 @@
-"""Realtor onboarding schemas."""
+"""Onboarding schemas."""
 
 import uuid
 from datetime import datetime
@@ -6,8 +6,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class RealtorOnboardRequest(BaseModel):
-    """Request body for the realtor onboarding endpoint."""
+class OnboardRequest(BaseModel):
+    """Request body for the onboarding endpoint."""
 
     calcom_api_key: str = Field(..., min_length=1, description="Cal.com API key")
     calcom_event_type_id: int = Field(..., description="Cal.com event type ID")
@@ -20,8 +20,8 @@ class RealtorOnboardRequest(BaseModel):
     )
 
 
-class RealtorOnboardResponse(BaseModel):
-    """Response from the realtor onboarding endpoint."""
+class OnboardResponse(BaseModel):
+    """Response from the onboarding endpoint."""
 
     workspace_id: uuid.UUID
     agent_id: uuid.UUID
@@ -38,8 +38,8 @@ class RealtorOnboardResponse(BaseModel):
     message: str
 
 
-class RealtorCampaignResponse(BaseModel):
-    """Response from the realtor CSV-to-campaign endpoint."""
+class LaunchCampaignResponse(BaseModel):
+    """Response from the onboarding CSV-to-campaign endpoint."""
 
     campaign_id: uuid.UUID
     campaign_name: str

@@ -1,4 +1,4 @@
-"""Unit tests for realtor onboarding workspace setup workflows."""
+"""Unit tests for onboarding workspace setup workflows."""
 
 from __future__ import annotations
 
@@ -18,13 +18,13 @@ from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.contacts import ImportResult
 from app.services.onboarding.exceptions import OnboardingValidationError, OnboardingWorkspaceError
 from app.services.onboarding.workspace_setup import (
-    REALTOR_AGENT_NAME,
-    RealtorCampaignInput,
-    RealtorOnboardingInput,
-    complete_realtor_onboarding,
+    REACTIVATION_AGENT_NAME,
+    CampaignInput,
+    OnboardingInput,
+    complete_onboarding,
     get_user_workspace,
-    launch_realtor_campaign_from_csv,
-    provision_realtor_phone_number,
+    launch_campaign_from_csv,
+    provision_phone_number,
 )
 from app.services.telephony.telnyx import PhoneNumberInfo
 
@@ -107,8 +107,8 @@ def _workspace(user_id: int = 7) -> tuple[WorkspaceMembership, Workspace]:
     )
     workspace = Workspace(
         id=workspace_id,
-        name="Jane Realty",
-        slug="jane-realty",
+        name="Ace Home Services",
+        slug="ace-home-services",
         is_active=True,
     )
     return membership, workspace
@@ -129,7 +129,7 @@ def _agent(workspace_id: uuid.UUID) -> Agent:
     return Agent(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
-        name=REALTOR_AGENT_NAME,
+        name=REACTIVATION_AGENT_NAME,
         channel_mode="text",
         voice_provider="openai",
         voice_id="alloy",
@@ -176,7 +176,7 @@ async def test_get_user_workspace_raises_when_user_has_no_membership() -> None:
     assert exc_info.value.message == "No workspace found. Please create a workspace first."
 
 
-async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phone() -> None:
+async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> None:
     db = _db()
     membership, workspace = _workspace(user_id=7)
     db.execute.side_effect = [
@@ -188,10 +188,10 @@ async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phon
     purchased_number = PhoneNumberInfo(id="telnyx-123", phone_number="+15555550123")
     telnyx = _MockTelnyxService([available_number], purchased_number)
 
-    result = await complete_realtor_onboarding(
+    result = await complete_onboarding(
         db=db,
         current_user_id=7,
-        request=RealtorOnboardingInput(
+        request=OnboardingInput(
             calcom_api_key="cal_key",
             calcom_event_type_id=123,
             area_code="512",
@@ -215,13 +215,13 @@ async def test_complete_realtor_onboarding_stores_credentials_and_purchases_phon
     db.commit.assert_awaited_once()
 
 
-async def test_provision_realtor_phone_number_is_best_effort_on_telnyx_error() -> None:
+async def test_provision_phone_number_is_best_effort_on_telnyx_error() -> None:
     db = _db()
     workspace_id = uuid.uuid4()
     available_number = PhoneNumberInfo(id="", phone_number="+15555550123")
     telnyx = _MockTelnyxService([available_number], raises_on_purchase=True)
 
-    result = await provision_realtor_phone_number(
+    result = await provision_phone_number(
         db=db,
         workspace_id=workspace_id,
         area_code="512",
@@ -235,7 +235,7 @@ async def test_provision_realtor_phone_number_is_best_effort_on_telnyx_error() -
     assert db.add.call_count == 0
 
 
-async def test_launch_realtor_campaign_imports_contacts_and_starts_campaign() -> None:
+async def test_launch_campaign_imports_contacts_and_starts_campaign() -> None:
     db = _db()
     membership, workspace = _workspace(user_id=7)
     agent = _agent(workspace.id)
@@ -261,10 +261,10 @@ async def test_launch_realtor_campaign_imports_contacts_and_starts_campaign() ->
     def now() -> datetime:
         return datetime(2026, 6, 1, 14, 30, tzinfo=UTC)
 
-    result = await launch_realtor_campaign_from_csv(
+    result = await launch_campaign_from_csv(
         db=db,
         current_user_id=7,
-        request=RealtorCampaignInput(
+        request=CampaignInput(
             file_content=b"first_name,phone_number\nAva,+15550000001\n",
             skip_duplicates=True,
             campaign_name=None,
@@ -278,7 +278,7 @@ async def test_launch_realtor_campaign_imports_contacts_and_starts_campaign() ->
         workspace_id=workspace.id,
         file_content=b"first_name,phone_number\nAva,+15550000001\n",
         skip_duplicates=True,
-        source="realtor_csv_upload",
+        source="csv_upload",
     )
     drip_bootstrapper.assert_awaited_once_with(db, workspace.id, [101, 102])
     assert result.campaign_name == "Lead Reactivation - June 01, 2026"
@@ -302,7 +302,7 @@ async def test_launch_realtor_campaign_imports_contacts_and_starts_campaign() ->
     db.refresh.assert_awaited_once_with(campaigns[0])
 
 
-async def test_launch_realtor_campaign_rejects_empty_import() -> None:
+async def test_launch_campaign_rejects_empty_import() -> None:
     db = _db()
     membership, workspace = _workspace(user_id=7)
     db.execute.side_effect = [_ExecuteResult(membership), _ExecuteResult(workspace)]
@@ -317,10 +317,10 @@ async def test_launch_realtor_campaign_rejects_empty_import() -> None:
     import_service.import_csv = AsyncMock(return_value=import_result)
 
     with pytest.raises(OnboardingValidationError) as exc_info:
-        await launch_realtor_campaign_from_csv(
+        await launch_campaign_from_csv(
             db=db,
             current_user_id=7,
-            request=RealtorCampaignInput(
+            request=CampaignInput(
                 file_content=b"first_name,phone_number\n",
                 skip_duplicates=True,
             ),

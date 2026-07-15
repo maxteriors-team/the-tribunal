@@ -1,7 +1,7 @@
-"""Auto-create a default realtor drip campaign for freshly imported contacts.
+"""Auto-create a default reactivation drip campaign for freshly imported contacts.
 
-Extracted from ``app/api/v1/realtor.py`` so the CSV upload flow (and any
-future import flows) can share the same helper.
+Shared by the onboarding CSV upload flow (and any future import flows) so newly
+imported contacts get enrolled in the standard home-service reactivation drip.
 """
 
 import uuid
@@ -15,9 +15,15 @@ from app.models.agent import Agent
 from app.models.drip_campaign import DripCampaign, DripCampaignStatus
 from app.models.phone_number import PhoneNumber
 from app.services.reactivation.drip_runner import enroll_contacts
-from app.services.reactivation.sequence_config import get_realtor_drip_config
+from app.services.reactivation.sequence_config import get_reactivation_drip_config
 
 logger = structlog.get_logger()
+
+# Current onboarding names the reactivation agent this. The legacy name is kept
+# in the lookup so drips for workspaces onboarded before the home-service rename
+# still resolve their agent instead of silently falling back.
+REACTIVATION_AGENT_NAME = "Lead Reactivation Agent"
+LEGACY_REACTIVATION_AGENT_NAME = "Realtor Lead Reactivation Agent"
 
 
 async def auto_create_drip_for_imports(
@@ -27,16 +33,17 @@ async def auto_create_drip_for_imports(
 ) -> None:
     """Create an active drip campaign and enroll the given contacts.
 
-    Looks up the workspace's realtor agent (falling back to any text-channel
-    agent) and the first active SMS-enabled phone number. If either is
-    missing, logs a warning and returns — matching the legacy behavior.
+    Looks up the workspace's reactivation agent (falling back to any
+    text-channel agent) and the first active SMS-enabled phone number. If
+    either is missing, logs a warning and returns — matching the legacy
+    behavior.
     """
-    # Find agent
+    # Find agent (accept the legacy realtor name for pre-rename workspaces)
     agent_result = await db.execute(
         select(Agent)
         .where(
             Agent.workspace_id == workspace_id,
-            Agent.name == "Realtor Lead Reactivation Agent",
+            Agent.name.in_([REACTIVATION_AGENT_NAME, LEGACY_REACTIVATION_AGENT_NAME]),
         )
         .limit(1)
     )
@@ -70,7 +77,7 @@ async def auto_create_drip_for_imports(
         logger.warning("no_phone_for_drip", workspace_id=str(workspace_id))
         return
 
-    drip_config = get_realtor_drip_config()
+    drip_config = get_reactivation_drip_config()
     drip_campaign = DripCampaign(
         workspace_id=workspace_id,
         agent_id=agent.id,

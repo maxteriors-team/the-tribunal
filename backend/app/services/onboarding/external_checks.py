@@ -1,4 +1,4 @@
-"""External Cal.com checks used by the realtor onboarding flow."""
+"""External Cal.com checks used by the onboarding flow."""
 
 from __future__ import annotations
 

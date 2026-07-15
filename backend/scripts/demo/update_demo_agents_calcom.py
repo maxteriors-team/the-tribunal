@@ -32,9 +32,9 @@ else:
 CALCOM_EVENT_TYPE_ID = 4453549
 
 DEMO_AGENTS = {
-    "ag_LXptHpWq": "Rachel (Dobi Real Estate)",
-    "ag_l28wHbyl": "Amy (Marian Grout Real Estate)",
-    "ag_72ObhPOO": "Tina (22 Title)",
+    "ag_LXptHpWq": "Rachel (Summit Exterior Cleaning)",
+    "ag_l28wHbyl": "Amy (Lumen Outdoor Lighting)",
+    "ag_72ObhPOO": "Tina (Evergreen Gutter Care)",
     "ag_g0bjj8NZ": "Mike (Rhino Building)",
 }
 

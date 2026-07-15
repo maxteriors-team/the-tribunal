@@ -190,13 +190,13 @@ def classify_by_keywords(message: str) -> ResponseCategory | None:
 # ---------------------------------------------------------------------------
 
 _CLASSIFY_SYSTEM_PROMPT = (
-    "You are a response classifier for a real estate lead "
+    "You are a response classifier for a home-services lead "
     "reactivation SMS campaign.\n\n"
     "Classify the contact's reply into exactly ONE of "
     "these categories:\n"
-    "- interested: Wants to learn more, asks to continue, or shows buying/selling intent\n"
+    "- interested: Wants to learn more, asks to continue, or shows intent to book/quote\n"
     "- objection: Declines, raises a blocker, has help, or says no without compliance risk\n"
-    "- question: Asks a factual question about real estate, the company, or the offer\n"
+    "- question: Asks a factual question about the service, the company, or the offer\n"
     "- not_now: Interested or possibly interested, but asks for later timing\n"
     "- wrong_person: Says this is the wrong number/person or they are not the lead\n"
     "- opt_out: Clearly asks to stop, unsubscribe, remove, or not be contacted\n"

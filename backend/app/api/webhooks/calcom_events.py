@@ -3,7 +3,7 @@
 Side-effect-heavy helpers extracted from ``calcom.py``:
 - Lifecycle SMS rendering + sending
 - From-number resolution for lifecycle SMS
-- Workspace owner lookup for realtor email notifications
+- Workspace owner lookup for appointment email notifications
 - Campaign resolution for new appointments
 - Recent voice-message linking
 """

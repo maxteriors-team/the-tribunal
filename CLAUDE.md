@@ -12,7 +12,8 @@ The Tribunal is a proprietary AI-powered CRM command center for capturing leads,
 ## Product domains and integrations
 
 - Core domains include workspaces, contacts/leads, conversations, AI agents, SMS and voice campaigns, appointments, offers, lead magnets/forms, opportunities, pending approvals, nudges, automations, billing, and onboarding.
-- External integrations include OpenAI Realtime, Telnyx voice/SMS, Cal.com booking/webhooks, Resend email/webhooks, Stripe billing, and Follow Up Boss/realtor workflows.
+- The product targets home-service businesses (exterior cleaning, pressure washing, gutters, landscape/holiday lighting, and similar trades); onboarding seeds a lead-reactivation agent + campaign for re-engaging past customers.
+- External integrations include OpenAI Realtime, Telnyx voice/SMS, Cal.com booking/webhooks, Resend email/webhooks, and Stripe billing.
 - Frontend root redirects to `/contacts`; the app also exposes public surfaces under routes such as `embed`, offers, lead magnets, demos, and lead forms.
 
 ## Project-specific architecture notes

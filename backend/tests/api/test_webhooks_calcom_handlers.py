@@ -8,7 +8,7 @@ helpers stubbed at the module level.
 The goal is to pin the *behavior contracts* the router relies on:
 
 - ``handle_booking_created`` creates an Appointment row, tags the
-  contact, fires confirmation SMS / realtor email exactly once per
+  contact, fires confirmation SMS / owner email exactly once per
   *new* booking, and idempotently updates an existing row.
 - ``handle_booking_rescheduled`` updates the existing appointment and
   resets ``reminder_sent_at`` so the reminder worker re-fires.
@@ -289,8 +289,8 @@ async def test_booking_created_new_appointment_full_flow(
         AsyncMock(return_value=contact),
     )
     stubs["get_workspace_owner"].return_value = (
-        "owner@realty.example",
-        "Jane Realtor",
+        "owner@acmehome.example",
+        "Jane Owner",
     )
 
     workspace = MagicMock()
@@ -353,7 +353,7 @@ async def test_booking_created_existing_appointment_does_not_send_sms(
     booking_created: dict[str, Any],
 ) -> None:
     """Idempotency: a retry that finds an existing Appointment must NOT
-    re-send the confirmation SMS or re-queue the realtor email.
+    re-send the confirmation SMS or re-queue the owner email.
 
     This is the ``is_new_booking`` per-row guard documented in
     :mod:`app.api.webhooks.calcom`.
@@ -388,7 +388,7 @@ async def test_booking_created_existing_appointment_does_not_send_sms(
     add_types = {type(c.args[0]).__name__ for c in db.add.call_args_list}
     assert "Appointment" not in add_types
 
-    # Critical: SMS + realtor email must NOT fire on the retry.
+    # Critical: SMS + owner email must NOT fire on the retry.
     stubs["send_lifecycle_sms"].assert_not_awaited()
     stubs["spawn_background_task"].assert_not_called()
 

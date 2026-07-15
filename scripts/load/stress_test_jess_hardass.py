@@ -63,7 +63,7 @@ HARDASS_SCENARIOS = [
     ),
     HardassScenario(
         name="Suspicious of Lead Source",
-        persona="Real estate agent, privacy conscious",
+        persona="Home services pro, privacy conscious",
         messages=[
             "Where did you get my info from?",
             "That doesn't answer my question. Who sold you my data?"

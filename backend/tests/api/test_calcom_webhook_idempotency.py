@@ -3,7 +3,7 @@
 Cal.com retries webhook deliveries on non-2xx responses (and occasionally
 on timeouts even when the server eventually returned 200). The downstream
 side effects in :mod:`app.api.webhooks.calcom_handlers` — confirmation
-SMS to the contact, realtor-notification email — are not idempotent on
+SMS to the contact, owner-notification email — are not idempotent on
 their own, so the router claims a Redis-backed dedupe slot
 (``SET NX EX 604800``) keyed on ``calcom:webhook:<id|trigger+uid+ts>``
 before dispatching to the per-event handlers.

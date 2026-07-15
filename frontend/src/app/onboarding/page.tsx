@@ -15,7 +15,7 @@ import {
   createCampaignFromCsv,
   onboard,
   parseCalcomUrl,
-} from "@/lib/api/realtor";
+} from "@/lib/api/onboarding";
 import { markAutoRedirectedToOnboarding } from "@/lib/onboarding-status";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";

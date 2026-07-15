@@ -27,24 +27,24 @@ const itemVariants = {
 
 const industries = [
   {
-    icon: Home,
-    title: "Real Estate",
-    description: "Reactivate past buyers and expired listings",
-  },
-  {
-    icon: Shield,
-    title: "Insurance",
-    description: "Policy renewals and cross-sell campaigns",
-  },
-  {
     icon: Wrench,
+    title: "Exterior & Cleaning",
+    description: "Power washing, windows, gutters — seasonal repeat business",
+  },
+  {
+    icon: Home,
     title: "Home Services",
-    description: "Past customers ready for repeat business",
+    description: "Past customers ready for their next visit",
   },
   {
     icon: Sun,
     title: "Solar/HVAC",
     description: "Old quotes and unconverted estimates",
+  },
+  {
+    icon: Shield,
+    title: "Roofing & Restoration",
+    description: "Reactivate aging leads and past inspections",
   },
   {
     icon: Car,

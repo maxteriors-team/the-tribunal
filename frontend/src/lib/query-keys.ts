@@ -419,13 +419,6 @@ export const queryKeys = {
     detail: (slug: string) => ["public-offers", "detail", slug] as const,
     bySlug: (slug: string) => ["public-offer", slug] as const,
   },
-  realtor: {
-    all: (workspaceId: string) => ["realtor", workspaceId] as const,
-    onboarding: (workspaceId: string) => ["realtor", workspaceId, "onboarding"] as const,
-    stats: (workspaceId: string) => ["realtor-stats", workspaceId] as const,
-    appointments: (workspaceId: string) =>
-      ["realtor-appointments", workspaceId] as const,
-  },
   roleplay: {
     all: (workspaceId: string) => ["roleplay", workspaceId] as const,
     personas: (workspaceId: string) =>

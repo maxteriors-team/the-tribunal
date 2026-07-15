@@ -81,7 +81,7 @@ TEST_CASES = [
         name="Interested Lead",
         messages=[
             "Hi there",
-            "I'm a realtor in Miami",
+            "I run a home-services company in Miami",
             "Yeah I struggle with following up on leads quickly"
         ],
         expected_behaviors=["?", "lead", "follow"],  # Asks question, mentions leads
@@ -125,7 +125,7 @@ TEST_CASES = [
         messages=[
             "Let's schedule something",
             "Tomorrow afternoon works",
-            "john.smith@realty.com",
+            "john.smith@example.com",
         ],
         expected_behaviors=["time", "PM"],  # Should use email and book
         category="booking"
@@ -173,7 +173,7 @@ TEST_CASES = [
     TestCase(
         name="Off Topic Question",
         messages=["What's the weather like today?"],
-        expected_behaviors=["real estate", "lead"],  # Redirects to service
+        expected_behaviors=["home services", "lead"],  # Redirects to service
         category="edge_cases"
     ),
     TestCase(
@@ -200,7 +200,7 @@ TEST_CASES = [
         name="Full Sales Flow",
         messages=[
             "Hey",
-            "I'm a real estate agent in Texas",
+            "I'm a home services pro in Texas",
             "Yeah I lose a lot of deals because I can't respond fast enough",
             "Maybe 5-10 leads a week",
             "Usually within a few hours, sometimes the next day",

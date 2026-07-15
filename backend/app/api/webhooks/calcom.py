@@ -35,7 +35,7 @@ router = APIRouter()
 logger = structlog.get_logger()
 
 # Idempotency dedupe window. Cal.com retries failed deliveries; the side
-# effects in handlers (confirmation SMS, realtor email) are not safe to
+# effects in handlers (confirmation SMS, owner email) are not safe to
 # replay. 7 days covers any plausible retry horizon while keeping the
 # Redis footprint bounded.
 _IDEMPOTENCY_TTL_SECONDS = DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS
@@ -145,7 +145,7 @@ async def calcom_booking_webhook(request: Request) -> dict[str, str]:
     observe_calcom_webhook(trigger)
 
     # Idempotency check: Cal.com retries failed deliveries, and the
-    # downstream side effects (confirmation SMS, realtor email) are not
+    # downstream side effects (confirmation SMS, owner email) are not
     # safe to replay. Claim a dedupe slot in Redis before dispatching.
     # The per-row ``is_new_booking`` guard in ``handle_booking_created``
     # already prevents duplicate SMS/email on retried BOOKING_CREATED

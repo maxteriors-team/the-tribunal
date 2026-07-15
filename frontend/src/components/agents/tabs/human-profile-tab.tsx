@@ -268,7 +268,7 @@ function HumanProfileForm({ agentId, workspaceId, profile, is404 }: HumanProfile
                   <FormItem>
                     <FormLabel>Role Title</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Senior Realtor" {...field} />
+                      <Input placeholder="e.g. Operations Manager" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

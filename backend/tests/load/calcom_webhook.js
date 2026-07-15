@@ -52,8 +52,8 @@ function buildBookingCreatedPayload() {
         },
       ],
       organizer: {
-        name: 'Realtor',
-        email: 'realtor@example.com',
+        name: 'Homeowner',
+        email: 'homeowner@example.com',
         timeZone: 'America/New_York',
       },
     },

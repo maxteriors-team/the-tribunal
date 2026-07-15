@@ -1,4 +1,4 @@
-"""Typed errors for realtor onboarding service workflows."""
+"""Typed errors for onboarding service workflows."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from app.services.exceptions import ServiceError, ServiceUnavailableError, Valid
 
 
 class OnboardingValidationError(ValidationError):
-    """Raised when realtor onboarding input or workspace state is invalid."""
+    """Raised when onboarding input or workspace state is invalid."""
 
 
 class OnboardingWorkspaceError(OnboardingValidationError):

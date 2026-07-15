@@ -431,11 +431,11 @@ class TextToolExecutor(BaseToolExecutor):
         try:
             owner = await self._get_workspace_owner()
             if owner:
-                realtor_email, realtor_name = owner
+                owner_email, owner_name = owner
                 spawn_background_task(
                     send_appointment_booked_notification(
-                        to_email=realtor_email,
-                        realtor_name=realtor_name,
+                        to_email=owner_email,
+                        owner_name=owner_name,
                         contact_name=contact.full_name or "Unknown",
                         contact_phone=contact.phone_number or "",
                         appointment_time=appointment.scheduled_at,
@@ -444,7 +444,7 @@ class TextToolExecutor(BaseToolExecutor):
                 )
                 self.log.info(
                     "appointment_booked_email_queued",
-                    to_email=realtor_email,
+                    to_email=owner_email,
                     appointment_id=appointment.id,
                 )
         except Exception:

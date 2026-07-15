@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { verifyCalcom } from "@/lib/api/realtor";
+import { verifyCalcom } from "@/lib/api/onboarding";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
 import type { OnboardingFormValues } from "../_state";

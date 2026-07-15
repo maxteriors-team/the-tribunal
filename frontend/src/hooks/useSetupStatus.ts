@@ -18,7 +18,7 @@ export interface SetupStatus {
 /**
  * Cheap "is this workspace configured?" probe for finding RF-002.
  *
- * The realtor onboarding wizard's final step creates the workspace's first AI
+ * The onboarding wizard's final step creates the workspace's first AI
  * agent, so "zero agents" is a reliable, already-available signal that a
  * brand-new / unconfigured workspace has never completed setup. We fetch a
  * single-row page so the probe stays light.

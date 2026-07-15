@@ -16,8 +16,8 @@
     "cancelledBy": "client@example.com",
     "organizer": {
       "id": 4242,
-      "name": "Jane Realtor",
-      "email": "jane@realty.example",
+      "name": "Jane Homeowner",
+      "email": "jane@example.com",
       "timeZone": "America/Los_Angeles"
     },
     "attendees": [

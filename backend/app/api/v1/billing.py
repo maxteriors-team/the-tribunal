@@ -167,7 +167,7 @@ async def create_checkout(
     params: dict[str, Any] = {
         "mode": "subscription",
         "line_items": [{"price": price_id, "quantity": 1}],
-        "success_url": f"{settings.frontend_url}/realtor-dashboard?subscribed=true",
+        "success_url": f"{settings.frontend_url}/billing?subscribed=true",
         "cancel_url": f"{settings.frontend_url}/onboarding",
         "metadata": {"workspace_id": str(workspace_id)},
     }
@@ -223,7 +223,7 @@ async def create_portal(
     client = _stripe_client()
 
     try:
-        return_url = f"{settings.frontend_url}/realtor-dashboard"
+        return_url = f"{settings.frontend_url}/billing"
         session = client.billing_portal.sessions.create(
             params={"customer": customer_id, "return_url": return_url},
         )

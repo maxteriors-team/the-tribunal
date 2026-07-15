@@ -65,7 +65,7 @@ from app.api.v1 import (
 )
 from app.api.v1.integrations import companycam as companycam_integration
 from app.api.v1.integrations import openai_oauth as openai_oauth_integration
-from app.api.v1.onboarding import realtor_setup
+from app.api.v1.onboarding import setup as onboarding_setup
 
 api_router = APIRouter()
 
@@ -418,12 +418,7 @@ api_router.include_router(
 )
 api_router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api_router.include_router(
-    realtor_setup.router,
-    prefix="/realtor",
-    tags=["Realtor Onboarding"],
-)
-api_router.include_router(
-    realtor_setup.workspace_router,
-    prefix="/workspaces/{workspace_id}/realtor",
-    tags=["Realtor Onboarding"],
+    onboarding_setup.router,
+    prefix="/onboarding",
+    tags=["Onboarding"],
 )

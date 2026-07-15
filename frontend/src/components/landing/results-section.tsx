@@ -102,7 +102,7 @@ export function ResultsSection() {
               appointments and closed $180K in new business.&quot;
             </p>
             <figcaption className="text-brand-body font-medium text-lg">
-              &mdash; Real Estate Team Lead
+              &mdash; Home Services Owner
             </figcaption>
           </blockquote>
         </motion.figure>

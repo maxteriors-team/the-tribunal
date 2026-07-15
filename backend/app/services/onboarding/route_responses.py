@@ -1,4 +1,4 @@
-"""Adapters from realtor onboarding service results to API response schemas."""
+"""Adapters from onboarding service results to API response schemas."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 
-from app.schemas.realtor import (
+from app.schemas.onboarding import (
+    LaunchCampaignResponse,
+    OnboardResponse,
     ParseCalcomUrlResponse,
-    RealtorCampaignResponse,
-    RealtorOnboardResponse,
     VerifyCalcomResponse,
 )
 from app.services.onboarding.exceptions import (
@@ -18,11 +18,11 @@ from app.services.onboarding.exceptions import (
     OnboardingUnprocessableError,
 )
 from app.services.onboarding.external_checks import CalcomEventTypeLookup, CalcomVerification
-from app.services.onboarding.workspace_setup import RealtorCampaignResult, RealtorOnboardingResult
+from app.services.onboarding.workspace_setup import CampaignResult, OnboardingResult
 
 
 def onboarding_error_to_http_exception(exc: OnboardingServiceError) -> HTTPException:
-    """Map onboarding service errors to the legacy realtor endpoint status codes."""
+    """Map onboarding service errors to the onboarding endpoint status codes."""
     if isinstance(exc, OnboardingUnprocessableError):
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     elif isinstance(exc, OnboardingExternalServiceError):
@@ -37,7 +37,7 @@ def raise_onboarding_http_error(exc: OnboardingServiceError) -> NoReturn:
     raise onboarding_error_to_http_exception(exc) from exc
 
 
-def realtor_onboard_response(result: RealtorOnboardingResult) -> RealtorOnboardResponse:
+def onboard_response(result: OnboardingResult) -> OnboardResponse:
     """Build the public onboarding response from the service result."""
     if result.phone_number:
         message = f"Onboarding complete. Phone number {result.phone_number} provisioned."
@@ -47,7 +47,7 @@ def realtor_onboard_response(result: RealtorOnboardingResult) -> RealtorOnboardR
             "you can add one from Settings → Phone Numbers."
         )
 
-    return RealtorOnboardResponse(
+    return OnboardResponse(
         workspace_id=result.workspace_id,
         agent_id=result.agent_id,
         phone_number_id=result.phone_number_id,
@@ -58,9 +58,9 @@ def realtor_onboard_response(result: RealtorOnboardingResult) -> RealtorOnboardR
     )
 
 
-def realtor_campaign_response(result: RealtorCampaignResult) -> RealtorCampaignResponse:
+def launch_campaign_response(result: CampaignResult) -> LaunchCampaignResponse:
     """Build the public campaign response from the service result."""
-    return RealtorCampaignResponse(
+    return LaunchCampaignResponse(
         campaign_id=result.campaign_id,
         campaign_name=result.campaign_name,
         campaign_status=result.campaign_status,

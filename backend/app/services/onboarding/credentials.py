@@ -1,4 +1,4 @@
-"""Credential storage helpers for realtor onboarding integrations."""
+"""Credential storage helpers for onboarding integrations."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Workspace setup workflows for realtor onboarding."""
+"""Workspace setup workflows for home-service lead-reactivation onboarding."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace, WorkspaceMembership
-from app.services.agents.realtor_template import (
-    get_realtor_agent_config,
-    get_realtor_campaign_defaults,
+from app.services.agents.reactivation_template import (
+    get_reactivation_agent_config,
+    get_reactivation_campaign_defaults,
 )
 from app.services.contacts import ContactImportService, ImportResult
 from app.services.onboarding.credentials import store_calcom_credentials
@@ -30,12 +30,16 @@ from app.services.telephony.telnyx import PhoneNumberInfo, TelnyxSMSService
 
 logger = structlog.get_logger()
 
-REALTOR_AGENT_NAME = "Realtor Lead Reactivation Agent"
+# Name given to the auto-created reactivation agent. The legacy realtor name is
+# accepted on lookup so workspaces onboarded before the home-service rename keep
+# resolving their existing agent.
+REACTIVATION_AGENT_NAME = "Lead Reactivation Agent"
+LEGACY_REACTIVATION_AGENT_NAME = "Realtor Lead Reactivation Agent"
 
 
 @dataclass(slots=True, frozen=True)
-class RealtorOnboardingInput:
-    """Input values required to complete realtor workspace onboarding."""
+class OnboardingInput:
+    """Input values required to complete workspace onboarding."""
 
     calcom_api_key: str
     calcom_event_type_id: int
@@ -43,8 +47,8 @@ class RealtorOnboardingInput:
 
 
 @dataclass(slots=True, frozen=True)
-class RealtorOnboardingResult:
-    """Result of realtor workspace onboarding."""
+class OnboardingResult:
+    """Result of workspace onboarding."""
 
     workspace_id: uuid.UUID
     agent_id: uuid.UUID
@@ -54,8 +58,8 @@ class RealtorOnboardingResult:
 
 
 @dataclass(slots=True, frozen=True)
-class RealtorCampaignInput:
-    """Input values required to import contacts and launch a realtor campaign."""
+class CampaignInput:
+    """Input values required to import contacts and launch a reactivation campaign."""
 
     file_content: bytes
     skip_duplicates: bool
@@ -63,8 +67,8 @@ class RealtorCampaignInput:
 
 
 @dataclass(slots=True, frozen=True)
-class RealtorCampaignResult:
-    """Result of launching a realtor campaign from uploaded contacts."""
+class CampaignResult:
+    """Result of launching a reactivation campaign from uploaded contacts."""
 
     campaign_id: uuid.UUID
     campaign_name: str
@@ -126,25 +130,25 @@ async def get_user_workspace(current_user_id: int, db: AsyncSession) -> Workspac
     return workspace
 
 
-async def complete_realtor_onboarding(
+async def complete_onboarding(
     *,
     db: AsyncSession,
     current_user_id: int,
-    request: RealtorOnboardingInput,
+    request: OnboardingInput,
     telnyx_api_key: str | None = None,
     telnyx_service_factory: TelnyxServiceFactory = TelnyxSMSService,
-) -> RealtorOnboardingResult:
-    """Create the realtor agent, store credentials, and best-effort provision SMS."""
+) -> OnboardingResult:
+    """Create the reactivation agent, store credentials, and best-effort provision SMS."""
     workspace = await get_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
-    agent = await create_realtor_agent(
+    agent = await create_reactivation_agent(
         db=db,
         workspace_id=workspace_id,
         calcom_event_type_id=request.calcom_event_type_id,
     )
     logger.info(
-        "realtor_agent_created",
+        "reactivation_agent_created",
         workspace_id=str(workspace_id),
         agent_id=str(agent.id),
         user_id=current_user_id,
@@ -157,7 +161,7 @@ async def complete_realtor_onboarding(
         user_id=current_user_id,
     )
 
-    phone = await provision_realtor_phone_number(
+    phone = await provision_phone_number(
         db=db,
         workspace_id=workspace_id,
         area_code=request.area_code,
@@ -167,7 +171,7 @@ async def complete_realtor_onboarding(
 
     await db.commit()
 
-    return RealtorOnboardingResult(
+    return OnboardingResult(
         workspace_id=workspace_id,
         agent_id=agent.id,
         phone_number_id=phone.phone_number_id,
@@ -176,17 +180,17 @@ async def complete_realtor_onboarding(
     )
 
 
-async def create_realtor_agent(
+async def create_reactivation_agent(
     *,
     db: AsyncSession,
     workspace_id: uuid.UUID,
     calcom_event_type_id: int,
 ) -> Agent:
-    """Create a realtor template text agent in the workspace."""
-    agent_config = get_realtor_agent_config()
+    """Create a reactivation template text agent in the workspace."""
+    agent_config = get_reactivation_agent_config()
     agent = Agent(
         workspace_id=workspace_id,
-        name=REALTOR_AGENT_NAME,
+        name=REACTIVATION_AGENT_NAME,
         calcom_event_type_id=calcom_event_type_id,
         **agent_config,
     )
@@ -195,7 +199,7 @@ async def create_realtor_agent(
     return agent
 
 
-async def provision_realtor_phone_number(
+async def provision_phone_number(
     *,
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -264,20 +268,20 @@ def _build_phone_number(workspace_id: uuid.UUID, purchased: PhoneNumberInfo) -> 
     )
 
 
-async def launch_realtor_campaign_from_csv(
+async def launch_campaign_from_csv(
     *,
     db: AsyncSession,
     current_user_id: int,
-    request: RealtorCampaignInput,
+    request: CampaignInput,
     import_service_factory: ContactImportServiceFactory = ContactImportService,
     drip_bootstrapper: DripBootstrapper = auto_create_drip_for_imports,
     now: Callable[[], datetime] | None = None,
-) -> RealtorCampaignResult:
+) -> CampaignResult:
     """Import contacts from CSV, create a campaign, enroll contacts, and start it."""
     workspace = await get_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
-    import_result = await import_realtor_contacts(
+    import_result = await import_onboarding_contacts(
         db=db,
         workspace_id=workspace_id,
         file_content=request.file_content,
@@ -285,10 +289,10 @@ async def launch_realtor_campaign_from_csv(
         import_service_factory=import_service_factory,
     )
 
-    agent = await get_realtor_agent(db=db, workspace_id=workspace_id)
-    phone_record = await get_realtor_sms_phone_number(db=db, workspace_id=workspace_id)
+    agent = await get_reactivation_agent(db=db, workspace_id=workspace_id)
+    phone_record = await get_sms_phone_number(db=db, workspace_id=workspace_id)
     clock = now or (lambda: datetime.now(UTC))
-    campaign = await create_realtor_campaign(
+    campaign = await create_reactivation_campaign(
         db=db,
         workspace_id=workspace_id,
         agent=agent,
@@ -309,13 +313,13 @@ async def launch_realtor_campaign_from_csv(
     await db.refresh(campaign)
 
     logger.info(
-        "realtor_campaign_started",
+        "reactivation_campaign_started",
         workspace_id=str(workspace_id),
         campaign_id=str(campaign.id),
         contacts=added_count,
     )
 
-    return RealtorCampaignResult(
+    return CampaignResult(
         campaign_id=campaign.id,
         campaign_name=campaign.name,
         campaign_status=campaign.status,
@@ -328,7 +332,7 @@ async def launch_realtor_campaign_from_csv(
     )
 
 
-async def import_realtor_contacts(
+async def import_onboarding_contacts(
     *,
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -336,14 +340,14 @@ async def import_realtor_contacts(
     skip_duplicates: bool,
     import_service_factory: ContactImportServiceFactory = ContactImportService,
 ) -> ImportResult:
-    """Import realtor CSV contacts and map import failures to onboarding errors."""
+    """Import onboarding CSV contacts and map import failures to onboarding errors."""
     import_service = import_service_factory(db)
     try:
         import_result = await import_service.import_csv(
             workspace_id=workspace_id,
             file_content=file_content,
             skip_duplicates=skip_duplicates,
-            source="realtor_csv_upload",
+            source="csv_upload",
         )
     except ValueError as exc:
         raise OnboardingValidationError(str(exc)) from exc
@@ -359,11 +363,11 @@ async def import_realtor_contacts(
     return import_result
 
 
-async def get_realtor_agent(*, db: AsyncSession, workspace_id: uuid.UUID) -> Agent:
-    """Return the realtor agent, falling back to the first text-channel agent."""
+async def get_reactivation_agent(*, db: AsyncSession, workspace_id: uuid.UUID) -> Agent:
+    """Return the reactivation agent, falling back to the first text-channel agent."""
     agent_result = await db.execute(
         apply_workspace_scope(select(Agent), Agent, workspace_id)
-        .where(Agent.name == REALTOR_AGENT_NAME)
+        .where(Agent.name.in_([REACTIVATION_AGENT_NAME, LEGACY_REACTIVATION_AGENT_NAME]))
         .limit(1)
     )
     agent = agent_result.scalar_one_or_none()
@@ -379,14 +383,14 @@ async def get_realtor_agent(*, db: AsyncSession, workspace_id: uuid.UUID) -> Age
 
     if agent is None:
         raise OnboardingValidationError(
-            "No realtor agent found in this workspace. "
+            "No reactivation agent found in this workspace. "
             "Complete onboarding first to create the agent."
         )
 
     return agent
 
 
-async def get_realtor_sms_phone_number(*, db: AsyncSession, workspace_id: uuid.UUID) -> PhoneNumber:
+async def get_sms_phone_number(*, db: AsyncSession, workspace_id: uuid.UUID) -> PhoneNumber:
     """Return the first active SMS-enabled phone number in the workspace."""
     phone_result = await db.execute(
         apply_workspace_scope(select(PhoneNumber), PhoneNumber, workspace_id)
@@ -408,7 +412,7 @@ async def get_realtor_sms_phone_number(*, db: AsyncSession, workspace_id: uuid.U
     return phone_record
 
 
-async def create_realtor_campaign(
+async def create_reactivation_campaign(
     *,
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -417,8 +421,8 @@ async def create_realtor_campaign(
     campaign_name: str | None,
     now: Callable[[], datetime],
 ) -> Campaign:
-    """Create the Campaign row for a realtor lead-reactivation launch."""
-    defaults = get_realtor_campaign_defaults()
+    """Create the Campaign row for a reactivation launch."""
+    defaults = get_reactivation_campaign_defaults()
     date_str = now().strftime("%B %d, %Y")
     resolved_name = campaign_name or f"Lead Reactivation - {date_str}"
 
@@ -434,7 +438,7 @@ async def create_realtor_campaign(
     await db.flush()
 
     logger.info(
-        "realtor_campaign_created",
+        "reactivation_campaign_created",
         workspace_id=str(workspace_id),
         campaign_id=str(campaign.id),
         agent_id=str(agent.id),

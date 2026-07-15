@@ -220,19 +220,19 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                 idempotency_parts=(appointment.id,),
             )
 
-        # Email notification to realtor for new bookings
+        # Email notification to workspace owner for new bookings
         if is_new_booking:
             try:
                 owner = await get_workspace_owner(db, workspace_id)
                 if owner:
-                    realtor_email, realtor_name = owner
+                    owner_email, owner_name = owner
                     contact_name = (
                         " ".join(filter(None, [contact.first_name, contact.last_name])) or "Unknown"
                     )
                     spawn_background_task(
                         send_appointment_booked_notification(
-                            to_email=realtor_email,
-                            realtor_name=realtor_name,
+                            to_email=owner_email,
+                            owner_name=owner_name,
                             contact_name=contact_name,
                             contact_phone=contact.phone_number or "",
                             appointment_time=appointment.scheduled_at,
@@ -241,7 +241,7 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                     )
                     log.info(
                         "appointment_booked_email_queued",
-                        to_email=realtor_email,
+                        to_email=owner_email,
                         contact_id=contact.id,
                     )
             except Exception:

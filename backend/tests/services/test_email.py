@@ -79,7 +79,7 @@ async def test_send_returns_none_when_resend_async_client_fails(
 async def test_invitation_email_uses_async_resend_path(fake_resend: _FakeResend) -> None:
     sent = await email.send_invitation_email(
         to_email="agent@example.com",
-        workspace_name="Acme Realty",
+        workspace_name="Acme Home Services",
         inviter_name="Nolan",
         invitation_url="https://app.example/invitations/abc",
         role="admin",
@@ -92,7 +92,7 @@ async def test_invitation_email_uses_async_resend_path(fake_resend: _FakeResend)
     params = args[0]
     assert params["from"] == "Tribunal <noreply@example.com>"
     assert params["to"] == ["agent@example.com"]
-    assert params["subject"] == "You've been invited to join Acme Realty"
+    assert params["subject"] == "You've been invited to join Acme Home Services"
     assert "https://app.example/invitations/abc" in params["html"]
     fake_resend.Emails.send.assert_not_called()
 
@@ -103,7 +103,7 @@ async def test_invitation_email_passes_resend_idempotency_key(fake_resend: _Fake
 
     sent = await email.send_invitation_email(
         to_email="agent@example.com",
-        workspace_name="Acme Realty",
+        workspace_name="Acme Home Services",
         inviter_name="Nolan",
         invitation_url="https://app.example/invitations/abc",
         role="admin",
