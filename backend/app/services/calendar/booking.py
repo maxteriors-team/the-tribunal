@@ -104,11 +104,14 @@ class BookingService:
         end_date_str: str | None = None,
         *,
         max_slots: int = 15,
+        now: datetime | None = None,
     ) -> AvailabilityResult:
         """Return open slots between two dates (inclusive), YYYY-MM-DD.
 
         Slots come from the workspace's business hours minus existing scheduled
-        appointments in the range.
+        appointments in the range. Past slots (relative to ``now``, default the
+        current clock) are excluded; ``now`` is injectable so callers and tests
+        can compute availability deterministically.
         """
         tz = self._get_timezone()
         try:
@@ -132,6 +135,7 @@ class BookingService:
                 busy=busy,
                 slot_minutes=self._slot_minutes,
                 max_slots=max_slots,
+                now=now,
             )
             self._log.info("availability_computed", slot_count=len(slots))
             return AvailabilityResult(

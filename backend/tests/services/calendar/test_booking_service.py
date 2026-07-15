@@ -70,7 +70,11 @@ async def test_check_availability_uses_business_hours_and_busy_set() -> None:
         session_factory=_factory([_ScalarResult(settings), _RowsResult(busy_rows)]),
     )
 
-    result = await service.check_availability("2026-07-15", "2026-07-15")
+    # Pin ``now`` to midnight of the test day so no morning slot is filtered as
+    # past — the assertion must not depend on the wall-clock time of the run.
+    result = await service.check_availability(
+        "2026-07-15", "2026-07-15", now=datetime(2026, 7, 15, 0, 0, tzinfo=TZ)
+    )
 
     assert result.success is True
     times = [s.time for s in result.slots]
@@ -85,7 +89,10 @@ async def test_check_availability_defaults_when_no_business_hours() -> None:
         uuid.uuid4(),
         session_factory=_factory([_ScalarResult(None), _RowsResult([])]),
     )
-    result = await service.check_availability("2026-07-15", max_slots=3)
+    # Pin ``now`` to midnight so the first slots aren't dropped as past.
+    result = await service.check_availability(
+        "2026-07-15", max_slots=3, now=datetime(2026, 7, 15, 0, 0, tzinfo=TZ)
+    )
     assert result.success is True
     assert [s.time for s in result.slots] == ["09:00", "09:30", "10:00"]
 
