@@ -280,6 +280,14 @@ def _default_seasonal_items() -> list[SeasonalItem]:
                 SizeRate(key="large", name="Large wreath (over 36 in)", price=150),
             ],
         ),
+        # Mini lights wrapped on bushes/trees, priced per linear foot of run
+        # (like garland) so the estimator's traced mini-light strands price.
+        SeasonalItem(
+            key="mini_lights",
+            label="Mini Lights (bushes & trees)",
+            unit="per_ft",
+            options=[SizeRate(key="standard", name="Mini lights (installed)", price=5)],
+        ),
         SeasonalItem(
             key="garland",
             label="Garland",

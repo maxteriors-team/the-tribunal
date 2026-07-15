@@ -431,6 +431,14 @@ PRICING: dict = {
                 ],
             },
             {
+                "key": "mini_lights",
+                "label": "Mini Lights (bushes & trees)",
+                "unit": "per_ft",
+                "options": [
+                    {"key": "standard", "name": "Mini lights (installed)", "price": 5},
+                ],
+            },
+            {
                 "key": "garland",
                 "label": "Garland",
                 "unit": "per_ft",

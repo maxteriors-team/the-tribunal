@@ -417,6 +417,48 @@ def test_christmas_prices_garland_per_linear_foot():
     assert any("ft Garland" in line.label for line in r.lines)
 
 
+def test_default_seasonal_items_include_mini_lights_per_ft():
+    # The estimator draws mini-light strands on bushes/trees; they price through
+    # a per-ft `mini_lights` decor category seeded into the default catalog.
+    items = {i.key: i for i in ChristmasConfig().items}
+    assert "mini_lights" in items
+    assert items["mini_lights"].unit == "per_ft"
+
+
+def test_christmas_prices_multi_product_payload_with_mini_lights():
+    # Default christmas catalog (now includes a per-ft `mini_lights` category),
+    # mirroring a drawn design: roofline + mini-lights runs + a tree + a wreath.
+    cfg = _landscape_config(
+        christmas=ChristmasConfig(
+            enabled=True, roofline_per_ft=6, takedown_rate=0.25, storage_price=0
+        )
+    )
+    r = pp.price_christmas(
+        cfg,
+        roofline_feet=100,
+        items={
+            "mini_lights": {"standard": 60},
+            "trees": {"small": 2},
+            "wreaths": {"standard": 1},
+        },
+    )
+    # buffer 0.11 -> gross = round_half_up(net / 0.89):
+    # roofline 600 -> 674; mini 300 -> 337; trees 240 -> 270; wreaths 85 -> 96.
+    assert r.roofline_cost == 674
+    costs = {i.key: i.cost for i in r.items}
+    assert costs["mini_lights"] == 337
+    mini = next(i for i in r.items if i.key == "mini_lights")
+    assert mini.unit == "per_ft"
+    assert costs["trees"] == 270
+    assert costs["wreaths"] == 96
+    # Unselected categories stay out of the breakdown.
+    assert "bushes" not in costs
+    assert "garland" not in costs
+    assert r.raw_total == 1377
+    assert r.total == 1377
+    assert sum(line.line_total for line in r.lines) == 1377
+
+
 def test_christmas_ignores_unknown_and_zero_counts():
     cfg = _christmas_config()
     r = pp.price_christmas(
