@@ -6,71 +6,73 @@ import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
 import { estimatorApi } from "@/lib/api/estimator";
 import type { LinearFeetEstimateResult } from "@/types/estimate";
 
-// The estimator never calls the pricing API until feet > 0, but mock it so a
-// stray call can't hit the network during the interactions under test.
+// Server pricing is always mocked — the component only ever sends feet/counts.
 vi.mock("@/lib/api/estimator", () => ({
   estimatorApi: {
-    estimate: vi.fn().mockResolvedValue(null),
-    share: vi.fn().mockResolvedValue({ url: "" }),
-    deliver: vi.fn().mockResolvedValue({ ok: true, to: "" }),
+    estimate: vi.fn(),
+    share: vi.fn(),
+    deliver: vi.fn(),
   },
 }));
 
-// Isolate the component from canvas geometry: jsdom can't produce real traced
-// points (getBoundingClientRect returns zeros), so force a positive measured
-// footage. The measurement math itself is unit-tested in measure.test.ts.
-// `pxPerFoot` stays 0 so `calibrated` is false — keeping the "set the scale"
-// hint the upload tests assert on.
-vi.mock("@/lib/estimator/measure", () => ({
-  REFERENCE_PRESETS: [{ key: "front_door", label: "Front door (single)", feet: 6.67 }],
-  rooflineFeet: () => 100,
-  pxPerFoot: () => 0,
-  polylineLength: () => 0,
+// jsdom can't decode images or drive a real canvas, so mock the photo loader:
+// upload resolves a fixed PhotoInfo and the canvas gets a fake decoded image.
+vi.mock("@/lib/estimator/photo", () => ({
+  fileToPhoto: vi
+    .fn()
+    .mockResolvedValue({ dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 }),
+  loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
 }));
 
-// jsdom ships no canvas 2D context; a minimal stub lets draw() run its path.
-function stubCanvas() {
-  const ctx = {
-    clearRect: vi.fn(),
-    drawImage: vi.fn(),
-    save: vi.fn(),
-    restore: vi.fn(),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(),
-    arc: vi.fn(),
-    fill: vi.fn(),
-    strokeStyle: "",
-    fillStyle: "",
-    lineWidth: 0,
-    lineJoin: "",
-  } as unknown as CanvasRenderingContext2D;
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
-}
+// The glow engine is exercised in render.test.ts; here it's a no-op so the
+// canvas component mounts without a 2D context.
+vi.mock("@/lib/estimator/render", () => ({
+  drawScene: vi.fn(),
+  itemHit: vi.fn(() => false),
+  resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
+}));
 
-// FileReader + Image are async browser APIs jsdom doesn't drive; stub both so
-// the upload chain (readAsDataURL -> Image.onload -> setHasImage) resolves
-// synchronously inside the change event.
-function stubImagePipeline() {
-  class MockFileReader {
-    onload: (() => void) | null = null;
-    result: string | null = null;
-    readAsDataURL() {
-      this.result = "data:image/png;base64,AAAA";
-      this.onload?.();
-    }
-  }
-  class MockImage {
-    onload: (() => void) | null = null;
-    width = 1200;
-    height = 800;
-    set src(_value: string) {
-      this.onload?.();
-    }
-  }
-  vi.stubGlobal("FileReader", MockFileReader);
-  vi.stubGlobal("Image", MockImage);
+// jsdom can't produce traced geometry (getBoundingClientRect is all zeros), so
+// force a measured design: hasDesign true + a fixed mapped payload. The mapping
+// math itself is unit-tested in design.test.ts.
+const MAPPED = { feet: 100, christmas_items: {} };
+vi.mock("@/lib/estimator/design", () => ({
+  designToEstimateInputs: vi.fn(() => MAPPED),
+  hasDesign: vi.fn(() => true),
+  designScale: vi.fn(() => ({ ftPerPx: 0.05, pxPerFt: 20, calibrated: false })),
+  formatFeet: (n: number) => `${n} ft`,
+}));
+
+const ESTIMATE: LinearFeetEstimateResult = {
+  feet: 100,
+  permanent: { enabled: true, total: 3300, per_ft: 32 },
+  christmas: {
+    enabled: true,
+    total: 900,
+    per_ft: 6,
+    items: [{ key: "wreaths", label: "Wreaths", unit: "each", cost: 96 }],
+  },
+  difference: 2400,
+  years: 5,
+  temporary_multi_year: 4500,
+  permanent_one_time: 3300,
+  multi_year_savings: 1200,
+  permanent_perks: [],
+  christmas_perks: [],
+  christmas_catalog: [
+    {
+      key: "wreaths",
+      label: "Wreaths",
+      unit: "each",
+      options: [{ key: "standard", name: "Wreath (up to 36 in)", price: 85 }],
+    },
+  ],
+};
+
+function stubCanvas() {
+  // Returning null makes the canvas draw() bail cleanly (no jsdom "not
+  // implemented" noise) — rendering is covered by render.test.ts.
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 }
 
 function renderEstimator() {
@@ -84,17 +86,17 @@ function renderEstimator() {
   );
 }
 
-describe("RooflineEstimator photo upload", () => {
+async function uploadPhoto(container: HTMLElement) {
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+  const file = new File(["x"], "house.png", { type: "image/png" });
+  fireEvent.change(input!, { target: { files: [file] } });
+  await waitFor(() => expect(container.querySelector("canvas")).not.toBeNull());
+}
+
+describe("RooflineEstimator", () => {
   beforeEach(() => {
     stubCanvas();
-    stubImagePipeline();
-    // restoreAllMocks (below) resets the module mock fns, so re-establish safe
-    // async defaults each test. feet is forced positive by the measure mock, so
-    // the pricing query is always enabled and must resolve (not undefined). The
-    // component only reads `estimate?.…`, so a null estimate is a valid resolve.
-    vi.mocked(estimatorApi.estimate).mockResolvedValue(
-      null as unknown as LinearFeetEstimateResult,
-    );
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(ESTIMATE);
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "",
       token: "",
@@ -105,53 +107,55 @@ describe("RooflineEstimator photo upload", () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
   });
 
-  it("mounts the measuring canvas after the first photo upload", async () => {
+  it("shows the welcome prompt before a photo, then the three-pane editor after upload", async () => {
     const { container } = renderEstimator();
 
-    // Before upload: empty prompt, no canvas, no draw tools.
+    // Before upload: welcome copy, no canvas, no palette.
     expect(container.querySelector("canvas")).toBeNull();
-    expect(screen.getByText(/Upload a straight-on photo/i)).toBeInTheDocument();
+    expect(screen.getByText(/Design their lights on a photo/i)).toBeInTheDocument();
 
-    const input = container.querySelector<HTMLInputElement>(
-      'input[type="file"]',
-    );
-    expect(input).not.toBeNull();
+    await uploadPhoto(container);
 
-    const file = new File(["x"], "house.png", { type: "image/png" });
-    fireEvent.change(input!, { target: { files: [file] } });
-
-    // After upload the canvas + drawing controls appear — proving `hasImage`
-    // flipped true. This is exactly what the pre-fix code failed to do, because
-    // the canvas mounts on `hasImage` yet `hasImage` was only set inside a
-    // callback that bailed when the canvas wasn't mounted yet.
-    await waitFor(() =>
-      expect(container.querySelector("canvas")).not.toBeNull(),
-    );
+    // After upload: the tool palette + a drawable roofline product + estimate panel.
+    expect(screen.getByRole("heading", { name: /^Tools$/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /2\. Roofline/i }),
+      screen.getByRole("button", { name: /C9 Roofline — Warm White/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/set the scale/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Select & edit/i }),
+    ).toBeInTheDocument();
+
+    // The design is priced server-side (feet is the only measured input sent).
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ feet: 100 }),
+      ),
+    );
+  });
+
+  it("derives the decor palette from the workspace christmas catalog", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    // The `each` wreath category becomes a placeable decor product.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Wreath \(up to 36 in\)/i }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Place decor/i)).toBeInTheDocument();
   });
 
   it("exposes the Save-to-customer fields once a photo is loaded", async () => {
     const { container } = renderEstimator();
-
-    // No customer capture before a photo exists.
     expect(screen.queryByLabelText(/Customer name/i)).toBeNull();
 
-    const input = container.querySelector<HTMLInputElement>(
-      'input[type="file"]',
-    );
-    const file = new File(["x"], "house.png", { type: "image/png" });
-    fireEvent.change(input!, { target: { files: [file] } });
+    await uploadPhoto(container);
 
-    // After upload the rep can attach the estimate to a customer.
-    await waitFor(() =>
-      expect(screen.getByLabelText(/Customer name/i)).toBeInTheDocument(),
-    );
+    expect(screen.getByLabelText(/Customer name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Customer phone/i)).toBeInTheDocument();
     expect(
@@ -172,24 +176,13 @@ describe("RooflineEstimator photo upload", () => {
     });
 
     const { container } = renderEstimator();
+    await uploadPhoto(container);
 
-    const input = container.querySelector<HTMLInputElement>(
-      'input[type="file"]',
-    );
-    fireEvent.change(input!, {
-      target: { files: [new File(["x"], "house.png", { type: "image/png" })] },
-    });
-    await waitFor(() =>
-      expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument(),
-    );
-
-    // Enter the customer's email, then save/share the estimate.
     fireEvent.change(screen.getByLabelText(/Customer email/i), {
       target: { value: "buyer@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Save & share/i }));
 
-    // The email action only appears after a save; it targets the entered email.
     const emailBtn = await screen.findByRole("button", {
       name: /Email estimate to buyer@example\.com/i,
     });
@@ -197,7 +190,6 @@ describe("RooflineEstimator photo upload", () => {
 
     fireEvent.click(emailBtn);
 
-    // Sends to the saved comparison token + entered email, then confirms.
     await waitFor(() =>
       expect(estimatorApi.deliver).toHaveBeenCalledWith(
         "ws_1",
