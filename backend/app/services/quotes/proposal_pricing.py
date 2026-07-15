@@ -553,17 +553,13 @@ def price_christmas(
     decor_net = _ZERO
     decor_gross = _ZERO
     for item in c.items:
-        net, gross, item_lines = _price_seasonal_item(
-            item, selections.get(item.key) or {}, config
-        )
+        net, gross, item_lines = _price_seasonal_item(item, selections.get(item.key) or {}, config)
         lines.extend(item_lines)
         decor_net += net
         decor_gross += gross
         if gross > 0:
             item_costs.append(
-                SeasonalItemCost(
-                    key=item.key, label=item.label, unit=item.unit, cost=float(gross)
-                )
+                SeasonalItemCost(key=item.key, label=item.label, unit=item.unit, cost=float(gross))
             )
 
     install_net = roofline_net + decor_net

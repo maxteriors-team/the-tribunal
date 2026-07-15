@@ -985,9 +985,7 @@ class QuoteService:
         if req.per_ft_override is not None:
             perm_config = config.model_copy(
                 update={
-                    "permanent": config.permanent.model_copy(
-                        update={"per_ft": req.per_ft_override}
-                    )
+                    "permanent": config.permanent.model_copy(update={"per_ft": req.per_ft_override})
                 }
             )
         xmas_config = config

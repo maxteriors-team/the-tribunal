@@ -221,10 +221,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         christmas_pricing = pp.price_christmas(
             config,
             roofline_feet=payload.christmas.roofline_feet,
-            items={
-                key: _counts(rows)
-                for key, rows in payload.christmas.items.items()
-            },
+            items={key: _counts(rows) for key, rows in payload.christmas.items.items()},
             takedown=payload.christmas.takedown,
             storage=payload.christmas.storage,
         )

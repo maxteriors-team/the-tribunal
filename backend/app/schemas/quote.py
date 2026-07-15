@@ -80,9 +80,7 @@ class QuoteBase(BaseModel):
     @model_validator(mode="after")
     def _one_deposit_mode(self) -> "QuoteBase":
         if self.deposit_percentage is not None and self.deposit_amount_fixed is not None:
-            raise ValueError(
-                "Set only one of deposit_percentage or deposit_amount_fixed"
-            )
+            raise ValueError("Set only one of deposit_percentage or deposit_amount_fixed")
         return self
 
 
@@ -113,9 +111,7 @@ class QuoteUpdate(BaseModel):
     @model_validator(mode="after")
     def _one_deposit_mode(self) -> "QuoteUpdate":
         if self.deposit_percentage is not None and self.deposit_amount_fixed is not None:
-            raise ValueError(
-                "Set only one of deposit_percentage or deposit_amount_fixed"
-            )
+            raise ValueError("Set only one of deposit_percentage or deposit_amount_fixed")
         return self
 
 
@@ -160,9 +156,7 @@ class QuoteConvertRequest(BaseModel):
     def _check_window(self) -> "QuoteConvertRequest":
         start, end = self.scheduled_start, self.scheduled_end
         if (start is None) != (end is None):
-            raise ValueError(
-                "scheduled_start and scheduled_end must be provided together"
-            )
+            raise ValueError("scheduled_start and scheduled_end must be provided together")
         if start is not None and end is not None and end <= start:
             raise ValueError("scheduled_end must be after scheduled_start")
         return self

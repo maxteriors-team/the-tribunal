@@ -201,9 +201,7 @@ async def reconcile_deposit(db: AsyncSession, token: str) -> DepositStatus:
             )
         else:
             if status.payment_status == "paid":
-                await mark_deposit_paid(
-                    db, quote, payment_intent_id=status.payment_intent_id
-                )
+                await mark_deposit_paid(db, quote, payment_intent_id=status.payment_intent_id)
                 return DepositStatus(
                     deposit_paid=True, deposit_amount=amount, currency=quote.currency
                 )
