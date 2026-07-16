@@ -11776,6 +11776,72 @@ export interface components {
             warranty?: string | null;
         };
         /**
+         * ChristmasPackagePricing
+         * @description One priced seasonal-Christmas package (a tier card + its computed price).
+         *
+         *     ``pricing`` is the standard :class:`ChristmasPricing` breakdown for this
+         *     package's included categories (+ roofline when ``includes_roofline``), so the
+         *     display lines and totals reuse the same engine as the à la carte flow. The
+         *     copy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.
+         */
+        ChristmasPackagePricing: {
+            /** Experience */
+            experience?: string | null;
+            /**
+             * Includes Roofline
+             * @default false
+             */
+            includes_roofline: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            pricing: components["schemas"]["ChristmasPricing"];
+            /** Value Tag */
+            value_tag?: string | null;
+        };
+        /**
+         * ChristmasPricing
+         * @description Computed seasonal-Christmas price + component breakdown.
+         *
+         *     Per-category decor costs live in ``items`` (one :class:`SeasonalItemCost`
+         *     each) so trees/bushes/wreaths/garland/… are uniform; ``lines`` remains the
+         *     authoritative display breakdown that sums to ``raw_total``.
+         */
+        ChristmasPricing: {
+            /** Items */
+            items?: components["schemas"]["SeasonalItemCost"][];
+            /** Lines */
+            lines?: components["schemas"]["CategoryLine"][];
+            /** Min Applied */
+            min_applied: boolean;
+            /** Minimum */
+            minimum: number;
+            /** Raw Total */
+            raw_total: number;
+            /** Roofline Cost */
+            roofline_cost: number;
+            /** Roofline Feet */
+            roofline_feet: number;
+            /** Storage Cost */
+            storage_cost: number;
+            /** Takedown Cost */
+            takedown_cost: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * ClockInRequest
          * @description Start the clock on a job (open-ended time entry).
          */
@@ -11908,6 +11974,8 @@ export interface components {
             label?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /** Selected Package */
+            selected_package?: string | null;
             /**
              * Storage
              * @default false
@@ -15786,6 +15854,8 @@ export interface components {
             feet: number;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /** Selected Package */
+            selected_package?: string | null;
             /**
              * Storage
              * @default false
@@ -15809,6 +15879,8 @@ export interface components {
             christmas: components["schemas"]["ChristmasEstimate"];
             /** Christmas Catalog */
             christmas_catalog?: components["schemas"]["SeasonalItem"][];
+            /** Christmas Packages */
+            christmas_packages?: components["schemas"]["ChristmasPackagePricing"][];
             /** Christmas Perks */
             christmas_perks?: string[];
             /** Difference */
@@ -22926,6 +22998,11 @@ export interface components {
          *     ``items`` maps a decor category key ("trees", "garland", …) to the selected
          *     options for that category, matching the standardized ``ChristmasConfig.items``
          *     catalog so any add-on is data, not a new field.
+         *
+         *     When the workspace sells Christmas as Good/Better/Best packages
+         *     (``ChristmasConfig.packages_enabled``), ``selected_package`` names the
+         *     package the client picked; it is ignored in the à la carte flow and falls
+         *     back server-side to the most inclusive priced package when unset or stale.
          */
         WizardChristmasSelection: {
             /** Items */
@@ -22937,6 +23014,8 @@ export interface components {
              * @default 0
              */
             roofline_feet: number;
+            /** Selected Package */
+            selected_package?: string | null;
             /**
              * Storage
              * @default false

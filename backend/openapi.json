@@ -9116,6 +9116,153 @@
         "title": "ChristmasPackage",
         "type": "object"
       },
+      "ChristmasPackagePricing": {
+        "description": "One priced seasonal-Christmas package (a tier card + its computed price).\n\n``pricing`` is the standard :class:`ChristmasPricing` breakdown for this\npackage's included categories (+ roofline when ``includes_roofline``), so the\ndisplay lines and totals reuse the same engine as the à la carte flow. The\ncopy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.",
+        "properties": {
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "includes_roofline": {
+            "default": false,
+            "title": "Includes Roofline",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/ChristmasPricing"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "pricing"
+        ],
+        "title": "ChristmasPackagePricing",
+        "type": "object"
+      },
+      "ChristmasPricing": {
+        "description": "Computed seasonal-Christmas price + component breakdown.\n\nPer-category decor costs live in ``items`` (one :class:`SeasonalItemCost`\neach) so trees/bushes/wreaths/garland/… are uniform; ``lines`` remains the\nauthoritative display breakdown that sums to ``raw_total``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalItemCost"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "min_applied": {
+            "title": "Min Applied",
+            "type": "boolean"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "raw_total": {
+            "title": "Raw Total",
+            "type": "number"
+          },
+          "roofline_cost": {
+            "title": "Roofline Cost",
+            "type": "number"
+          },
+          "roofline_feet": {
+            "title": "Roofline Feet",
+            "type": "number"
+          },
+          "storage_cost": {
+            "title": "Storage Cost",
+            "type": "number"
+          },
+          "takedown_cost": {
+            "title": "Takedown Cost",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "roofline_feet",
+          "roofline_cost",
+          "takedown_cost",
+          "storage_cost",
+          "minimum",
+          "raw_total",
+          "total",
+          "min_applied"
+        ],
+        "title": "ChristmasPricing",
+        "type": "object"
+      },
       "ClockInRequest": {
         "description": "Start the clock on a job (open-ended time entry).",
         "properties": {
@@ -9409,6 +9556,17 @@
               }
             ],
             "title": "Per Ft Override"
+          },
+          "selected_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Package"
           },
           "storage": {
             "default": false,
@@ -19584,6 +19742,17 @@
             ],
             "title": "Per Ft Override"
           },
+          "selected_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Package"
+          },
           "storage": {
             "default": false,
             "title": "Storage",
@@ -19612,6 +19781,13 @@
               "$ref": "#/components/schemas/SeasonalItem"
             },
             "title": "Christmas Catalog",
+            "type": "array"
+          },
+          "christmas_packages": {
+            "items": {
+              "$ref": "#/components/schemas/ChristmasPackagePricing"
+            },
+            "title": "Christmas Packages",
             "type": "array"
           },
           "christmas_perks": {
@@ -39095,7 +39271,7 @@
         "type": "object"
       },
       "WizardChristmasSelection": {
-        "description": "Seasonal Christmas selection: roofline + decor items + takedown/storage.\n\n``items`` maps a decor category key (\"trees\", \"garland\", …) to the selected\noptions for that category, matching the standardized ``ChristmasConfig.items``\ncatalog so any add-on is data, not a new field.",
+        "description": "Seasonal Christmas selection: roofline + decor items + takedown/storage.\n\n``items`` maps a decor category key (\"trees\", \"garland\", …) to the selected\noptions for that category, matching the standardized ``ChristmasConfig.items``\ncatalog so any add-on is data, not a new field.\n\nWhen the workspace sells Christmas as Good/Better/Best packages\n(``ChristmasConfig.packages_enabled``), ``selected_package`` names the\npackage the client picked; it is ignored in the à la carte flow and falls\nback server-side to the most inclusive priced package when unset or stale.",
         "properties": {
           "items": {
             "additionalProperties": {
@@ -39112,6 +39288,17 @@
             "minimum": 0.0,
             "title": "Roofline Feet",
             "type": "number"
+          },
+          "selected_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Package"
           },
           "storage": {
             "default": false,
