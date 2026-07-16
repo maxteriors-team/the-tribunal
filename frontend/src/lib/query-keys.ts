@@ -244,6 +244,9 @@ export const queryKeys = {
     ...contacts,
     stats: (workspaceId: string) =>
       [...contacts.all(workspaceId), "stats"] as const,
+    /** Full contact roster fetched by paging through the list endpoint. */
+    allRecords: (workspaceId: string) =>
+      [...contacts.all(workspaceId), "all-records"] as const,
     ids: (workspaceId: string, params: QueryKeyParams) =>
       [...contacts.all(workspaceId), "ids", normalizeQueryKeyParams(params)] as const,
     infinite: (workspaceId: string | null, filters: QueryKeyParams) =>

@@ -195,6 +195,40 @@ export const contactsApi = {
     });
   },
 
+  /**
+   * Fetch every contact in a workspace by paging through the list endpoint.
+   *
+   * `list` caps `page_size` at 100 server-side, so callers that need the full
+   * roster (e.g. resolving customer names for recurring-job templates) can't
+   * grab everything in one request. This pages through instead: fetch page 1,
+   * then fetch any remaining pages in parallel and concatenate their items.
+   */
+  listAll: async (
+    workspaceId: string,
+    params: Omit<ContactsListParams, "page" | "page_size"> = {},
+  ): Promise<Contact[]> => {
+    const PAGE_SIZE = 100;
+    const first = await baseApi.list(workspaceId, {
+      ...params,
+      page: 1,
+      page_size: PAGE_SIZE,
+    });
+    const items = [...first.items];
+    if (first.pages > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: first.pages - 1 }, (_, index) =>
+          baseApi.list(workspaceId, {
+            ...params,
+            page: index + 2,
+            page_size: PAGE_SIZE,
+          }),
+        ),
+      );
+      for (const page of rest) items.push(...page.items);
+    }
+    return items;
+  },
+
   getStats: async (workspaceId: string): Promise<ContactStatsResponse> => {
     return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/stats", {
       path: { workspace_id: workspaceId },

@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
@@ -120,15 +120,24 @@ export function RecurringJobDialog({
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const isEdit = Boolean(template);
+  const [contactSearch, setContactSearch] = useState("");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: DEFAULT_VALUES,
   });
 
+  // Server-side contact search keeps the picker usable in workspaces with more
+  // than the endpoint's 100-per-page cap — the operator narrows by name/email
+  // instead of the client trying to load every contact at once.
+  const contactsParams = {
+    page: 1,
+    page_size: 100,
+    search: contactSearch.trim() || undefined,
+  };
   const contactsQuery = useQuery({
-    queryKey: queryKeys.contacts.list(workspaceId ?? "", { page_size: 200 }),
-    queryFn: () => contactsApi.list(workspaceId ?? "", { page_size: 200 }),
+    queryKey: queryKeys.contacts.list(workspaceId ?? "", contactsParams),
+    queryFn: () => contactsApi.list(workspaceId ?? "", contactsParams),
     enabled: Boolean(workspaceId) && open && !isEdit,
   });
 
@@ -181,6 +190,7 @@ export function RecurringJobDialog({
           queryKey: queryKeys.recurringJobs.all(workspaceId),
         });
       }
+      setContactSearch("");
       onOpenChange(false);
     },
     onError: (err: unknown) =>
@@ -189,6 +199,7 @@ export function RecurringJobDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && saveMutation.isPending) return;
+    if (!next) setContactSearch("");
     onOpenChange(next);
   };
 
@@ -218,6 +229,12 @@ export function RecurringJobDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Customer</FormLabel>
+                    <Input
+                      placeholder="Search customers by name or email…"
+                      value={contactSearch}
+                      onChange={(event) => setContactSearch(event.target.value)}
+                      className="mb-2"
+                    />
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -231,11 +248,19 @@ export function RecurringJobDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {contacts.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {contactLabel(c)}
-                          </SelectItem>
-                        ))}
+                        {contacts.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {contactsQuery.isLoading
+                              ? "Loading customers…"
+                              : "No customers found"}
+                          </div>
+                        ) : (
+                          contacts.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                              {contactLabel(c)}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />

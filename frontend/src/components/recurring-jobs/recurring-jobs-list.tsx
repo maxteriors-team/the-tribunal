@@ -72,13 +72,13 @@ export function RecurringJobsList() {
   });
 
   const contactsQuery = useQuery({
-    queryKey: queryKeys.contacts.list(workspaceId ?? "", { page_size: 200 }),
-    queryFn: () => contactsApi.list(workspaceId ?? "", { page_size: 200 }),
+    queryKey: queryKeys.contacts.allRecords(workspaceId ?? ""),
+    queryFn: () => contactsApi.listAll(workspaceId ?? ""),
     enabled: Boolean(workspaceId),
   });
 
   const contactName = (id: number): string => {
-    const c = contactsQuery.data?.items?.find((x) => x.id === id);
+    const c = contactsQuery.data?.find((x) => x.id === id);
     if (!c) return `Customer #${id}`;
     const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
     return name || c.email || `Customer #${id}`;
