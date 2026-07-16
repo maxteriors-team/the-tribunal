@@ -31,6 +31,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  TreePine,
   UserSearch,
   Users,
   Wrench,
@@ -41,6 +42,9 @@ import type { Capability, Tier } from "@/lib/permissions";
 
 export type AppNavBadgeKey = "nudges" | "pending-actions";
 
+/** Optional seasonal accent that visually distinguishes a nav item. */
+export type AppNavAccent = "christmas";
+
 export interface AppNavItem {
   title: string;
   url: string;
@@ -49,6 +53,11 @@ export interface AppNavItem {
   commandPalette?: boolean;
   devOnly?: boolean;
   badgeKey?: AppNavBadgeKey;
+  /**
+   * Festive accent that tints the item's icon so it stands out among the
+   * otherwise-monochrome nav (used for the seasonal Christmas Lights hub).
+   */
+  accent?: AppNavAccent;
   /**
    * Capability required to see this item. When set, the sidebar and command
    * palette hide it unless the caller's role grants the capability (mirrors the
@@ -138,6 +147,15 @@ export const workspaceNavItems: AppNavItem[] = [
     icon: Ruler,
     sidebar: true,
     commandPalette: true,
+    requires: "billing:read",
+  },
+  {
+    title: "Christmas Lights",
+    url: "/christmas-lights",
+    icon: TreePine,
+    sidebar: true,
+    commandPalette: true,
+    accent: "christmas",
     requires: "billing:read",
   },
   {
@@ -408,6 +426,7 @@ export const breadcrumbLabels: Record<string, string> = {
   opportunities: "Opportunities",
   quotes: "Quotes",
   invoices: "Invoices",
+  "christmas-lights": "Christmas Lights",
   new: "New",
   create: "Create",
   sms: "SMS",

@@ -214,6 +214,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
   const renderSidebarItem = (item: AppNavItem, options?: { muted?: boolean }) => {
     const Icon = item.icon;
+    // Festive tint keeps the seasonal hub recognizable among monochrome items.
+    const accentClass =
+      item.accent === "christmas" ? "text-emerald-600 dark:text-emerald-400" : "";
 
     return (
       <SidebarMenuItem key={item.title}>
@@ -224,7 +227,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
           className={options?.muted ? "text-muted-foreground" : undefined}
         >
           <Link href={item.url}>
-            <Icon className="size-4" />
+            <Icon className={`size-4${accentClass ? ` ${accentClass}` : ""}`} />
             <span>{item.title}</span>
             {renderBadge(item.badgeKey)}
           </Link>

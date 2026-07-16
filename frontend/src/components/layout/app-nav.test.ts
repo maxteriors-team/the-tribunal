@@ -68,3 +68,26 @@ describe("real nav items under the field tier", () => {
     expect(canSeeNavItem(calendar, "field", canAll)).toBe(true);
   });
 });
+
+describe("Christmas Lights seasonal hub nav item", () => {
+  const christmas = workspaceNavItems.find(
+    (i) => i.url === "/christmas-lights",
+  );
+
+  it("is registered with a festive accent and billing gate", () => {
+    expect(christmas).toBeDefined();
+    // The seasonal tab must read as visually distinct (drives the tinted icon).
+    expect(christmas!.accent).toBe("christmas");
+    // Gated like the other quoting surfaces (Quotes/Estimator/Invoices).
+    expect(christmas!.requires).toBe("billing:read");
+  });
+
+  it("follows the capability gate for non-field tiers", () => {
+    expect(canSeeNavItem(christmas!, "manager", canAll)).toBe(true);
+    expect(canSeeNavItem(christmas!, "tech", canNone)).toBe(false);
+  });
+
+  it("stays fail-closed to field techs even with all capabilities", () => {
+    expect(canSeeNavItem(christmas!, "field", canAll)).toBe(false);
+  });
+});
