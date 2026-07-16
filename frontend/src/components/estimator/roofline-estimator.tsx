@@ -30,6 +30,7 @@ import type { PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import type { LinearFeetEstimateRequest } from "@/types/estimate";
 
+import { AIRenderModal } from "./ai-render";
 import { ComparisonCard, type ComparisonView } from "./comparison-card";
 import { editorReducer, initialEditorState } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
@@ -83,6 +84,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [savedToCustomer, setSavedToCustomer] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   // ---- Catalog (drawable palette) ---------------------------------------
   // Independent of the current design, so products are available the moment a
@@ -280,6 +282,21 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
               </button>
             </div>
           ) : null}
+          {photo ? (
+            <button
+              className="est-btn"
+              type="button"
+              disabled={!designHas}
+              title={
+                designHas
+                  ? undefined
+                  : "Draw the lights first, then render a photorealistic version"
+              }
+              onClick={() => setAiOpen(true)}
+            >
+              ✨ AI render
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -450,6 +467,16 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
             <div className="est-client-preview">
               <ComparisonCard view={clientView} />
             </div>
+          ) : null}
+
+          {aiOpen && photo ? (
+            <AIRenderModal
+              workspaceId={workspaceId}
+              photo={photo}
+              design={design}
+              productById={productById}
+              onClose={() => setAiOpen(false)}
+            />
           ) : null}
         </>
       ) : (

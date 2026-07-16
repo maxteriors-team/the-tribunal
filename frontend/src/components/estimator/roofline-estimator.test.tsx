@@ -12,6 +12,7 @@ vi.mock("@/lib/api/estimator", () => ({
     estimate: vi.fn(),
     share: vi.fn(),
     deliver: vi.fn(),
+    render: vi.fn(),
   },
 }));
 

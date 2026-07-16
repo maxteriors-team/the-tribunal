@@ -11,6 +11,8 @@ import type {
   ComparisonDeliverResult,
   ComparisonShareRequest,
   ComparisonShareResult,
+  EstimateRenderRequest,
+  EstimateRenderResult,
   LinearFeetEstimateRequest,
   LinearFeetEstimateResult,
 } from "@/types/estimate";
@@ -25,6 +27,20 @@ export const estimatorApi = {
   ): Promise<LinearFeetEstimateResult> =>
     apiPost<LinearFeetEstimateResult>(
       `${base(workspaceId)}/quotes/estimate`,
+      payload,
+    ),
+
+  /**
+   * Turn a drawn design (composited over the photo) into a photorealistic night
+   * render. Server-side OpenAI edit using the workspace credential — no browser
+   * key; the client only sends the flattened image.
+   */
+  render: (
+    workspaceId: string,
+    payload: EstimateRenderRequest,
+  ): Promise<EstimateRenderResult> =>
+    apiPost<EstimateRenderResult>(
+      `${base(workspaceId)}/quotes/estimate/render`,
       payload,
     ),
 
