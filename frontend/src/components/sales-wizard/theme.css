@@ -183,10 +183,16 @@
   .fixture-section { background: var(--s1); border: 1px solid var(--bdr); margin-bottom: 2px; animation: sw-up 0.6s var(--ease) 0.14s both; }
   .fixture-section-header { padding: 11px 18px; border-bottom: 1px solid var(--bdr); display: flex; align-items: center; justify-content: space-between; background: var(--s2); }
   .fixture-section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.20em; text-transform: uppercase; color: var(--t3); }
+  .fixture-section-title-wrap { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .fixture-section-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--bdr); flex: none; }
   .fixture-section-subtotal { font-family: var(--font-cormorant), serif; font-size: 17px; font-weight: 400; color: var(--gold); min-width: 80px; text-align: right; }
   .fix-row { display: flex; align-items: center; padding: 10px 18px; gap: 14px; border-bottom: 1px solid var(--bdr); transition: background 0.15s; }
   .fix-row:last-child { border-bottom: none; }
   .fix-row.active-row { background: var(--gold-g); }
+  .fix-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--bdr); flex: none; transition: transform 0.15s var(--ease); }
+  .fix-row.active-row .fix-icon { transform: scale(1.04); }
+  .fix-icon-glyph { width: 18px; height: 18px; }
+  .fixture-section-icon .fix-icon-glyph { width: 15px; height: 15px; }
   .fix-name-wrap { flex: 1; min-width: 0; }
   .fix-name { font-size: 14px; font-weight: 500; color: var(--t1); }
   .fix-row.active-row .fix-name { color: var(--t1); }
@@ -646,7 +652,7 @@
     .additional-amount-wrap { grid-column: 1; width: 100%; }
     .charge-del { grid-column: 2; width: 34px; height: 34px; }
     .fix-row { align-items: flex-start; flex-wrap: wrap; padding: 12px 14px; }
-    .fix-name-wrap { flex-basis: 100%; }
+    .fix-name-wrap { flex: 1 1 auto; }
     .fix-controls { width: 100%; justify-content: space-between; }
     .fix-line-total { min-width: auto; }
     .tier-tabs { grid-template-columns: 1fr; }

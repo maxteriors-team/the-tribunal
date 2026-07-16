@@ -396,11 +396,6 @@
   border-color: var(--bdr-g);
 }
 
-.tp-tool-icon {
-  width: 18px;
-  text-align: center;
-}
-
 .tp-tool kbd {
   margin-left: auto;
   background: rgba(255, 255, 255, 0.07);
@@ -436,6 +431,28 @@
   color: var(--t4);
   font-size: 11px;
   flex: 0 0 auto;
+}
+
+.tp-glyph {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.tp-cat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--bdr);
+  flex: 0 0 auto;
+}
+
+.tp-cat-icon .tp-glyph {
+  width: 14px;
+  height: 14px;
 }
 
 .tp-run-options {
@@ -494,6 +511,10 @@
   flex: 1;
   padding: 8px 10px;
   text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 /* ---- Center stage: the photo canvas ---- */

@@ -6,6 +6,10 @@
  * document (`category_sections` / `grand_*`); these components only collect the
  * rep's raw inputs and render the server's numbers.
  */
+import {
+  seasonalIconForCategory,
+  tintSurface,
+} from "@/lib/estimator/seasonal-icons";
 import type { ChristmasConfig, SeasonalItem } from "@/types/sales-wizard";
 
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
@@ -125,10 +129,20 @@ function SeasonalItemGroup({
   const selection = wizard.christmas.items[item.key] ?? {};
   const isPerFt = item.unit === "per_ft";
   const unitLabel = isPerFt ? "/ ft" : "/ ea";
+  const { Icon, tint } = seasonalIconForCategory(item.key);
   return (
     <div className="fixture-section">
       <div className="fixture-section-header">
-        <div className="fixture-section-title">{item.label}</div>
+        <div className="fixture-section-title-wrap">
+          <span
+            className="fixture-section-icon"
+            style={{ color: tint, background: tintSurface(tint) }}
+            aria-hidden="true"
+          >
+            <Icon className="fix-icon-glyph" />
+          </span>
+          <div className="fixture-section-title">{item.label}</div>
+        </div>
       </div>
       <div className="fixture-rows">
         {options.map((rate) => {
@@ -138,6 +152,13 @@ function SeasonalItemGroup({
               className={`fix-row${value > 0 ? " active-row" : ""}`}
               key={rate.key}
             >
+              <span
+                className="fix-icon"
+                style={{ color: tint, background: tintSurface(tint) }}
+                aria-hidden="true"
+              >
+                <Icon className="fix-icon-glyph" />
+              </span>
               <div className="fix-name-wrap">
                 <div className="fix-name">{rate.name}</div>
                 <div className="fix-price">

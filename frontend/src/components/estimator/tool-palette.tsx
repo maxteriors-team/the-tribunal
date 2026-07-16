@@ -9,6 +9,13 @@
  * rates. Picking a product arms the draw/place tool; selecting a run on the
  * canvas reveals its spacing/color overrides here.
  */
+import {
+  MousePointer2,
+  Redo2,
+  Ruler,
+  Trash2,
+  Undo2,
+} from "lucide-react";
 import { type Dispatch } from "react";
 
 import {
@@ -16,6 +23,10 @@ import {
   SPACING_OPTIONS,
   presetNameFor,
 } from "@/lib/estimator/catalog";
+import {
+  seasonalIconForStyle,
+  tintSurface,
+} from "@/lib/estimator/seasonal-icons";
 import type { Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
 
@@ -63,7 +74,7 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           className={`tp-tool ${tool.type === "select" ? "active" : ""}`}
           onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "select" } })}
         >
-          <span className="tp-tool-icon">⬚</span> Select &amp; edit
+          <MousePointer2 className="tp-glyph" aria-hidden="true" /> Select &amp; edit
           <kbd>V</kbd>
         </button>
         <button
@@ -71,45 +82,65 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           className={`tp-tool ${tool.type === "calibrate" ? "active" : ""}`}
           onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
         >
-          <span className="tp-tool-icon">📏</span> Set scale
+          <Ruler className="tp-glyph" aria-hidden="true" /> Set scale
           <kbd>S</kbd>
         </button>
       </div>
 
       <div className="tp-section tp-grow">
         {linear.length > 0 ? <h2>Draw lights</h2> : null}
-        {linear.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
-            onClick={() =>
-              dispatch({ type: "SET_TOOL", tool: { type: "draw", productId: p.id } })
-            }
-            title={`Trace along the photo — ${formatCurrency(p.price)}/ft`}
-          >
-            <Swatch colors={p.colors} />
-            <span className="tp-product-name">{p.name}</span>
-            <span className="tp-product-price">{formatCurrency(p.price)}/ft</span>
-          </button>
-        ))}
+        {linear.map((p) => {
+          const { Icon, tint } = seasonalIconForStyle(p.style);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
+              onClick={() =>
+                dispatch({ type: "SET_TOOL", tool: { type: "draw", productId: p.id } })
+              }
+              title={`Trace along the photo — ${formatCurrency(p.price)}/ft`}
+            >
+              <span
+                className="tp-cat-icon"
+                style={{ color: tint, background: tintSurface(tint) }}
+                aria-hidden="true"
+              >
+                <Icon className="tp-glyph" />
+              </span>
+              <Swatch colors={p.colors} />
+              <span className="tp-product-name">{p.name}</span>
+              <span className="tp-product-price">{formatCurrency(p.price)}/ft</span>
+            </button>
+          );
+        })}
 
         {each.length > 0 ? <h2 className="tp-mt">Place decor</h2> : null}
-        {each.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
-            onClick={() =>
-              dispatch({ type: "SET_TOOL", tool: { type: "place", productId: p.id } })
-            }
-            title={`Click the photo to place — ${formatCurrency(p.price)} each`}
-          >
-            <Swatch colors={p.colors} />
-            <span className="tp-product-name">{p.name}</span>
-            <span className="tp-product-price">{formatCurrency(p.price)}</span>
-          </button>
-        ))}
+        {each.map((p) => {
+          const { Icon, tint } = seasonalIconForStyle(p.style);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
+              onClick={() =>
+                dispatch({ type: "SET_TOOL", tool: { type: "place", productId: p.id } })
+              }
+              title={`Click the photo to place — ${formatCurrency(p.price)} each`}
+            >
+              <span
+                className="tp-cat-icon"
+                style={{ color: tint, background: tintSurface(tint) }}
+                aria-hidden="true"
+              >
+                <Icon className="tp-glyph" />
+              </span>
+              <Swatch colors={p.colors} />
+              <span className="tp-product-name">{p.name}</span>
+              <span className="tp-product-price">{formatCurrency(p.price)}</span>
+            </button>
+          );
+        })}
 
         {selectedRun ? (
           <div className="tp-run-options">
@@ -131,7 +162,7 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           onClick={() => dispatch({ type: "UNDO" })}
           title="Undo (⌘Z)"
         >
-          ↶ Undo
+          <Undo2 className="tp-glyph" aria-hidden="true" /> Undo
         </button>
         <button
           type="button"
@@ -140,7 +171,7 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           onClick={() => dispatch({ type: "REDO" })}
           title="Redo (⇧⌘Z)"
         >
-          Redo ↷
+          <Redo2 className="tp-glyph" aria-hidden="true" /> Redo
         </button>
         <button
           type="button"
@@ -149,7 +180,7 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           onClick={() => dispatch({ type: "CLEAR_DESIGN" })}
           title="Remove all lights (keeps the photo scale)"
         >
-          Clear
+          <Trash2 className="tp-glyph" aria-hidden="true" /> Clear
         </button>
       </div>
     </aside>
