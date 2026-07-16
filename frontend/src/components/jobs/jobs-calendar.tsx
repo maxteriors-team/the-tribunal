@@ -22,7 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { useJobs, useMyJobsCalendar } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import type { Job, JobTechnician } from "@/lib/api/jobs";
+import type { Job, JobListParams, JobTechnician } from "@/lib/api/jobs";
 import { getWeekRange } from "@/lib/calendar/calendar-derivations";
 import {
   JOB_STATUS_OPTIONS,
@@ -35,6 +35,15 @@ import {
   type JobStatusFilter,
 } from "@/lib/jobs/job-derivations";
 import { addDays, formatDate, isSameDay } from "@/lib/utils/date";
+
+/**
+ * The dispatch backlog ("Unscheduled" queue) is workspace-wide and independent
+ * of the visible week, so it's fetched with its own status filter rather than
+ * derived from the week-scoped board list — whose `date_from`/`date_to` range
+ * excludes null-start rows. Module-level so the query key stays referentially
+ * stable across renders.
+ */
+const UNSCHEDULED_QUEUE_PARAMS: JobListParams = { status: "unscheduled" };
 
 function TechnicianChips({ technicians }: { technicians: JobTechnician[] }) {
   if (technicians.length === 0) {
@@ -111,15 +120,32 @@ export function JobsCalendar() {
     mineOnly,
   );
 
+  // The unscheduled queue is fetched on its own (status filter, no date range).
+  // Deriving it from the week-scoped board list would always come back empty:
+  // the backend's date filter drops null-start rows (`NULL >= date_from` is
+  // never true), so no unscheduled job survives a windowed query. Keeping it
+  // separate also leaves the week list — and its `jobs.length` "This week" count
+  // and day columns — untouched. This dedicated fetch is board-view only; in
+  // "my jobs" mode the queue falls back to the week-scoped personal list below.
+  const unscheduledQuery = useJobs(workspaceId ?? "", UNSCHEDULED_QUEUE_PARAMS, !mineOnly);
+
   const activeQuery = mineOnly ? mineQuery : boardQuery;
   const jobs = useMemo(() => activeQuery.data?.items ?? [], [activeQuery.data?.items]);
-  const queue = useMemo(() => unscheduledJobs(jobs), [jobs]);
+  const queue = useMemo(
+    () => (mineOnly ? unscheduledJobs(jobs) : (unscheduledQuery.data?.items ?? [])),
+    [mineOnly, jobs, unscheduledQuery.data?.items],
+  );
 
-  // Resolve the open job from the live list so the detail dialog reflects edits
+  // Resolve the open job from the live lists so the detail dialog reflects edits
   // after a refetch, and closes itself if the job is deleted or filtered out.
+  // Check the queue too: unscheduled jobs are clicked straight from that panel
+  // and aren't in the week-scoped `jobs` list.
   const selectedJob = useMemo(
-    () => jobs.find((job) => job.id === selectedJobId) ?? null,
-    [jobs, selectedJobId],
+    () =>
+      jobs.find((job) => job.id === selectedJobId) ??
+      queue.find((job) => job.id === selectedJobId) ??
+      null,
+    [jobs, queue, selectedJobId],
   );
 
   // Changing the visible set (week, status, or the "my jobs" scope) clears any
