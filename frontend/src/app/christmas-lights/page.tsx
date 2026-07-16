@@ -79,7 +79,7 @@ export default function ChristmasLightsRoute() {
               </span>
               <div className="min-w-0">
                 <h1 className="text-2xl font-semibold tracking-tight">
-                  Christmas Lights
+                  Christmas Light Estimator
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                   Your seasonal command center. Design a lit-up render, build a

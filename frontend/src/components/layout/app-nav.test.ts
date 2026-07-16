@@ -76,6 +76,8 @@ describe("Christmas Lights seasonal hub nav item", () => {
 
   it("is registered with a festive accent and billing gate", () => {
     expect(christmas).toBeDefined();
+    // Named for the seasonal estimator workflow it fronts.
+    expect(christmas!.title).toBe("Christmas Light Estimator");
     // The seasonal tab must read as visually distinct (drives the tinted icon).
     expect(christmas!.accent).toBe("christmas");
     // Gated like the other quoting surfaces (Quotes/Estimator/Invoices).

@@ -150,7 +150,7 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
-    title: "Christmas Lights",
+    title: "Christmas Light Estimator",
     url: "/christmas-lights",
     icon: TreePine,
     sidebar: true,
@@ -426,7 +426,7 @@ export const breadcrumbLabels: Record<string, string> = {
   opportunities: "Opportunities",
   quotes: "Quotes",
   invoices: "Invoices",
-  "christmas-lights": "Christmas Lights",
+  "christmas-lights": "Christmas Light Estimator",
   new: "New",
   create: "Create",
   sms: "SMS",
