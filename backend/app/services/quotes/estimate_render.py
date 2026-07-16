@@ -34,12 +34,16 @@ logger = structlog.get_logger()
 # ~1280px before upload, so a legitimate design is well under this.
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
-_SUPPORTED_MIME = {
-    "image/png": "design.png",
-    "image/jpeg": "design.jpg",
-    "image/jpg": "design.jpg",
-    "image/webp": "design.webp",
+# Recognized upload types -> (filename, content-type forwarded to OpenAI). The
+# content type must be a real image MIME: OpenAI's images.edit rejects a part
+# sent as application/octet-stream as an invalid image.
+_SUPPORTED_MIME: dict[str, tuple[str, str]] = {
+    "image/png": ("design.png", "image/png"),
+    "image/jpeg": ("design.jpg", "image/jpeg"),
+    "image/jpg": ("design.jpg", "image/jpeg"),
+    "image/webp": ("design.webp", "image/webp"),
 }
+_DEFAULT_IMAGE: tuple[str, str] = ("design.png", "image/png")
 
 # Ported 1:1 from the in-house light-estimator ``defaultPrompt`` so the render
 # matches what reps already trust. Kept under the OpenAI 1000-char prompt cap.
@@ -68,20 +72,21 @@ def default_render_prompt(mode: str) -> str:
     )
 
 
-def _decode_design_image(image: str) -> tuple[bytes, str]:
-    """Decode a base64 ``data:`` URL (or raw base64) into ``(bytes, filename)``.
+def _decode_design_image(image: str) -> tuple[bytes, str, str]:
+    """Decode a base64 ``data:`` URL (or raw base64) into ``(bytes, filename, mime)``.
 
-    Raises :class:`ValidationError` for anything we can't turn into a supported
-    image, so a malformed upload is a clean 400 rather than an OpenAI 4xx.
+    ``mime`` is a real image content type forwarded to OpenAI. Raises
+    :class:`ValidationError` for anything we can't turn into a supported image,
+    so a malformed upload is a clean 400 rather than an OpenAI 4xx.
     """
     raw = image.strip()
-    filename = "design.png"
+    filename, content_type = _DEFAULT_IMAGE
     if raw.startswith("data:"):
         header, _, payload = raw.partition(",")
         if not payload:
             raise ValidationError("The design image was empty or malformed.")
         mime = header[5:].split(";", 1)[0].strip().lower()
-        filename = _SUPPORTED_MIME.get(mime, "design.png")
+        filename, content_type = _SUPPORTED_MIME.get(mime, _DEFAULT_IMAGE)
         raw = payload
 
     try:
@@ -93,7 +98,7 @@ def _decode_design_image(image: str) -> tuple[bytes, str]:
         raise ValidationError("The design image was empty.")
     if len(data) > _MAX_IMAGE_BYTES:
         raise ValidationError("The design image is too large to render.")
-    return data, filename
+    return data, filename, content_type
 
 
 async def render_design(
@@ -110,7 +115,7 @@ async def render_design(
     :class:`ServiceUnavailableError` when OpenAI credentials are missing or the
     image API fails, and :class:`ValidationError` for an undecodable design.
     """
-    data, filename = _decode_design_image(image)
+    data, filename, content_type = _decode_design_image(image)
     prompt_text = (prompt or "").strip() or default_render_prompt(mode)
 
     try:
@@ -124,7 +129,7 @@ async def render_design(
     try:
         response = await client.images.edit(
             model=settings.openai_estimate_render_model,
-            image=(filename, data, "application/octet-stream"),
+            image=(filename, data, content_type),
             prompt=prompt_text,
             size="auto",
             quality="high",

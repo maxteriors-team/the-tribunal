@@ -77,8 +77,12 @@ async def test_render_returns_jpeg_data_url_from_workspace_client() -> None:
     assert kwargs["model"] == "gpt-image-2"
     assert kwargs["output_format"] == "jpeg"
     assert kwargs["n"] == 1
-    # The decoded PNG bytes are forwarded as the edit base image.
-    assert kwargs["image"][1] == _PNG_BYTES
+    # The decoded PNG bytes are forwarded as the edit base image, with a real
+    # image content type (never application/octet-stream, which OpenAI rejects).
+    filename, blob, content_type = kwargs["image"]
+    assert blob == _PNG_BYTES
+    assert filename == "design.png"
+    assert content_type == "image/png"
 
 
 @pytest.mark.asyncio
