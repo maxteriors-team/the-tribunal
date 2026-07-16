@@ -426,8 +426,9 @@ PRICING: dict = {
                 "label": "Wreaths",
                 "unit": "each",
                 "options": [
-                    {"key": "standard", "name": "Wreath (up to 36 in)", "price": 85},
-                    {"key": "large", "name": "Large wreath (over 36 in)", "price": 150},
+                    {"key": "36in", "name": "Wreath (36 in)", "price": 85},
+                    {"key": "48in", "name": "Wreath (48 in)", "price": 125},
+                    {"key": "60in", "name": "Wreath (60 in)", "price": 165},
                 ],
             },
             {

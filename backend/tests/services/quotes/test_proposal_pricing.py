@@ -426,6 +426,18 @@ def test_default_seasonal_items_include_mini_lights_per_ft():
     assert items["mini_lights"].unit == "per_ft"
 
 
+def test_default_wreaths_ship_three_diameter_sizes():
+    # Reps quote wreaths by diameter, so the default catalog offers 36/48/60 in
+    # as separate line items (each independently countable on one quote).
+    items = {i.key: i for i in ChristmasConfig().items}
+    wreaths = items["wreaths"]
+    assert wreaths.unit == "each"
+    assert [o.key for o in wreaths.options] == ["36in", "48in", "60in"]
+    # Prices stay monotonic with size so bigger wreaths never quote cheaper.
+    prices = [o.price for o in wreaths.options]
+    assert prices == sorted(prices)
+
+
 def test_christmas_prices_multi_product_payload_with_mini_lights():
     # Default christmas catalog (now includes a per-ft `mini_lights` category),
     # mirroring a drawn design: roofline + mini-lights runs + a tree + a wreath.
@@ -440,7 +452,7 @@ def test_christmas_prices_multi_product_payload_with_mini_lights():
         items={
             "mini_lights": {"standard": 60},
             "trees": {"small": 2},
-            "wreaths": {"standard": 1},
+            "wreaths": {"36in": 1},
         },
     )
     # buffer 0.11 -> gross = round_half_up(net / 0.89):
