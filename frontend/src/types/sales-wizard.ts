@@ -13,6 +13,7 @@ export type TierConfig = Schemas["TierConfig"];
 export type CatalogItemResponse = Schemas["CatalogItemResponse"];
 export type PermanentConfig = Schemas["PermanentConfig"];
 export type ChristmasConfig = Schemas["ChristmasConfig"];
+export type ChristmasPackage = Schemas["ChristmasPackage"];
 export type SeasonalItem = Schemas["SeasonalItem"];
 export type SizeRate = Schemas["SizeRate"];
 

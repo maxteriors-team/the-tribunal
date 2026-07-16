@@ -12,7 +12,12 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from app.schemas.pricing import ChristmasPricing, PermanentPricing, PricingSettings
+from app.schemas.pricing import (
+    ChristmasPackage,
+    ChristmasPricing,
+    PermanentPricing,
+    PricingSettings,
+)
 from app.schemas.proposal_wizard import (
     CATEGORY_ORDER,
     FulfillmentPart,
@@ -84,6 +89,44 @@ def _category_section(
         monthly_payment=float(pp.monthly_payment(total, config)) if total > 0 else 0.0,
         min_applied=pricing.min_applied,
     )
+
+
+def _resolve_christmas_package(
+    config: PricingSettings,
+    selected_key: str | None,
+    *,
+    roofline_feet: float,
+    items: dict[str, dict[str, float]],
+    takedown: bool,
+    storage: bool,
+) -> ChristmasPackage | None:
+    """Pick which seasonal package to quote when Christmas packages are enabled.
+
+    The client's ``selected_package`` wins when it names a configured package.
+    Otherwise fall back to the most inclusive package — highest in the canonical
+    low→high order (``package_order`` then declared order, mirroring
+    :func:`pp.price_christmas_packages`) — whose priced total is > 0, so an unset
+    or stale selection still quotes the fullest display the measurement supports.
+    Returns ``None`` when no package is configured or none prices above zero.
+    """
+    packages = config.christmas.packages
+    by_key = {p.key: p for p in packages}
+    if selected_key and selected_key in by_key:
+        return by_key[selected_key]
+    order = [k for k in config.christmas.package_order if k in by_key]
+    order += [p.key for p in packages if p.key not in order]
+    for key in reversed(order):
+        pricing = pp.price_christmas_package(
+            config,
+            by_key[key],
+            roofline_feet=roofline_feet,
+            items=items,
+            takedown=takedown,
+            storage=storage,
+        )
+        if pricing.total > 0:
+            return by_key[key]
+    return None
 
 
 def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document assembly
@@ -218,14 +261,37 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
     christmas_pricing = None
     if "christmas" in categories and payload.christmas is not None:
-        christmas_pricing = pp.price_christmas(
-            config,
-            roofline_feet=payload.christmas.roofline_feet,
-            items={key: _counts(rows) for key, rows in payload.christmas.items.items()},
-            takedown=payload.christmas.takedown,
-            storage=payload.christmas.storage,
-        )
-        if christmas_pricing.total > 0:
+        christmas_items = {key: _counts(rows) for key, rows in payload.christmas.items.items()}
+        if config.christmas.packages_enabled:
+            # Sell Christmas as a single Good/Better/Best package: resolve the
+            # client's pick (or the most inclusive priced package) and quote it
+            # via the shared engine restricted to that package's coverage.
+            package = _resolve_christmas_package(
+                config,
+                payload.christmas.selected_package,
+                roofline_feet=payload.christmas.roofline_feet,
+                items=christmas_items,
+                takedown=payload.christmas.takedown,
+                storage=payload.christmas.storage,
+            )
+            if package is not None:
+                christmas_pricing = pp.price_christmas_package(
+                    config,
+                    package,
+                    roofline_feet=payload.christmas.roofline_feet,
+                    items=christmas_items,
+                    takedown=payload.christmas.takedown,
+                    storage=payload.christmas.storage,
+                )
+        else:
+            christmas_pricing = pp.price_christmas(
+                config,
+                roofline_feet=payload.christmas.roofline_feet,
+                items=christmas_items,
+                takedown=payload.christmas.takedown,
+                storage=payload.christmas.storage,
+            )
+        if christmas_pricing is not None and christmas_pricing.total > 0:
             category_sections.append(
                 _category_section("christmas", config.christmas.label, christmas_pricing, config)
             )

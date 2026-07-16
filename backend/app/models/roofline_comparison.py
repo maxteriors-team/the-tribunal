@@ -77,6 +77,12 @@ class RooflineComparison(Base):
         JSONB, nullable=True
     )
 
+    # Optional seasonal package the rep selected when sharing (a
+    # ``ChristmasPackage.key``). Recomputed prices use it to show the client that
+    # package's total instead of the à la carte seasonal total; NULL means no
+    # package was chosen. Only the total ever reaches the public payload.
+    selected_package: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
     # Optional presentation context shown to the client / used internally.
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     label: Mapped[str | None] = mapped_column(String(200), nullable=True)

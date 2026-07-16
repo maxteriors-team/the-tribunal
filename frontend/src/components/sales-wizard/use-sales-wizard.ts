@@ -72,6 +72,10 @@ export interface ChristmasDraft {
   items: Record<string, Record<string, number>>;
   takedown: boolean;
   storage: boolean;
+  // Selected Good/Better/Best package key when the workspace sells Christmas as
+  // packages (`ChristmasConfig.packages_enabled`). "" lets the server pick the
+  // most-inclusive priced package; ignored entirely in the à la carte flow.
+  selected_package: string;
 }
 
 const EMPTY_CHRISTMAS: ChristmasDraft = {
@@ -79,6 +83,7 @@ const EMPTY_CHRISTMAS: ChristmasDraft = {
   items: {},
   takedown: false,
   storage: false,
+  selected_package: "",
 };
 
 function countsToList(
@@ -202,6 +207,7 @@ export interface UseSalesWizardReturn {
     optionKey: string,
     value: number,
   ) => void;
+  setChristmasPackage: (key: string) => void;
   night: NightPreviewState;
   setNight: (patch: Partial<NightPreviewState>) => void;
   // Upfront deposit selection (empty value => workspace default on save).
@@ -413,6 +419,9 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     },
     [],
   );
+  const setChristmasPackage = useCallback((key: string) => {
+    setChristmasState((prev) => ({ ...prev, selected_package: key }));
+  }, []);
   const setNight = useCallback((patch: Partial<NightPreviewState>) => {
     setNightState((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -464,6 +473,8 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
             ),
             takedown: christmas.takedown,
             storage: christmas.storage,
+            // Empty selection => server prices the most inclusive package.
+            selected_package: christmas.selected_package || null,
           }
         : null,
       night_preview: night.image
@@ -616,6 +627,7 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     christmas,
     setChristmas,
     setSeasonalItem,
+    setChristmasPackage,
     night,
     setNight,
     depositMode,

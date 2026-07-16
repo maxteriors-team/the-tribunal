@@ -210,3 +210,65 @@ def test_zero_feet_yields_zero_totals() -> None:
     assert result.permanent.total == 0
     assert result.difference == 0
     assert result.multi_year_savings == 0
+
+
+def _packages_config() -> PricingSettings:
+    """Base config with Good/Better/Best seasonal packages turned on."""
+    return _config(
+        christmas=ChristmasConfig(
+            enabled=True,
+            roofline_per_ft=6,
+            minimum=0,
+            packages_enabled=True,
+        )
+    )
+
+
+def test_packages_priced_from_one_measurement_when_enabled() -> None:
+    # One roofline+decor measurement prices every package by restricting each to
+    # its covered decor subset (+ roofline when included). trees medium=$260,
+    # garland=$8/ft, roofline=$6/ft, no gross-up buffer.
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    totals = {p.key: p.pricing.total for p in result.christmas_packages}
+    assert totals == {
+        "essential": 520,  # trees 2*260, no roofline
+        "middle": 1120,  # roofline 600 + trees 520
+        "premier": 1520,  # roofline 600 + trees 520 + garland 50*8
+    }
+    # Cards render low -> high; declared order applies when package_order is empty.
+    assert [p.key for p in result.christmas_packages] == ["essential", "middle", "premier"]
+    # Package cards carry copy for the tier presentation.
+    middle = next(p for p in result.christmas_packages if p.key == "middle")
+    assert middle.includes_roofline is True
+    assert middle.popular is True
+
+
+def test_packages_absent_when_disabled() -> None:
+    # packages_enabled defaults False -> the à la carte flow is unchanged.
+    result = _estimate(_config(), 100)
+    assert result.christmas_packages == []
+
+
+def test_selected_package_total_differs_from_a_la_carte() -> None:
+    # ``selected_package`` is echoed on the request, but the rep-facing result
+    # still exposes the full à la carte seasonal total and every package price —
+    # only the public page (``get_public_comparison``) swaps in the selected
+    # package's total. Here à la carte prices everything selected ($1,520) while
+    # the "middle" package (roofline + trees only) is $1,120, the figure the
+    # public page would show, so the selection genuinely changes what the client
+    # sees for the seasonal side.
+    result = _estimate(
+        _packages_config(),
+        100,
+        selected_package="middle",
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    # Rep view is unchanged by the selection: full à la carte seasonal total.
+    assert result.christmas.total == 1520
+    # The middle package's total is what the public comparison substitutes.
+    selected = next(p for p in result.christmas_packages if p.key == "middle")
+    assert selected.pricing.total == 1120

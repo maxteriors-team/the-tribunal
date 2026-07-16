@@ -70,7 +70,11 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
-from app.services.quotes.proposal_pricing import price_christmas, price_permanent
+from app.services.quotes.proposal_pricing import (
+    price_christmas,
+    price_christmas_packages,
+    price_permanent,
+)
 from app.services.quotes.proposal_template import get_proposal_template
 
 logger = structlog.get_logger()
@@ -1043,6 +1047,21 @@ class QuoteService:
             takedown=req.takedown,
             storage=req.storage,
         )
+        # When the workspace sells Christmas as Good/Better/Best packages, price
+        # every package from the same measurement so the rep tool can render tier
+        # cards. The shared engine restricts each package to its covered decor
+        # subset (+ roofline when included) and honors the seasonal per-ft override.
+        christmas_packages = (
+            price_christmas_packages(
+                xmas_config,
+                roofline_feet=req.feet,
+                items=req.christmas_items,
+                takedown=req.takedown,
+                storage=req.storage,
+            )
+            if config.christmas.packages_enabled
+            else []
+        )
         perm_enabled = bool(config.permanent.enabled)
         xmas_enabled = bool(config.christmas.enabled)
         perm_total = float(perm.total) if perm_enabled else 0.0
@@ -1080,6 +1099,7 @@ class QuoteService:
             permanent_perks=list(config.permanent.perks),
             christmas_perks=list(config.christmas.perks),
             christmas_catalog=list(config.christmas.items),
+            christmas_packages=christmas_packages,
         )
 
     async def estimate_linear_feet(
@@ -1138,6 +1158,7 @@ class QuoteService:
                 else None
             ),
             christmas_items=req.christmas_items or None,
+            selected_package=req.selected_package or None,
             client_name=req.client_name,
             label=req.label,
             contact_id=contact_id,
@@ -1249,8 +1270,23 @@ class QuoteService:
                 per_ft_override=comparison.per_ft_override,
                 christmas_per_ft_override=comparison.christmas_per_ft_override,
                 christmas_items=comparison.christmas_items or {},
+                selected_package=comparison.selected_package,
             ),
         )
+
+        # When the rep shared a specific seasonal package, the client sees that
+        # package's total instead of the à la carte seasonal total. Fall back to
+        # the standard seasonal total if the package is unknown (stale key or
+        # packages disabled since sharing). Only the total changes — the perks,
+        # difference, and multi-year projection keep their current behavior.
+        christmas_total = computed.christmas.total
+        if comparison.selected_package:
+            selected = next(
+                (p for p in computed.christmas_packages if p.key == comparison.selected_package),
+                None,
+            )
+            if selected is not None:
+                christmas_total = selected.pricing.total
 
         return PublicComparison(
             business_name=template.business_name or (workspace.name if workspace else ""),
@@ -1263,7 +1299,7 @@ class QuoteService:
                 enabled=computed.permanent.enabled, total=computed.permanent.total
             ),
             christmas=PublicChristmasComparison(
-                enabled=computed.christmas.enabled, total=computed.christmas.total
+                enabled=computed.christmas.enabled, total=christmas_total
             ),
             difference=computed.difference,
             years=computed.years,

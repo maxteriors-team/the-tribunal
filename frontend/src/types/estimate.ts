@@ -18,5 +18,8 @@ export type PublicComparison = Schemas["PublicComparison"];
 export type SeasonalItem = Schemas["SeasonalItem"];
 export type SeasonalItemCost = Schemas["SeasonalItemCost"];
 export type SizeRate = Schemas["SizeRate"];
+// One priced Good/Better/Best seasonal package (a tier card + its computed price).
+// Present on the rep estimate result when the workspace sells Christmas packages.
+export type ChristmasPackagePricing = Schemas["ChristmasPackagePricing"];
 // Decor selection: category key -> { option key -> value } (count or feet).
 export type ChristmasItemsSelection = Record<string, Record<string, number>>;

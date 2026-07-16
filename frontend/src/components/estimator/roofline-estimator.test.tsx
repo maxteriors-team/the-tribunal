@@ -69,6 +69,54 @@ const ESTIMATE: LinearFeetEstimateResult = {
   ],
 };
 
+// Priced Good/Better/Best seasonal packages (workspace with `packages_enabled`).
+// Totals ascend so the resolver's "most inclusive last" default is observable,
+// and each package carries the full ChristmasPricing breakdown the server sends.
+function pkgPricing(total: number) {
+  return {
+    min_applied: false,
+    minimum: 0,
+    raw_total: total,
+    roofline_cost: 0,
+    roofline_feet: 100,
+    storage_cost: 0,
+    takedown_cost: 0,
+    total,
+    items: [],
+    lines: [],
+  };
+}
+
+const WITH_PACKAGES: LinearFeetEstimateResult = {
+  ...ESTIMATE,
+  christmas_packages: [
+    {
+      key: "essential",
+      label: "Essential",
+      name: "Essential",
+      includes_roofline: false,
+      popular: false,
+      pricing: pkgPricing(700),
+    },
+    {
+      key: "middle",
+      label: "Middle",
+      name: "Middle",
+      includes_roofline: true,
+      popular: true,
+      pricing: pkgPricing(1100),
+    },
+    {
+      key: "premier",
+      label: "Premier",
+      name: "Premier",
+      includes_roofline: true,
+      popular: false,
+      pricing: pkgPricing(1400),
+    },
+  ],
+};
+
 function stubCanvas() {
   // Returning null makes the canvas draw() bail cleanly (no jsdom "not
   // implemented" noise) — rendering is covered by render.test.ts.
@@ -161,6 +209,55 @@ describe("RooflineEstimator", () => {
     expect(
       screen.getByRole("button", { name: /Save & share/i }),
     ).toBeInTheDocument();
+  });
+
+  it("renders seasonal package cards and mirrors the picked package's total", async () => {
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    // All three Good/Better/Best cards render by their client-facing name.
+    expect(
+      await screen.findByRole("button", { name: /Essential/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Middle/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Premier/i })).toBeInTheDocument();
+
+    // No explicit pick yet → the most-inclusive package (Premier) is the default,
+    // so the seasonal headline shows its total, not the à la carte christmas total.
+    const grandRow = () =>
+      container.querySelector(".ep-total-grand") as HTMLElement;
+    expect(grandRow()).toHaveTextContent("$1,400");
+    expect(grandRow()).not.toHaveTextContent("$900");
+
+    // Picking a lower tier updates the seasonal headline to that package's total…
+    fireEvent.click(screen.getByRole("button", { name: /Essential/i }));
+    await waitFor(() => expect(grandRow()).toHaveTextContent("$700"));
+
+    // …and re-prices server-side with the chosen package key.
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ selected_package: "essential" }),
+      ),
+    );
+  });
+
+  it("shares the resolved seasonal package key with the persisted estimate", async () => {
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await screen.findByRole("button", { name: /Premier/i });
+
+    // Save & share without an explicit pick persists the resolved default
+    // (most-inclusive package), so the public page folds that package's total.
+    fireEvent.click(screen.getByRole("button", { name: /Save & share/i }));
+    await waitFor(() =>
+      expect(estimatorApi.share).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ selected_package: "premier" }),
+      ),
+    );
   });
 
   it("emails the saved estimate to the entered customer", async () => {

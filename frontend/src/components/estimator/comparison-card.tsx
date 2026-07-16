@@ -16,6 +16,11 @@ export interface ComparisonView {
   clientName?: string | null;
   permanent: { enabled: boolean; total: number };
   christmas: { enabled: boolean; total: number };
+  // Name of the seasonal package the rep selected (Good/Better/Best), shown above
+  // the seasonal price. Undefined for à la carte seasonal and on the public page,
+  // whose totals-only payload carries no package label — the total already
+  // reflects the chosen package server-side.
+  christmasName?: string | null;
   difference: number;
   years: number;
   temporary_multi_year: number;
@@ -111,6 +116,9 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
           <div className="cmp-card-kind">Per season</div>
           {view.christmas.enabled ? (
             <>
+              {view.christmasName ? (
+                <div className="cmp-card-pkg">{view.christmasName}</div>
+              ) : null}
               <div className="cmp-price">
                 {formatCurrency(view.christmas.total, currency)}
               </div>

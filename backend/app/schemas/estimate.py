@@ -17,7 +17,11 @@ Two boundaries live here:
 
 from pydantic import BaseModel, Field
 
-from app.schemas.pricing import SeasonalItem, SeasonalItemCost
+from app.schemas.pricing import (
+    ChristmasPackagePricing,
+    SeasonalItem,
+    SeasonalItemCost,
+)
 
 # --------------------------------------------------------------------------- #
 # Rep estimate (authenticated)
@@ -49,6 +53,11 @@ class LinearFeetEstimateRequest(BaseModel):
     # count for ``each`` items (trees/bushes/wreaths) and linear feet for
     # ``per_ft`` items (garland). Empty => roofline-only seasonal pricing.
     christmas_items: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # Optional seasonal package selection (a ``ChristmasPackage.key``). When the
+    # workspace sells Christmas as Good/Better/Best packages, this records which
+    # tier the client chose so the shared comparison echoes that package's total.
+    # ``None`` => à la carte seasonal pricing (the standard roofline + decor flow).
+    selected_package: str | None = None
 
 
 class PermanentEstimate(BaseModel):
@@ -93,6 +102,11 @@ class LinearFeetEstimateResult(BaseModel):
     # The workspace's seasonal decor catalog (feet-free, safe) so the rep tool
     # can render add-on controls without a second request.
     christmas_catalog: list[SeasonalItem] = Field(default_factory=list)
+    # Priced Good/Better/Best seasonal packages, populated only when the workspace
+    # enables Christmas packages (``christmas.packages_enabled``). Feet-free like
+    # the à la carte breakdown; the rep tool renders one tier card per package
+    # from the shared engine's totals. Empty when packages are off.
+    christmas_packages: list[ChristmasPackagePricing] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #

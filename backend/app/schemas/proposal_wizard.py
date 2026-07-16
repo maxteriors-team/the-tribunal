@@ -97,12 +97,18 @@ class WizardChristmasSelection(BaseModel):
     ``items`` maps a decor category key ("trees", "garland", …) to the selected
     options for that category, matching the standardized ``ChristmasConfig.items``
     catalog so any add-on is data, not a new field.
+
+    When the workspace sells Christmas as Good/Better/Best packages
+    (``ChristmasConfig.packages_enabled``), ``selected_package`` names the
+    package the client picked; it is ignored in the à la carte flow and falls
+    back server-side to the most inclusive priced package when unset or stale.
     """
 
     roofline_feet: float = Field(default=0, ge=0)
     items: dict[str, list[WizardCategoryCount]] = Field(default_factory=dict)
     takedown: bool = False
     storage: bool = False
+    selected_package: str | None = None
 
 
 class ProposalMockup(BaseModel):

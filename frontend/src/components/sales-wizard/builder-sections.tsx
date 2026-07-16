@@ -6,9 +6,12 @@
  * document (`category_sections` / `grand_*`); these components only collect the
  * rep's raw inputs and render the server's numbers.
  */
-import type { SeasonalItem } from "@/types/sales-wizard";
+import type { ChristmasConfig, SeasonalItem } from "@/types/sales-wizard";
 
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
+
+/** One Good/Better/Best seasonal package (derived from the generated config type). */
+type ChristmasPackage = NonNullable<ChristmasConfig["packages"]>[number];
 
 function section(wizard: UseSalesWizardReturn, key: string) {
   return wizard.document?.category_sections.find((s) => s.key === key) ?? null;
@@ -210,9 +213,96 @@ function SeasonalItemGroup({
   );
 }
 
+// Low→high package order: config `package_order` first, then declared order —
+// mirrors the backend so the last entry is the most inclusive package.
+function orderChristmasPackages(cfg: ChristmasConfig): ChristmasPackage[] {
+  const packages = cfg.packages ?? [];
+  const byKey = new Map(packages.map((p) => [p.key, p] as const));
+  const ordered: ChristmasPackage[] = [];
+  for (const key of cfg.package_order ?? []) {
+    const pkg = byKey.get(key);
+    if (pkg && !ordered.includes(pkg)) ordered.push(pkg);
+  }
+  for (const pkg of packages) if (!ordered.includes(pkg)) ordered.push(pkg);
+  return ordered;
+}
+
+// Selectable Good/Better/Best seasonal package cards. The rep picks one; the
+// shared roofline + decor controls below feed whichever package is priced.
+// Mirrors the landscape tier cards (care-tier pattern) — popular badge, points,
+// value tag. The server prices only the *selected* package into the christmas
+// section, so the live total shows on the active card (“—” on the rest).
+function ChristmasPackageCards({ wizard }: { wizard: UseSalesWizardReturn }) {
+  const cfg = wizard.pricing?.christmas;
+  if (!cfg) return null;
+  const ordered = orderChristmasPackages(cfg);
+  if (!ordered.length) return null;
+  // Highlight the rep's explicit pick, else the most-inclusive package — the
+  // same fallback the server uses when `selected_package` is unset, so the
+  // highlighted card always matches the priced christmas-section total.
+  const picked = wizard.christmas.selected_package;
+  const selectedKey =
+    picked && ordered.some((p) => p.key === picked)
+      ? picked
+      : (ordered[ordered.length - 1]?.key ?? "");
+  const total = section(wizard, "christmas")?.financed_total ?? 0;
+  return (
+    <div className="care-tiers">
+      {ordered.map((pkg) => {
+        const isSelected = pkg.key === selectedKey;
+        const tierLabel = [pkg.marker, pkg.card_tier ?? pkg.label]
+          .filter(Boolean)
+          .join("\u00a0 ");
+        const points = pkg.points ?? [];
+        return (
+          <button
+            type="button"
+            key={pkg.key}
+            className={`care-tier${isSelected ? " selected" : ""}`}
+            aria-pressed={isSelected}
+            onClick={() => wizard.setChristmasPackage(pkg.key)}
+          >
+            {pkg.popular ? (
+              <div className="care-tier-pop">Most Popular</div>
+            ) : null}
+            {pkg.value_tag ? (
+              <div className="pkg-value-tag">{pkg.value_tag}</div>
+            ) : null}
+            {tierLabel ? (
+              <div className="care-tier-per">{tierLabel}</div>
+            ) : null}
+            <div className="care-tier-name">{pkg.name ?? pkg.label}</div>
+            {pkg.card_tier && pkg.label ? (
+              <div className="care-tier-blurb">{pkg.label}</div>
+            ) : null}
+            <div className="care-tier-price">
+              {isSelected && total > 0 ? fmt(total) : "\u2014"}
+            </div>
+            <div className="care-tier-per">Package total</div>
+            {pkg.experience ? (
+              <div className="care-tier-blurb">{pkg.experience}</div>
+            ) : null}
+            {points.length ? (
+              <div className="pkg-points">
+                {points.map((point, i) => (
+                  <div className="pkg-point" key={i}>
+                    <span className="pkg-point-marker">&#8212;</span>
+                    <div>{point}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
   const { christmas, setChristmas, pricing } = wizard;
   const cfg = pricing?.christmas;
+  const packagesEnabled = Boolean(cfg?.packages_enabled);
   return (
     <div className="bistro-block">
       <div className="care-head">
@@ -224,9 +314,12 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
         </div>
       </div>
       <div className="bistro-subtitle">
-        Professional roofline, trees, bushes, wreaths and garland — installed,
-        maintained all season, with optional takedown &amp; storage.
+        {packagesEnabled
+          ? "Choose a Good / Better / Best package, then enter the roofline and decor once — your selected package prices live off your workspace rates."
+          : "Professional roofline, trees, bushes, wreaths and garland — installed, maintained all season, with optional takedown & storage."}
       </div>
+
+      {packagesEnabled ? <ChristmasPackageCards wizard={wizard} /> : null}
 
       <div className="bistro-feet-wrap">
         <label className="bistro-feet-label" htmlFor="xmas-roof">

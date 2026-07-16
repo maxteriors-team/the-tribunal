@@ -24,6 +24,7 @@ import {
   designToEstimateInputs,
   hasDesign,
 } from "@/lib/estimator/design";
+import { resolveSelectedPackage, packageName } from "@/lib/estimator/packages";
 import { fileToPhoto } from "@/lib/estimator/photo";
 import type { PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
@@ -64,6 +65,10 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("rep");
   const [takedown, setTakedown] = useState(false);
   const [storage, setStorage] = useState(false);
+  // The rep's chosen Good/Better/Best seasonal package (a ChristmasPackage key).
+  // null = no explicit pick yet; the resolver falls back to the most-inclusive
+  // package, matching the server so the preview and the shared page agree.
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   // Internal-only per-linear-foot rate overrides for this estimate. null = use
   // the workspace's standard configured rate. Never shown to the client.
   const [perFtOverride, setPerFtOverride] = useState<number | null>(null);
@@ -112,6 +117,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       per_ft_override: perFtOverride,
       christmas_per_ft_override: christmasPerFtOverride,
       christmas_items: inputs.christmas_items,
+      selected_package: selectedPackage,
     }),
     [
       feet,
@@ -120,6 +126,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       perFtOverride,
       christmasPerFtOverride,
       inputs.christmas_items,
+      selectedPackage,
     ],
   );
 
@@ -130,6 +137,18 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
+
+  // Resolve the seasonal package the rep is selling (explicit pick, else the
+  // most-inclusive one). When packages are active the client sees this package's
+  // total as the seasonal price, so the preview and the persisted share both
+  // adopt it in place of the à la carte roofline+decor total.
+  const selectedPkg = resolveSelectedPackage(
+    estimate?.christmas_packages ?? [],
+    selectedPackage,
+  );
+  const christmasTotal = selectedPkg
+    ? selectedPkg.pricing.total
+    : (estimate?.christmas.total ?? 0);
 
   // Any change to the priced inputs invalidates a previously saved link so the
   // "Saved to customer" confirmation can never read as current after an edit.
@@ -157,6 +176,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       setStorage(false);
       setPerFtOverride(null);
       setChristmasPerFtOverride(null);
+      setSelectedPackage(null);
       resetShare();
     } catch {
       window.alert("Could not read that image file.");
@@ -166,6 +186,9 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   // ---- Save / share / email ---------------------------------------------
   const shareParams = {
     ...estimateParams,
+    // Persist the concrete package key (resolved default included) so the public
+    // page folds this package's total instead of falling back to à la carte.
+    selected_package: selectedPkg?.key ?? null,
     client_name: clientName.trim() || null,
     client_email: clientEmail.trim() || null,
     client_phone: clientPhone.trim() || null,
@@ -204,7 +227,8 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     ? {
         currency: "USD",
         permanent: estimate.permanent,
-        christmas: estimate.christmas,
+        christmas: { enabled: estimate.christmas.enabled, total: christmasTotal },
+        christmasName: selectedPkg ? packageName(selectedPkg) : null,
         difference: estimate.difference,
         years: estimate.years,
         temporary_multi_year: estimate.temporary_multi_year,
@@ -276,6 +300,8 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                 feet={feet}
                 calibrated={calibrated}
                 hasDesign={designHas}
+                selectedPackage={selectedPackage}
+                onSelectPackage={setSelectedPackage}
               />
 
               <div className="est-options">

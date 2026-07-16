@@ -157,6 +157,19 @@
   margin-bottom: 16px;
 }
 
+/* Selected seasonal package name (Good/Better/Best) above the seasonal price. */
+.cmp-card-pkg {
+  align-self: flex-start;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid var(--bdr-g);
+  border-radius: 999px;
+  padding: 3px 12px;
+  margin-bottom: 12px;
+}
+
 .cmp-price {
   font-size: 34px;
   color: var(--t1);
@@ -846,6 +859,113 @@
   font-size: 24px;
   font-weight: 700;
   color: var(--green);
+}
+
+/* Seasonal Good/Better/Best package picker (rep-only, narrow right panel) */
+.ep-packages {
+  margin-bottom: 14px;
+}
+
+.ep-pkgs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ep-pkg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--bdr);
+  border-radius: 10px;
+  background: var(--s3);
+  color: var(--t2);
+  padding: 12px 30px 12px 14px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ep-pkg.popular {
+  padding-top: 20px;
+}
+
+.ep-pkg:hover:not(.selected) {
+  border-color: var(--bdr-g);
+}
+
+.ep-pkg.selected {
+  border-color: var(--gold);
+  background: #1f1c14;
+}
+
+.ep-pkg.selected::after {
+  content: "\2713";
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ep-pkg-pop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--black);
+  background: var(--gold);
+  padding: 2px 8px;
+  border-radius: 0 0 8px 0;
+}
+
+.ep-pkg-tag {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-d);
+}
+
+.ep-pkg-marker {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t4);
+}
+
+.ep-pkg-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.ep-pkg-total {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1.15;
+}
+
+.ep-pkg-per {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t4);
+}
+
+.ep-pkg-blurb {
+  font-size: 12px;
+  color: var(--t3);
+  line-height: 1.4;
+  margin-top: 4px;
 }
 
 /* options / overrides */

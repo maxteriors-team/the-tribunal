@@ -62,6 +62,10 @@ export default function PublicComparisonPage({
           currency: data.currency,
           clientName: data.client_name,
           permanent: data.permanent,
+          // Totals-only by construction: `christmas.total` already reflects the
+          // rep's selected Good/Better/Best package (folded server-side). The
+          // public payload carries no package label, per-ft, or feet, so we pass
+          // no `christmasName` — the client sees the price, never the measurement.
           christmas: data.christmas,
           difference: data.difference,
           years: data.years,
