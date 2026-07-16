@@ -6502,6 +6502,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render Estimate
+         * @description Turn a drawn lighting design into a photorealistic night render.
+         *
+         *     Server-side OpenAI image edit using the workspace credential — no browser
+         *     key. Spends per image, hence ``billing:write``.
+         */
+        post: operations["render_estimate_api_v1_workspaces__workspace_id__quotes_estimate_render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/estimate/share": {
         parameters: {
             query?: never;
@@ -13436,6 +13459,39 @@ export interface components {
         EnrollContactsRequest: {
             /** Contact Ids */
             contact_ids: number[];
+        };
+        /**
+         * EstimateRenderRequest
+         * @description A composited design image to turn into a photorealistic night render.
+         *
+         *     ``image`` is the rep's drawn lighting design flattened over the customer
+         *     photo, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal
+         *     vs permanent prompt; ``prompt`` optionally overrides it. This boundary carries
+         *     **no dollars and no feet** — it only transforms an image via the workspace's
+         *     OpenAI credential, server-side, so the browser never handles a key.
+         */
+        EstimateRenderRequest: {
+            /**
+             * Image
+             * @description base64 data URL of the composited design
+             */
+            image: string;
+            /**
+             * Mode
+             * @default seasonal
+             * @enum {string}
+             */
+            mode: "seasonal" | "permanent";
+            /** Prompt */
+            prompt?: string | null;
+        };
+        /**
+         * EstimateRenderResult
+         * @description The photorealistic render as a base64 ``data:`` image URL.
+         */
+        EstimateRenderResult: {
+            /** Image */
+            image: string;
         };
         /**
          * FilterDefinition
@@ -36664,6 +36720,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonDeliverResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    render_estimate_api_v1_workspaces__workspace_id__quotes_estimate_render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateRenderResult"];
                 };
             };
             /** @description Validation Error */

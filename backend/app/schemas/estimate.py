@@ -15,6 +15,8 @@ Two boundaries live here:
   leak is structurally impossible, not just omitted.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas.pricing import (
@@ -107,6 +109,32 @@ class LinearFeetEstimateResult(BaseModel):
     # the à la carte breakdown; the rep tool renders one tier card per package
     # from the shared engine's totals. Empty when packages are off.
     christmas_packages: list[ChristmasPackagePricing] = Field(default_factory=list)
+
+
+# --------------------------------------------------------------------------- #
+# AI night render (authenticated) — turn a drawn design into a photoreal photo
+# --------------------------------------------------------------------------- #
+
+
+class EstimateRenderRequest(BaseModel):
+    """A composited design image to turn into a photorealistic night render.
+
+    ``image`` is the rep's drawn lighting design flattened over the customer
+    photo, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal
+    vs permanent prompt; ``prompt`` optionally overrides it. This boundary carries
+    **no dollars and no feet** — it only transforms an image via the workspace's
+    OpenAI credential, server-side, so the browser never handles a key.
+    """
+
+    image: str = Field(min_length=1, description="base64 data URL of the composited design")
+    mode: Literal["seasonal", "permanent"] = "seasonal"
+    prompt: str | None = Field(default=None, max_length=1000)
+
+
+class EstimateRenderResult(BaseModel):
+    """The photorealistic render as a base64 ``data:`` image URL."""
+
+    image: str
 
 
 # --------------------------------------------------------------------------- #

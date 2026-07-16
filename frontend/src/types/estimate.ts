@@ -12,6 +12,8 @@ export type ComparisonShareRequest = Schemas["ComparisonShareRequest"];
 export type ComparisonShareResult = Schemas["ComparisonShareResult"];
 export type ComparisonDeliverRequest = Schemas["ComparisonDeliverRequest"];
 export type ComparisonDeliverResult = Schemas["ComparisonDeliverResult"];
+export type EstimateRenderRequest = Schemas["EstimateRenderRequest"];
+export type EstimateRenderResult = Schemas["EstimateRenderResult"];
 export type PublicComparison = Schemas["PublicComparison"];
 
 // Standardized seasonal decor catalog (trees/bushes/wreaths/garland/…).

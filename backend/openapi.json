@@ -13826,6 +13826,57 @@
         "title": "EnrollContactsRequest",
         "type": "object"
       },
+      "EstimateRenderRequest": {
+        "description": "A composited design image to turn into a photorealistic night render.\n\n``image`` is the rep's drawn lighting design flattened over the customer\nphoto, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal\nvs permanent prompt; ``prompt`` optionally overrides it. This boundary carries\n**no dollars and no feet** — it only transforms an image via the workspace's\nOpenAI credential, server-side, so the browser never handles a key.",
+        "properties": {
+          "image": {
+            "description": "base64 data URL of the composited design",
+            "minLength": 1,
+            "title": "Image",
+            "type": "string"
+          },
+          "mode": {
+            "default": "seasonal",
+            "enum": [
+              "seasonal",
+              "permanent"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "EstimateRenderRequest",
+        "type": "object"
+      },
+      "EstimateRenderResult": {
+        "description": "The photorealistic render as a base64 ``data:`` image URL.",
+        "properties": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "EstimateRenderResult",
+        "type": "object"
+      },
       "FilterDefinition": {
         "description": "Definition of a filter set.",
         "properties": {
@@ -65491,6 +65542,65 @@
           }
         ],
         "summary": "Deliver Comparison",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/render": {
+      "post": {
+        "description": "Turn a drawn lighting design into a photorealistic night render.\n\nServer-side OpenAI image edit using the workspace credential — no browser\nkey. Spends per image, hence ``billing:write``.",
+        "operationId": "render_estimate_api_v1_workspaces__workspace_id__quotes_estimate_render_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateRenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateRenderResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Render Estimate",
         "tags": [
           "Quotes"
         ]

@@ -33,6 +33,8 @@ from app.schemas.estimate import (
     ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
+    EstimateRenderRequest,
+    EstimateRenderResult,
     LinearFeetEstimateRequest,
     LinearFeetEstimateResult,
     PermanentEstimate,
@@ -1115,6 +1117,30 @@ class QuoteService:
         workspace = await get_or_404(self.db, Workspace, workspace_id)
         config = get_pricing_config(workspace)
         return self._compute_comparison(config, req)
+
+    async def render_estimate(
+        self,
+        workspace_id: uuid.UUID,
+        req: EstimateRenderRequest,
+    ) -> EstimateRenderResult:
+        """Render a drawn lighting design into a photorealistic night photo.
+
+        Delegates to :func:`app.services.quotes.estimate_render.render_design`,
+        which uses the workspace's OpenAI credential. Pure image transform — no
+        pricing, no persistence. The design is the only data that leaves for
+        OpenAI; every dollar stays server-computed.
+        """
+        from app.services.quotes.estimate_render import render_design
+
+        await get_or_404(self.db, Workspace, workspace_id)
+        image = await render_design(
+            self.db,
+            workspace_id,
+            image=req.image,
+            mode=req.mode,
+            prompt=req.prompt,
+        )
+        return EstimateRenderResult(image=image)
 
     async def share_comparison(
         self,

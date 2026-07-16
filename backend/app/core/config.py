@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     openai_oauth_originator: str = ""
     openai_oauth_user_agent: str = ""
     openai_realtime_model: str = "gpt-realtime-2"
+    # Image model for the estimator's photorealistic night render (Phase 2).
+    openai_estimate_render_model: str = "gpt-image-2"
     openai_realtime_client_secret_ttl_seconds: int = 600
     openai_realtime_idle_timeout_ms: int | None = 6000
     openai_codex_voice_enabled: bool = False

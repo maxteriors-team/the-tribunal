@@ -21,6 +21,8 @@ from app.schemas.estimate import (
     ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
+    EstimateRenderRequest,
+    EstimateRenderResult,
     LinearFeetEstimateRequest,
     LinearFeetEstimateResult,
     PublicComparison,
@@ -262,6 +264,23 @@ async def estimate_linear_feet(
     """Compute a permanent-vs-temporary estimate for a measured roofline."""
     service = QuoteService(db)
     return await service.estimate_linear_feet(workspace_id, payload)
+
+
+@router.post("/estimate/render", response_model=EstimateRenderResult)
+async def render_estimate(
+    workspace_id: uuid.UUID,
+    payload: EstimateRenderRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> EstimateRenderResult:
+    """Turn a drawn lighting design into a photorealistic night render.
+
+    Server-side OpenAI image edit using the workspace credential — no browser
+    key. Spends per image, hence ``billing:write``.
+    """
+    service = QuoteService(db)
+    return await service.render_estimate(workspace_id, payload)
 
 
 @router.post(

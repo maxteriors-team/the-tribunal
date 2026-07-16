@@ -212,6 +212,23 @@ async def test_invoice_create_denied_to_tech_and_sales_allowed_to_manager() -> N
         _clear_overrides()
 
 
+async def test_estimate_render_denied_to_sales_allowed_to_manager() -> None:
+    # The AI render spends on the workspace's OpenAI account, so it is billing:write
+    # gated like other quote mutations. Proves the route is registered and gated
+    # through the real ASGI app (the allowed path then 500s on the mocked DB).
+    body = {"image": "data:image/png;base64,AAAA", "mode": "seasonal"}
+    try:
+        for role in ("technician", "sales_rep"):
+            async with _client_as(role) as client:
+                resp = await client.post(_url("/quotes/estimate/render"), json=body)
+                assert resp.status_code == 403, role
+        async with _client_as("manager") as client:
+            resp = await client.post(_url("/quotes/estimate/render"), json=body)
+            assert resp.status_code != 403
+    finally:
+        _clear_overrides()
+
+
 async def test_number_provisioning_is_admin_only() -> None:
     body = {"phone_number": "+15551230000"}
     try:
