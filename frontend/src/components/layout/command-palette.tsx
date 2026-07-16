@@ -14,7 +14,7 @@ import { campaignsApi } from "@/lib/api/campaigns";
 import { contactsApi } from "@/lib/api/contacts";
 import { queryKeys } from "@/lib/query-keys";
 
-import { appNavSections, canSeeNavItem, isNavItemVisible } from "./app-nav";
+import { appNavSections, canSeeNavItem, isNavItemVisible, type AppNavItem } from "./app-nav";
 
 interface CommandPaletteProps {
   open?: boolean;
@@ -97,6 +97,28 @@ export function CommandPalette({
     [tier, can]
   );
 
+  // The palette disables cmdk's built-in filter (shouldFilter={false}) and only
+  // renders the nav groups while the input is empty, so typed text never matched
+  // pages. Match nav items against the live query ourselves and surface the hits
+  // as a "Pages" group. Live query (not the debounced term) keeps it instant.
+  const pageMatches = useMemo(() => {
+    if (!hasQuery) return [];
+    const term = query.trim().toLowerCase();
+    return commandGroups
+      .flatMap((group) => group.items)
+      .map((item) => {
+        const titleIndex = item.title.toLowerCase().indexOf(term);
+        let score = 0;
+        if (titleIndex === 0) score = 3;
+        else if (titleIndex > 0) score = 2;
+        else if (item.url.toLowerCase().includes(term)) score = 1;
+        return { item, score };
+      })
+      .filter((match) => match.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((match) => match.item);
+  }, [hasQuery, query, commandGroups]);
+
   const contacts = contactsQuery.data?.items ?? [];
   const campaigns = campaignsQuery.data?.items ?? [];
   const isSearching =
@@ -106,6 +128,24 @@ export function CommandPalette({
   const handleSelect = (href: string) => {
     router.push(href);
     setOpen(false);
+  };
+
+  const renderNavItem = (item: AppNavItem) => {
+    const Icon = item.icon;
+
+    return (
+      <Command.Item
+        key={item.url}
+        value={`nav-${item.url}`}
+        onSelect={() => handleSelect(item.url)}
+        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent aria-selected:bg-accent"
+      >
+        <div className="flex size-7 items-center justify-center rounded-md bg-primary/10">
+          <Icon className="size-4 text-primary" />
+        </div>
+        {item.title}
+      </Command.Item>
+    );
   };
 
   return (
@@ -137,25 +177,15 @@ export function CommandPalette({
             {!hasQuery &&
               commandGroups.map((group) => (
                 <Command.Group key={group.title} heading={group.title}>
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-
-                    return (
-                      <Command.Item
-                        key={item.url}
-                        value={`nav-${item.url}`}
-                        onSelect={() => handleSelect(item.url)}
-                        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent aria-selected:bg-accent"
-                      >
-                        <div className="flex size-7 items-center justify-center rounded-md bg-primary/10">
-                          <Icon className="size-4 text-primary" />
-                        </div>
-                        {item.title}
-                      </Command.Item>
-                    );
-                  })}
+                  {group.items.map((item) => renderNavItem(item))}
                 </Command.Group>
               ))}
+
+            {hasQuery && pageMatches.length > 0 && (
+              <Command.Group heading="Pages">
+                {pageMatches.map((item) => renderNavItem(item))}
+              </Command.Group>
+            )}
 
             {hasQuery && contacts.length > 0 && (
               <Command.Group heading="Contacts">
