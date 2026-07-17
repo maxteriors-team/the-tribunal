@@ -41,7 +41,9 @@ export type EditorAction =
   | {
       type: "UPDATE_RUN";
       id: string;
-      patch: Partial<Pick<Run, "points" | "productId" | "spacingIn" | "colors">>;
+      patch: Partial<
+        Pick<Run, "points" | "productId" | "spacingIn" | "colors" | "bulbScale">
+      >;
       transient?: boolean;
     }
   | { type: "DELETE_RUN"; id: string }

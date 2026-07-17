@@ -120,11 +120,14 @@ export function drawRunLights(
   if (points.length < 2) return;
   const inch = Math.max(pxPerFt / 12, 0.2);
   const colors = product.colors.length > 0 ? product.colors : ["#ffd98a"];
+  // Visual-only bulb-size multiplier (Small…Jumbo). Never touches spacing or the
+  // measured feet, so pricing is unaffected — just how big the glow reads.
+  const scale = product.bulbScale ?? 1;
 
   switch (product.style) {
     case "mini": {
       const spacing = Math.max(inch * (product.spacingIn || 4), 1.5);
-      const r = Math.max(inch * 0.7, minR * 0.55, 0.8);
+      const r = Math.max(inch * 0.7, minR * 0.55, 0.8) * scale;
       pointsAlongPath(points, spacing).forEach((q, i) => {
         const off = jitter(i * 13 + 1) * inch * 3;
         const nx = -Math.sin(q.angle);
@@ -142,7 +145,7 @@ export function drawRunLights(
       strokePath(ctx, points, "rgba(14,52,26,0.92)", Math.max(inch * 5, 4));
       strokePath(ctx, points, "rgba(32,92,46,0.85)", Math.max(inch * 3, 2.5));
       const spacing = Math.max(inch * (product.spacingIn || 8), 2);
-      const r = Math.max(inch * 0.8, minR * 0.6, 0.9);
+      const r = Math.max(inch * 0.8, minR * 0.6, 0.9) * scale;
       pointsAlongPath(points, spacing).forEach((q, i) => {
         const off = jitter(i * 7 + 3) * inch * 1.8;
         const nx = -Math.sin(q.angle);
@@ -158,7 +161,7 @@ export function drawRunLights(
     }
     case "stake": {
       const spacing = Math.max(inch * (product.spacingIn || 30), 4);
-      const r = Math.max(inch * 1.8, minR, 1.6);
+      const r = Math.max(inch * 1.8, minR, 1.6) * scale;
       pointsAlongPath(points, spacing).forEach((q, i) => {
         drawBulb(ctx, q.p, r, colors[i % colors.length]);
       });
@@ -168,7 +171,7 @@ export function drawRunLights(
       // aluminum channel with evenly spaced LED pucks — clean, no jitter
       strokePath(ctx, points, "rgba(126,134,148,0.4)", Math.max(inch * 1.1, 1.4));
       const spacing = Math.max(inch * (product.spacingIn || 9), 2);
-      const r = Math.max(inch * 1.5, minR, 1.4);
+      const r = Math.max(inch * 1.5, minR, 1.4) * scale;
       pointsAlongPath(points, spacing).forEach((q, i) => {
         drawBulb(ctx, q.p, r, colors[i % colors.length]);
       });
@@ -178,7 +181,7 @@ export function drawRunLights(
     default: {
       strokePath(ctx, points, "rgba(15,20,30,0.4)", Math.max(inch * 0.5, 1));
       const spacing = Math.max(inch * (product.spacingIn || 12), 2);
-      const r = Math.max(inch * 1.6, minR, 1.4);
+      const r = Math.max(inch * 1.6, minR, 1.4) * scale;
       pointsAlongPath(points, spacing).forEach((q, i) => {
         drawBulb(ctx, q.p, r, colors[i % colors.length]);
       });
@@ -404,11 +407,14 @@ export function drawScene(
 
 /** Apply a run's spacing/color overrides on top of its product. */
 export function withRunOverrides(product: Product, run: Run): Product {
-  if (run.spacingIn == null && run.colors == null) return product;
+  if (run.spacingIn == null && run.colors == null && run.bulbScale == null) {
+    return product;
+  }
   return {
     ...product,
     spacingIn: run.spacingIn ?? product.spacingIn,
     colors: run.colors ?? product.colors,
+    bulbScale: run.bulbScale ?? product.bulbScale,
   };
 }
 

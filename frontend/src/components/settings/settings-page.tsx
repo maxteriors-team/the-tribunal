@@ -8,6 +8,7 @@ import { IntegrationsSettingsTab } from "@/components/settings/integrations-sett
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
 import { NotificationsSettingsTab } from "@/components/settings/notifications-settings-tab";
 import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
+import { PermanentPricingSettingsCard } from "@/components/settings/permanent-pricing-settings-card";
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
 import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab";
 import { ReviewSettingsTab } from "@/components/settings/review-settings-tab";
@@ -99,7 +100,10 @@ export function SettingsPage() {
 
         <TabsContent value="pricing">
           <QueryErrorBoundary message="Failed to load pricing settings. Please try again.">
-            <SeasonalPricingSettingsTab />
+            <div className="space-y-6">
+              <PermanentPricingSettingsCard />
+              <SeasonalPricingSettingsTab />
+            </div>
           </QueryErrorBoundary>
         </TabsContent>
 

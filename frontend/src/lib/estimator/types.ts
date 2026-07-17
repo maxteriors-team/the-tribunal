@@ -63,6 +63,12 @@ export interface Product {
   spacingIn: number;
   /** Default rendered size in feet for placed items (wreath diameter, tree height…). */
   sizeFt: number;
+  /**
+   * Visual bulb-radius multiplier for linear styles (Small…Jumbo). Optional so
+   * existing product literals stay valid; the render engine defaults it to 1.
+   * Purely cosmetic — never affects the measured feet or the server price.
+   */
+  bulbScale?: number;
   target: DrawTarget;
 }
 
@@ -73,6 +79,8 @@ export interface Run {
   /** Per-run overrides — fall back to the product's values when unset. */
   spacingIn?: number;
   colors?: string[];
+  /** Per-run bulb-size multiplier (visual only); falls back to the product's. */
+  bulbScale?: number;
 }
 
 export interface PlacedItem {

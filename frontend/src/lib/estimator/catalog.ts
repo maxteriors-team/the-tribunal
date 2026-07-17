@@ -42,6 +42,36 @@ export function presetNameFor(colors: readonly string[]): string {
   return "Warm White";
 }
 
+/**
+ * Named bulb-size choices → a visual radius multiplier for linear runs. Purely
+ * cosmetic, exactly like `COLOR_PRESETS` / `SPACING_OPTIONS`: the measured
+ * footage and every server-computed dollar are unaffected, so a rep can show a
+ * customer C9 vs jumbo bulbs without changing the price.
+ */
+export const BULB_SIZE_OPTIONS: Record<string, number> = {
+  Small: 0.75,
+  Standard: 1,
+  Large: 1.3,
+  Jumbo: 1.6,
+};
+
+/** Default bulb-size multiplier when a product/run doesn't specify one. */
+export const DEFAULT_BULB_SCALE = 1;
+
+/** Nearest named bulb size for a scale (defaults to Standard). */
+export function bulbSizeNameFor(scale: number): string {
+  let best = "Standard";
+  let bestDelta = Infinity;
+  for (const [name, s] of Object.entries(BULB_SIZE_OPTIONS)) {
+    const delta = Math.abs(s - scale);
+    if (delta < bestDelta) {
+      best = name;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}
+
 /** Quick-toggle bulb spacing choices per light style (inches). */
 export const SPACING_OPTIONS: Record<RenderStyle, number[]> = {
   c9: [9, 12, 15, 18],
@@ -85,6 +115,7 @@ function rooflineProducts(perFt: number): Product[] {
     style: "c9" as const,
     spacingIn: DEFAULT_SPACING.c9,
     sizeFt: 0,
+    bulbScale: DEFAULT_BULB_SCALE,
     target: ROOFLINE_TARGET,
   };
   return [
@@ -141,6 +172,26 @@ export function buildCatalog(
   const perFt = estimate?.christmas.per_ft ?? 0;
   const products = rooflineProducts(perFt);
 
+  // Permanent LED roofline — offered only when the workspace sells permanent
+  // lighting (`permanent.enabled`). Like the warm/multicolor C9 pair, it targets
+  // the shared roofline `feet`, so it's another *visual* for the one measured
+  // roofline; its per-ft rate is priced server-side (display hint only here).
+  if (estimate?.permanent?.enabled) {
+    products.push({
+      id: "roofline-permanent",
+      name: "Permanent LED Roofline",
+      category: "permanent",
+      kind: "linear",
+      price: estimate.permanent.per_ft,
+      style: "permanent",
+      colors: COLOR_PRESETS["Warm White"],
+      spacingIn: DEFAULT_SPACING.permanent,
+      sizeFt: 0,
+      bulbScale: DEFAULT_BULB_SCALE,
+      target: ROOFLINE_TARGET,
+    });
+  }
+
   for (const cat of estimate?.christmas_catalog ?? []) {
     const style = styleForCategory(cat.key, cat.unit);
     const kind = cat.unit === "per_ft" ? "linear" : "each";
@@ -155,6 +206,7 @@ export function buildCatalog(
         colors: COLOR_PRESETS["Warm White"],
         spacingIn: DEFAULT_SPACING[style],
         sizeFt: kind === "each" ? sizeFtFor(cat.key, opt.key, opt.name) : 0,
+        bulbScale: DEFAULT_BULB_SCALE,
         target: { field: "christmas", category: cat.key, option: opt.key },
       });
     }

@@ -19,8 +19,10 @@ import {
 import { type Dispatch } from "react";
 
 import {
+  BULB_SIZE_OPTIONS,
   COLOR_PRESETS,
   SPACING_OPTIONS,
+  bulbSizeNameFor,
   presetNameFor,
 } from "@/lib/estimator/catalog";
 import {
@@ -204,6 +206,7 @@ function RunOptions({
   ].sort((a, b) => a - b);
   const effSpacing = run.spacingIn ?? product.spacingIn;
   const effColors = run.colors ?? product.colors;
+  const effSize = bulbSizeNameFor(run.bulbScale ?? product.bulbScale ?? 1);
 
   return (
     <>
@@ -227,6 +230,28 @@ function RunOptions({
           </div>
         </div>
       ) : null}
+      <div>
+        <p className="tp-opt-label">Bulb size</p>
+        <div className="tp-chip-row">
+          {Object.entries(BULB_SIZE_OPTIONS).map(([name, scale]) => (
+            <button
+              key={`bulb-${name}`}
+              type="button"
+              className={`tp-spacing-chip ${effSize === name ? "on" : ""}`}
+              onClick={() =>
+                dispatch({
+                  type: "UPDATE_RUN",
+                  id: run.id,
+                  patch: { bulbScale: scale },
+                })
+              }
+              title={`${name} bulbs`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
       <div>
         <p className="tp-opt-label">Colors</p>
         <select

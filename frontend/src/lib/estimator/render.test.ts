@@ -151,6 +151,19 @@ describe("drawRunLights / drawPlacedItem styles", () => {
       drawPlacedItem(ctx, tree, { ...wreath, style: "treewrap" }, 40, 2),
     ).not.toThrow();
   });
+
+  it("renders a scaled (jumbo) bulb without throwing", () => {
+    stubSpriteCanvas();
+    const ctx = fakeCtx();
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    ];
+    expect(() =>
+      drawRunLights(ctx, pts, { ...c9, bulbScale: 1.6 }, 40, 2),
+    ).not.toThrow();
+    expect(ctx.drawImage).toHaveBeenCalled();
+  });
 });
 
 describe("withRunOverrides", () => {
@@ -159,17 +172,28 @@ describe("withRunOverrides", () => {
     expect(withRunOverrides(c9, run)).toBe(c9);
   });
 
-  it("layers per-run spacing and colors over the product", () => {
+  it("layers per-run spacing, colors, and bulb size over the product", () => {
     const run: Run = {
       id: "r",
       productId: c9.id,
       points: [],
       spacingIn: 6,
       colors: ["#ff0000"],
+      bulbScale: 1.6,
     };
     const merged = withRunOverrides(c9, run);
     expect(merged.spacingIn).toBe(6);
     expect(merged.colors).toEqual(["#ff0000"]);
+    expect(merged.bulbScale).toBe(1.6);
+  });
+
+  it("treats a bulb-size-only override as a change", () => {
+    const run: Run = { id: "r", productId: c9.id, points: [], bulbScale: 0.75 };
+    const merged = withRunOverrides(c9, run);
+    expect(merged).not.toBe(c9);
+    expect(merged.bulbScale).toBe(0.75);
+    // untouched fields still fall back to the product
+    expect(merged.spacingIn).toBe(c9.spacingIn);
   });
 });
 
