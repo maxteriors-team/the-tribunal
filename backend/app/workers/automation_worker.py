@@ -66,12 +66,17 @@ from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
 from app.models.tag import ContactTag, Tag
 from app.services.approval.approval_gate_service import approval_gate_service
-from app.services.automations.events import AUTOMATION_EVENT_TRIGGERS
+from app.services.automations.events import (
+    AUTOMATION_EVENT_TRIGGERS,
+    EVENT_LEAD_CREATED,
+    lead_created_event_matches,
+)
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.tags import TagService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.services.telephony.text_provider import get_text_message_provider
+from app.utils.phone import normalize_phone_safe
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -174,6 +179,16 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
         )
         automations = list(matches.scalars().all())
+
+        # ``lead_created`` automations may narrow to specific lead sources via
+        # trigger_config; drop the ones whose selectors don't match this event
+        # so a Facebook-funnel automation never fires for an unrelated source.
+        if event.event_type.lower() == EVENT_LEAD_CREATED:
+            automations = [
+                automation
+                for automation in automations
+                if lead_created_event_matches(automation.trigger_config, event.payload)
+            ]
 
         contact: Contact | None = None
         if event.contact_id is not None:
@@ -595,6 +610,8 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             message (str): Template string; supports {first_name}, {last_name},
                            {full_name}, {company_name}, {email}, and any event
                            payload token (e.g. {rating}, {stage}).
+            fallbacks (dict): Optional per-token defaults used when a token
+                           renders blank (e.g. {"first_name": "there"}).
         """
         message_template: str = config.get("message", "")
         if not message_template:
@@ -611,7 +628,20 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
-        message_body = self._render_template(message_template, contact, payload)
+        # Leads can arrive with raw US numbers like "(248) 555-0123" from imports
+        # or ad-platform webhooks; the provider requires E.164. Normalize here so
+        # an unsendable number is skipped cleanly instead of raising downstream.
+        to_number = normalize_phone_safe(contact.phone_number)
+        if not to_number:
+            self.logger.warning(
+                "Contact phone not valid E.164 — skipping SMS",
+                contact_id=contact.id,
+            )
+            return
+
+        message_body = self._render_template(
+            message_template, contact, payload, config.get("fallbacks")
+        )
 
         from_number = await self._resolve_from_number(db, contact.id, automation.workspace_id)
         if not from_number:
@@ -625,7 +655,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         try:
             idempotency_key = derive_outbound_key("automation_sms", automation.id, contact.id)
             await sms_service.send_message(
-                to_number=contact.phone_number,
+                to_number=to_number,
                 from_number=from_number,
                 body=message_body,
                 db=db,
@@ -635,7 +665,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             self.logger.info(
                 "Automation SMS sent",
                 contact_id=contact.id,
-                to=contact.phone_number,
+                to=to_number,
             )
         finally:
             await sms_service.close()
@@ -668,8 +698,8 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             self.logger.warning("Contact has no email", contact_id=contact.id)
             return
 
-        subject = self._render_template(subject_template, contact, payload)
-        body = self._render_template(body_template, contact, payload)
+        subject = self._render_template(subject_template, contact, payload, config.get("fallbacks"))
+        body = self._render_template(body_template, contact, payload, config.get("fallbacks"))
         idempotency_key = derive_outbound_key("automation_email", automation.id, contact.id)
 
         sent = await send_automation_email(
@@ -880,11 +910,15 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         template: str,
         contact: Contact,
         payload: dict[str, Any] | None = None,
+        fallbacks: dict[str, Any] | None = None,
     ) -> str:
         """Replace simple {placeholder} tokens in a message template.
 
         Contact tokens take precedence; event ``payload`` keys fill in extras
-        like ``{rating}`` or ``{stage}``. Unknown tokens are left untouched.
+        like ``{rating}`` or ``{stage}``. ``fallbacks`` supplies a default for
+        any token that would otherwise render blank (e.g. ``{first_name}`` ->
+        ``"there"`` when the lead record has no first name). Unknown tokens are
+        left untouched.
         """
         full_name = " ".join(filter(None, [contact.first_name, contact.last_name]))
         replacements: dict[str, str] = {
@@ -899,6 +933,11 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 "email": contact.email or "",
             }
         )
+        # Fill blanks (missing/empty tokens) with caller-supplied fallbacks so a
+        # personalized template still reads naturally for sparse lead records.
+        for key, fallback in (fallbacks or {}).items():
+            if not replacements.get(str(key)):
+                replacements[str(key)] = "" if fallback is None else str(fallback)
         result = template
         for key, value in replacements.items():
             result = result.replace(f"{{{key}}}", value)

@@ -37,6 +37,7 @@ from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
 from app.services.automations.events import (
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
+    EVENT_LEAD_CREATED,
     EVENT_MISSED_CALL,
     EVENT_ROLEPLAY_COMPLETED,
     emit_automation_event,
@@ -411,6 +412,77 @@ async def test_contactless_event_completes(event_type: str) -> None:
         execution = result.scalar_one()
         assert execution.status == "completed"
         assert execution.contact_id is None
+
+
+# --------------------------------------------------------------------------- #
+# lead_created source filtering                                                #
+# --------------------------------------------------------------------------- #
+
+
+async def _lead_created_automation(db, workspace_id: uuid.UUID, public_key: str, tag: str):
+    automation = Automation(
+        workspace_id=workspace_id,
+        name=f"lead_created {public_key} -> {tag}",
+        trigger_type=EVENT_LEAD_CREATED,
+        trigger_config={"lead_source_public_key": public_key},
+        actions=[{"type": "apply_tag", "config": {"tag": tag}}],
+        is_active=True,
+    )
+    db.add(automation)
+    await db.flush()
+    return automation
+
+
+async def test_lead_created_runs_for_matching_source() -> None:
+    """A lead_created automation fires when the event's source matches its config."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _lead_created_automation(db, ws.id, "ls_match", "fb-perm")
+
+        await emit_automation_event(
+            db,
+            workspace_id=ws.id,
+            event_type=EVENT_LEAD_CREATED,
+            contact_id=contact.id,
+            payload={
+                "lead_source_public_key": "ls_match",
+                "source_detail": None,
+                "is_new_lead": True,
+            },
+        )
+        await db.commit()
+
+        await _drain(db)
+        await db.commit()
+
+        assert await _contact_has_tag(db, contact.id, "fb-perm")
+
+
+async def test_lead_created_skips_nonmatching_source() -> None:
+    """An active listener still exists, but a mismatched source must not tag."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _lead_created_automation(db, ws.id, "ls_match", "fb-perm")
+
+        await emit_automation_event(
+            db,
+            workspace_id=ws.id,
+            event_type=EVENT_LEAD_CREATED,
+            contact_id=contact.id,
+            payload={
+                "lead_source_public_key": "ls_other",
+                "source_detail": None,
+                "is_new_lead": True,
+            },
+        )
+        await db.commit()
+
+        await _drain(db)
+        await db.commit()
+
+        assert not await _contact_has_tag(db, contact.id, "fb-perm")
 
 
 # --------------------------------------------------------------------------- #

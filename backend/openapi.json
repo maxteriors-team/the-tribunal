@@ -4159,7 +4159,7 @@
           },
           "trigger_type": {
             "default": "event",
-            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
             "title": "Trigger Type",
             "type": "string"
           }
@@ -4349,7 +4349,7 @@
           "trigger_type": {
             "anyOf": [
               {
-                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
                 "type": "string"
               },
               {

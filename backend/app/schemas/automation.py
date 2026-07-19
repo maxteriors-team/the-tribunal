@@ -28,6 +28,8 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "missed_call",
     "roleplay_completed",
     "knowledge_document_uploaded",
+    # Lead-capture trigger (emitted by the public lead-form ingestion path)
+    "lead_created",
     # Billing & field-service lifecycle triggers
     "quote_sent",
     "quote_approved",

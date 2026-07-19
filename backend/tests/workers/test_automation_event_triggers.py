@@ -33,6 +33,7 @@ from app.services.automations.events import (
     EVENT_JOB_COMPLETED,
     EVENT_JOB_SCHEDULED,
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
+    EVENT_LEAD_CREATED,
     EVENT_MISSED_CALL,
     EVENT_OPPORTUNITY_CREATED,
     EVENT_QUOTE_APPROVED,
@@ -53,6 +54,7 @@ ALL_EVENT_TRIGGERS = [
     EVENT_MISSED_CALL,
     EVENT_ROLEPLAY_COMPLETED,
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
+    EVENT_LEAD_CREATED,
     EVENT_QUOTE_SENT,
     EVENT_QUOTE_APPROVED,
     EVENT_QUOTE_DECLINED,
@@ -208,6 +210,87 @@ async def test_render_template_uses_event_payload() -> None:
     )
 
     assert rendered == "Hi Ada, thanks for the 5-star review!"
+
+
+async def test_render_template_applies_fallback_when_token_blank() -> None:
+    """A blank {first_name} falls back to the configured default."""
+    worker = AutomationWorker()
+    contact = _contact()
+    contact.first_name = None
+
+    rendered = worker._render_template(
+        "Hi {first_name}, it's Max.", contact, {}, {"first_name": "there"}
+    )
+
+    assert rendered == "Hi there, it's Max."
+
+
+async def test_render_template_fallback_not_used_when_value_present() -> None:
+    """A real first name wins over the fallback."""
+    worker = AutomationWorker()
+    contact = _contact()  # first_name == "Ada"
+
+    rendered = worker._render_template(
+        "Hi {first_name}, it's Max.", contact, {}, {"first_name": "there"}
+    )
+
+    assert rendered == "Hi Ada, it's Max."
+
+
+async def test_action_send_sms_normalizes_raw_us_number(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A raw US number like \"(248) 555-0123\" is sent as E.164, with fallback."""
+    import app.workers.automation_worker as mod
+
+    worker = AutomationWorker()
+    contact = _contact()
+    contact.first_name = None  # exercise the fallback path
+    contact.phone_number = "(248) 555-0123"
+
+    sms_service = MagicMock()
+    sms_service.send_message = AsyncMock()
+    sms_service.close = AsyncMock()
+    monkeypatch.setattr(mod, "get_text_message_provider", lambda: sms_service)
+    worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
+
+    automation = _automation("lead_created", [])
+    await worker._action_send_sms(
+        automation,
+        contact,
+        {"message": "Hi {first_name}", "fallbacks": {"first_name": "there"}},
+        {},
+        MagicMock(),
+    )
+
+    sms_service.send_message.assert_awaited_once()
+    kwargs = sms_service.send_message.await_args.kwargs
+    assert kwargs["to_number"] == "+12485550123"
+    assert kwargs["body"] == "Hi there"
+
+
+async def test_action_send_sms_skips_unnormalizable_phone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unparseable phone is skipped cleanly (no send, no raise)."""
+    import app.workers.automation_worker as mod
+
+    worker = AutomationWorker()
+    contact = _contact()
+    contact.phone_number = "not-a-phone"
+
+    sms_service = MagicMock()
+    sms_service.send_message = AsyncMock()
+    sms_service.close = AsyncMock()
+    monkeypatch.setattr(mod, "get_text_message_provider", lambda: sms_service)
+    worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
+
+    automation = _automation("lead_created", [])
+    await worker._action_send_sms(
+        automation, contact, {"message": "Hi {first_name}"}, {}, MagicMock()
+    )
+
+    sms_service.send_message.assert_not_awaited()
 
 
 async def test_process_event_dedupes_existing_execution() -> None:

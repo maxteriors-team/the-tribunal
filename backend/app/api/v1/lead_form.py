@@ -24,6 +24,7 @@ from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
 from app.schemas.speed_to_lead import SpeedToLeadProofResponse
+from app.services.automations.events import EVENT_LEAD_CREATED, emit_automation_event
 from app.services.contacts.address_parsing import parse_us_address
 from app.services.idempotency import derive_outbound_key
 from app.services.lead_sources.attribution_service import (
@@ -577,6 +578,29 @@ async def submit_lead(
     )
 
     await db.flush()
+
+    # Queue a lead_created automation event for brand-new leads so workspace
+    # automations (tag, auto-text, ...) can react to the capture. Gated on
+    # is_new_lead so a returning contact re-submitting the form never re-fires,
+    # and wrapped defensively so a queueing failure can't break lead capture.
+    # emit_automation_event no-ops unless an active automation listens, and it
+    # shares this request's transaction (committed below with the contact).
+    if is_new_lead:
+        try:
+            await emit_automation_event(
+                db,
+                workspace_id=lead_source.workspace_id,
+                event_type=EVENT_LEAD_CREATED,
+                contact_id=contact.id,
+                payload={
+                    "lead_source_id": str(lead_source.id),
+                    "lead_source_public_key": lead_source.public_key,
+                    "source_detail": body.source_detail,
+                    "is_new_lead": True,
+                },
+            )
+        except Exception:
+            logger.exception("lead_created_event_emit_failed", contact_id=contact.id)
 
     # Execute post-capture action
     await _execute_action(lead_source, contact, db)

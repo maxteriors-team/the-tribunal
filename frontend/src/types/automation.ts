@@ -19,7 +19,9 @@ export type AutomationTriggerType =
   | "deal_stage_changed"
   | "missed_call"
   | "roleplay_completed"
-  | "knowledge_document_uploaded";
+  | "knowledge_document_uploaded"
+  // Lead capture trigger (emitted by the public lead-form ingestion path)
+  | "lead_created";
 
 // Action types the backend automation worker can execute, plus UI-only kinds
 // retained for backward compatibility with existing automations.

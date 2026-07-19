@@ -36,6 +36,12 @@ EVENT_MISSED_CALL = "missed_call"
 EVENT_ROLEPLAY_COMPLETED = "roleplay_completed"
 EVENT_KNOWLEDGE_DOCUMENT_UPLOADED = "knowledge_document_uploaded"
 
+# Lead-capture trigger. Emitted by the public lead-form ingestion path
+# (``app.api.v1.lead_form.submit_lead``) when a brand-new contact is created
+# from a lead source. Automations can narrow it to specific sources via
+# ``trigger_config`` (see :func:`lead_created_event_matches`).
+EVENT_LEAD_CREATED = "lead_created"
+
 # Billing & field-service lifecycle triggers. Each is emitted by exactly one
 # transition in its service (quotes/invoices/jobs) inside the producer's
 # transaction; see the respective ``*_service`` modules. Payloads carry ids plus
@@ -60,6 +66,7 @@ AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
         EVENT_MISSED_CALL,
         EVENT_ROLEPLAY_COMPLETED,
         EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
+        EVENT_LEAD_CREATED,
         EVENT_QUOTE_SENT,
         EVENT_QUOTE_APPROVED,
         EVENT_QUOTE_DECLINED,
@@ -70,6 +77,46 @@ AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
         EVENT_JOB_COMPLETED,
     }
 )
+
+
+def lead_created_event_matches(
+    trigger_config: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Return True if a ``lead_created`` event matches an automation's selectors.
+
+    ``trigger_config`` may narrow a ``lead_created`` automation to specific lead
+    sources via any of ``lead_source_public_key``, ``lead_source_id``, or
+    ``source_detail``. Semantics are permissive **OR**: the event matches if any
+    configured selector matches the event payload, so a landing page can be
+    caught either by its stable lead-source key or by a ``source_detail``
+    fallback (e.g. an instant-quote page that doesn't always carry click ids).
+
+    When no selectors are configured the automation matches every new lead in
+    the workspace (a general "any new lead" trigger). ``source_detail`` is
+    compared case-insensitively and whitespace-trimmed.
+    """
+    config = trigger_config or {}
+    data = payload or {}
+
+    selectors: list[bool] = []
+
+    want_key = str(config.get("lead_source_public_key") or "").strip()
+    if want_key:
+        selectors.append(str(data.get("lead_source_public_key") or "").strip() == want_key)
+
+    want_id = str(config.get("lead_source_id") or "").strip()
+    if want_id:
+        selectors.append(str(data.get("lead_source_id") or "").strip() == want_id)
+
+    want_detail = str(config.get("source_detail") or "").strip().lower()
+    if want_detail:
+        got_detail = str(data.get("source_detail") or "").strip().lower()
+        selectors.append(got_detail == want_detail)
+
+    if not selectors:
+        return True
+    return any(selectors)
 
 
 async def _has_active_listener(

@@ -102,6 +102,7 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
   missed_call: { label: "Missed Call", icon: PhoneMissed, color: "text-destructive", description: "When an inbound call goes unanswered" },
   roleplay_completed: { label: "Roleplay Completed", icon: GraduationCap, color: "text-primary", description: "When a practice-arena rehearsal finishes" },
   knowledge_document_uploaded: { label: "Knowledge Doc Uploaded", icon: FileText, color: "text-info", description: "When a knowledge document is added" },
+  lead_created: { label: "New Lead Captured", icon: UserPlus, color: "text-success", description: "When a new lead is captured from a lead source" },
 };
 
 const actionTypeConfig: Record<AutomationActionType, { label: string; icon: LucideIcon }> = {
@@ -119,6 +120,7 @@ const actionTypeConfig: Record<AutomationActionType, { label: string; icon: Luci
 // Triggers offered in the builder dropdown, grouped for readability.
 const TRIGGER_OPTIONS: { group: string; values: AutomationTriggerType[] }[] = [
   { group: "General", values: ["event", "schedule", "condition"] },
+  { group: "Leads", values: ["lead_created"] },
   { group: "Appointments", values: ["appointment_booked", "booking_created", "no_show", "never_booked"] },
   { group: "Contacts & Pipeline", values: ["contact_tagged", "opportunity_created", "deal_stage_changed"] },
   { group: "Engagement", values: ["review_received", "review_request_response", "missed_call", "roleplay_completed", "knowledge_document_uploaded"] },
