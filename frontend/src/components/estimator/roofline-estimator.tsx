@@ -206,10 +206,30 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   });
 
   const deliverMutation = useMutation({
-    mutationFn: () =>
-      estimatorApi.deliver(workspaceId, shareToken ?? "", clientEmail.trim() || null),
+    mutationFn: (token: string) =>
+      estimatorApi.deliver(workspaceId, token, clientEmail.trim() || null),
     onSuccess: (result) => setSentTo(result.to),
   });
+
+  // One-click "email the estimate": the button is always visible on every
+  // estimate. If the rep hasn't saved a share link yet we mint one first, then
+  // deliver it to the customer — so emailing never depends on remembering to
+  // press "Save & share" beforehand.
+  const emailPending = shareMutation.isPending || deliverMutation.isPending;
+  const canEmail = designHas && clientEmail.trim().length > 0;
+  const emailEstimate = async () => {
+    if (!canEmail || emailPending) return;
+    try {
+      let token = shareToken;
+      if (!token) {
+        const shared = await shareMutation.mutateAsync();
+        token = shared.token;
+      }
+      if (token) await deliverMutation.mutateAsync(token);
+    } catch {
+      // Surfaced to the rep via shareMutation/deliverMutation isError below.
+    }
+  };
 
   const editCustomer =
     (setter: (value: string) => void) => (value: string) => {
@@ -412,11 +432,31 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                 <button
                   className="est-btn primary est-save-btn"
                   type="button"
+                  disabled={!canEmail || emailPending}
+                  title={
+                    canEmail
+                      ? undefined
+                      : "Draw the design and add a customer email to send the estimate"
+                  }
+                  onClick={() => void emailEstimate()}
+                >
+                  {emailPending ? "Sending…" : "✉ Email estimate"}
+                </button>
+                <button
+                  className="est-btn est-save-btn"
+                  type="button"
                   disabled={!designHas || shareMutation.isPending}
                   onClick={() => shareMutation.mutate()}
                 >
-                  {shareMutation.isPending ? "Saving…" : "Save & share"}
+                  {shareMutation.isPending ? "Saving…" : "Save & share link only"}
                 </button>
+                {deliverMutation.isError || shareMutation.isError ? (
+                  <div className="est-send-row">
+                    <span className="est-send-error">
+                      Couldn’t send — check the email and try again.
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               {shareUrl ? (
@@ -433,31 +473,11 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                       Copy
                     </button>
                   </div>
-                  <div className="est-send-row">
-                    <button
-                      className="est-btn primary"
-                      type="button"
-                      disabled={!clientEmail.trim() || deliverMutation.isPending}
-                      title={
-                        clientEmail.trim()
-                          ? undefined
-                          : "Add a customer email above to send the estimate"
-                      }
-                      onClick={() => deliverMutation.mutate()}
-                    >
-                      {deliverMutation.isPending
-                        ? "Sending…"
-                        : `✉ Email estimate to ${clientEmail.trim() || "customer"}`}
-                    </button>
-                    {sentTo ? (
+                  {sentTo ? (
+                    <div className="est-send-row">
                       <span className="est-sent-note">✓ Sent to {sentTo}</span>
-                    ) : null}
-                    {deliverMutation.isError ? (
-                      <span className="est-send-error">
-                        Couldn’t send — check the email and try again.
-                      </span>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

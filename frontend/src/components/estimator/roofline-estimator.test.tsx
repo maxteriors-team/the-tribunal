@@ -198,7 +198,7 @@ describe("RooflineEstimator", () => {
     expect(screen.getByText(/Place decor/i)).toBeInTheDocument();
   });
 
-  it("exposes the Save-to-customer fields once a photo is loaded", async () => {
+  it("exposes the Save-to-customer fields and an always-present email button once a photo is loaded", async () => {
     const { container } = renderEstimator();
     expect(screen.queryByLabelText(/Customer name/i)).toBeNull();
 
@@ -208,8 +208,14 @@ describe("RooflineEstimator", () => {
     expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Customer phone/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Save & share/i }),
+      screen.getByRole("button", { name: /Save & share link only/i }),
     ).toBeInTheDocument();
+
+    // The email button is present on every estimate (no need to save first),
+    // but disabled until a customer email is entered.
+    const emailBtn = screen.getByRole("button", { name: /Email estimate/i });
+    expect(emailBtn).toBeInTheDocument();
+    expect(emailBtn).toBeDisabled();
   });
 
   it("renders seasonal package cards and mirrors the picked package's total", async () => {
@@ -252,7 +258,9 @@ describe("RooflineEstimator", () => {
 
     // Save & share without an explicit pick persists the resolved default
     // (most-inclusive package), so the public page folds that package's total.
-    fireEvent.click(screen.getByRole("button", { name: /Save & share/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Save & share link only/i }),
+    );
     await waitFor(() =>
       expect(estimatorApi.share).toHaveBeenCalledWith(
         "ws_1",
@@ -261,7 +269,7 @@ describe("RooflineEstimator", () => {
     );
   });
 
-  it("emails the saved estimate to the entered customer", async () => {
+  it("emails the estimate in one click, minting a share link first", async () => {
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "https://app.test/p/compare/tok_123",
       token: "tok_123",
@@ -276,18 +284,25 @@ describe("RooflineEstimator", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
+    // The email button is there immediately, disabled until an email is typed —
+    // the rep never has to press "Save & share" first.
+    const emailBtn = screen.getByRole("button", { name: /Email estimate/i });
+    expect(emailBtn).toBeDisabled();
+
     fireEvent.change(screen.getByLabelText(/Customer email/i), {
       target: { value: "buyer@example.com" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Save & share/i }));
-
-    const emailBtn = await screen.findByRole("button", {
-      name: /Email estimate to buyer@example\.com/i,
-    });
     expect(emailBtn).toBeEnabled();
 
+    // One click mints the share link (share) and then delivers it (deliver).
     fireEvent.click(emailBtn);
 
+    await waitFor(() =>
+      expect(estimatorApi.share).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ client_email: "buyer@example.com" }),
+      ),
+    );
     await waitFor(() =>
       expect(estimatorApi.deliver).toHaveBeenCalledWith(
         "ws_1",
