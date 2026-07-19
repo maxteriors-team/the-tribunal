@@ -684,6 +684,21 @@
 .sales-wizard .cat-chip-check { position: absolute; top: 12px; right: 14px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bdr-g); color: var(--t4); font-size: 13px; font-weight: 700; transition: all 0.2s; }
 .sales-wizard .cat-chip.selected .cat-chip-check { background: var(--gold); border-color: var(--gold); color: #0a0a0a; }
 
+/* Product lines grouped by service (Landscape vs Christmas/Holiday) so the two
+ * services read as visually separate even though selections share one quote.
+ * `--svc-accent` is set per group inline (gold vs evergreen). */
+.sales-wizard .svc-groups { display: flex; flex-direction: column; gap: 16px; }
+.sales-wizard .svc-group { border: 1px solid var(--bdr); border-top: 2px solid var(--svc-accent, var(--gold)); background: var(--s1); padding: 16px 16px 18px; }
+.sales-wizard .svc-group-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sales-wizard .svc-group-icon { width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--svc-accent, var(--gold)); color: var(--svc-accent, var(--gold)); background: rgba(255, 255, 255, 0.02); }
+.sales-wizard .svc-group-glyph { width: 19px; height: 19px; }
+.sales-wizard .svc-group-name { font-family: var(--font-cormorant), serif; font-size: 23px; font-weight: 400; color: var(--t1); line-height: 1.05; }
+.sales-wizard .svc-group-blurb { font-size: 11px; color: var(--t3); margin-top: 3px; line-height: 1.4; }
+.sales-wizard .svc-group .cat-chip.selected .cat-chip-check { background: var(--svc-accent, var(--gold)); border-color: var(--svc-accent, var(--gold)); }
+
+/* Per-service accent pill on a builder step heading (Landscape / Holiday). */
+.sales-wizard .wizard-service-tag { display: inline-block; margin-bottom: 9px; padding: 3px 11px; border: 1px solid var(--svc-accent, var(--gold)); color: var(--svc-accent, var(--gold)); font-size: 8px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; }
+
 .sales-wizard .xmas-toggles { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0 4px; }
 .sales-wizard .xmas-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t2); cursor: pointer; }
 .sales-wizard .xmas-toggle input { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; }

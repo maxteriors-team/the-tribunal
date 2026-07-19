@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   Bot,
   Boxes,
+  Calculator,
   Calendar,
   ClipboardCheck,
   CreditCard,
@@ -134,7 +135,7 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "pipeline:write_own",
   },
   {
-    title: "Quotes",
+    title: "Quotes & Estimates",
     url: "/quotes",
     icon: FileText,
     sidebar: true,
@@ -142,7 +143,15 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
-    title: "Estimator",
+    title: "Quote Builder",
+    url: "/sales-wizard",
+    icon: Calculator,
+    sidebar: true,
+    commandPalette: true,
+    requires: "billing:read",
+  },
+  {
+    title: "Photo Designer",
     url: "/estimator",
     icon: Ruler,
     sidebar: true,
@@ -150,10 +159,13 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
+    // Seasonal launcher folded into the unified Quotes & Estimates hub; kept in
+    // the command palette (and reachable by URL) but out of the sidebar so there
+    // is one obvious quoting/estimates home instead of competing estimator tabs.
     title: "Christmas Light Estimator",
     url: "/christmas-lights",
     icon: TreePine,
-    sidebar: true,
+    sidebar: false,
     commandPalette: true,
     accent: "christmas",
     requires: "billing:read",
@@ -424,7 +436,9 @@ export const breadcrumbLabels: Record<string, string> = {
   "ad-library": "Ad Library",
   "pending-actions": "Pending Actions",
   opportunities: "Opportunities",
-  quotes: "Quotes",
+  quotes: "Quotes & Estimates",
+  "sales-wizard": "Quote Builder",
+  estimator: "Photo Designer",
   invoices: "Invoices",
   "christmas-lights": "Christmas Light Estimator",
   new: "New",

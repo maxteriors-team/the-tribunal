@@ -21,6 +21,39 @@ function section(wizard: UseSalesWizardReturn, key: string) {
   return wizard.document?.category_sections.find((s) => s.key === key) ?? null;
 }
 
+/**
+ * Roofline linear-feet input. Both the permanent and seasonal-Christmas lines
+ * collect their own roofline footage with identical markup, so the field lives
+ * here once — the value/handler stay separate (a rep can run different footage
+ * per line), only the presentation is shared.
+ */
+function RooflineFeetField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="bistro-feet-wrap">
+      <label className="bistro-feet-label" htmlFor={id}>
+        Roofline Linear Feet
+      </label>
+      <input
+        className="bistro-feet-input"
+        id={id}
+        type="number"
+        min={0}
+        placeholder="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
 /** The live grossed breakdown rows for a category (server-priced). */
 function Breakdown({
   wizard,
@@ -73,20 +106,11 @@ export function PermanentSection({ wizard }: { wizard: UseSalesWizardReturn }) {
         holidays, sports, and everyday accent lighting.
       </div>
       <div className="fields-grid-2">
-        <div className="bistro-feet-wrap">
-          <label className="bistro-feet-label" htmlFor="perm-feet">
-            Roofline Linear Feet
-          </label>
-          <input
-            className="bistro-feet-input"
-            id="perm-feet"
-            type="number"
-            min={0}
-            placeholder="0"
-            value={permanent.feet}
-            onChange={(e) => setPermanent({ feet: e.target.value })}
-          />
-        </div>
+        <RooflineFeetField
+          id="perm-feet"
+          value={permanent.feet}
+          onChange={(feet) => setPermanent({ feet })}
+        />
         <div className="bistro-feet-wrap">
           <label className="bistro-feet-label" htmlFor="perm-channels">
             Zones / Channels
@@ -342,20 +366,11 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
 
       {packagesEnabled ? <ChristmasPackageCards wizard={wizard} /> : null}
 
-      <div className="bistro-feet-wrap">
-        <label className="bistro-feet-label" htmlFor="xmas-roof">
-          Roofline Linear Feet
-        </label>
-        <input
-          className="bistro-feet-input"
-          id="xmas-roof"
-          type="number"
-          min={0}
-          placeholder="0"
-          value={christmas.roofline_feet}
-          onChange={(e) => setChristmas({ roofline_feet: e.target.value })}
-        />
-      </div>
+      <RooflineFeetField
+        id="xmas-roof"
+        value={christmas.roofline_feet}
+        onChange={(roofline_feet) => setChristmas({ roofline_feet })}
+      />
 
       {(cfg?.items ?? []).map((item) => (
         <SeasonalItemGroup key={item.key} wizard={wizard} item={item} />

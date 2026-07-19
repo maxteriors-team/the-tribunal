@@ -15,7 +15,7 @@ import {
   GrandTotals,
   PermanentSection,
 } from "./builder-sections";
-import { CategoryStep } from "./category-step";
+import { CategoryStep, SERVICE_ACCENTS } from "./category-step";
 import { DesignStep, MiniTotals } from "./design-step";
 import { EnhancementsStep } from "./enhancements-step";
 import { fmt, type ClientDraft, type UseSalesWizardReturn } from "./use-sales-wizard";
@@ -46,6 +46,18 @@ interface FieldProps {
   label: string;
   placeholder: string;
   type?: string;
+}
+
+/** Small accent pill naming the service a builder step belongs to. */
+function ServiceTag({ label, accent }: { label: string; accent: string }) {
+  return (
+    <span
+      className="wizard-service-tag"
+      style={{ "--svc-accent": accent } as React.CSSProperties}
+    >
+      {label}
+    </span>
+  );
 }
 
 function ClientField({ wizard, field, label, placeholder, type }: FieldProps) {
@@ -348,6 +360,10 @@ export function CalculatorScreen({
             <section className={`wizard-step${step === "design" ? " active" : ""}`}>
               <div className="wizard-step-heading">
                 <div className="wizard-kicker">{stepOf("design")}</div>
+                <ServiceTag
+                  label="Landscape Lighting"
+                  accent={SERVICE_ACCENTS.landscape}
+                />
                 <div className="wizard-title">
                   <em>Design</em>{" "}Packages
                 </div>
@@ -373,6 +389,10 @@ export function CalculatorScreen({
             <section className={`wizard-step${step === "seasonal" ? " active" : ""}`}>
               <div className="wizard-step-heading">
                 <div className="wizard-kicker">{stepOf("seasonal")}</div>
+                <ServiceTag
+                  label="Christmas & Holiday Lighting"
+                  accent={SERVICE_ACCENTS.holiday}
+                />
                 <div className="wizard-title">
                   <em>Seasonal</em>{" "}&amp; Permanent
                 </div>

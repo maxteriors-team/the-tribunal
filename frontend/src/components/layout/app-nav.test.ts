@@ -82,6 +82,10 @@ describe("Christmas Lights seasonal hub nav item", () => {
     expect(christmas!.accent).toBe("christmas");
     // Gated like the other quoting surfaces (Quotes/Estimator/Invoices).
     expect(christmas!.requires).toBe("billing:read");
+    // Folded into the unified Quotes & Estimates hub: out of the sidebar, but
+    // still reachable via the command palette (and by URL).
+    expect(christmas!.sidebar).toBe(false);
+    expect(christmas!.commandPalette).toBe(true);
   });
 
   it("follows the capability gate for non-field tiers", () => {
