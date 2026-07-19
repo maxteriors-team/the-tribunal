@@ -36,7 +36,12 @@ export interface Quote {
   currency: string;
   /** Optional upfront deposit as a percentage of the total (0–100); null = none. */
   deposit_percentage?: number | null;
+  deposit_amount_fixed?: number | null;
   deposit_paid_at?: string | null;
+  /** Server-computed effective deposit in major units (fixed wins); null = none. */
+  deposit_amount?: number | null;
+  /** Server-computed: a deposit is owed and not yet paid. */
+  deposit_required?: boolean;
   issue_date?: string | null;
   expiry_date?: string | null;
   sent_at?: string | null;

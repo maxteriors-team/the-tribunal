@@ -12,6 +12,7 @@ import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact
 import { ContactHeader } from "@/components/contacts/contact-sidebar/contact-header";
 import { ContactInfoSection } from "@/components/contacts/contact-sidebar/contact-info-section";
 import { ContactNotesMeta } from "@/components/contacts/contact-sidebar/contact-notes-meta";
+import { ContactQuotes } from "@/components/contacts/contact-sidebar/contact-quotes";
 import { ContactTimeline } from "@/components/contacts/contact-sidebar/contact-timeline";
 import { DeleteContactDialog } from "@/components/contacts/contact-sidebar/delete-contact-dialog";
 import { EngagementSummary } from "@/components/contacts/contact-sidebar/engagement-summary";
@@ -74,6 +75,8 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
     timeline,
     appointments,
     appointmentsLoading,
+    quotes,
+    quotesLoading,
     phoneNumbers,
     aiEnabled,
     setAiEnabled,
@@ -217,6 +220,9 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
             appointments={appointments}
             isLoading={appointmentsLoading}
           />
+
+          <Separator />
+          <ContactQuotes quotes={quotes} isLoading={quotesLoading} />
 
           <ContactNotesMeta contact={selectedContact} />
         </div>

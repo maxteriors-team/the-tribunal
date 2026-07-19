@@ -234,6 +234,16 @@ describe("queryKeys factory composition", () => {
     expect(byContact.slice(0, all.length)).toEqual([...all]);
   });
 
+  it("derives quotes.byContact from the quotes `all` key so contact profile + quote mutations share a cache", () => {
+    // Backs the Quotes section on the contact profile sidebar. Deriving it from
+    // the shared list builder keeps it under `quotes.all`, so a quote
+    // create/update/delete invalidate cascade also refreshes the profile list.
+    const all = queryKeys.quotes.all("ws_1");
+    const byContact = queryKeys.quotes.byContact("ws_1", 5);
+    expect(byContact).toEqual(["quotes", "ws_1", { contact_id: 5 }]);
+    expect(byContact.slice(0, all.length)).toEqual([...all]);
+  });
+
   it("builds the bespoke proposal-template + public-proposal keys with a stable shape", () => {
     // These drive cache invalidation across the settings tab, the public
     // proposal page, and the quotes-list link actions, so their shape is a

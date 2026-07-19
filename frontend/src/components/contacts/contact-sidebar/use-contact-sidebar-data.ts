@@ -13,6 +13,7 @@ import { appointmentsApi } from "@/lib/api/appointments";
 import { callsApi, type InitiateCallRequest } from "@/lib/api/calls";
 import { conversationsApi } from "@/lib/api/conversations";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
+import { quotesApi } from "@/lib/api/quotes";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Contact } from "@/types";
@@ -40,6 +41,17 @@ export function useContactSidebarData({
     queryKey: queryKeys.appointments.byContact(workspaceId ?? "", contact?.id),
     queryFn: () =>
       appointmentsApi.list(workspaceId!, {
+        page: 1,
+        page_size: 50,
+        contact_id: contact!.id,
+      }),
+    enabled: !!workspaceId && !!contact,
+  });
+
+  const { data: quotesData, isPending: quotesLoading } = useQuery({
+    queryKey: queryKeys.quotes.byContact(workspaceId ?? "", contact?.id),
+    queryFn: () =>
+      quotesApi.list(workspaceId!, {
         page: 1,
         page_size: 50,
         contact_id: contact!.id,
@@ -120,6 +132,8 @@ export function useContactSidebarData({
     timeline,
     appointments: appointmentsData?.items ?? [],
     appointmentsLoading,
+    quotes: quotesData?.items ?? [],
+    quotesLoading,
     phoneNumbers: phoneNumbersData?.items ?? [],
     aiEnabled,
     setAiEnabled,

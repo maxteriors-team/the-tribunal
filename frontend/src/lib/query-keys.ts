@@ -387,7 +387,11 @@ export const queryKeys = {
       phoneNumbers.list(workspaceId, { active_only: false }),
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
-  quotes,
+  quotes: {
+    ...quotes,
+    byContact: (workspaceId: string, contactId: number | string | undefined) =>
+      quotes.list(workspaceId, { contact_id: contactId }),
+  },
   proposalTemplate: {
     settings: (workspaceId: string) =>
       ["proposal-template", workspaceId] as const,
