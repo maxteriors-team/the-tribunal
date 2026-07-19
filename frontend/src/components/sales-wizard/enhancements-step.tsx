@@ -17,7 +17,6 @@ import {
 
 interface EnhancementsStepProps {
   wizard: UseSalesWizardReturn;
-  onOpenNight: () => void;
 }
 
 /**
@@ -162,7 +161,7 @@ function savingsBasis(
   return `Estimated first-year value: ${parts.join(" + ")}. Estimate only — actual savings vary.`;
 }
 
-export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps) {
+export function EnhancementsStep({ wizard }: EnhancementsStepProps) {
   const {
     pricing,
     document,
@@ -388,22 +387,6 @@ export function EnhancementsStep({ wizard, onOpenNight }: EnhancementsStepProps)
             )}
           </div>
         </div>
-      ) : null}
-
-      {showCare ? (
-        <>
-          <button
-            type="button"
-            className="night-launch-btn"
-            onClick={onOpenNight}
-          >
-            &#9789;&nbsp; Night Mode &#8212; Show It Lit at Night
-          </button>
-          <div className="night-launch-sub">
-            Trace your roofline on the photo to auto-measure the footage and light
-            it up &#8212; the Christmas price updates as you draw.
-          </div>
-        </>
       ) : null}
     </>
   );

@@ -373,6 +373,20 @@ export function CalculatorScreen({
                 </div>
               </div>
               <DesignStep wizard={wizard} />
+              <button
+                type="button"
+                className={`night-launch-btn${wizard.night.image ? " saved" : ""}`}
+                onClick={onOpenNight}
+              >
+                {wizard.night.image
+                  ? "\u2713\u00a0 Design saved \u2014 edit the lit photo"
+                  : "\u263e\u00a0 Night Preview: Light the Design on Their Photo"}
+              </button>
+              <div className="night-launch-sub">
+                {wizard.night.image
+                  ? "Saved to this proposal \u2014 it shows on the client’s shared page and the quote is filed on their customer record."
+                  : "Paint uplights, path, spot and wash lighting onto a photo of the home to preview the finished design after dark. It saves into the proposal as a visual mockup."}
+              </div>
               <div className="wizard-nav">
                 <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
                   Back
@@ -419,7 +433,7 @@ export function CalculatorScreen({
             </section>
           ) : null}
 
-          {/* ── Enhancements (mockups always · care / bistro / night) ── */}
+          {/* ── Enhancements (mockups always · care / bistro) ── */}
           <section className={`wizard-step${step === "enhancements" ? " active" : ""}`}>
             <div className="wizard-step-heading">
               <div className="wizard-kicker">{stepOf("enhancements")}</div>
@@ -427,12 +441,12 @@ export function CalculatorScreen({
                 <em>Enhance</em>{" "}the Proposal
               </div>
               <div className="wizard-copy">
-                Upload design mockups, then add annual care, bistro string
-                lighting, or a night-mode preview. Leave any optional section
-                blank and it stays out of the client proposal.
+                Upload design mockups, then add annual care or bistro string
+                lighting. Leave any optional section blank and it stays out of
+                the client proposal.
               </div>
             </div>
-            <EnhancementsStep wizard={wizard} onOpenNight={onOpenNight} />
+            <EnhancementsStep wizard={wizard} />
             {hasLandscape ? <MiniTotals wizard={wizard} /> : null}
             <div className="wizard-nav">
               <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
