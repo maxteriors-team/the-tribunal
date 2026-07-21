@@ -82,9 +82,15 @@ import {
 } from "@/hooks/useAutomations";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { automationsApi } from "@/lib/api/automations";
+import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils/date";
-import type { Automation, AutomationTriggerType, AutomationActionType } from "@/types";
+import type {
+  Automation,
+  AutomationAction,
+  AutomationTriggerType,
+  AutomationActionType,
+} from "@/types";
 
 const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: LucideIcon; color: string; description: string }> = {
   event: { label: "Event", icon: Zap, color: "text-warning", description: "When an event occurs" },
@@ -136,6 +142,14 @@ const ACTION_OPTIONS: AutomationActionType[] = [
   "wait",
 ];
 
+// Actions that tag the contact and therefore need a tag-name value. An empty
+// tag makes the worker skip the action, so the builder requires one.
+const TAG_ACTIONS: AutomationActionType[] = ["apply_tag", "add_tag"];
+
+// Sentinel for the "any lead source" option: Radix Select items can't use an
+// empty-string value, so we map this back to "" (match every new lead).
+const ALL_LEAD_SOURCES = "__all__";
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -179,6 +193,10 @@ export function AutomationsPage() {
   const [newAutomationDescription, setNewAutomationDescription] = useState("");
   const [newTriggerType, setNewTriggerType] = useState<AutomationTriggerType>("event");
   const [newActionType, setNewActionType] = useState<AutomationActionType>("send_sms");
+  // Tag name for apply_tag/add_tag actions; lead-source public_key that narrows
+  // a lead_created trigger to one form ("" = every new lead).
+  const [newTagValue, setNewTagValue] = useState("");
+  const [newLeadSourceKey, setNewLeadSourceKey] = useState("");
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
@@ -187,12 +205,21 @@ export function AutomationsPage() {
     queryFn: () => automationsApi.getStats(workspaceId!),
     enabled: !!workspaceId,
   });
+  const { data: leadSourcesData } = useQuery({
+    queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
+    queryFn: () => leadSourcesApi.list(workspaceId!),
+    enabled: !!workspaceId,
+  });
   const createMutation = useCreateAutomation(workspaceId ?? "");
   const updateMutation = useUpdateAutomation(workspaceId ?? "");
   const deleteMutation = useDeleteAutomation(workspaceId ?? "");
   const toggleMutation = useToggleAutomation(workspaceId ?? "");
 
   const automations = data?.items ?? [];
+  const leadSources = leadSourcesData ?? [];
+  const isTagAction = TAG_ACTIONS.includes(newActionType);
+  const leadSourceNameByKey = (key: string) =>
+    leadSources.find((source) => source.public_key === key)?.name ?? key;
 
   const filteredAutomations = automations.filter(
     (automation) =>
@@ -202,9 +229,53 @@ export function AutomationsPage() {
 
   const activeCount = automations.filter((a) => a.is_active).length;
 
+  const resetForm = () => {
+    setNewAutomationName("");
+    setNewAutomationDescription("");
+    setNewTriggerType("event");
+    setNewActionType("send_sms");
+    setNewTagValue("");
+    setNewLeadSourceKey("");
+  };
+
+  // Build the first action's config from the builder fields while preserving
+  // any config keys the builder doesn't surface (e.g. an existing SMS body), so
+  // editing an automation's name never blanks its action settings.
+  const buildActions = (): AutomationAction[] => {
+    const config: Record<string, unknown> =
+      editingAutomation?.actions[0]?.type === newActionType
+        ? { ...(editingAutomation.actions[0]?.config ?? {}) }
+        : {};
+    if (TAG_ACTIONS.includes(newActionType)) {
+      config.tag = newTagValue.trim();
+    }
+    return [{ type: newActionType, config }];
+  };
+
+  // Narrow a lead_created automation to one lead source, or clear the selector
+  // for an "any new lead" trigger. Unrelated selectors set via the API survive.
+  const buildTriggerConfig = (): Record<string, unknown> => {
+    const config: Record<string, unknown> =
+      editingAutomation && editingAutomation.trigger_type === newTriggerType
+        ? { ...(editingAutomation.trigger_config ?? {}) }
+        : {};
+    if (newTriggerType === "lead_created") {
+      if (newLeadSourceKey) {
+        config.lead_source_public_key = newLeadSourceKey;
+      } else {
+        delete config.lead_source_public_key;
+      }
+    }
+    return config;
+  };
+
   const handleCreateAutomation = async () => {
     if (!newAutomationName.trim()) {
       toast.error("Please enter a name for the automation");
+      return;
+    }
+    if (TAG_ACTIONS.includes(newActionType) && !newTagValue.trim()) {
+      toast.error("Enter a tag name for the Apply Tag action");
       return;
     }
 
@@ -216,7 +287,8 @@ export function AutomationsPage() {
             name: newAutomationName,
             description: newAutomationDescription || undefined,
             trigger_type: newTriggerType,
-            actions: [{ type: newActionType, config: {} }],
+            trigger_config: buildTriggerConfig(),
+            actions: buildActions(),
           },
         });
         toast.success("Automation updated successfully");
@@ -226,17 +298,14 @@ export function AutomationsPage() {
           name: newAutomationName,
           description: newAutomationDescription || undefined,
           trigger_type: newTriggerType,
-          trigger_config: {},
-          actions: [{ type: newActionType, config: {} }],
+          trigger_config: buildTriggerConfig(),
+          actions: buildActions(),
           is_active: true,
         });
         toast.success("Automation created successfully");
       }
       setIsCreateDialogOpen(false);
-      setNewAutomationName("");
-      setNewAutomationDescription("");
-      setNewTriggerType("event");
-      setNewActionType("send_sms");
+      resetForm();
     } catch {
       toast.error(editingAutomation ? "Failed to update automation" : "Failed to create automation");
     }
@@ -246,7 +315,11 @@ export function AutomationsPage() {
     setNewAutomationName(automation.name);
     setNewAutomationDescription(automation.description ?? "");
     setNewTriggerType(automation.trigger_type);
-    setNewActionType(automation.actions[0]?.type ?? "send_sms");
+    const firstAction = automation.actions[0];
+    setNewActionType(firstAction?.type ?? "send_sms");
+    setNewTagValue(typeof firstAction?.config?.tag === "string" ? firstAction.config.tag : "");
+    const sourceKey = automation.trigger_config?.lead_source_public_key;
+    setNewLeadSourceKey(typeof sourceKey === "string" ? sourceKey : "");
     setEditingAutomation(automation);
   };
 
@@ -377,6 +450,32 @@ export function AutomationsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {newTriggerType === "lead_created" && (
+                <div className="space-y-2">
+                  <Label>Lead source</Label>
+                  <Select
+                    value={newLeadSourceKey || ALL_LEAD_SOURCES}
+                    onValueChange={(v) =>
+                      setNewLeadSourceKey(v === ALL_LEAD_SOURCES ? "" : v)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_LEAD_SOURCES}>All lead sources</SelectItem>
+                      {leadSources.map((source) => (
+                        <SelectItem key={source.id} value={source.public_key}>
+                          {source.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Run this for one form only, or leave on all lead sources to catch every new lead.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Action</Label>
                 <Select
@@ -402,6 +501,20 @@ export function AutomationsPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {isTagAction && (
+                <div className="space-y-2">
+                  <Label htmlFor="auto-tag">Tag to apply</Label>
+                  <Input
+                    id="auto-tag"
+                    placeholder="e.g. Perm Lighting"
+                    value={newTagValue}
+                    onChange={(e) => setNewTagValue(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Created in this workspace if it doesn&apos;t exist yet, then added to the contact.
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button
@@ -409,10 +522,7 @@ export function AutomationsPage() {
                 onClick={() => {
                   setIsCreateDialogOpen(false);
                   setEditingAutomation(null);
-                  setNewAutomationName("");
-                  setNewAutomationDescription("");
-                  setNewTriggerType("event");
-                  setNewActionType("send_sms");
+                  resetForm();
                 }}
               >
                 Cancel
@@ -609,6 +719,16 @@ export function AutomationsPage() {
                           <p className="text-xs text-muted-foreground">
                             {trigger.description}
                           </p>
+                          {automation.trigger_type === "lead_created" &&
+                            typeof automation.trigger_config?.lead_source_public_key ===
+                              "string" && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Source:{" "}
+                                {leadSourceNameByKey(
+                                  automation.trigger_config.lead_source_public_key as string
+                                )}
+                              </p>
+                            )}
                         </div>
                       </div>
 
@@ -625,6 +745,8 @@ export function AutomationsPage() {
                             icon: Settings2,
                           };
                           const ActionIcon = actionConfig.icon;
+                          const tagValue =
+                            typeof action.config?.tag === "string" ? action.config.tag : "";
                           return (
                             <div
                               key={index}
@@ -632,6 +754,11 @@ export function AutomationsPage() {
                             >
                               <ActionIcon className="size-4 text-muted-foreground" />
                               <span className="text-sm">{actionConfig.label}</span>
+                              {tagValue && (
+                                <span className="ml-auto rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                  {tagValue}
+                                </span>
+                              )}
                             </div>
                           );
                         })}
