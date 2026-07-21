@@ -66,7 +66,7 @@ describe("CommandPalette", () => {
     // Section headings + a sample of items from different sections.
     expect(screen.getByText("Workspace")).toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Quotes")).toBeInTheDocument();
+    expect(screen.getByText("Quotes & Estimates")).toBeInTheDocument();
     expect(screen.getByText("Contacts")).toBeInTheDocument();
   });
 
@@ -78,7 +78,7 @@ describe("CommandPalette", () => {
     // The typed query now yields a "Pages" group with the matching page — the
     // exact behavior the placeholder promises and that was previously broken.
     expect(await screen.findByText("Pages")).toBeInTheDocument();
-    expect(screen.getByText("Quotes")).toBeInTheDocument();
+    expect(screen.getByText("Quotes & Estimates")).toBeInTheDocument();
 
     // Non-matching nav items and the section headings drop out under a query.
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("CommandPalette", () => {
     renderPalette();
 
     await userEvent.type(screen.getByPlaceholderText(PLACEHOLDER), "quotes");
-    await userEvent.click(await screen.findByText("Quotes"));
+    await userEvent.click(await screen.findByText("Quotes & Estimates"));
 
     expect(pushMock).toHaveBeenCalledWith("/quotes");
   });
