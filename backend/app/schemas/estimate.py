@@ -171,6 +171,20 @@ class ComparisonShareResult(BaseModel):
     saved_to_customer: bool = False
 
 
+class EstimateQuoteRequest(ComparisonShareRequest):
+    """Convert a measured estimate into a real draft quote.
+
+    Reuses the estimate inputs (feet, decor, internal per-foot overrides, and the
+    optional seasonal package) plus the client details from the share request,
+    and adds ``side`` to choose which priced option becomes the quote: the
+    one-time ``permanent`` install or the ``seasonal`` (Christmas) job. Every line
+    is recomputed server-side from the workspace pricing config — the rep's
+    measurements are the only untrusted input, exactly like the estimate itself.
+    """
+
+    side: Literal["permanent", "seasonal"] = "seasonal"
+
+
 class ComparisonDeliverRequest(BaseModel):
     """Email a saved estimate's client link to the customer.
 

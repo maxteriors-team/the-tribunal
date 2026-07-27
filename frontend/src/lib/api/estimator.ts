@@ -11,10 +11,12 @@ import type {
   ComparisonDeliverResult,
   ComparisonShareRequest,
   ComparisonShareResult,
+  EstimateQuoteRequest,
   EstimateRenderRequest,
   EstimateRenderResult,
   LinearFeetEstimateRequest,
   LinearFeetEstimateResult,
+  QuoteDetailResponse,
 } from "@/types/estimate";
 
 const base = (workspaceId: string) => `/api/v1/workspaces/${workspaceId}`;
@@ -63,5 +65,18 @@ export const estimatorApi = {
     apiPost<ComparisonDeliverResult>(
       `${base(workspaceId)}/quotes/estimate/comparison/${token}/send`,
       { to: to ?? null },
+    ),
+
+  /**
+   * Convert the measured design into a real draft quote. ``side`` picks the
+   * permanent install or the seasonal job; every line is priced server-side.
+   */
+  createQuote: (
+    workspaceId: string,
+    payload: EstimateQuoteRequest,
+  ): Promise<QuoteDetailResponse> =>
+    apiPost<QuoteDetailResponse>(
+      `${base(workspaceId)}/quotes/estimate/quote`,
+      payload,
     ),
 };

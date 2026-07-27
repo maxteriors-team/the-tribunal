@@ -8,13 +8,16 @@ and feet-privacy contract are all locked down without touching Postgres.
 
 from __future__ import annotations
 
-from app.schemas.estimate import LinearFeetEstimateRequest
+import pytest
+
+from app.schemas.estimate import EstimateQuoteRequest, LinearFeetEstimateRequest
 from app.schemas.pricing import (
     ChristmasConfig,
     FinancingConfig,
     PermanentConfig,
     PricingSettings,
 )
+from app.services.exceptions import ValidationError
 from app.services.quotes.quote_service import QuoteService
 
 
@@ -272,3 +275,103 @@ def test_selected_package_total_differs_from_a_la_carte() -> None:
     # The middle package's total is what the public comparison substitutes.
     selected = next(p for p in result.christmas_packages if p.key == "middle")
     assert selected.pricing.total == 1120
+
+
+# --------------------------------------------------------------------------- #
+# Estimate -> quote conversion (the light designer's "design -> quote" step)
+# --------------------------------------------------------------------------- #
+def _convert(config: PricingSettings, side: str, feet: float, **kw):
+    """Price a side and map it to quote line items (both pure, no DB)."""
+    service = QuoteService(None)  # type: ignore[arg-type]  # pure methods only
+    req = EstimateQuoteRequest(side=side, feet=feet, **kw)
+    title, pricing = service._price_estimate_side(config, req)
+    return title, pricing, service._estimate_line_items(pricing)
+
+
+def _lines_sum(line_items) -> float:
+    # Mirrors QuoteService._line_total for quantity=1 lines (quantity*unit price).
+    return round(sum(li.quantity * li.unit_price - li.discount for li in line_items), 2)
+
+
+def test_convert_permanent_lines_sum_to_permanent_total() -> None:
+    title, pricing, lines = _convert(_config(), "permanent", 100)
+    # 100ft * $30 + $300 controller = $3,300, split across itemized lines.
+    assert pricing.total == 3300
+    assert title == "Permanent Holiday Lighting"
+    names = [li.name for li in lines]
+    assert "100 ft permanent roofline" in names
+    assert any("Controller" in n for n in names)
+    # The summed quote total equals the estimate exactly (no per-unit drift).
+    assert _lines_sum(lines) == 3300
+
+
+def test_convert_seasonal_a_la_carte_itemizes_roofline_and_decor() -> None:
+    title, pricing, lines = _convert(
+        _config(),
+        "seasonal",
+        100,
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    # roofline 600 + trees 520 + garland 400 = 1520.
+    assert pricing.total == 1520
+    assert title == "Christmas Lighting"
+    names = [li.name for li in lines]
+    assert "100 ft roofline" in names
+    assert any("Garland" in n for n in names)
+    assert _lines_sum(lines) == 1520
+
+
+def test_convert_seasonal_package_scopes_coverage_and_titles() -> None:
+    title, pricing, lines = _convert(
+        _packages_config(),
+        "seasonal",
+        100,
+        selected_package="middle",
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    # "Middle" covers roofline + trees only (garland excluded): 600 + 520 = 1120.
+    assert pricing.total == 1120
+    assert title == "Christmas Lighting \u2014 The Classic"
+    assert all("Garland" not in li.name for li in lines)
+    assert _lines_sum(lines) == 1120
+
+
+def test_convert_reconciles_job_minimum_with_a_line() -> None:
+    config = _config(
+        permanent=PermanentConfig(
+            enabled=True, per_ft=30, controller_base=0, minimum=5000
+        )
+    )
+    _title, pricing, lines = _convert(config, "permanent", 100)
+    # 100 * 30 = 3000 raw, lifted to the $5,000 minimum via a reconciliation line.
+    assert pricing.total == 5000
+    assert any(li.name == "Job minimum" and li.unit_price == 2000 for li in lines)
+    assert _lines_sum(lines) == 5000
+
+
+def test_convert_all_lines_are_quantity_one_at_component_total() -> None:
+    # The mapping keeps totals exact by emitting quantity=1 lines priced at the
+    # authoritative component total (feet/counts live in the label instead).
+    _title, _pricing, lines = _convert(
+        _config(), "seasonal", 100, christmas_items={"trees": {"medium": 2}}
+    )
+    assert lines and all(li.quantity == 1 for li in lines)
+
+
+def test_convert_permanent_override_flows_into_quote() -> None:
+    _title, pricing, lines = _convert(_config(), "permanent", 100, per_ft_override=45)
+    # Internal rate bills 100*45 + 300 = 4800 on the quote.
+    assert pricing.total == 4800
+    assert _lines_sum(lines) == 4800
+
+
+def test_convert_disabled_permanent_side_raises() -> None:
+    config = _config(permanent=PermanentConfig(enabled=False))
+    with pytest.raises(ValidationError):
+        _convert(config, "permanent", 100)
+
+
+def test_convert_disabled_seasonal_side_raises() -> None:
+    config = _config(christmas=ChristmasConfig(enabled=False))
+    with pytest.raises(ValidationError):
+        _convert(config, "seasonal", 100)

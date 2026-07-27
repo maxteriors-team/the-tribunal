@@ -13826,6 +13826,139 @@
         "title": "EnrollContactsRequest",
         "type": "object"
       },
+      "EstimateQuoteRequest": {
+        "description": "Convert a measured estimate into a real draft quote.\n\nReuses the estimate inputs (feet, decor, internal per-foot overrides, and the\noptional seasonal package) plus the client details from the share request,\nand adds ``side`` to choose which priced option becomes the quote: the\none-time ``permanent`` install or the ``seasonal`` (Christmas) job. Every line\nis recomputed server-side from the workspace pricing config — the rep's\nmeasurements are the only untrusted input, exactly like the estimate itself.",
+        "properties": {
+          "channels": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "christmas_items": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "title": "Christmas Items",
+            "type": "object"
+          },
+          "christmas_per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Christmas Per Ft Override"
+          },
+          "client_email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Email"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "client_phone": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Phone"
+          },
+          "feet": {
+            "minimum": 0.0,
+            "title": "Feet",
+            "type": "number"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "per_ft_override": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Ft Override"
+          },
+          "selected_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Package"
+          },
+          "side": {
+            "default": "seasonal",
+            "enum": [
+              "permanent",
+              "seasonal"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "storage": {
+            "default": false,
+            "title": "Storage",
+            "type": "boolean"
+          },
+          "takedown": {
+            "default": false,
+            "title": "Takedown",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "feet"
+        ],
+        "title": "EstimateQuoteRequest",
+        "type": "object"
+      },
       "EstimateRenderRequest": {
         "description": "A composited design image to turn into a photorealistic night render.\n\n``image`` is the rep's drawn lighting design flattened over the customer\nphoto, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal\nvs permanent prompt; ``prompt`` optionally overrides it. This boundary carries\n**no dollars and no feet** — it only transforms an image via the workspace's\nOpenAI credential, server-side, so the browser never handles a key.",
         "properties": {
@@ -65542,6 +65675,65 @@
           }
         ],
         "summary": "Deliver Comparison",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/quote": {
+      "post": {
+        "description": "Create a draft quote from a measured roofline estimate.\n\nPrices the chosen permanent or seasonal side server-side and turns each\ngrossed component into a quote line — the estimator's core \"design → quote\"\nstep. Returns the created draft quote.",
+        "operationId": "convert_estimate_to_quote_api_v1_workspaces__workspace_id__quotes_estimate_quote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Convert Estimate To Quote",
         "tags": [
           "Quotes"
         ]

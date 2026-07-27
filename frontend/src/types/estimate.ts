@@ -8,6 +8,9 @@ type Schemas = components["schemas"];
 
 export type LinearFeetEstimateRequest = Schemas["LinearFeetEstimateRequest"];
 export type LinearFeetEstimateResult = Schemas["LinearFeetEstimateResult"];
+// Convert a measured estimate into a real draft quote (the design->quote step).
+export type EstimateQuoteRequest = Schemas["EstimateQuoteRequest"];
+export type QuoteDetailResponse = Schemas["QuoteDetailResponse"];
 export type ComparisonShareRequest = Schemas["ComparisonShareRequest"];
 export type ComparisonShareResult = Schemas["ComparisonShareResult"];
 export type ComparisonDeliverRequest = Schemas["ComparisonDeliverRequest"];

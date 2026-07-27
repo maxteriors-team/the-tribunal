@@ -1062,6 +1062,35 @@
   margin-top: 12px;
 }
 
+/* "Turn this design into a quote" — the design->quote conversion block. */
+.est-quote-convert {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bdr);
+}
+
+.est-quote-convert-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--t4);
+  margin-bottom: 4px;
+}
+
+.est-quote-convert .est-saved-note {
+  margin-top: 12px;
+}
+
+.est-quote-link {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.est-quote-link:hover {
+  color: var(--gold-l, #edd080);
+}
+
 .est-share {
   padding: 14px 16px;
   border: 1px solid var(--bdr-g);

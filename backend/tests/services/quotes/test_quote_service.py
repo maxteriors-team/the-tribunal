@@ -23,13 +23,20 @@ from app.models.field_service import Job, ServiceLocation
 from app.models.invoice import Invoice
 from app.models.quote import Quote
 from app.models.workspace import Workspace
+from app.schemas.estimate import EstimateQuoteRequest
+from app.schemas.pricing import (
+    ChristmasConfig,
+    FinancingConfig,
+    PermanentConfig,
+    PricingSettings,
+)
 from app.schemas.quote import (
     QuoteCreate,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
     QuoteUpdate,
 )
-from app.services.exceptions import ConflictError
+from app.services.exceptions import ConflictError, ValidationError
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -360,3 +367,84 @@ async def test_convert_requires_approved_status() -> None:
 
         with pytest.raises(ConflictError):
             await svc.convert_quote(ws.id, quote.id)
+
+
+async def _enable_lighting_pricing(db: AsyncSession, ws: Workspace) -> None:
+    """Seed a workspace pricing config with both holiday services enabled.
+
+    ``fee_buffer=0`` keeps totals exact so the asserted dollars are obvious.
+    """
+    pricing = PricingSettings(
+        financing=FinancingConfig(enabled=True, fee_buffer=0.0),
+        permanent=PermanentConfig(
+            enabled=True, per_ft=30, controller_base=300, per_channel=0, minimum=0
+        ),
+        christmas=ChristmasConfig(enabled=True, roofline_per_ft=6, minimum=0),
+    )
+    ws.settings = {"pricing": pricing.model_dump(mode="json")}
+    await db.flush()
+
+
+async def test_create_quote_from_estimate_persists_priced_lines_and_contact() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                feet=100,
+                client_name="Dana Rivers",
+                client_phone="+15551230000",
+            ),
+        )
+
+        # 100ft * $30 + $300 controller = $3,300, as a real draft quote.
+        assert quote.number == "QUO-000001"
+        assert quote.status == "draft"
+        assert quote.title == "Permanent Holiday Lighting"
+        assert quote.total == 3300.0
+        # Client details resolved onto a CRM contact (phone-keyed).
+        assert quote.contact_id is not None
+        names = [li.name for li in quote.line_items]
+        assert "100 ft permanent roofline" in names
+        # The persisted line items sum back to the quote total.
+        assert round(sum(li.total for li in quote.line_items), 2) == 3300.0
+
+
+async def test_create_quote_from_estimate_seasonal_itemizes_decor() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="seasonal",
+                feet=100,
+                christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+            ),
+        )
+
+        # roofline 600 + trees 520 + garland 400 = 1520.
+        assert quote.title == "Christmas Lighting"
+        assert quote.total == 1520.0
+        assert quote.contact_id is None  # no client details supplied -> unlinked
+        names = [li.name for li in quote.line_items]
+        assert "100 ft roofline" in names
+
+
+async def test_create_quote_from_estimate_empty_design_is_rejected() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        svc = QuoteService(db)
+
+        # No feet and no decor -> nothing to quote; the rep gets an actionable error.
+        with pytest.raises(ValidationError):
+            await svc.create_quote_from_estimate(
+                ws.id, EstimateQuoteRequest(side="seasonal", feet=0)
+            )

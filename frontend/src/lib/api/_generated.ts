@@ -6502,6 +6502,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/estimate/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Estimate To Quote
+         * @description Create a draft quote from a measured roofline estimate.
+         *
+         *     Prices the chosen permanent or seasonal side server-side and turns each
+         *     grossed component into a quote line — the estimator's core "design → quote"
+         *     step. Returns the created draft quote.
+         */
+        post: operations["convert_estimate_to_quote_api_v1_workspaces__workspace_id__quotes_estimate_quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/estimate/render": {
         parameters: {
             query?: never;
@@ -13459,6 +13483,62 @@ export interface components {
         EnrollContactsRequest: {
             /** Contact Ids */
             contact_ids: number[];
+        };
+        /**
+         * EstimateQuoteRequest
+         * @description Convert a measured estimate into a real draft quote.
+         *
+         *     Reuses the estimate inputs (feet, decor, internal per-foot overrides, and the
+         *     optional seasonal package) plus the client details from the share request,
+         *     and adds ``side`` to choose which priced option becomes the quote: the
+         *     one-time ``permanent`` install or the ``seasonal`` (Christmas) job. Every line
+         *     is recomputed server-side from the workspace pricing config — the rep's
+         *     measurements are the only untrusted input, exactly like the estimate itself.
+         */
+        EstimateQuoteRequest: {
+            /**
+             * Channels
+             * @default 0
+             */
+            channels: number;
+            /** Christmas Items */
+            christmas_items?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Christmas Per Ft Override */
+            christmas_per_ft_override?: number | null;
+            /** Client Email */
+            client_email?: string | null;
+            /** Client Name */
+            client_name?: string | null;
+            /** Client Phone */
+            client_phone?: string | null;
+            /** Feet */
+            feet: number;
+            /** Label */
+            label?: string | null;
+            /** Per Ft Override */
+            per_ft_override?: number | null;
+            /** Selected Package */
+            selected_package?: string | null;
+            /**
+             * Side
+             * @default seasonal
+             * @enum {string}
+             */
+            side: "permanent" | "seasonal";
+            /**
+             * Storage
+             * @default false
+             */
+            storage: boolean;
+            /**
+             * Takedown
+             * @default false
+             */
+            takedown: boolean;
         };
         /**
          * EstimateRenderRequest
@@ -36720,6 +36800,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonDeliverResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    convert_estimate_to_quote_api_v1_workspaces__workspace_id__quotes_estimate_quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateQuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
                 };
             };
             /** @description Validation Error */

@@ -13,6 +13,7 @@ vi.mock("@/lib/api/estimator", () => ({
     share: vi.fn(),
     deliver: vi.fn(),
     render: vi.fn(),
+    createQuote: vi.fn(),
   },
 }));
 
@@ -153,6 +154,9 @@ describe("RooflineEstimator", () => {
       saved_to_customer: false,
     });
     vi.mocked(estimatorApi.deliver).mockResolvedValue({ ok: true, to: "" });
+    vi.mocked(estimatorApi.createQuote).mockResolvedValue({
+      number: "QUO-000007",
+    } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -265,6 +269,51 @@ describe("RooflineEstimator", () => {
       expect(estimatorApi.share).toHaveBeenCalledWith(
         "ws_1",
         expect.objectContaining({ selected_package: "premier" }),
+      ),
+    );
+  });
+
+  it("converts the measured design into a seasonal draft quote and confirms the number", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    // Both priced sides are enabled, so the rep can convert either side.
+    const seasonalBtn = await screen.findByRole("button", {
+      name: /Create seasonal quote/i,
+    });
+    expect(
+      screen.getByRole("button", { name: /Create permanent quote/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(seasonalBtn);
+
+    // Conversion sends only the measured inputs plus the chosen side; every
+    // line is recomputed server-side.
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ side: "seasonal", feet: 100 }),
+      ),
+    );
+
+    // The created quote's number is confirmed inline with a link into Quotes.
+    expect(
+      await screen.findByText(/Quote QUO-000007 created/i),
+    ).toBeInTheDocument();
+  });
+
+  it("converts the permanent side when the permanent quote button is used", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Create permanent quote/i }),
+    );
+
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ side: "permanent", feet: 100 }),
       ),
     );
   });

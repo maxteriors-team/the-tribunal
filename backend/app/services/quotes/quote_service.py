@@ -33,6 +33,7 @@ from app.schemas.estimate import (
     ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
+    EstimateQuoteRequest,
     EstimateRenderRequest,
     EstimateRenderResult,
     LinearFeetEstimateRequest,
@@ -43,7 +44,7 @@ from app.schemas.estimate import (
     PublicPermanentComparison,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
-from app.schemas.pricing import PricingSettings
+from app.schemas.pricing import ChristmasPricing, PermanentPricing, PricingSettings
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
@@ -74,6 +75,7 @@ from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
 from app.services.quotes.proposal_pricing import (
     price_christmas,
+    price_christmas_package,
     price_christmas_packages,
     price_permanent,
 )
@@ -1010,6 +1012,38 @@ class QuoteService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _permanent_config_with_override(
+        config: PricingSettings, per_ft_override: float | None
+    ) -> PricingSettings:
+        """Config copy with the permanent $/ft replaced by an internal override.
+
+        Returns the config unchanged when no override is set. The copy is
+        throwaway so the workspace's customer-facing pricing is never mutated.
+        Shared by the live comparison and the estimate→quote conversion so both
+        honor a rep's per-job rate identically.
+        """
+        if per_ft_override is None:
+            return config
+        return config.model_copy(
+            update={"permanent": config.permanent.model_copy(update={"per_ft": per_ft_override})}
+        )
+
+    @staticmethod
+    def _christmas_config_with_override(
+        config: PricingSettings, roofline_override: float | None
+    ) -> PricingSettings:
+        """Config copy with the seasonal roofline $/ft replaced by an override."""
+        if roofline_override is None:
+            return config
+        return config.model_copy(
+            update={
+                "christmas": config.christmas.model_copy(
+                    update={"roofline_per_ft": roofline_override}
+                )
+            }
+        )
+
+    @staticmethod
     def _compute_comparison(
         config: PricingSettings, req: LinearFeetEstimateRequest
     ) -> LinearFeetEstimateResult:
@@ -1025,22 +1059,10 @@ class QuoteService:
         throwaway config copies, so the workspace's customer-facing pricing is
         never mutated. Each override affects only its own side.
         """
-        perm_config = config
-        if req.per_ft_override is not None:
-            perm_config = config.model_copy(
-                update={
-                    "permanent": config.permanent.model_copy(update={"per_ft": req.per_ft_override})
-                }
-            )
-        xmas_config = config
-        if req.christmas_per_ft_override is not None:
-            xmas_config = config.model_copy(
-                update={
-                    "christmas": config.christmas.model_copy(
-                        update={"roofline_per_ft": req.christmas_per_ft_override}
-                    )
-                }
-            )
+        perm_config = QuoteService._permanent_config_with_override(config, req.per_ft_override)
+        xmas_config = QuoteService._christmas_config_with_override(
+            config, req.christmas_per_ft_override
+        )
         perm = price_permanent(perm_config, feet=req.feet, channels=req.channels)
         xmas = price_christmas(
             xmas_config,
@@ -1117,6 +1139,145 @@ class QuoteService:
         workspace = await get_or_404(self.db, Workspace, workspace_id)
         config = get_pricing_config(workspace)
         return self._compute_comparison(config, req)
+
+    def _price_estimate_side(
+        self, config: PricingSettings, req: EstimateQuoteRequest
+    ) -> tuple[str, PermanentPricing | ChristmasPricing]:
+        """Recompute the chosen side's priced breakdown for a quote.
+
+        Returns ``(quote_title, pricing)``. The seasonal side prices the selected
+        Good/Better/Best package when one is chosen and packages are enabled,
+        else the à la carte roofline+decor. Raises :class:`ValidationError` when
+        the requested side isn't enabled for the workspace, so the rep gets an
+        actionable message instead of an empty quote.
+        """
+        if req.side == "permanent":
+            if not config.permanent.enabled:
+                raise ValidationError("Permanent lighting isn't enabled for this workspace.")
+            perm_config = self._permanent_config_with_override(config, req.per_ft_override)
+            pricing: PermanentPricing | ChristmasPricing = price_permanent(
+                perm_config, feet=req.feet, channels=req.channels
+            )
+            return config.permanent.label, pricing
+
+        if not config.christmas.enabled:
+            raise ValidationError("Seasonal lighting isn't enabled for this workspace.")
+        xmas_config = self._christmas_config_with_override(config, req.christmas_per_ft_override)
+        if req.selected_package and config.christmas.packages_enabled:
+            package = next(
+                (p for p in config.christmas.packages if p.key == req.selected_package),
+                None,
+            )
+            if package is not None:
+                pricing = price_christmas_package(
+                    xmas_config,
+                    package,
+                    roofline_feet=req.feet,
+                    items=req.christmas_items,
+                    takedown=req.takedown,
+                    storage=req.storage,
+                )
+                return f"{config.christmas.label} — {package.name or package.label}", pricing
+        pricing = price_christmas(
+            xmas_config,
+            roofline_feet=req.feet,
+            items=req.christmas_items,
+            takedown=req.takedown,
+            storage=req.storage,
+        )
+        return config.christmas.label, pricing
+
+    @staticmethod
+    def _estimate_line_items(
+        pricing: PermanentPricing | ChristmasPricing,
+    ) -> list[QuoteLineItemCreate]:
+        """Map a priced breakdown's display lines to quote line items.
+
+        Each grossed ``CategoryLine`` becomes one quote line at ``quantity=1`` and
+        ``unit_price=line_total`` — the authoritative cent-rounded component cost,
+        with the measured feet/counts carried in the line label. This mirrors how
+        the sales wizard emits permanent/seasonal sections, so the summed quote
+        total matches the estimate exactly rather than drifting on per-unit
+        rounding. When a job minimum lifted the priced total above the sum of
+        components, a reconciling line keeps the quote total equal to that total.
+        """
+        items = [
+            QuoteLineItemCreate(
+                name=line.label,
+                description=line.detail,
+                quantity=1,
+                unit_price=round(float(line.line_total), 2),
+                discount=0,
+            )
+            for line in pricing.lines
+            if line.line_total > 0
+        ]
+        shortfall = round(float(pricing.total) - float(pricing.raw_total), 2)
+        if pricing.min_applied and shortfall > 0:
+            items.append(
+                QuoteLineItemCreate(
+                    name="Job minimum", quantity=1, unit_price=shortfall, discount=0
+                )
+            )
+        return items
+
+    async def create_quote_from_estimate(
+        self,
+        workspace_id: uuid.UUID,
+        req: EstimateQuoteRequest,
+        *,
+        created_by_id: int | None = None,
+    ) -> QuoteDetailResponse:
+        """Turn a measured roofline estimate into a real draft quote.
+
+        The core of the light-designer tool: the drawn design's measurements price
+        the chosen permanent or seasonal breakdown server-side, each grossed
+        component becomes a quote line, and the client (when name/phone are given)
+        is resolved onto a CRM contact with the same dedupe rules as the shared
+        comparison. The quote is created as a draft through :meth:`create_quote`,
+        so numbering, the workspace default deposit, total recomputation, and the
+        client proposal link all apply unchanged.
+        """
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+
+        title, pricing = self._price_estimate_side(config, req)
+        line_items = self._estimate_line_items(pricing)
+        if not line_items:
+            raise ValidationError(
+                "This estimate has nothing to quote yet — draw the design first."
+            )
+
+        first_name, last_name = _split_name(req.client_name)
+        contact_id = await self._resolve_or_create_contact(
+            workspace_id,
+            first_name=first_name,
+            last_name=last_name,
+            email=req.client_email,
+            phone=req.client_phone,
+            source="roofline_estimator",
+        )
+
+        quote = await self.create_quote(
+            workspace_id,
+            QuoteCreate(
+                contact_id=contact_id,
+                title=req.label or title,
+                currency="USD",
+                line_items=line_items,
+            ),
+            created_by_id=created_by_id,
+        )
+        self.log.info(
+            "quote_created_from_estimate",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            number=quote.number,
+            side=req.side,
+            contact_id=contact_id,
+            total=float(quote.total),
+        )
+        return quote
 
     async def render_estimate(
         self,

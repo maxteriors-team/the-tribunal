@@ -21,6 +21,7 @@ from app.schemas.estimate import (
     ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
+    EstimateQuoteRequest,
     EstimateRenderRequest,
     EstimateRenderResult,
     LinearFeetEstimateRequest,
@@ -298,6 +299,30 @@ async def share_comparison(
     """Persist a comparison behind a token and return the client-facing link."""
     service = QuoteService(db)
     return await service.share_comparison(workspace_id, payload, created_by_id=current_user.id)
+
+
+@router.post(
+    "/estimate/quote",
+    response_model=QuoteDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def convert_estimate_to_quote(
+    workspace_id: uuid.UUID,
+    payload: EstimateQuoteRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Create a draft quote from a measured roofline estimate.
+
+    Prices the chosen permanent or seasonal side server-side and turns each
+    grossed component into a quote line — the estimator's core "design → quote"
+    step. Returns the created draft quote.
+    """
+    service = QuoteService(db)
+    return await service.create_quote_from_estimate(
+        workspace_id, payload, created_by_id=current_user.id
+    )
 
 
 @router.post(

@@ -15,6 +15,7 @@
  * estimate + customer/share (right).
  */
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { estimatorApi } from "@/lib/api/estimator";
@@ -84,6 +85,11 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [savedToCustomer, setSavedToCustomer] = useState(false);
+  // The draft quote just created from this design (its number is shown inline
+  // with a link into Quotes). Cleared whenever the priced inputs change.
+  const [quoteResult, setQuoteResult] = useState<{ number: string } | null>(
+    null,
+  );
   const [aiOpen, setAiOpen] = useState(false);
 
   // ---- Catalog (drawable palette) ---------------------------------------
@@ -159,6 +165,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     setShareToken(null);
     setSentTo(null);
     setSavedToCustomer(false);
+    setQuoteResult(null);
   }, []);
   useEffect(() => {
     resetShare();
@@ -210,6 +217,16 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       estimatorApi.deliver(workspaceId, token, clientEmail.trim() || null),
     onSuccess: (result) => setSentTo(result.to),
   });
+
+  // Convert the drawn design into a real draft quote. ``side`` picks which
+  // priced option the customer is buying; the seasonal side carries the chosen
+  // package. Every line is recomputed server-side, so this only sends inputs.
+  const createQuoteMutation = useMutation({
+    mutationFn: (side: "permanent" | "seasonal") =>
+      estimatorApi.createQuote(workspaceId, { ...shareParams, side }),
+    onSuccess: (quote) => setQuoteResult({ number: quote.number }),
+  });
+  const quotePending = createQuoteMutation.isPending;
 
   // One-click "email the estimate": the button is always visible on every
   // estimate. If the rep hasn't saved a share link yet we mint one first, then
@@ -455,6 +472,63 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
                     <span className="est-send-error">
                       Couldn’t send — check the email and try again.
                     </span>
+                  </div>
+                ) : null}
+
+                {estimate &&
+                (estimate.permanent.enabled || estimate.christmas.enabled) ? (
+                  <div className="est-quote-convert">
+                    <div className="est-quote-convert-title">
+                      Turn this design into a quote
+                    </div>
+                    {estimate.permanent.enabled ? (
+                      <button
+                        className="est-btn primary est-save-btn"
+                        type="button"
+                        disabled={!designHas || quotePending}
+                        onClick={() => createQuoteMutation.mutate("permanent")}
+                      >
+                        {quotePending
+                          ? "Creating…"
+                          : estimate.christmas.enabled
+                            ? "Create permanent quote"
+                            : "Create quote"}
+                      </button>
+                    ) : null}
+                    {estimate.christmas.enabled ? (
+                      <button
+                        className="est-btn est-save-btn"
+                        type="button"
+                        disabled={!designHas || quotePending}
+                        onClick={() => createQuoteMutation.mutate("seasonal")}
+                      >
+                        {quotePending
+                          ? "Creating…"
+                          : estimate.permanent.enabled
+                            ? "Create seasonal quote"
+                            : "Create quote"}
+                      </button>
+                    ) : null}
+                    <div className="est-customer-hint">
+                      Creates a draft quote with itemized, server-priced lines.
+                      Review and send it from Quotes.
+                    </div>
+                    {quoteResult ? (
+                      <div className="est-saved-note">
+                        ✓ Quote {quoteResult.number} created ·{" "}
+                        <Link href="/quotes" className="est-quote-link">
+                          Open in Quotes →
+                        </Link>
+                      </div>
+                    ) : null}
+                    {createQuoteMutation.isError ? (
+                      <div className="est-send-row">
+                        <span className="est-send-error">
+                          Couldn’t create the quote — draw a design, then try
+                          again.
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
