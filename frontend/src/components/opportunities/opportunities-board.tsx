@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KanbanSquare, MoreVertical, Plus } from "lucide-react";
+import { KanbanSquare, MoreVertical, Plus, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -39,6 +39,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { Opportunity, Pipeline, PipelineStage } from "@/types";
 
+import { ManageStagesDialog } from "./manage-stages-dialog";
 import { OpportunityCreateSheet } from "./opportunity-create-sheet";
 import { OpportunityDetailSheet } from "./opportunity-detail-sheet";
 
@@ -112,6 +113,7 @@ function PipelineBoard({
   const [detailOpen, setDetailOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
+  const [manageStagesOpen, setManageStagesOpen] = useState(false);
 
   const sensors = useSensors(
     // Require a small drag distance so a plain click still opens the card.
@@ -243,10 +245,21 @@ function PipelineBoard({
           <span className="text-sm font-medium text-muted-foreground">
             {pipeline.name}
           </span>
-          <Button size="sm" onClick={() => openCreate()} data-testid="add-opportunity">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Opportunity
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setManageStagesOpen(true)}
+              data-testid="manage-stages"
+            >
+              <Settings2 className="mr-1.5 h-4 w-4" />
+              Manage stages
+            </Button>
+            <Button size="sm" onClick={() => openCreate()} data-testid="add-opportunity">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Opportunity
+            </Button>
+          </div>
         </div>
 
         <DndContext
@@ -293,6 +306,13 @@ function PipelineBoard({
         defaultStageId={createStageId}
         open={createOpen}
         onOpenChange={setCreateOpen}
+      />
+
+      <ManageStagesDialog
+        workspaceId={workspaceId}
+        pipeline={pipeline}
+        open={manageStagesOpen}
+        onOpenChange={setManageStagesOpen}
       />
     </>
   );
