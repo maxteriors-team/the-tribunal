@@ -41,10 +41,16 @@ from app.schemas.estimate import (
     PermanentEstimate,
     PublicChristmasComparison,
     PublicComparison,
+    PublicComparisonPackage,
     PublicPermanentComparison,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
-from app.schemas.pricing import ChristmasPricing, PermanentPricing, PricingSettings
+from app.schemas.pricing import (
+    ChristmasPackagePricing,
+    ChristmasPricing,
+    PermanentPricing,
+    PricingSettings,
+)
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
@@ -82,6 +88,57 @@ from app.services.quotes.proposal_pricing import (
 from app.services.quotes.proposal_template import get_proposal_template
 
 logger = structlog.get_logger()
+
+
+def _resolve_recommended_package(
+    packages: list[ChristmasPackagePricing],
+    selected_key: str | None,
+) -> ChristmasPackagePricing | None:
+    """The seasonal package to steer the client toward.
+
+    Mirrors the frontend ``resolveSelectedPackage``: the rep's explicit pick when
+    it names a priced package, else the most-inclusive tier (last in
+    ``package_order``, which :func:`price_christmas_packages` emits low→high).
+    ``None`` when the workspace sells no seasonal packages.
+    """
+    if not packages:
+        return None
+    if selected_key:
+        for pkg in packages:
+            if pkg.key == selected_key:
+                return pkg
+    return packages[-1]
+
+
+def build_public_comparison_packages(
+    packages: list[ChristmasPackagePricing],
+    selected_key: str | None,
+) -> list[PublicComparisonPackage]:
+    """Map priced seasonal packages to the feet-free public card payload.
+
+    Only each package's ``total`` crosses the public boundary — never the
+    :class:`ChristmasPricing` breakdown (which carries ``roofline_feet`` /
+    ``roofline_cost``), so a measurement cannot leak to the homeowner. The
+    recommended tier is flagged for a highlight, not a gate.
+    """
+    recommended = _resolve_recommended_package(packages, selected_key)
+    return [
+        PublicComparisonPackage(
+            key=pkg.key,
+            label=pkg.label,
+            name=pkg.name,
+            marker=pkg.marker,
+            experience=pkg.experience,
+            points=list(pkg.points),
+            value_tag=pkg.value_tag,
+            popular=pkg.popular,
+            includes_roofline=pkg.includes_roofline,
+            total=pkg.pricing.total,
+            recommended=recommended is not None and pkg.key == recommended.key,
+        )
+        for pkg in packages
+    ]
+
 
 # Statuses past which header/line edits and deletes are blocked: a quote the
 # customer has decided on (or that lapsed) is a historical record.
@@ -1459,19 +1516,22 @@ class QuoteService:
             ),
         )
 
-        # When the rep shared a specific seasonal package, the client sees that
-        # package's total instead of the à la carte seasonal total. Fall back to
-        # the standard seasonal total if the package is unknown (stale key or
-        # packages disabled since sharing). Only the total changes — the perks,
-        # difference, and multi-year projection keep their current behavior.
-        christmas_total = computed.christmas.total
-        if comparison.selected_package:
-            selected = next(
-                (p for p in computed.christmas_packages if p.key == comparison.selected_package),
-                None,
-            )
-            if selected is not None:
-                christmas_total = selected.pricing.total
+        # Surface the full Good/Better/Best ladder to the client (feet-free) when
+        # the workspace sells seasonal packages; otherwise the à la carte total
+        # stands. The recommended package (rep's pick, else most-inclusive) drives
+        # both the highlighted card and the single seasonal headline/savings
+        # figure, so the comparison and the package grid always agree. Only the
+        # total changes — the perks, difference, and multi-year projection keep
+        # their current behavior.
+        christmas_packages = build_public_comparison_packages(
+            computed.christmas_packages, comparison.selected_package
+        )
+        recommended = _resolve_recommended_package(
+            computed.christmas_packages, comparison.selected_package
+        )
+        christmas_total = (
+            recommended.pricing.total if recommended is not None else computed.christmas.total
+        )
 
         return PublicComparison(
             business_name=template.business_name or (workspace.name if workspace else ""),
@@ -1493,6 +1553,7 @@ class QuoteService:
             multi_year_savings=computed.multi_year_savings,
             permanent_perks=computed.permanent_perks,
             christmas_perks=computed.christmas_perks,
+            christmas_packages=christmas_packages,
         )
 
     # ------------------------------------------------------------------

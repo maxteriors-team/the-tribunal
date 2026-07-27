@@ -222,6 +222,34 @@ class PublicChristmasComparison(BaseModel):
     total: float
 
 
+class PublicComparisonPackage(BaseModel):
+    """One seasonal Good/Better/Best package as the client sees it — feet-free.
+
+    The public analog of :class:`app.schemas.pricing.ChristmasPackagePricing`: it
+    carries the card copy plus the single computed ``total`` only, and
+    deliberately **omits** the full :class:`app.schemas.pricing.ChristmasPricing`
+    breakdown (which includes ``roofline_feet`` / ``roofline_cost``). A
+    measurement therefore cannot reach the homeowner — the same feet-privacy
+    contract as the rest of this module, enforced by construction.
+
+    ``recommended`` flags the package the rep is steering the client toward (their
+    explicit pick, else the most-inclusive tier) so one card can be highlighted
+    without gating the others.
+    """
+
+    key: str
+    label: str
+    name: str | None = None
+    marker: str | None = None
+    experience: str | None = None
+    points: list[str] = Field(default_factory=list)
+    value_tag: str | None = None
+    popular: bool = False
+    includes_roofline: bool = False
+    total: float
+    recommended: bool = False
+
+
 class PublicComparison(BaseModel):
     """Read-only, safe-fields-only comparison for the public token page.
 
@@ -245,3 +273,7 @@ class PublicComparison(BaseModel):
     multi_year_savings: float
     permanent_perks: list[str] = Field(default_factory=list)
     christmas_perks: list[str] = Field(default_factory=list)
+    # Priced Good/Better/Best seasonal packages the client can compare, present
+    # only when the workspace sells Christmas as packages. Feet-free (``total``
+    # per package, never the roofline breakdown); empty for à la carte seasonal.
+    christmas_packages: list[PublicComparisonPackage] = Field(default_factory=list)

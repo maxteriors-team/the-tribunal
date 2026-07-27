@@ -81,7 +81,11 @@ export function EstimatePanel({
 
           {hasPackages ? (
             <div className="ep-packages">
-              <div className="ep-lines-head">Seasonal package</div>
+              <div className="ep-lines-head">Recommended package</div>
+              <p className="ep-pkg-hint">
+                The client sees all three. This is the one you&rsquo;re
+                recommending, highlighted on their page.
+              </p>
               <div className="ep-pkgs">
                 {packages.map((pkg) => {
                   const isSelected = selectedPkg?.key === pkg.key;

@@ -11,6 +11,21 @@
  */
 import { formatCurrency } from "@/lib/utils/number";
 
+// One seasonal Good/Better/Best package as the client compares it. Feet-free by
+// construction: it carries the tier copy and a single ``total`` only, never the
+// roofline breakdown, matching the public payload's privacy contract.
+export interface ComparisonPackageView {
+  key: string;
+  name: string;
+  marker?: string | null;
+  total: number;
+  valueTag?: string | null;
+  popular?: boolean;
+  recommended?: boolean;
+  points?: string[];
+  experience?: string | null;
+}
+
 export interface ComparisonView {
   currency?: string;
   clientName?: string | null;
@@ -30,6 +45,10 @@ export interface ComparisonView {
   // server-side defaults, so they surface as `string[] | undefined`.
   permanent_perks?: string[];
   christmas_perks?: string[];
+  // Seasonal Good/Better/Best ladder (feet-free totals only). When present, the
+  // card renders a package grid under the permanent-vs-seasonal comparison so the
+  // client can compare tiers. Empty/undefined => à la carte seasonal pricing.
+  christmasPackages?: ComparisonPackageView[];
 }
 
 function Perks({ perks }: { perks?: string[] }) {
@@ -51,6 +70,7 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
   const permanentWins = bothOffered && view.multi_year_savings > 0;
   const savings = Math.abs(view.multi_year_savings);
   const greeting = view.clientName ? `Prepared for ${view.clientName}` : null;
+  const packages = view.christmasPackages ?? [];
 
   return (
     <div className="cmp-wrap">
@@ -133,6 +153,52 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
           <Perks perks={view.christmas_perks} />
         </div>
       </div>
+
+      {packages.length > 0 ? (
+        <div className="cmp-pkg-section">
+          <div className="cmp-pkg-head">
+            <h2>Choose your seasonal package</h2>
+            <p>
+              Three ways to light up the season. Pick the look that fits your
+              home.
+            </p>
+          </div>
+          <div className="cmp-pkg-grid">
+            {packages.map((pkg) => (
+              <div
+                className={`cmp-card cmp-pkg${pkg.recommended ? " recommended" : ""}`}
+                key={pkg.key}
+              >
+                {pkg.recommended ? (
+                  <span className="cmp-card-tag">Recommended</span>
+                ) : pkg.popular ? (
+                  <span className="cmp-card-tag alt">Most popular</span>
+                ) : null}
+                <h3>
+                  {pkg.marker ? (
+                    <span className="cmp-pkg-marker">{pkg.marker}</span>
+                  ) : null}
+                  {pkg.name}
+                </h3>
+                {pkg.experience ? (
+                  <div className="cmp-pkg-exp">{pkg.experience}</div>
+                ) : null}
+                <div className="cmp-price">
+                  {formatCurrency(pkg.total, currency)}
+                </div>
+                <div className="cmp-price-note">Per season</div>
+                {pkg.points && pkg.points.length > 0 ? (
+                  <ul className="cmp-perks">
+                    {pkg.points.map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

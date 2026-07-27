@@ -18,6 +18,10 @@ export type ComparisonDeliverResult = Schemas["ComparisonDeliverResult"];
 export type EstimateRenderRequest = Schemas["EstimateRenderRequest"];
 export type EstimateRenderResult = Schemas["EstimateRenderResult"];
 export type PublicComparison = Schemas["PublicComparison"];
+// One seasonal Good/Better/Best package as the client sees it (feet-free: total
+// only, never the roofline breakdown). Present on the public comparison payload
+// when the workspace sells Christmas packages.
+export type PublicComparisonPackage = Schemas["PublicComparisonPackage"];
 
 // Standardized seasonal decor catalog (trees/bushes/wreaths/garland/…).
 export type SeasonalItem = Schemas["SeasonalItem"];

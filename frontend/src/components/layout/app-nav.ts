@@ -151,10 +151,13 @@ export const workspaceNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
+    // Folded into the unified Quotes & Estimates hub as a tab (one quoting home
+    // instead of competing estimator routes); kept in the command palette and
+    // reachable by URL, but out of the sidebar. Deep-links straight to the tab.
     title: "Photo Designer",
-    url: "/estimator",
+    url: "/quotes?tab=designer",
     icon: Ruler,
-    sidebar: true,
+    sidebar: false,
     commandPalette: true,
     requires: "billing:read",
   },

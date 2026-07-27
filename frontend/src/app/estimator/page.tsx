@@ -1,23 +1,9 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
-import { AppSidebar } from "@/components/layout/app-sidebar";
-import { useWorkspace } from "@/providers/workspace-provider";
-
+// The Photo Designer now lives as a tab inside the unified Quotes & Estimates
+// hub (one quoting home instead of competing estimator routes). This route is
+// kept so existing deep links, bookmarks, and the command palette still land on
+// the designer.
 export default function EstimatorRoute() {
-  const { currentWorkspaceId, isPending } = useWorkspace();
-
-  return (
-    <AppSidebar>
-      <div className="h-full overflow-y-auto">
-        {isPending || !currentWorkspaceId ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Loading workspace…
-          </div>
-        ) : (
-          <RooflineEstimator workspaceId={currentWorkspaceId} />
-        )}
-      </div>
-    </AppSidebar>
-  );
+  redirect("/quotes?tab=designer");
 }

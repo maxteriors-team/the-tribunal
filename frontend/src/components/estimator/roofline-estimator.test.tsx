@@ -273,6 +273,32 @@ describe("RooflineEstimator", () => {
     );
   });
 
+  it("mirrors the seasonal package ladder into the client preview with the pick recommended", async () => {
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    // Rep panel priced the packages (the picker buttons are present).
+    await screen.findByRole("button", { name: /Premier/i });
+
+    // Switch to the client-facing preview; the estimator feeds the same
+    // Good/Better/Best ladder (feet-free totals only) into the ComparisonCard.
+    fireEvent.click(screen.getByRole("button", { name: /Client preview/i }));
+    const preview = await waitFor(() => {
+      const el = container.querySelector(".est-client-preview");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+
+    // All three tiers surface to the client…
+    expect(preview.querySelectorAll(".cmp-pkg-grid .cmp-pkg")).toHaveLength(3);
+    // …and only the resolved default (most-inclusive Premier, no explicit pick)
+    // is flagged Recommended — not the merely `popular` Middle tier — matching
+    // what the server folds into the shared page.
+    const recommended = preview.querySelectorAll(".cmp-pkg.recommended");
+    expect(recommended).toHaveLength(1);
+    expect(recommended[0].textContent).toContain("Premier");
+  });
+
   it("converts the measured design into a seasonal draft quote and confirms the number", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);

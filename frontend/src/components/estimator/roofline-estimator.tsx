@@ -275,6 +275,20 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
         multi_year_savings: estimate.multi_year_savings,
         permanent_perks: estimate.permanent_perks,
         christmas_perks: estimate.christmas_perks,
+        // Feet-free ladder for the client preview: only each package's total
+        // crosses over (never the roofline breakdown), so the rep sees exactly
+        // the Good/Better/Best cards the homeowner gets, with their pick flagged.
+        christmasPackages: (estimate.christmas_packages ?? []).map((pkg) => ({
+          key: pkg.key,
+          name: packageName(pkg),
+          marker: pkg.marker,
+          total: pkg.pricing.total,
+          valueTag: pkg.value_tag,
+          popular: pkg.popular,
+          recommended: pkg.key === selectedPkg?.key,
+          points: pkg.points,
+          experience: pkg.experience,
+        })),
       }
     : null;
 

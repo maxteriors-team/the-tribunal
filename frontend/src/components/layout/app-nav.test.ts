@@ -69,6 +69,26 @@ describe("real nav items under the field tier", () => {
   });
 });
 
+describe("Photo Designer nav item (folded into the Quotes hub)", () => {
+  const designer = workspaceNavItems.find((i) => i.title === "Photo Designer");
+
+  it("is a command-palette-only deep link into the Quotes designer tab", () => {
+    expect(designer).toBeDefined();
+    // Lives as a tab in the unified Quotes & Estimates hub, so it deep-links to
+    // the tab rather than the retired standalone /estimator route.
+    expect(designer!.url).toBe("/quotes?tab=designer");
+    // Out of the sidebar (one quoting home), but still searchable + URL-reachable.
+    expect(designer!.sidebar).toBe(false);
+    expect(designer!.commandPalette).toBe(true);
+    // Gated like the other quoting surfaces.
+    expect(designer!.requires).toBe("billing:read");
+  });
+
+  it("stays fail-closed to field techs even with all capabilities", () => {
+    expect(canSeeNavItem(designer!, "field", canAll)).toBe(false);
+  });
+});
+
 describe("Christmas Lights seasonal hub nav item", () => {
   const christmas = workspaceNavItems.find(
     (i) => i.url === "/christmas-lights",

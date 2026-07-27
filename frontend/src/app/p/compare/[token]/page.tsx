@@ -50,6 +50,12 @@ export default function PublicComparisonPage({
     ["--gold" as string]: data.accent_color || data.brand_color,
   } as React.CSSProperties;
 
+  // Seasonal Good/Better/Best ladder (feet-free totals only). The recommended
+  // tier (rep's pick, else most-inclusive) also labels the summary seasonal card
+  // so the comparison and the package grid agree on the highlighted package.
+  const packages = data.christmas_packages ?? [];
+  const recommended = packages.find((pkg) => pkg.recommended) ?? null;
+
   return (
     <div className="cmp-view" style={brandStyle}>
       {data.business_name ? (
@@ -62,11 +68,14 @@ export default function PublicComparisonPage({
           currency: data.currency,
           clientName: data.client_name,
           permanent: data.permanent,
-          // Totals-only by construction: `christmas.total` already reflects the
-          // rep's selected Good/Better/Best package (folded server-side). The
-          // public payload carries no package label, per-ft, or feet, so we pass
-          // no `christmasName` — the client sees the price, never the measurement.
+          // Feet-free by construction: `christmas.total` already reflects the
+          // recommended Good/Better/Best package (folded server-side), and
+          // `christmasName` labels that tier from the package payload — still no
+          // per-ft or feet, so the client sees prices, never the measurement.
           christmas: data.christmas,
+          christmasName: recommended
+            ? (recommended.name ?? recommended.label)
+            : null,
           difference: data.difference,
           years: data.years,
           temporary_multi_year: data.temporary_multi_year,
@@ -74,6 +83,17 @@ export default function PublicComparisonPage({
           multi_year_savings: data.multi_year_savings,
           permanent_perks: data.permanent_perks,
           christmas_perks: data.christmas_perks,
+          christmasPackages: packages.map((pkg) => ({
+            key: pkg.key,
+            name: pkg.name ?? pkg.label,
+            marker: pkg.marker,
+            total: pkg.total,
+            valueTag: pkg.value_tag,
+            popular: pkg.popular,
+            recommended: pkg.recommended,
+            points: pkg.points,
+            experience: pkg.experience,
+          })),
         }}
       />
     </div>

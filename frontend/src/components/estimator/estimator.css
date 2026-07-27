@@ -216,6 +216,80 @@
   font-style: italic;
 }
 
+/* Client seasonal package ladder (Good/Better/Best under the comparison). */
+.cmp-pkg-section {
+  margin-top: 34px;
+}
+
+.cmp-pkg-head {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.cmp-pkg-head h2 {
+  color: var(--t1);
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.cmp-pkg-head p {
+  color: var(--t3);
+  font-size: 14px;
+}
+
+.cmp-pkg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .cmp-pkg-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cmp-card.cmp-pkg {
+  padding: 20px;
+}
+
+.cmp-card.cmp-pkg h3 {
+  color: var(--t1);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmp-pkg-marker {
+  color: var(--gold);
+  font-size: 15px;
+}
+
+.cmp-pkg-exp {
+  color: var(--t3);
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+
+.cmp-card.cmp-pkg .cmp-price {
+  font-size: 28px;
+}
+
+.cmp-card.cmp-pkg .cmp-perks {
+  margin-top: 14px;
+}
+
+.cmp-card-tag.alt {
+  color: var(--gold);
+  background: transparent;
+  border: 1px solid var(--bdr-g);
+}
+
 /* ======================================================================== */
 /* Rep-only light designer (HHC-style three-pane editor)                    */
 /* ======================================================================== */
@@ -885,6 +959,13 @@
 /* Seasonal Good/Better/Best package picker (rep-only, narrow right panel) */
 .ep-packages {
   margin-bottom: 14px;
+}
+
+.ep-pkg-hint {
+  color: var(--t3);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 4px 0 10px;
 }
 
 .ep-pkgs {

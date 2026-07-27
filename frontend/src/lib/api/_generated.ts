@@ -19472,6 +19472,8 @@ export interface components {
             /** Business Name */
             business_name: string;
             christmas: components["schemas"]["PublicChristmasComparison"];
+            /** Christmas Packages */
+            christmas_packages?: components["schemas"]["PublicComparisonPackage"][];
             /** Christmas Perks */
             christmas_perks?: string[];
             /** Client Name */
@@ -19496,6 +19498,54 @@ export interface components {
             temporary_multi_year: number;
             /** Years */
             years: number;
+        };
+        /**
+         * PublicComparisonPackage
+         * @description One seasonal Good/Better/Best package as the client sees it — feet-free.
+         *
+         *     The public analog of :class:`app.schemas.pricing.ChristmasPackagePricing`: it
+         *     carries the card copy plus the single computed ``total`` only, and
+         *     deliberately **omits** the full :class:`app.schemas.pricing.ChristmasPricing`
+         *     breakdown (which includes ``roofline_feet`` / ``roofline_cost``). A
+         *     measurement therefore cannot reach the homeowner — the same feet-privacy
+         *     contract as the rest of this module, enforced by construction.
+         *
+         *     ``recommended`` flags the package the rep is steering the client toward (their
+         *     explicit pick, else the most-inclusive tier) so one card can be highlighted
+         *     without gating the others.
+         */
+        PublicComparisonPackage: {
+            /** Experience */
+            experience?: string | null;
+            /**
+             * Includes Roofline
+             * @default false
+             */
+            includes_roofline: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
+            /** Total */
+            total: number;
+            /** Value Tag */
+            value_tag?: string | null;
         };
         /**
          * PublicFeedbackResult

@@ -29819,6 +29819,13 @@
           "christmas": {
             "$ref": "#/components/schemas/PublicChristmasComparison"
           },
+          "christmas_packages": {
+            "items": {
+              "$ref": "#/components/schemas/PublicComparisonPackage"
+            },
+            "title": "Christmas Packages",
+            "type": "array"
+          },
           "christmas_perks": {
             "items": {
               "type": "string"
@@ -29897,6 +29904,96 @@
           "multi_year_savings"
         ],
         "title": "PublicComparison",
+        "type": "object"
+      },
+      "PublicComparisonPackage": {
+        "description": "One seasonal Good/Better/Best package as the client sees it — feet-free.\n\nThe public analog of :class:`app.schemas.pricing.ChristmasPackagePricing`: it\ncarries the card copy plus the single computed ``total`` only, and\ndeliberately **omits** the full :class:`app.schemas.pricing.ChristmasPricing`\nbreakdown (which includes ``roofline_feet`` / ``roofline_cost``). A\nmeasurement therefore cannot reach the homeowner — the same feet-privacy\ncontract as the rest of this module, enforced by construction.\n\n``recommended`` flags the package the rep is steering the client toward (their\nexplicit pick, else the most-inclusive tier) so one card can be highlighted\nwithout gating the others.",
+        "properties": {
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "includes_roofline": {
+            "default": false,
+            "title": "Includes Roofline",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "total"
+        ],
+        "title": "PublicComparisonPackage",
         "type": "object"
       },
       "PublicFeedbackResult": {

@@ -18,7 +18,11 @@ from app.schemas.pricing import (
     PricingSettings,
 )
 from app.services.exceptions import ValidationError
-from app.services.quotes.quote_service import QuoteService
+from app.services.quotes.quote_service import (
+    QuoteService,
+    _resolve_recommended_package,
+    build_public_comparison_packages,
+)
 
 
 def _config(**overrides) -> PricingSettings:
@@ -146,9 +150,7 @@ def test_estimate_exposes_seasonal_catalog() -> None:
 
 def test_permanent_minimum_applied() -> None:
     config = _config(
-        permanent=PermanentConfig(
-            enabled=True, per_ft=30, controller_base=0, minimum=5000
-        )
+        permanent=PermanentConfig(enabled=True, per_ft=30, controller_base=0, minimum=5000)
     )
     result = _estimate(config, 100)
     # 100 * 30 = 3000 -> lifted to the $5,000 minimum.
@@ -278,6 +280,63 @@ def test_selected_package_total_differs_from_a_la_carte() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Public comparison package mapping (feet-free client ladder)
+# --------------------------------------------------------------------------- #
+def test_public_packages_carry_totals_and_copy_but_no_feet() -> None:
+    # The public payload exposes every priced package as a card, but only the
+    # ``total`` crosses over — the ChristmasPricing breakdown (roofline_feet /
+    # roofline_cost) must never reach the homeowner.
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+    )
+    public = build_public_comparison_packages(result.christmas_packages, None)
+
+    assert [p.key for p in public] == ["essential", "middle", "premier"]
+    assert {p.key: p.total for p in public} == {
+        "essential": 520,
+        "middle": 1120,
+        "premier": 1520,
+    }
+    # Card copy survives so the client sees a real tier ladder.
+    middle = next(p for p in public if p.key == "middle")
+    assert middle.includes_roofline is True
+    assert middle.popular is True
+
+    # Feet-privacy contract: the serialized card carries no measurement field and
+    # not the nested pricing breakdown that would smuggle one in.
+    forbidden = {"pricing", "roofline_feet", "roofline_cost", "feet", "per_ft", "lines"}
+    for card in public:
+        assert forbidden.isdisjoint(card.model_dump().keys())
+
+
+def test_public_packages_recommend_explicit_pick_else_most_inclusive() -> None:
+    result = _estimate(_packages_config(), 100, christmas_items={"trees": {"medium": 1}})
+    packages = result.christmas_packages
+
+    # Explicit pick -> that package is the recommended (highlighted) one.
+    picked = build_public_comparison_packages(packages, "middle")
+    assert [p.key for p in picked if p.recommended] == ["middle"]
+
+    # No pick -> the most-inclusive tier (last, low→high) is recommended, matching
+    # the frontend resolver so the preview and the shared page agree.
+    default = build_public_comparison_packages(packages, None)
+    assert [p.key for p in default if p.recommended] == ["premier"]
+
+    # A stale/unknown key falls back to the most-inclusive default, never crashes.
+    stale = build_public_comparison_packages(packages, "nope")
+    assert [p.key for p in stale if p.recommended] == ["premier"]
+    assert _resolve_recommended_package([], "middle") is None
+
+
+def test_public_packages_empty_when_workspace_sells_a_la_carte() -> None:
+    # packages_enabled defaults False -> no ladder crosses to the client.
+    result = _estimate(_config(), 100)
+    assert build_public_comparison_packages(result.christmas_packages, None) == []
+
+
+# --------------------------------------------------------------------------- #
 # Estimate -> quote conversion (the light designer's "design -> quote" step)
 # --------------------------------------------------------------------------- #
 def _convert(config: PricingSettings, side: str, feet: float, **kw):
@@ -338,9 +397,7 @@ def test_convert_seasonal_package_scopes_coverage_and_titles() -> None:
 
 def test_convert_reconciles_job_minimum_with_a_line() -> None:
     config = _config(
-        permanent=PermanentConfig(
-            enabled=True, per_ft=30, controller_base=0, minimum=5000
-        )
+        permanent=PermanentConfig(enabled=True, per_ft=30, controller_base=0, minimum=5000)
     )
     _title, pricing, lines = _convert(config, "permanent", 100)
     # 100 * 30 = 3000 raw, lifted to the $5,000 minimum via a reconciliation line.
