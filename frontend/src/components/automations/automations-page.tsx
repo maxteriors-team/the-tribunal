@@ -83,6 +83,7 @@ import {
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { automationsApi } from "@/lib/api/automations";
 import { leadSourcesApi } from "@/lib/api/lead-sources";
+import { tagsApi } from "@/lib/api/tags";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils/date";
 import type {
@@ -194,9 +195,11 @@ export function AutomationsPage() {
   const [newTriggerType, setNewTriggerType] = useState<AutomationTriggerType>("event");
   const [newActionType, setNewActionType] = useState<AutomationActionType>("send_sms");
   // Tag name for apply_tag/add_tag actions; lead-source public_key that narrows
-  // a lead_created trigger to one form ("" = every new lead).
+  // a lead_created trigger to one form ("" = every new lead); tag that fires a
+  // contact_tagged trigger (service line, e.g. "Landscape Lighting").
   const [newTagValue, setNewTagValue] = useState("");
   const [newLeadSourceKey, setNewLeadSourceKey] = useState("");
+  const [newTriggerTag, setNewTriggerTag] = useState("");
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
@@ -210,6 +213,11 @@ export function AutomationsPage() {
     queryFn: () => leadSourcesApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
+  const { data: tagsData } = useQuery({
+    queryKey: queryKeys.tags.all(workspaceId ?? ""),
+    queryFn: () => tagsApi.list(workspaceId!),
+    enabled: !!workspaceId,
+  });
   const createMutation = useCreateAutomation(workspaceId ?? "");
   const updateMutation = useUpdateAutomation(workspaceId ?? "");
   const deleteMutation = useDeleteAutomation(workspaceId ?? "");
@@ -217,7 +225,9 @@ export function AutomationsPage() {
 
   const automations = data?.items ?? [];
   const leadSources = leadSourcesData ?? [];
+  const tagOptions = tagsData?.items ?? [];
   const isTagAction = TAG_ACTIONS.includes(newActionType);
+  const isTagTrigger = newTriggerType === "contact_tagged";
   const leadSourceNameByKey = (key: string) =>
     leadSources.find((source) => source.public_key === key)?.name ?? key;
 
@@ -236,6 +246,7 @@ export function AutomationsPage() {
     setNewActionType("send_sms");
     setNewTagValue("");
     setNewLeadSourceKey("");
+    setNewTriggerTag("");
   };
 
   // Build the first action's config from the builder fields while preserving
@@ -266,6 +277,11 @@ export function AutomationsPage() {
         delete config.lead_source_public_key;
       }
     }
+    // contact_tagged fires for contacts carrying this exact tag; the worker
+    // reads trigger_config.tag, so an empty value would never match.
+    if (newTriggerType === "contact_tagged") {
+      config.tag = newTriggerTag.trim();
+    }
     return config;
   };
 
@@ -276,6 +292,10 @@ export function AutomationsPage() {
     }
     if (TAG_ACTIONS.includes(newActionType) && !newTagValue.trim()) {
       toast.error("Enter a tag name for the Apply Tag action");
+      return;
+    }
+    if (newTriggerType === "contact_tagged" && !newTriggerTag.trim()) {
+      toast.error("Pick the tag that should trigger this automation");
       return;
     }
 
@@ -320,6 +340,8 @@ export function AutomationsPage() {
     setNewTagValue(typeof firstAction?.config?.tag === "string" ? firstAction.config.tag : "");
     const sourceKey = automation.trigger_config?.lead_source_public_key;
     setNewLeadSourceKey(typeof sourceKey === "string" ? sourceKey : "");
+    const triggerTag = automation.trigger_config?.tag;
+    setNewTriggerTag(typeof triggerTag === "string" ? triggerTag : "");
     setEditingAutomation(automation);
   };
 
@@ -473,6 +495,35 @@ export function AutomationsPage() {
                   </Select>
                   <p className="text-xs text-muted-foreground">
                     Run this for one form only, or leave on all lead sources to catch every new lead.
+                  </p>
+                </div>
+              )}
+              {isTagTrigger && (
+                <div className="space-y-2">
+                  <Label>Tag</Label>
+                  {tagOptions.length > 0 ? (
+                    <Select value={newTriggerTag} onValueChange={setNewTriggerTag}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a tag" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tagOptions.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.name}>
+                            {tag.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      placeholder="e.g. Landscape Lighting"
+                      value={newTriggerTag}
+                      onChange={(e) => setNewTriggerTag(e.target.value)}
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Fires for contacts who have this exact tag, like a service line
+                    (Landscape Lighting, Permanent Lighting) or Previous Client.
                   </p>
                 </div>
               )}
@@ -727,6 +778,13 @@ export function AutomationsPage() {
                                 {leadSourceNameByKey(
                                   automation.trigger_config.lead_source_public_key as string
                                 )}
+                              </p>
+                            )}
+                          {automation.trigger_type === "contact_tagged" &&
+                            typeof automation.trigger_config?.tag === "string" &&
+                            automation.trigger_config.tag && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Tag: {automation.trigger_config.tag as string}
                               </p>
                             )}
                         </div>
