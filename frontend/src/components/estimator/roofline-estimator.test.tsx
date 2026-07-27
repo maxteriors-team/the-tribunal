@@ -289,6 +289,10 @@ describe("RooflineEstimator", () => {
       return el as HTMLElement;
     });
 
+    // The preview carries the festive client theme, so it mirrors what the
+    // homeowner sees on /p/compare rather than the neutral rep chrome.
+    expect(preview).toHaveClass("cmp-festive");
+
     // All three tiers surface to the client…
     expect(preview.querySelectorAll(".cmp-pkg-grid .cmp-pkg")).toHaveLength(3);
     // …and only the resolved default (most-inclusive Premier, no explicit pick)

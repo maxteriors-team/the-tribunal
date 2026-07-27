@@ -572,7 +572,8 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
           </div>
 
           {viewMode === "client" && clientView ? (
-            <div className="est-client-preview">
+            // Festive theme so the preview mirrors the client's holiday page.
+            <div className="est-client-preview cmp-festive">
               <ComparisonCard view={clientView} />
             </div>
           ) : null}

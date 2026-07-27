@@ -291,6 +291,110 @@
 }
 
 /* ======================================================================== */
+/* Festive (Christmas) theme — client comparison only (.cmp-festive)         */
+/* ------------------------------------------------------------------------ */
+/* Scoped to the public /p/compare page and the rep's "Client preview" so a  */
+/* homeowner gets a holiday-lighting look; the rep's editor chrome (.est-*)  */
+/* keeps the neutral dark/gold theme. Works by remapping the shared tokens,  */
+/* so every existing .cmp-* rule inherits the palette with no duplication.   */
+/* ======================================================================== */
+.cmp-festive {
+  /* Midnight evergreen base — warmer and more premium than flat black. */
+  --black: #0b1712;
+  --s1: #11201a;
+  --s2: #16271f;
+  --s3: #1c2f26;
+  /* Candlelit warm gold: the color of installed string lights at dusk. */
+  --gold: #ecc873;
+  --gold-l: #f7de9c;
+  --gold-d: #c39a4a;
+  /* Savings stays bright green — reads as positive and as festive evergreen. */
+  --green: #5fe08c;
+  /* Frost-white text on evergreen. */
+  --t1: #ffffff;
+  --t2: #d7e2dc;
+  --t3: #a1b3a9;
+  --t4: #6d7f76;
+  --bdr: rgba(220, 240, 232, 0.12);
+  --bdr-g: rgba(236, 200, 115, 0.32);
+  /* Holly berry — reserved for the single "Recommended" pick. */
+  --holly: #cf4636;
+  --holly-glow: rgba(207, 70, 54, 0.42);
+  --wire: rgba(220, 240, 232, 0.22);
+
+  position: relative;
+}
+
+/* String-light garland: the product being sold, drawn across the top. A thin
+   wire with evenly spaced warm-gold / holly / pine bulbs, tiled across any
+   width. Page content clears it via the wrap's top padding. */
+.cmp-festive::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 14px 15px, var(--gold-l) 0 2px, rgba(247, 222, 156, 0.35) 3px, transparent 7px),
+    radial-gradient(circle at 42px 15px, #ff9d86 0 2px, var(--holly-glow) 3px, transparent 7px),
+    radial-gradient(circle at 70px 15px, #a7ecb8 0 2px, rgba(95, 224, 140, 0.35) 3px, transparent 7px),
+    linear-gradient(var(--wire), var(--wire));
+  background-repeat: repeat-x, repeat-x, repeat-x, repeat-x;
+  background-size: 84px 24px, 84px 24px, 84px 24px, 100% 2px;
+  background-position: 0 0, 0 0, 0 0, 0 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cmp-festive::before {
+    animation: cmp-twinkle 5.5s ease-in-out infinite;
+  }
+}
+
+@keyframes cmp-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+/* Eyebrow labels take the warm festive gold so the holiday palette stays
+   cohesive; the business is identified by its name text, not a brand accent. */
+.cmp-festive .cmp-brand {
+  color: var(--gold);
+}
+
+/* Savings hero: a warm "lit window" glow over evergreen. */
+.cmp-festive .cmp-savings {
+  border-color: rgba(236, 200, 115, 0.3);
+  background:
+    radial-gradient(130% 150% at 50% -10%, rgba(236, 200, 115, 0.16), transparent 60%),
+    linear-gradient(180deg, #14251d, #0f1f18);
+}
+
+/* Recommended package: holly ribbon + a soft berry glow on the card. */
+.cmp-festive .cmp-card.recommended {
+  border-color: var(--holly-glow);
+  box-shadow: 0 0 0 1px var(--holly-glow), 0 12px 34px -20px var(--holly-glow);
+}
+
+.cmp-festive .cmp-card-tag {
+  background: var(--holly);
+  color: #ffffff;
+}
+
+/* "Most popular" stays a gold outline so the red ribbon is unique to the pick. */
+.cmp-festive .cmp-card-tag.alt {
+  background: transparent;
+  color: var(--gold);
+  border-color: var(--bdr-g);
+}
+
+/* ======================================================================== */
 /* Rep-only light designer (HHC-style three-pane editor)                    */
 /* ======================================================================== */
 

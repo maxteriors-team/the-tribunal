@@ -45,10 +45,10 @@ export default function PublicComparisonPage({
     );
   }
 
-  // Apply the workspace brand accent to the scoped theme.
-  const brandStyle = {
-    ["--gold" as string]: data.accent_color || data.brand_color,
-  } as React.CSSProperties;
+  // The festive palette is fixed (warm gold / holly / evergreen) so the holiday
+  // page stays cohesive for every workspace regardless of its brand color; the
+  // business is identified by its name text rather than a brand accent that
+  // could clash with the theme.
 
   // Seasonal Good/Better/Best ladder (feet-free totals only). The recommended
   // tier (rep's pick, else most-inclusive) also labels the summary seasonal card
@@ -57,7 +57,7 @@ export default function PublicComparisonPage({
   const recommended = packages.find((pkg) => pkg.recommended) ?? null;
 
   return (
-    <div className="cmp-view" style={brandStyle}>
+    <div className="cmp-view cmp-festive">
       {data.business_name ? (
         <div style={{ textAlign: "center", paddingTop: 32 }}>
           <span className="cmp-brand">{data.business_name}</span>
