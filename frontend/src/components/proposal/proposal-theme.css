@@ -627,6 +627,8 @@
   .pp-error { font-size: 12px; color: #e0968f; margin-top: 14px; }
   .pp-meta { text-align: center; font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t4); margin-top: 16px; line-height: 1.8; }
   .pp-footer-note { text-align: center; font-size: 11px; color: var(--t4); margin-top: 22px; line-height: 1.7; }
+  .pp-footer-note a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; transition: color 0.2s; }
+  .pp-footer-note a:hover { color: var(--gold-l); }
 
   /* Responsive polish */
   @media (max-width: 900px) {
