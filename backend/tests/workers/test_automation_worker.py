@@ -314,7 +314,9 @@ async def _contact_row(db, workspace_id: uuid.UUID) -> Contact:
     return contact
 
 
-async def _pipeline_with_stages(db, workspace_id: uuid.UUID) -> tuple[Pipeline, PipelineStage, PipelineStage]:
+async def _pipeline_with_stages(
+    db, workspace_id: uuid.UUID
+) -> tuple[Pipeline, PipelineStage, PipelineStage]:
     pipeline = Pipeline(workspace_id=workspace_id, name="Sales", is_active=True)
     db.add(pipeline)
     await db.flush()
