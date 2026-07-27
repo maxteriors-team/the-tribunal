@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils/number";
 import type { PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
+import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
 
 import "./proposal-theme.css";
@@ -298,7 +299,9 @@ export function PlainQuoteView({
           ) : null}
         </div>
         {branding.footer ? (
-          <div className="pp-footer-note">{branding.footer}</div>
+          <div className="pp-footer-note">
+            {renderTextWithLinks(branding.footer)}
+          </div>
         ) : null}
       </div>
     </div>

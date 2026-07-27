@@ -13,45 +13,17 @@
  * (`./proposal-theme.css`, `./proposal-fonts`, `./document`), independent of the
  * disposable sales-wizard builder.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 
 import { formatDate } from "@/lib/utils/date";
 import type { PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
 import { fmt, type ProposalDoc } from "./document";
+import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
 
 import "./proposal-theme.css";
-
-/**
- * Render operator-authored text with clickable links — used for the footer
- * note, e.g. a "Terms & Conditions" line linking to the business website.
- *
- * Only `http(s)://` URLs are linkified, via string splitting rather than
- * `dangerouslySetInnerHTML`, so stored copy can never inject markup or a
- * `javascript:` link. Trailing sentence punctuation (e.g. a period ending the
- * line) is kept out of the href so the link still resolves.
- */
-function renderTextWithLinks(text: string): ReactNode[] {
-  // Capturing group keeps the URLs in the split output (at odd indices); the
-  // regex test below re-identifies them so we don't depend on that position.
-  return text.split(/(https?:\/\/[^\s<]+)/g).map((part, index) => {
-    if (!/^https?:\/\//.test(part)) {
-      return part;
-    }
-    const trailing = part.match(/[.,;:!?)\]}'"]+$/)?.[0] ?? "";
-    const href = trailing ? part.slice(0, -trailing.length) : part;
-    return (
-      <span key={index}>
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {href}
-        </a>
-        {trailing}
-      </span>
-    );
-  });
-}
 
 interface ClientProposalViewProps {
   data: PublicProposal;
