@@ -17,8 +17,26 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://aicrm:aicrm_dev_password@localhost:5432/aicrm"
-    db_pool_size: int = 5
-    db_max_overflow: int = 10
+    # Connection budget, sized against production Postgres ``max_connections=100``
+    # (minus ``superuser_reserved_connections=3`` -> 97 usable).
+    #
+    # One process runs the API *and* ~28 background workers whose per-worker
+    # ``MAX_CONCURRENCY`` fan-out each open their own session, so the pool has to
+    # absorb a worker burst without starving the request path: ``get_current_user``
+    # queries the DB on every authenticated request, so an exhausted pool stalls
+    # every dashboard page load until ``db_pool_timeout`` elapses.
+    #
+    # ``db_pool_size + db_max_overflow`` = 35 peak per instance. Railway keeps the
+    # old container serving until the new one passes ``/readyz``, so budget for two:
+    # 2 x 35 = 70, leaving ~27 for ``alembic upgrade head``, backups, and psql.
+    # Raise via ``DB_POOL_SIZE`` / ``DB_MAX_OVERFLOW`` only alongside that ceiling.
+    db_pool_size: int = 20
+    db_max_overflow: int = 15
+    # Seconds a caller waits for a free connection before raising ``TimeoutError``.
+    # Deliberately shorter than SQLAlchemy's 30s default: a page that errors quickly
+    # beats one that hangs past the proxy's own timeout, and every worker is
+    # retry-backed, so a fast failure just defers the item to the next poll cycle.
+    db_pool_timeout: int = 10
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

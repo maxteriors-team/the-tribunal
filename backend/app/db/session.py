@@ -25,7 +25,7 @@ engine = create_async_engine(
     # Max seconds a request will wait for a free connection before raising
     # ``TimeoutError``. Bounds tail latency under saturation — a stuck pool
     # fails fast instead of piling up requests indefinitely.
-    pool_timeout=30,
+    pool_timeout=settings.db_pool_timeout,
     # Issue a lightweight ``SELECT 1`` on checkout. Catches connections the
     # server has closed (restarts, idle timeouts) and transparently reconnects
     # so individual requests do not see ``DisconnectionError``.
