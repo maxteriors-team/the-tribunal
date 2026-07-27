@@ -154,6 +154,30 @@ export function CalculatorScreen({
   const hasLandscape = wizard.hasCategory("landscape");
   const hasSeasonal =
     wizard.hasCategory("permanent") || wizard.hasCategory("christmas");
+  // Permanent and Christmas are separate services that happen to share one step
+  // (`id: "seasonal"`, kept so step ordering is untouched). Its label, heading,
+  // and service tag follow the active service, so a permanent quote is never
+  // presented as Christmas.
+  const isPermanentService = wizard.activeService === "permanent";
+  const seasonalStep = isPermanentService
+    ? {
+        // The progress chip clips past ~8 tracked characters, so the step reads
+        // "Roofline" (what this step prices) while the tag names the service.
+        label: "Roofline",
+        tag: "Holiday Lights \u2014 Permanent",
+        accent: SERVICE_ACCENTS.permanent,
+        copy:
+          "Price the year-round LED roofline track. Enter footage and zones \u2014 " +
+          "every line prices live off your workspace rates.",
+      }
+    : {
+        label: "Seasonal",
+        tag: "Christmas & Holiday Lighting",
+        accent: SERVICE_ACCENTS.christmas,
+        copy:
+          "Price this season's Christmas lighting. Enter roofline footage and " +
+          "decor counts \u2014 every line prices live off your workspace rates.",
+      };
 
   // Steps are driven by which product lines the quote covers, so the rep only
   // walks the sections that apply to this quote.
@@ -163,13 +187,13 @@ export function CalculatorScreen({
       { id: "lines", label: "Lines" },
     ];
     if (hasLandscape) list.push({ id: "design", label: "Design" });
-    if (hasSeasonal) list.push({ id: "seasonal", label: "Seasonal" });
+    if (hasSeasonal) list.push({ id: "seasonal", label: seasonalStep.label });
     // Add-ons: mockups apply to every quote (care/bistro gate internally), so
     // this step is always available.
     list.push({ id: "enhancements", label: "Add-ons" });
     list.push({ id: "review", label: "Review" });
     return list;
-  }, [hasLandscape, hasSeasonal]);
+  }, [hasLandscape, hasSeasonal, seasonalStep.label]);
 
   const [stepState, setStep] = useState<WizardStepId>("client");
   const step = steps.some((s) => s.id === stepState) ? stepState : "client";
@@ -340,8 +364,8 @@ export function CalculatorScreen({
                 <em>Product</em>{" "}Lines
               </div>
               <div className="wizard-copy">
-                Choose which lines this quote covers. Add as many as apply — each
-                one gets its own section, and the totals combine into one quote.
+                Pick the service this quote covers. One quote, one service —
+                switching services starts that service&apos;s quote.
               </div>
             </div>
             <CategoryStep wizard={wizard} />
@@ -404,17 +428,21 @@ export function CalculatorScreen({
               <div className="wizard-step-heading">
                 <div className="wizard-kicker">{stepOf("seasonal")}</div>
                 <ServiceTag
-                  label="Christmas & Holiday Lighting"
-                  accent={SERVICE_ACCENTS.holiday}
+                  label={seasonalStep.tag}
+                  accent={seasonalStep.accent}
                 />
                 <div className="wizard-title">
-                  <em>Seasonal</em>{" "}&amp; Permanent
+                  {isPermanentService ? (
+                    <>
+                      <em>Permanent</em>{" "}Roofline
+                    </>
+                  ) : (
+                    <>
+                      <em>Seasonal</em>{" "}Christmas
+                    </>
+                  )}
                 </div>
-                <div className="wizard-copy">
-                  Price permanent roofline and seasonal Christmas lighting. Enter
-                  footage and decor counts — every line prices live off your
-                  workspace rates.
-                </div>
+                <div className="wizard-copy">{seasonalStep.copy}</div>
               </div>
               {wizard.hasCategory("permanent") ? (
                 <PermanentSection wizard={wizard} />

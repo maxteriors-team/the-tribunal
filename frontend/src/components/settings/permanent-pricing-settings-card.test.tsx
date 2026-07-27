@@ -44,7 +44,11 @@ function permanent(overrides: Partial<PermanentConfig> = {}): PermanentConfig {
 }
 
 function pricing(perm: PermanentConfig): PricingSettings {
-  return { comparison_years: 5, permanent: perm };
+  return {
+    comparison_years: 5,
+    roofline_comparison_enabled: false,
+    permanent: perm,
+  };
 }
 
 function renderCard() {

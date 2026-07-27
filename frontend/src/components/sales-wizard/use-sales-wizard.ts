@@ -38,6 +38,54 @@ export const CATEGORY_KEYS = [
 ] as const;
 export type CategoryKey = (typeof CATEGORY_KEYS)[number];
 
+// ─── Service paths (one quote = one service) ─────────────────────────────────
+// Landscape lighting, year-round permanent LED track, and seasonal Christmas are
+// three separate services, each owning the product lines it sells. A quote never
+// spans two of them: picking a service replaces the selection rather than adding
+// to it. Mirrors ``SERVICE_CATEGORIES`` in
+// ``backend/app/schemas/proposal_wizard.py``.
+export const SERVICE_CATEGORIES = {
+  landscape: ["landscape", "bistro"],
+  permanent: ["permanent"],
+  christmas: ["christmas"],
+} as const satisfies Record<string, readonly CategoryKey[]>;
+
+export type ServiceKey = keyof typeof SERVICE_CATEGORIES;
+
+export const SERVICE_KEYS = [
+  "landscape",
+  "permanent",
+  "christmas",
+] as const satisfies readonly ServiceKey[];
+
+/** The service path a product line belongs to. */
+export function serviceForCategory(key: CategoryKey): ServiceKey {
+  return (
+    SERVICE_KEYS.find((service) =>
+      (SERVICE_CATEGORIES[service] as readonly CategoryKey[]).includes(key),
+    ) ?? "landscape"
+  );
+}
+
+/**
+ * Which service the current selection belongs to.
+ *
+ * Falls back to `"landscape"` for an empty selection so the wizard always has an
+ * active branch to render. The first matching service wins, which only matters
+ * for a legacy cross-service draft loaded from an existing quote.
+ */
+export function serviceForCategories(
+  keys: readonly CategoryKey[],
+): ServiceKey {
+  return (
+    SERVICE_KEYS.find((service) =>
+      keys.some((key) =>
+        (SERVICE_CATEGORIES[service] as readonly CategoryKey[]).includes(key),
+      ),
+    ) ?? "landscape"
+  );
+}
+
 // ─── Draft state shapes (inputs stay strings so typing feels native) ────────
 export interface ChargeDraft {
   description: string;
@@ -176,6 +224,10 @@ export interface UseSalesWizardReturn {
   categories: CategoryKey[];
   hasCategory: (key: CategoryKey) => boolean;
   toggleCategory: (key: CategoryKey) => void;
+  // The service path this quote is on. One quote = one service; `setService`
+  // switches branch and replaces the selection so a mix can never be built.
+  activeService: ServiceKey;
+  setService: (service: ServiceKey) => void;
   // Selection state
   client: ClientDraft;
   setClientField: (key: keyof ClientDraft, value: string) => void;
@@ -230,7 +282,15 @@ export interface UseSalesWizardReturn {
   isDelivering: boolean;
 }
 
-export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
+export function useSalesWizard(
+  workspaceId: string,
+  /**
+   * Service branch this quote starts on (from `/sales-wizard?service=…`), so the
+   * hub's service-scoped entries land the rep directly on that path. Defaults to
+   * landscape, the previous behavior.
+   */
+  initialService: ServiceKey = "landscape",
+): UseSalesWizardReturn {
   const pricingQuery = useQuery({
     queryKey: queryKeys.salesWizard.pricing(workspaceId),
     queryFn: () => salesWizardApi.getPricing(workspaceId),
@@ -259,7 +319,9 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     feet: "",
   });
   const [mockups, setMockups] = useState<MockupDraft[]>([]);
-  const [categories, setCategories] = useState<CategoryKey[]>(["landscape"]);
+  const [categories, setCategories] = useState<CategoryKey[]>(() => [
+    SERVICE_CATEGORIES[initialService][0],
+  ]);
   const [permanent, setPermanentState] = useState<PermanentDraft>({
     feet: "",
     channels: "",
@@ -391,12 +453,24 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     (key: CategoryKey) => categories.includes(key),
     [categories],
   );
+  const activeService = useMemo(
+    () => serviceForCategories(categories),
+    [categories],
+  );
+  const setService = useCallback((service: ServiceKey) => {
+    // Replace, never merge: switching branch drops the previous service's lines
+    // so a quote can't end up spanning two services. Each service starts on its
+    // primary line (bistro stays an opt-in line chip within landscape).
+    setCategories([SERVICE_CATEGORIES[service][0]]);
+  }, []);
   const toggleCategory = useCallback((key: CategoryKey) => {
-    setCategories((prev) =>
-      prev.includes(key)
+    setCategories((prev) => {
+      // A line from another service switches the branch instead of mixing.
+      if (serviceForCategories(prev) !== serviceForCategory(key)) return [key];
+      return prev.includes(key)
         ? prev.filter((c) => c !== key)
-        : CATEGORY_KEYS.filter((c) => c === key || prev.includes(c)),
-    );
+        : CATEGORY_KEYS.filter((c) => c === key || prev.includes(c));
+    });
   }, []);
   const setPermanent = useCallback((patch: Partial<PermanentDraft>) => {
     setPermanentState((prev) => ({ ...prev, ...patch }));
@@ -610,6 +684,8 @@ export function useSalesWizard(workspaceId: string): UseSalesWizardReturn {
     categories,
     hasCategory,
     toggleCategory,
+    activeService,
+    setService,
     activeTier,
     setActiveTier,
     carePlanTier,

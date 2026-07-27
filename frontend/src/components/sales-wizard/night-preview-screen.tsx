@@ -325,6 +325,7 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   );
 
   const { setChristmas, toggleCategory, hasCategory, setNight } = wizard;
+  const { activeService } = wizard;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -415,14 +416,24 @@ export function NightPreviewScreen({ wizard, onClose }: NightPreviewScreenProps)
   // A valid calibrated trace drives the seasonal roofline price: push the
   // measured feet into `christmas.roofline_feet` and auto-enable the category so
   // the live preview re-prices. Guarded by feet > 0 and a last-written ref so a
-  // single draw doesn't loop or surprise-toggle on an empty trace.
+  // single draw doesn't loop or surprise-toggle on an empty trace, and scoped to
+  // the christmas service so measuring on a landscape or permanent quote can
+  // never silently switch service paths.
   useEffect(() => {
+    if (activeService !== "christmas") return;
     if (!calibrated || feet <= 0) return;
     if (lastFeetRef.current === feet) return;
     lastFeetRef.current = feet;
     setChristmas({ roofline_feet: String(feet) });
     if (!hasCategory("christmas")) toggleCategory("christmas");
-  }, [calibrated, feet, setChristmas, toggleCategory, hasCategory]);
+  }, [
+    activeService,
+    calibrated,
+    feet,
+    setChristmas,
+    toggleCategory,
+    hasCategory,
+  ]);
 
   const point = (ev: React.PointerEvent): { nx: number; ny: number } => {
     const canvas = canvasRef.current!;

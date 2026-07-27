@@ -94,6 +94,9 @@ export default function PublicComparisonPage({
             points: pkg.points,
             experience: pkg.experience,
           })),
+          // Roofline-only cost comparison; null unless the workspace turned it on
+          // and sells both options, so the default page is unchanged. Costs only.
+          roofline: data.roofline,
         }}
       />
     </div>

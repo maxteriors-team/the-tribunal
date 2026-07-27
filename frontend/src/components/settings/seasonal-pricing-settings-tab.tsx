@@ -175,6 +175,9 @@ export function SeasonalPricingSettingsTab() {
   const [categories, setCategories] = useState<EditCategory[]>([]);
   const [packagesEnabled, setPackagesEnabled] = useState(false);
   const [packages, setPackages] = useState<EditPackage[]>([]);
+  // Client-visible roofline-vs-roofline cost comparison. Lives at the top level
+  // of the pricing config (next to comparison_years), not inside `christmas`.
+  const [rooflineComparison, setRooflineComparison] = useState(false);
   // Snapshot of the server christmas block so save preserves takedown/storage/
   // perks/etc. that this editor intentionally does not expose.
   const [serverChristmas, setServerChristmas] = useState<ChristmasConfig | null>(
@@ -191,6 +194,7 @@ export function SeasonalPricingSettingsTab() {
     const cats = toEditModel(pricing.christmas.items ?? []);
     setCategories(cats);
     setPackagesEnabled(pricing.christmas.packages_enabled ?? false);
+    setRooflineComparison(pricing.roofline_comparison_enabled ?? false);
     setPackages(
       toPackageEditModel(
         pricing.christmas.packages ?? [],
@@ -201,8 +205,10 @@ export function SeasonalPricingSettingsTab() {
   }
 
   const mutation = useMutation({
-    mutationFn: (christmas: ChristmasConfig) =>
-      salesWizardApi.updatePricing(workspaceId!, { christmas }),
+    mutationFn: (update: {
+      christmas: ChristmasConfig;
+      roofline_comparison_enabled: boolean;
+    }) => salesWizardApi.updatePricing(workspaceId!, update),
     onSuccess: (updated) => {
       queryClient.setQueryData(
         queryKeys.salesWizard.pricing(workspaceId ?? ""),
@@ -419,12 +425,15 @@ export function SeasonalPricingSettingsTab() {
     }
 
     mutation.mutate({
-      ...serverChristmas,
-      roofline_per_ft: rate,
-      items,
-      packages_enabled: packagesEnabled,
-      package_order: builtPackages.map((p) => p.key),
-      packages: builtPackages,
+      christmas: {
+        ...serverChristmas,
+        roofline_per_ft: rate,
+        items,
+        packages_enabled: packagesEnabled,
+        package_order: builtPackages.map((p) => p.key),
+        packages: builtPackages,
+      },
+      roofline_comparison_enabled: rooflineComparison,
     });
   };
 
@@ -790,6 +799,29 @@ export function SeasonalPricingSettingsTab() {
             >
               <Plus className="size-4" /> Add package
             </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold">
+                Roofline cost comparison
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Show customers a roofline-only cost comparison on every shared
+                estimate: the one-time permanent install against the seasonal
+                roofline they pay each year. Roofline against roofline, decor
+                excluded, so the numbers are like-for-like. Only appears when
+                you sell both permanent and seasonal lighting.
+              </p>
+            </div>
+            <Switch
+              checked={rooflineComparison}
+              onCheckedChange={setRooflineComparison}
+              disabled={disabled}
+              aria-label="Show customers the roofline cost comparison"
+            />
           </div>
 
           <Separator />

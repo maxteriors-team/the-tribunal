@@ -12,7 +12,7 @@ import { CalculatorScreen } from "./calculator-screen";
 import { salesWizardFontVars } from "./fonts";
 import { NightPreviewScreen } from "./night-preview-screen";
 import { PresentationScreen } from "./presentation-screen";
-import { useSalesWizard } from "./use-sales-wizard";
+import { useSalesWizard, type ServiceKey } from "./use-sales-wizard";
 import "./theme.css";
 
 type Screen = "calc" | "present" | "night";
@@ -20,10 +20,16 @@ type Screen = "calc" | "present" | "night";
 interface SalesWizardProps {
   workspaceId: string;
   brandName: string;
+  /** Service branch to start on (deep-linked from the Quotes hub). */
+  service?: ServiceKey;
 }
 
-export function SalesWizard({ workspaceId, brandName }: SalesWizardProps) {
-  const wizard = useSalesWizard(workspaceId);
+export function SalesWizard({
+  workspaceId,
+  brandName,
+  service = "landscape",
+}: SalesWizardProps) {
+  const wizard = useSalesWizard(workspaceId, service);
   const [screen, setScreen] = useState<Screen>("calc");
 
   const show = (next: Screen) => {

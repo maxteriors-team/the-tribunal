@@ -1,6 +1,16 @@
 "use client";
 
-import { Calculator, FileText, Ruler } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Cable,
+  Calculator,
+  ChevronDown,
+  FileText,
+  Ruler,
+  Snowflake,
+  Trees,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -8,14 +18,59 @@ import { Suspense } from "react";
 import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { QuotesList } from "@/components/quotes/quotes-list";
+import type { ServiceKey } from "@/components/sales-wizard/use-sales-wizard";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { salesWizardApi } from "@/lib/api/sales-wizard";
+import { queryKeys } from "@/lib/query-keys";
 import { useWorkspace } from "@/providers/workspace-provider";
+import type { PricingSettings } from "@/types/sales-wizard";
 
 // Deep-linkable tabs so the command palette / `/estimator` redirect can land the
 // rep straight on the Photo Designer (`?tab=designer`).
 const TAB_VALUES = new Set(["quotes", "designer"]);
+
+// A quote covers one service, so the branch is chosen here rather than mid-quote.
+// Each entry deep-links the wizard onto that service path (`?service=`).
+const SERVICE_ENTRIES: {
+  service: ServiceKey;
+  label: string;
+  blurb: string;
+  Icon: LucideIcon;
+  /** Whether this workspace sells the service, mirroring the wizard's picker. */
+  offered: (pricing: PricingSettings | undefined) => boolean;
+}[] = [
+  {
+    service: "landscape",
+    label: "Landscape Lighting",
+    blurb: "Architectural fixtures & bistro",
+    Icon: Trees,
+    // Landscape is always on the menu, matching the wizard's picker.
+    offered: () => true,
+  },
+  {
+    service: "permanent",
+    label: "Holiday Lights — Permanent",
+    blurb: "Year-round LED roofline track",
+    Icon: Cable,
+    offered: (pricing) => Boolean(pricing?.permanent?.enabled),
+  },
+  {
+    service: "christmas",
+    label: "Christmas & Holiday Lighting",
+    blurb: "Seasonal roofline, trees & wreaths",
+    Icon: Snowflake,
+    offered: (pricing) => Boolean(pricing?.christmas?.enabled),
+  },
+];
 
 function PhotoDesignerTab() {
   const { currentWorkspaceId, isPending } = useWorkspace();
@@ -33,10 +88,21 @@ function PhotoDesignerTab() {
 }
 
 function QuotesHub() {
+  const { currentWorkspaceId } = useWorkspace();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const defaultTab =
     requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "quotes";
+
+  // Only offer services this workspace actually sells, so a menu entry can never
+  // land the rep on a branch with nothing to price.
+  const { data: pricing } = useQuery({
+    queryKey: queryKeys.salesWizard.pricing(currentWorkspaceId ?? ""),
+    queryFn: () => salesWizardApi.getPricing(currentWorkspaceId!),
+    enabled: !!currentWorkspaceId,
+    staleTime: 5 * 60_000,
+  });
+  const services = SERVICE_ENTRIES.filter((entry) => entry.offered(pricing));
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -51,12 +117,31 @@ function QuotesHub() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button asChild size="sm">
-            <Link href="/sales-wizard">
-              <Calculator className="h-4 w-4" />
-              Build a quote
-            </Link>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <Calculator className="h-4 w-4" />
+                Build a quote
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Pick a service</DropdownMenuLabel>
+              {services.map((entry) => (
+                <DropdownMenuItem key={entry.service} asChild>
+                  <Link href={`/sales-wizard?service=${entry.service}`}>
+                    <entry.Icon className="size-4" />
+                    <span className="flex flex-col gap-0.5">
+                      <span>{entry.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.blurb}
+                      </span>
+                    </span>
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

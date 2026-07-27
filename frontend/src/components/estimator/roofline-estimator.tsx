@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { estimatorApi } from "@/lib/api/estimator";
+import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { buildCatalog, indexProducts } from "@/lib/estimator/catalog";
 import {
   designScale,
@@ -47,6 +48,9 @@ interface RooflineEstimatorProps {
 
 // Params for the catalog probe: a feet=0 estimate that returns the workspace's
 // decor catalog (and roofline rate) without needing a drawn design yet.
+// Cents-exact rounding, matching the backend's ``round(value, 2)`` on money.
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 const CATALOG_PARAMS: LinearFeetEstimateRequest = {
   feet: 0,
   channels: 0,
@@ -157,6 +161,32 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const christmasTotal = selectedPkg
     ? selectedPkg.pricing.total
     : (estimate?.christmas.total ?? 0);
+
+  // The client-visible roofline cost comparison is a workspace setting, so the
+  // rep preview needs the pricing config to know whether the homeowner sees it.
+  const { data: pricing } = useQuery({
+    queryKey: queryKeys.salesWizard.pricing(workspaceId),
+    queryFn: () => salesWizardApi.getPricing(workspaceId),
+    staleTime: 5 * 60_000,
+  });
+
+  // Mirror of the server's ``build_public_roofline_comparison`` so the preview
+  // shows exactly what the shared page will render (same pattern as
+  // ``resolveSelectedPackage`` mirroring the backend's recommended-package rule).
+  // Roofline against roofline from the à la carte costs — never a package's,
+  // which is $0 for a package that excludes the roofline.
+  const rooflineView = useMemo(() => {
+    if (!pricing?.roofline_comparison_enabled || !estimate) return null;
+    if (!estimate.permanent.enabled || !estimate.christmas.enabled) return null;
+    const seasonal = estimate.christmas.roofline_cost;
+    const multiYear = round2(seasonal * estimate.years);
+    return {
+      permanent_total: estimate.permanent.roofline_cost,
+      seasonal_total: seasonal,
+      seasonal_multi_year: multiYear,
+      savings: round2(multiYear - estimate.permanent.roofline_cost),
+    };
+  }, [pricing?.roofline_comparison_enabled, estimate]);
 
   // Any change to the priced inputs invalidates a previously saved link so the
   // "Saved to customer" confirmation can never read as current after an edit.
@@ -289,6 +319,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
           points: pkg.points,
           experience: pkg.experience,
         })),
+        roofline: rooflineView,
       }
     : null;
 

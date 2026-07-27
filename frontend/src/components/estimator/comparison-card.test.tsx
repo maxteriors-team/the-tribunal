@@ -100,3 +100,70 @@ describe("ComparisonCard seasonal package ladder", () => {
     expect(screen.getByText("$1,100.00")).toBeInTheDocument();
   });
 });
+
+// The roofline-only cost comparison: an opt-in, feet-free block that compares
+// roofline to roofline (decor excluded) so the numbers are like-for-like.
+const ROOFLINE: NonNullable<ComparisonView["roofline"]> = {
+  permanent_total: 3000,
+  seasonal_total: 800,
+  seasonal_multi_year: 4000,
+  savings: 1000,
+};
+
+describe("ComparisonCard roofline cost comparison", () => {
+  it("renders both roofline costs and the multi-year projection when present", () => {
+    render(<ComparisonCard view={{ ...BASE, roofline: ROOFLINE }} />);
+
+    expect(
+      screen.getByRole("heading", { name: /Roofline, side by side/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Permanent roofline")).toBeInTheDocument();
+    expect(screen.getByText("Seasonal roofline")).toBeInTheDocument();
+    // Roofline-only costs, distinct from the headline totals above ($4,200/$1,100).
+    expect(screen.getByText("$3,000.00")).toBeInTheDocument();
+    expect(screen.getByText("$800.00")).toBeInTheDocument();
+    // The seasonal side shows what paying every season adds up to.
+    expect(
+      screen.getByText(/\$4,000\.00 over 5 seasons/i),
+    ).toBeInTheDocument();
+  });
+
+  it("tags the permanent roofline as the saver when it wins the horizon", () => {
+    render(<ComparisonCard view={{ ...BASE, roofline: ROOFLINE }} />);
+
+    const tag = screen.getByText(/Saves \$1,000\.00/i);
+    const card = tag.closest(".cmp-card");
+    expect(card).toHaveClass("recommended");
+    expect(
+      within(card as HTMLElement).getByText("Permanent roofline"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the saver tag when seasonal is not more expensive over the horizon", () => {
+    render(
+      <ComparisonCard
+        view={{
+          ...BASE,
+          roofline: { ...ROOFLINE, seasonal_multi_year: 2500, savings: -500 },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Permanent roofline")).toBeInTheDocument();
+    expect(screen.queryByText(/^Saves /i)).not.toBeInTheDocument();
+  });
+
+  it("renders nothing when the workspace has the comparison off", () => {
+    // The flag defaults off server-side, so `roofline` is null/absent and the
+    // page renders exactly as it did before the feature existed.
+    const { rerender } = render(<ComparisonCard view={BASE} />);
+    expect(
+      screen.queryByText(/Roofline, side by side/i),
+    ).not.toBeInTheDocument();
+
+    rerender(<ComparisonCard view={{ ...BASE, roofline: null }} />);
+    expect(
+      screen.queryByText(/Roofline, side by side/i),
+    ).not.toBeInTheDocument();
+  });
+});

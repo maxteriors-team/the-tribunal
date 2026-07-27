@@ -47,11 +47,12 @@ vi.mock("@/lib/estimator/design", () => ({
 
 const ESTIMATE: LinearFeetEstimateResult = {
   feet: 100,
-  permanent: { enabled: true, total: 3300, per_ft: 32 },
+  permanent: { enabled: true, total: 3300, per_ft: 32, roofline_cost: 3200 },
   christmas: {
     enabled: true,
     total: 900,
     per_ft: 6,
+    roofline_cost: 600,
     items: [{ key: "wreaths", label: "Wreaths", unit: "each", cost: 96 }],
   },
   difference: 2400,

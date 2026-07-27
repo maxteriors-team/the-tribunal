@@ -49,6 +49,17 @@ export interface ComparisonView {
   // card renders a package grid under the permanent-vs-seasonal comparison so the
   // client can compare tiers. Empty/undefined => à la carte seasonal pricing.
   christmasPackages?: ComparisonPackageView[];
+  // Roofline-only, like-for-like cost comparison: permanent's one-time roofline
+  // install against the seasonal roofline paid each season. The headline totals
+  // can include decor, which makes them apples-to-oranges; this block is the
+  // honest version. Present only when the workspace turns the comparison on and
+  // both sides are offered — null/undefined renders nothing. Costs only, no feet.
+  roofline?: {
+    permanent_total: number;
+    seasonal_total: number;
+    seasonal_multi_year: number;
+    savings: number;
+  } | null;
 }
 
 function Perks({ perks }: { perks?: string[] }) {
@@ -71,6 +82,10 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
   const savings = Math.abs(view.multi_year_savings);
   const greeting = view.clientName ? `Prepared for ${view.clientName}` : null;
   const packages = view.christmasPackages ?? [];
+  const roofline = view.roofline ?? null;
+  // Permanent wins the roofline-only comparison when paying every season costs
+  // more over the horizon than installing once.
+  const rooflineSavings = roofline && roofline.savings > 0 ? roofline.savings : 0;
 
   return (
     <div className="cmp-wrap">
@@ -153,6 +168,50 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
           <Perks perks={view.christmas_perks} />
         </div>
       </div>
+
+      {roofline ? (
+        <div className="cmp-pkg-section">
+          <div className="cmp-pkg-head">
+            <h2>Roofline, side by side</h2>
+            <p>
+              The same run of roofline lights, priced both ways — decor left out
+              on purpose, so you&apos;re comparing like for like.
+            </p>
+          </div>
+          <div className="cmp-cards">
+            <div
+              className={`cmp-card${rooflineSavings > 0 ? " recommended" : ""}`}
+            >
+              {rooflineSavings > 0 ? (
+                <span className="cmp-card-tag">
+                  Saves {formatCurrency(rooflineSavings, currency)}
+                </span>
+              ) : null}
+              <h2>Permanent roofline</h2>
+              <div className="cmp-card-kind">One-time install</div>
+              <div className="cmp-price">
+                {formatCurrency(roofline.permanent_total, currency)}
+              </div>
+              <div className="cmp-price-note">
+                Paid once — lit every holiday after that
+              </div>
+            </div>
+
+            <div className="cmp-card">
+              <h2>Seasonal roofline</h2>
+              <div className="cmp-card-kind">Per season</div>
+              <div className="cmp-price">
+                {formatCurrency(roofline.seasonal_total, currency)}
+              </div>
+              <div className="cmp-price-note">
+                Every season ·{" "}
+                {formatCurrency(roofline.seasonal_multi_year, currency)} over{" "}
+                {view.years} seasons
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {packages.length > 0 ? (
         <div className="cmp-pkg-section">

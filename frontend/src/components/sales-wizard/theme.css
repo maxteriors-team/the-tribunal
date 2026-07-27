@@ -687,16 +687,26 @@
 .sales-wizard .cat-chip-check { position: absolute; top: 12px; right: 14px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bdr-g); color: var(--t4); font-size: 13px; font-weight: 700; transition: all 0.2s; }
 .sales-wizard .cat-chip.selected .cat-chip-check { background: var(--gold); border-color: var(--gold); color: #0a0a0a; }
 
-/* Product lines grouped by service (Landscape vs Christmas/Holiday) so the two
- * services read as visually separate even though selections share one quote.
- * `--svc-accent` is set per group inline (gold vs evergreen). */
+/* One quote = one service, so the three service paths (landscape / permanent /
+ * christmas) are chosen exclusively — a radio group, not checkboxes. The picked
+ * branch is accent-lit and holds a check; the others dim so the active path is
+ * never ambiguous. `--svc-accent` is set per group inline (gold / ice / evergreen).
+ * Only landscape sells more than one line, so it is the only group that also
+ * renders an inner `.cat-picker`. */
 .sales-wizard .svc-groups { display: flex; flex-direction: column; gap: 16px; }
-.sales-wizard .svc-group { border: 1px solid var(--bdr); border-top: 2px solid var(--svc-accent, var(--gold)); background: var(--s1); padding: 16px 16px 18px; }
-.sales-wizard .svc-group-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sales-wizard .svc-group { border: 1px solid var(--bdr); border-top: 2px solid var(--svc-accent, var(--gold)); background: var(--s1); padding: 16px 16px 18px; transition: opacity 0.18s, border-color 0.18s, background 0.18s; }
+.sales-wizard .svc-group:not(.selected) { opacity: 0.58; }
+.sales-wizard .svc-group:not(.selected):hover { opacity: 1; }
+.sales-wizard .svc-group.selected { border-color: var(--svc-accent, var(--gold)); background: var(--s2); }
+.sales-wizard .svc-group-head { display: flex; align-items: center; gap: 12px; }
+.sales-wizard .svc-group-head + .cat-picker { margin-top: 14px; }
+.sales-wizard .svc-group-pick { width: 100%; padding: 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .sales-wizard .svc-group-icon { width: 36px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--svc-accent, var(--gold)); color: var(--svc-accent, var(--gold)); background: rgba(255, 255, 255, 0.02); }
 .sales-wizard .svc-group-glyph { width: 19px; height: 19px; }
-.sales-wizard .svc-group-name { font-family: var(--font-cormorant), serif; font-size: 23px; font-weight: 400; color: var(--t1); line-height: 1.05; }
-.sales-wizard .svc-group-blurb { font-size: 11px; color: var(--t3); margin-top: 3px; line-height: 1.4; }
+.sales-wizard .svc-group-name { display: block; font-family: var(--font-cormorant), serif; font-size: 23px; font-weight: 400; color: var(--t1); line-height: 1.05; }
+.sales-wizard .svc-group-blurb { display: block; font-size: 11px; color: var(--t3); margin-top: 3px; line-height: 1.4; }
+.sales-wizard .svc-group-check { margin-left: auto; flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--bdr-g); color: var(--t4); font-size: 13px; font-weight: 700; transition: all 0.2s; }
+.sales-wizard .svc-group.selected .svc-group-check { background: var(--svc-accent, var(--gold)); border-color: var(--svc-accent, var(--gold)); color: #0a0a0a; }
 .sales-wizard .svc-group .cat-chip.selected .cat-chip-check { background: var(--svc-accent, var(--gold)); border-color: var(--svc-accent, var(--gold)); }
 
 /* Per-service accent pill on a builder step heading (Landscape / Holiday). */
