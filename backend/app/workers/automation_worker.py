@@ -36,6 +36,9 @@ Supported action type values
 - ``make_call``      : initiate an outbound AI voice call via Telnyx
 - ``enroll_campaign``: create a CampaignContact record (idempotent via upsert)
 - ``apply_tag`` / ``add_tag`` : add a normalized workspace tag to the contact
+- ``move_to_stage`` : move the contact's / event's opportunity to a pipeline
+                      stage (idempotent; re-firing against a settled stage is a
+                      no-op that emits nothing)
 - ``wait`` / ``delay``: no-op in the current cycle (action is recorded as
                         "scheduled" and re-evaluated on subsequent poll)
 
@@ -63,7 +66,9 @@ from app.models.automation_execution import AutomationExecution
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus, CampaignStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.opportunity import Opportunity
 from app.models.phone_number import PhoneNumber
+from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import ContactTag, Tag
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.automations.events import (
@@ -515,6 +520,14 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 elif action_type == "enroll_campaign" and contact is not None:
                     await self._action_enroll_campaign(automation, contact, action_config, db)
 
+                elif action_type == "move_to_stage":
+                    # Not a _CONTACT_ACTION: the event path can carry an
+                    # opportunity_id with no contact, so the handler does its own
+                    # None-safe resolution.
+                    await self._action_move_to_stage(
+                        automation, contact, action_config, payload, db
+                    )
+
                 elif action_type in ("apply_tag", "add_tag") and contact is not None:
                     await self._action_apply_tag(contact, action_config, db)
 
@@ -901,9 +914,163 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             tag=tag,
         )
 
+    async def _action_move_to_stage(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        config: dict[str, Any],
+        payload: dict[str, Any],
+        db: AsyncSession,
+    ) -> None:
+        """Move an opportunity to a chosen pipeline stage.
+
+        Config keys:
+            stage_id (str): UUID of the destination stage (required).
+            pipeline_id (str, optional): Narrows contact-based resolution to one
+                pipeline (and gives the builder context).
+
+        Opportunity resolution order:
+            1. ``payload["opportunity_id"]`` (present on opportunity_created /
+               deal_stage_changed events) — that opportunity, scoped to the
+               workspace.
+            2. else the contact's newest open, active opportunity (optionally
+               filtered by ``pipeline_id``).
+            3. else warn + skip (e.g. lead_created before any deal exists — a
+               documented v1 limitation; this action does not create deals).
+
+        Loop-safe: ``OpportunityService.move_stage`` only logs/emits when the
+        target stage differs from the current one, so a
+        ``move -> deal_stage_changed -> move`` re-fire against a settled stage is
+        a no-op that emits nothing.
+        """
+        stage_id = self._parse_uuid(config.get("stage_id"))
+        if stage_id is None:
+            self.logger.warning(
+                "move_to_stage missing or invalid stage_id",
+                automation_id=str(automation.id),
+                stage_id=config.get("stage_id"),
+            )
+            return
+
+        pipeline_id: uuid.UUID | None = None
+        if config.get("pipeline_id"):
+            pipeline_id = self._parse_uuid(config.get("pipeline_id"))
+            if pipeline_id is None:
+                self.logger.warning(
+                    "move_to_stage has invalid pipeline_id",
+                    pipeline_id=config.get("pipeline_id"),
+                )
+                return
+
+        # Validate the destination stage lives in this automation's workspace
+        # (via its pipeline) before touching any opportunity — mirrors the
+        # enroll_campaign workspace check and keeps moves tenant-scoped.
+        stage_in_workspace = await db.execute(
+            select(PipelineStage.id)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .where(
+                PipelineStage.id == stage_id,
+                Pipeline.workspace_id == automation.workspace_id,
+            )
+            .limit(1)
+        )
+        if stage_in_workspace.first() is None:
+            self.logger.warning(
+                "move_to_stage: stage not found in workspace",
+                stage_id=str(stage_id),
+                workspace_id=str(automation.workspace_id),
+            )
+            return
+
+        opportunity_id = await self._resolve_move_opportunity(
+            automation, contact, payload, pipeline_id, db
+        )
+        if opportunity_id is None:
+            self.logger.warning(
+                "move_to_stage: no opportunity to move",
+                automation_id=str(automation.id),
+                contact_id=contact.id if contact else None,
+            )
+            return
+
+        # Imported lazily to avoid any import cycle at module load (mirrors the
+        # notify_workspace_event import in _notify_automation_triggered).
+        from app.services.opportunities.opportunity_service import OpportunityService
+
+        await OpportunityService(db).move_stage(
+            automation.workspace_id,
+            opportunity_id,
+            stage_id,
+            user_id=None,
+            source="automation",
+        )
+        self.logger.info(
+            "Automation moved opportunity stage",
+            opportunity_id=str(opportunity_id),
+            stage_id=str(stage_id),
+        )
+
+    async def _resolve_move_opportunity(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        payload: dict[str, Any],
+        pipeline_id: uuid.UUID | None,
+        db: AsyncSession,
+    ) -> uuid.UUID | None:
+        """Pick the opportunity a ``move_to_stage`` action should act on.
+
+        Prefers an explicit ``payload["opportunity_id"]`` (event path), then falls
+        back to the contact's newest open, active opportunity. Every lookup is
+        scoped to the automation's workspace.
+        """
+        payload_oid = self._parse_uuid(payload.get("opportunity_id"))
+        if payload_oid is not None:
+            found = await db.execute(
+                select(Opportunity.id)
+                .where(
+                    Opportunity.id == payload_oid,
+                    Opportunity.workspace_id == automation.workspace_id,
+                )
+                .limit(1)
+            )
+            resolved = found.scalar_one_or_none()
+            if resolved is not None:
+                return resolved
+
+        if contact is not None:
+            filters: list[Any] = [
+                Opportunity.workspace_id == automation.workspace_id,
+                Opportunity.primary_contact_id == contact.id,
+                Opportunity.is_active.is_(True),
+                Opportunity.status == "open",
+            ]
+            if pipeline_id is not None:
+                filters.append(Opportunity.pipeline_id == pipeline_id)
+            found = await db.execute(
+                select(Opportunity.id)
+                .where(and_(*filters))
+                .order_by(Opportunity.created_at.desc())
+                .limit(1)
+            )
+            return found.scalar_one_or_none()
+
+        return None
+
     # ------------------------------------------------------------------ #
     # Helpers                                                              #
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _parse_uuid(value: Any) -> uuid.UUID | None:
+        """Parse ``value`` as a UUID, returning None for empty/invalid input."""
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return uuid.UUID(text)
+        except ValueError:
+            return None
 
     def _render_template(
         self,

@@ -83,6 +83,7 @@ import {
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { automationsApi } from "@/lib/api/automations";
 import { leadSourcesApi } from "@/lib/api/lead-sources";
+import { opportunitiesApi } from "@/lib/api/opportunities";
 import { tagsApi } from "@/lib/api/tags";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils/date";
@@ -119,6 +120,7 @@ const actionTypeConfig: Record<AutomationActionType, { label: string; icon: Luci
   enroll_campaign: { label: "Enroll in Campaign", icon: Megaphone },
   apply_tag: { label: "Apply Tag", icon: Tag },
   add_tag: { label: "Add Tag", icon: Tag },
+  move_to_stage: { label: "Move Deal Stage", icon: TrendingUp },
   wait: { label: "Wait", icon: Timer },
   delay: { label: "Delay", icon: Timer },
   update_status: { label: "Update Status", icon: Settings2 },
@@ -140,6 +142,7 @@ const ACTION_OPTIONS: AutomationActionType[] = [
   "make_call",
   "enroll_campaign",
   "apply_tag",
+  "move_to_stage",
   "wait",
 ];
 
@@ -200,6 +203,10 @@ export function AutomationsPage() {
   const [newTagValue, setNewTagValue] = useState("");
   const [newLeadSourceKey, setNewLeadSourceKey] = useState("");
   const [newTriggerTag, setNewTriggerTag] = useState("");
+  // Destination stage for a move_to_stage action; the owning pipeline is stored
+  // alongside it for builder context / opportunity disambiguation.
+  const [newStageId, setNewStageId] = useState("");
+  const [newStagePipelineId, setNewStagePipelineId] = useState("");
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
@@ -218,6 +225,11 @@ export function AutomationsPage() {
     queryFn: () => tagsApi.list(workspaceId!),
     enabled: !!workspaceId,
   });
+  const { data: pipelinesData } = useQuery({
+    queryKey: queryKeys.opportunities.pipelines(workspaceId ?? ""),
+    queryFn: () => opportunitiesApi.listPipelines(workspaceId!),
+    enabled: !!workspaceId,
+  });
   const createMutation = useCreateAutomation(workspaceId ?? "");
   const updateMutation = useUpdateAutomation(workspaceId ?? "");
   const deleteMutation = useDeleteAutomation(workspaceId ?? "");
@@ -227,7 +239,17 @@ export function AutomationsPage() {
   const leadSources = leadSourcesData ?? [];
   const tagOptions = tagsData?.items ?? [];
   const isTagAction = TAG_ACTIONS.includes(newActionType);
+  const isStageAction = newActionType === "move_to_stage";
   const isTagTrigger = newTriggerType === "contact_tagged";
+  const pipelines = pipelinesData ?? [];
+  // Resolve a stored stage_id to its display name for the action chip.
+  const stageNameById = (stageId: string): string | undefined => {
+    for (const pipeline of pipelines) {
+      const stage = pipeline.stages?.find((s) => s.id === stageId);
+      if (stage) return stage.name;
+    }
+    return undefined;
+  };
   const leadSourceNameByKey = (key: string) =>
     leadSources.find((source) => source.public_key === key)?.name ?? key;
 
@@ -247,6 +269,8 @@ export function AutomationsPage() {
     setNewTagValue("");
     setNewLeadSourceKey("");
     setNewTriggerTag("");
+    setNewStageId("");
+    setNewStagePipelineId("");
   };
 
   // Build the first action's config from the builder fields while preserving
@@ -259,6 +283,16 @@ export function AutomationsPage() {
         : {};
     if (TAG_ACTIONS.includes(newActionType)) {
       config.tag = newTagValue.trim();
+    }
+    // move_to_stage stores the destination stage plus its owning pipeline (kept
+    // for builder context and opportunity disambiguation on the backend).
+    if (newActionType === "move_to_stage") {
+      config.stage_id = newStageId;
+      if (newStagePipelineId) {
+        config.pipeline_id = newStagePipelineId;
+      } else {
+        delete config.pipeline_id;
+      }
     }
     return [{ type: newActionType, config }];
   };
@@ -292,6 +326,10 @@ export function AutomationsPage() {
     }
     if (TAG_ACTIONS.includes(newActionType) && !newTagValue.trim()) {
       toast.error("Enter a tag name for the Apply Tag action");
+      return;
+    }
+    if (newActionType === "move_to_stage" && !newStageId) {
+      toast.error("Pick the stage to move the deal to");
       return;
     }
     if (newTriggerType === "contact_tagged" && !newTriggerTag.trim()) {
@@ -338,6 +376,12 @@ export function AutomationsPage() {
     const firstAction = automation.actions[0];
     setNewActionType(firstAction?.type ?? "send_sms");
     setNewTagValue(typeof firstAction?.config?.tag === "string" ? firstAction.config.tag : "");
+    setNewStageId(
+      typeof firstAction?.config?.stage_id === "string" ? firstAction.config.stage_id : ""
+    );
+    setNewStagePipelineId(
+      typeof firstAction?.config?.pipeline_id === "string" ? firstAction.config.pipeline_id : ""
+    );
     const sourceKey = automation.trigger_config?.lead_source_public_key;
     setNewLeadSourceKey(typeof sourceKey === "string" ? sourceKey : "");
     const triggerTag = automation.trigger_config?.tag;
@@ -407,6 +451,8 @@ export function AutomationsPage() {
               setNewAutomationDescription("");
               setNewTriggerType("event");
               setNewActionType("send_sms");
+              setNewStageId("");
+              setNewStagePipelineId("");
             }
           }}
         >
@@ -563,6 +609,49 @@ export function AutomationsPage() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Created in this workspace if it doesn&apos;t exist yet, then added to the contact.
+                  </p>
+                </div>
+              )}
+              {isStageAction && (
+                <div className="space-y-2">
+                  <Label>Move deal to stage</Label>
+                  {pipelines.length > 0 ? (
+                    <Select
+                      value={newStageId}
+                      onValueChange={(v) => {
+                        setNewStageId(v);
+                        const owner = pipelines.find((p) =>
+                          p.stages?.some((s) => s.id === v)
+                        );
+                        setNewStagePipelineId(owner?.id ?? "");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pipelines.map((pipeline) => (
+                          <SelectGroup key={pipeline.id}>
+                            <SelectLabel>{pipeline.name}</SelectLabel>
+                            {[...pipeline.stages]
+                              .sort((a, b) => a.order - b.order)
+                              .map((stage) => (
+                                <SelectItem key={stage.id} value={stage.id}>
+                                  {stage.name}
+                                </SelectItem>
+                              ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No pipelines yet — create one in Opportunities first.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    When this runs, the contact&apos;s open deal is moved to this stage
+                    (e.g. Estimate Scheduled).
                   </p>
                 </div>
               )}
@@ -805,6 +894,18 @@ export function AutomationsPage() {
                           const ActionIcon = actionConfig.icon;
                           const tagValue =
                             typeof action.config?.tag === "string" ? action.config.tag : "";
+                          const stageId =
+                            typeof action.config?.stage_id === "string"
+                              ? action.config.stage_id
+                              : "";
+                          // Show the tag for tag actions, or the resolved stage
+                          // name for a move_to_stage action.
+                          const chip =
+                            action.type === "move_to_stage"
+                              ? stageId
+                                ? stageNameById(stageId) ?? "Stage"
+                                : ""
+                              : tagValue;
                           return (
                             <div
                               key={index}
@@ -812,9 +913,9 @@ export function AutomationsPage() {
                             >
                               <ActionIcon className="size-4 text-muted-foreground" />
                               <span className="text-sm">{actionConfig.label}</span>
-                              {tagValue && (
+                              {chip && (
                                 <span className="ml-auto rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                                  {tagValue}
+                                  {chip}
                                 </span>
                               )}
                             </div>

@@ -337,6 +337,88 @@ class OpportunityService:
         self._enforce_owner(opportunity, restrict_to_user_id)
         return OpportunityDetailResponse.model_validate(opportunity)
 
+    async def move_stage(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        stage_id: uuid.UUID,
+        *,
+        user_id: int | None = None,
+        source: str = "automation",
+    ) -> Opportunity | None:
+        """Move an opportunity to ``stage_id`` — the single source of truth for a
+        stage change.
+
+        Runs the full side-effect block: a ``stage_changed``
+        :class:`OpportunityActivity` (``user_id`` may be ``None`` for an
+        automation-driven move), a probability + ``stage_changed_at`` update, and
+        an :data:`EVENT_DEAL_STAGE_CHANGED` emission. ``source`` labels who moved
+        the deal (``"manual"`` for API callers, ``"automation"`` for the worker).
+
+        Idempotent: when ``stage_id`` already equals the opportunity's current
+        stage this is a no-op — no activity, no probability change, and **no
+        event** — so a ``move -> deal_stage_changed -> move`` cycle terminates
+        after one hop. Callers own the transaction (no commit here).
+
+        Returns the opportunity, or ``None`` when it does not exist in
+        ``workspace_id`` (callers treat that as skip, not error).
+        """
+        opportunity = await self.db.get(Opportunity, opportunity_id)
+        if opportunity is None or opportunity.workspace_id != workspace_id:
+            return None
+
+        # Idempotency / loop brake: nothing to do (and nothing to emit) when the
+        # deal is already in the requested stage.
+        if not stage_id or stage_id == opportunity.stage_id:
+            return opportunity
+
+        stage_query = select(PipelineStage).where(PipelineStage.id == stage_id)
+        stage = (await self.db.execute(stage_query)).scalar_one_or_none()
+        if not stage:
+            raise NotFoundError("Stage not found")
+
+        old_stage_query = select(PipelineStage).where(PipelineStage.id == opportunity.stage_id)
+        old_stage = (await self.db.execute(old_stage_query)).scalar_one_or_none()
+
+        self.db.add(
+            OpportunityActivity(
+                opportunity_id=opportunity.id,
+                user_id=user_id,
+                activity_type="stage_changed",
+                old_value=old_stage.name if old_stage else "None",
+                new_value=stage.name,
+                description=(
+                    f"Moved from {old_stage.name if old_stage else 'None'} to {stage.name}"
+                ),
+            )
+        )
+
+        opportunity.stage_id = stage_id
+        opportunity.probability = stage.probability
+        opportunity.stage_changed_at = datetime.now(UTC)
+
+        await emit_automation_event(
+            self.db,
+            workspace_id=workspace_id,
+            event_type=EVENT_DEAL_STAGE_CHANGED,
+            contact_id=opportunity.primary_contact_id,
+            payload={
+                "opportunity_id": str(opportunity.id),
+                "name": opportunity.name,
+                "old_stage": old_stage.name if old_stage else None,
+                "stage": stage.name,
+                "probability": stage.probability,
+                "source": source,
+            },
+        )
+        self.log.info(
+            "opportunity_stage_moved",
+            opportunity_id=str(opportunity.id),
+            stage_id=str(stage_id),
+            source=source,
+        )
+        return opportunity
+
     async def update_opportunity(
         self,
         workspace_id: uuid.UUID,
@@ -356,45 +438,17 @@ class OpportunityService:
                 update={"assigned_user_id": restrict_to_user_id}
             )
 
-        # Stage change — update probability and log activity
+        # Stage change — delegate to move_stage so the activity log, probability
+        # update, stage_changed_at, and deal_stage_changed event stay in one
+        # place. move_stage is idempotent, so passing the current stage is a safe
+        # no-op (the != guard below just avoids a redundant lookup).
         if opportunity_in.stage_id and opportunity_in.stage_id != opportunity.stage_id:
-            stage_query = select(PipelineStage).where(PipelineStage.id == opportunity_in.stage_id)
-            stage = (await self.db.execute(stage_query)).scalar_one_or_none()
-            if not stage:
-                raise NotFoundError("Stage not found")
-
-            old_stage_query = select(PipelineStage).where(PipelineStage.id == opportunity.stage_id)
-            old_stage = (await self.db.execute(old_stage_query)).scalar_one_or_none()
-
-            self.db.add(
-                OpportunityActivity(
-                    opportunity_id=opportunity_id,
-                    user_id=user_id,
-                    activity_type="stage_changed",
-                    old_value=old_stage.name if old_stage else "None",
-                    new_value=stage.name,
-                    description=(
-                        f"Moved from {old_stage.name if old_stage else 'None'} to {stage.name}"
-                    ),
-                )
-            )
-
-            opportunity.stage_id = opportunity_in.stage_id
-            opportunity.probability = stage.probability
-            opportunity.stage_changed_at = datetime.now(UTC)
-
-            await emit_automation_event(
-                self.db,
-                workspace_id=workspace_id,
-                event_type=EVENT_DEAL_STAGE_CHANGED,
-                contact_id=opportunity.primary_contact_id,
-                payload={
-                    "opportunity_id": str(opportunity.id),
-                    "name": opportunity.name,
-                    "old_stage": old_stage.name if old_stage else None,
-                    "stage": stage.name,
-                    "probability": stage.probability,
-                },
+            await self.move_stage(
+                workspace_id,
+                opportunity_id,
+                opportunity_in.stage_id,
+                user_id=user_id,
+                source="manual",
             )
 
         # Simple field updates

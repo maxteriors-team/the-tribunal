@@ -32,6 +32,7 @@ export type AutomationActionType =
   | "enroll_campaign"
   | "apply_tag"
   | "add_tag"
+  | "move_to_stage"
   | "wait"
   | "delay"
   | "update_status";
