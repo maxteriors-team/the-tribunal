@@ -117,31 +117,42 @@ function QuotesHub() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm">
+          {services.length === 1 ? (
+            // Nothing to pick when the workspace sells one service, so the hub
+            // keeps its original one-click entry point onto that branch.
+            <Button asChild size="sm">
+              <Link href={`/sales-wizard?service=${services[0].service}`}>
                 <Calculator className="h-4 w-4" />
                 Build a quote
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Pick a service</DropdownMenuLabel>
-              {services.map((entry) => (
-                <DropdownMenuItem key={entry.service} asChild>
-                  <Link href={`/sales-wizard?service=${entry.service}`}>
-                    <entry.Icon className="size-4" />
-                    <span className="flex flex-col gap-0.5">
-                      <span>{entry.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {entry.blurb}
+              </Link>
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Calculator className="h-4 w-4" />
+                  Build a quote
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Pick a service</DropdownMenuLabel>
+                {services.map((entry) => (
+                  <DropdownMenuItem key={entry.service} asChild>
+                    <Link href={`/sales-wizard?service=${entry.service}`}>
+                      <entry.Icon className="size-4" />
+                      <span className="flex flex-col gap-0.5">
+                        <span>{entry.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {entry.blurb}
+                        </span>
                       </span>
-                    </span>
-                  </Link>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
