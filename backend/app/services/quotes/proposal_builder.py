@@ -30,6 +30,7 @@ from app.schemas.proposal_wizard import (
     ProposalTierView,
     ProposalWizardPayload,
     WizardCategoryCount,
+    service_for_categories,
 )
 from app.schemas.quote import QuoteLineItemCreate
 from app.services.quotes import proposal_pricing as pp
@@ -396,6 +397,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         mockups=payload.mockups,
         categories=categories,
         category_sections=category_sections,
+        service=service_for_categories(categories),
         selected_financed_total=selected_financed,
         selected_cash_total=selected_cash,
         selected_monthly_payment=selected_monthly,

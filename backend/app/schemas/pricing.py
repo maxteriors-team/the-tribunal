@@ -496,6 +496,10 @@ class PricingSettings(BaseModel):
     christmas: ChristmasConfig = Field(default_factory=ChristmasConfig)
     # Horizon (seasons) for the permanent-vs-temporary multi-year savings pitch.
     comparison_years: int = Field(default=5, ge=1, le=30)
+    # Show the client a roofline-only cost comparison (permanent one-time install
+    # vs seasonal roofline per season) on the public comparison page. Off by
+    # default so existing workspaces and already-shared links are unchanged.
+    roofline_comparison_enabled: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -660,3 +664,4 @@ class PricingSettingsUpdate(BaseModel):
     permanent: PermanentConfig | None = None
     christmas: ChristmasConfig | None = None
     comparison_years: int | None = Field(default=None, ge=1, le=30)
+    roofline_comparison_enabled: bool | None = None

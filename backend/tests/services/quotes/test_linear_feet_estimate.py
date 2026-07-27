@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas.estimate import EstimateQuoteRequest, LinearFeetEstimateRequest
+from app.schemas.estimate import (
+    EstimateQuoteRequest,
+    LinearFeetEstimateRequest,
+    PublicChristmasComparison,
+    PublicComparison,
+    PublicPermanentComparison,
+)
 from app.schemas.pricing import (
     ChristmasConfig,
     FinancingConfig,
@@ -22,6 +28,7 @@ from app.services.quotes.quote_service import (
     QuoteService,
     _resolve_recommended_package,
     build_public_comparison_packages,
+    build_public_roofline_comparison,
 )
 
 
@@ -334,6 +341,128 @@ def test_public_packages_empty_when_workspace_sells_a_la_carte() -> None:
     # packages_enabled defaults False -> no ladder crosses to the client.
     result = _estimate(_config(), 100)
     assert build_public_comparison_packages(result.christmas_packages, None) == []
+
+
+# --------------------------------------------------------------------------- #
+# Public roofline-only cost comparison (opt-in, feet-free)
+# --------------------------------------------------------------------------- #
+def test_roofline_comparison_absent_by_default() -> None:
+    # Flag defaults off -> every existing workspace and already-shared link keeps
+    # rendering exactly as it does today.
+    config = _config()
+    assert config.roofline_comparison_enabled is False
+    assert build_public_roofline_comparison(config, _estimate(config, 100)) is None
+
+
+def test_roofline_comparison_compares_roofline_to_roofline_when_enabled() -> None:
+    config = _config(roofline_comparison_enabled=True)
+    # Decor is selected on purpose: the roofline block must ignore it, otherwise
+    # it's the same apples-to-oranges comparison as the headline totals.
+    computed = _estimate(config, 100, christmas_items={"trees": {"medium": 2}})
+    block = build_public_roofline_comparison(config, computed)
+
+    assert block is not None
+    # Permanent roofline track only: 100ft * $30 = $3,000 (no $300 controller).
+    assert block.permanent_total == 3000
+    # Seasonal roofline only: 100ft * $6 = $600 (the $520 of trees is excluded).
+    assert block.seasonal_total == 600
+    assert computed.christmas.total == 1120  # headline still includes the decor
+    # Projected over the configured horizon: $600 * 5 = $3,000, dead even here.
+    assert block.seasonal_multi_year == 3000
+    assert block.savings == 0
+
+
+def test_roofline_comparison_savings_follow_the_horizon() -> None:
+    config = _config(roofline_comparison_enabled=True, comparison_years=10)
+    block = build_public_roofline_comparison(config, _estimate(config, 100))
+
+    assert block is not None
+    assert block.seasonal_multi_year == 6000  # 600 * 10
+    assert block.savings == 3000  # 6000 - 3000 permanent roofline
+
+
+def test_roofline_comparison_uses_a_la_carte_not_the_package_roofline() -> None:
+    # "essential" has includes_roofline=False, so its priced roofline_cost is $0.
+    # Sourcing the block from a package would show a misleading $0 per season;
+    # the à la carte roofline cost is the honest, always-defined figure.
+    config = _config(
+        roofline_comparison_enabled=True,
+        christmas=ChristmasConfig(
+            enabled=True, roofline_per_ft=6, minimum=0, packages_enabled=True
+        ),
+    )
+    computed = _estimate(config, 100, selected_package="essential")
+    essential = next(p for p in computed.christmas_packages if p.key == "essential")
+    assert essential.pricing.roofline_cost == 0
+
+    block = build_public_roofline_comparison(config, computed)
+    assert block is not None
+    assert block.seasonal_total == 600
+
+
+@pytest.mark.parametrize(
+    "disabled",
+    [
+        {"permanent": PermanentConfig(enabled=False)},
+        {"christmas": ChristmasConfig(enabled=False)},
+    ],
+)
+def test_roofline_comparison_needs_both_sides_offered(disabled) -> None:
+    # A one-sided "comparison" isn't a comparison; suppress the block entirely.
+    config = _config(roofline_comparison_enabled=True, **disabled)
+    assert build_public_roofline_comparison(config, _estimate(config, 100)) is None
+
+
+def test_roofline_comparison_block_is_feet_free() -> None:
+    # Feet-privacy contract: costs only, never the measurement that produced them.
+    config = _config(roofline_comparison_enabled=True)
+    block = build_public_roofline_comparison(config, _estimate(config, 100))
+
+    assert block is not None
+    assert set(block.model_dump()) == {
+        "permanent_total",
+        "seasonal_total",
+        "seasonal_multi_year",
+        "savings",
+    }
+
+
+def test_public_comparison_payload_never_serializes_feet() -> None:
+    # Structural check on the whole public model (roofline block included): no
+    # nested key anywhere may expose a measurement or an internal per-foot rate.
+    config = _config(roofline_comparison_enabled=True)
+    computed = _estimate(config, 100, christmas_items={"trees": {"medium": 2}})
+    payload = PublicComparison(
+        business_name="Test Co",
+        brand_color="#000000",
+        accent_color="#ffffff",
+        permanent=PublicPermanentComparison(
+            enabled=computed.permanent.enabled, total=computed.permanent.total
+        ),
+        christmas=PublicChristmasComparison(
+            enabled=computed.christmas.enabled, total=computed.christmas.total
+        ),
+        difference=computed.difference,
+        years=computed.years,
+        temporary_multi_year=computed.temporary_multi_year,
+        permanent_one_time=computed.permanent_one_time,
+        multi_year_savings=computed.multi_year_savings,
+        roofline=build_public_roofline_comparison(config, computed),
+    ).model_dump()
+    assert payload["roofline"] is not None
+
+    forbidden = {"feet", "per_ft", "roofline_feet", "channels", "roofline_cost"}
+
+    def assert_clean(node) -> None:
+        if isinstance(node, dict):
+            assert forbidden.isdisjoint(node.keys()), node.keys()
+            for value in node.values():
+                assert_clean(value)
+        elif isinstance(node, list):
+            for value in node:
+                assert_clean(value)
+
+    assert_clean(payload)
 
 
 # --------------------------------------------------------------------------- #

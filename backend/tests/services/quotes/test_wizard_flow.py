@@ -403,6 +403,10 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
         # Grand total = landscape selected tier + both category sections.
         assert doc.grand_financed_total == doc.selected_financed_total + 3877.0 + 2429.0
 
+        # The rep wizard is single-service, but the API stays permissive: a payload
+        # spanning service paths still prices and is recorded as "mixed".
+        assert doc.service == "mixed"
+
         quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         names = [line.name for line in quote.line_items]
         assert "Permanent Holiday Lighting" in names
@@ -414,6 +418,7 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
             "permanent",
             "christmas",
         ]
+        assert quote.proposal_document["service"] == "mixed"
 
 
 async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
@@ -436,9 +441,54 @@ async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
         assert doc.selected_financed_total == 0
         assert [s.key for s in doc.category_sections] == ["christmas"]
         assert doc.grand_financed_total == doc.category_sections[0].financed_total
+        # Christmas is its own service path, branched apart from every other line.
+        assert doc.service == "christmas"
 
         quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         assert [line.name for line in quote.line_items] == ["Christmas Lighting"]
+        assert quote.total == doc.grand_financed_total
+        assert quote.proposal_document["service"] == "christmas"
+
+
+async def test_permanent_only_quote_is_its_own_service_path() -> None:
+    """Permanent LED track is a separate service from seasonal Christmas, so a
+    permanent-only quote is never labeled (or presented as) Christmas."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = ProposalWizardPayload(
+            client=WizardClient(first_name="Nia", last_name="Brooks"),
+            categories=["permanent"],
+            permanent=WizardPermanentSelection(feet=120, channels=4),
+        )
+        doc = await svc.preview_from_wizard(ws.id, payload)
+
+        assert doc.service == "permanent"
+        assert [s.key for s in doc.category_sections] == ["permanent"]
+        assert doc.tiers == []
+
+
+async def test_landscape_service_covers_bistro_without_becoming_mixed() -> None:
+    """Bistro belongs to the landscape service path, so landscape + bistro is one
+    service (not a cross-service mix)."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = ProposalWizardPayload(
+            client=WizardClient(first_name="Ada", last_name="Lin"),
+            categories=["landscape", "bistro"],
+            quantities=[WizardFixtureQty(item_id="up-zdc", quantity=6)],
+            bistro=WizardBistroSelection(product="color", tier="easy", feet=60),
+        )
+        doc = await svc.preview_from_wizard(ws.id, payload)
+
+        assert doc.service == "landscape"
+        assert doc.bistro is not None
+
+        quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert quote.proposal_document["service"] == "landscape"
         assert quote.total == doc.grand_financed_total
 
 

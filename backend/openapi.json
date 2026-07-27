@@ -8975,7 +8975,7 @@
         "type": "object"
       },
       "ChristmasEstimate": {
-        "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).\n\n``items`` is the priced decor breakdown (one entry per selected category) so\nthe rep can see what makes up the seasonal total.",
+        "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).\n\n``items`` is the priced decor breakdown (one entry per selected category) so\nthe rep can see what makes up the seasonal total. ``roofline_cost`` is the\nroofline-only component of ``total`` (no decor, takedown, or storage) — the\nlike-for-like counterpart to :attr:`PermanentEstimate.roofline_cost`.",
         "properties": {
           "enabled": {
             "title": "Enabled",
@@ -8990,6 +8990,11 @@
           },
           "per_ft": {
             "title": "Per Ft",
+            "type": "number"
+          },
+          "roofline_cost": {
+            "default": 0,
+            "title": "Roofline Cost",
             "type": "number"
           },
           "total": {
@@ -26872,7 +26877,7 @@
         "type": "object"
       },
       "PermanentEstimate": {
-        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).",
+        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).\n\n``roofline_cost`` is the track-only component of ``total`` (no controller or\nzone hardware), so it can be compared like-for-like against the seasonal\nroofline cost.",
         "properties": {
           "enabled": {
             "title": "Enabled",
@@ -26880,6 +26885,11 @@
           },
           "per_ft": {
             "title": "Per Ft",
+            "type": "number"
+          },
+          "roofline_cost": {
+            "default": 0,
+            "title": "Roofline Cost",
             "type": "number"
           },
           "total": {
@@ -27690,6 +27700,11 @@
           "permanent": {
             "$ref": "#/components/schemas/PermanentConfig"
           },
+          "roofline_comparison_enabled": {
+            "default": false,
+            "title": "Roofline Comparison Enabled",
+            "type": "boolean"
+          },
           "savings": {
             "$ref": "#/components/schemas/SavingsConfig"
           },
@@ -27809,6 +27824,17 @@
                 "type": "null"
               }
             ]
+          },
+          "roofline_comparison_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roofline Comparison Enabled"
           },
           "savings": {
             "anyOf": [
@@ -28678,6 +28704,17 @@
               }
             ],
             "title": "Selected Tier"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
           },
           "terms": {
             "anyOf": [
@@ -29882,6 +29919,16 @@
             "title": "Permanent Perks",
             "type": "array"
           },
+          "roofline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicRooflineComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "temporary_multi_year": {
             "title": "Temporary Multi Year",
             "type": "number"
@@ -30839,6 +30886,35 @@
           "status"
         ],
         "title": "PublicReviewRequest",
+        "type": "object"
+      },
+      "PublicRooflineComparison": {
+        "description": "Roofline-only, like-for-like cost comparison for the public page.\n\nThe headline seasonal total can include decor (trees/bushes/wreaths), which\nmakes it apples-to-oranges against permanent's roofline track. This block is\nthe honest version: permanent's one-time roofline install cost vs the\nseasonal roofline cost per season, projected over the configured horizon.\n\nFeet-free by construction like every other public model here — costs only,\nnever the measurement that produced them. Present only when the workspace\nenables ``roofline_comparison_enabled`` and both sides are offered.",
+        "properties": {
+          "permanent_total": {
+            "title": "Permanent Total",
+            "type": "number"
+          },
+          "savings": {
+            "title": "Savings",
+            "type": "number"
+          },
+          "seasonal_multi_year": {
+            "title": "Seasonal Multi Year",
+            "type": "number"
+          },
+          "seasonal_total": {
+            "title": "Seasonal Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "permanent_total",
+          "seasonal_total",
+          "seasonal_multi_year",
+          "savings"
+        ],
+        "title": "PublicRooflineComparison",
         "type": "object"
       },
       "PurchasePhoneNumberRequest": {

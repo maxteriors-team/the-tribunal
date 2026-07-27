@@ -11765,7 +11765,9 @@ export interface components {
          * @description Seasonal-lighting side of the estimate (rep view — includes per_ft).
          *
          *     ``items`` is the priced decor breakdown (one entry per selected category) so
-         *     the rep can see what makes up the seasonal total.
+         *     the rep can see what makes up the seasonal total. ``roofline_cost`` is the
+         *     roofline-only component of ``total`` (no decor, takedown, or storage) — the
+         *     like-for-like counterpart to :attr:`PermanentEstimate.roofline_cost`.
          */
         ChristmasEstimate: {
             /** Enabled */
@@ -11774,6 +11776,11 @@ export interface components {
             items?: components["schemas"]["SeasonalItemCost"][];
             /** Per Ft */
             per_ft: number;
+            /**
+             * Roofline Cost
+             * @default 0
+             */
+            roofline_cost: number;
             /** Total */
             total: number;
         };
@@ -18441,12 +18448,21 @@ export interface components {
         /**
          * PermanentEstimate
          * @description Permanent-lighting side of the estimate (rep view — includes per_ft).
+         *
+         *     ``roofline_cost`` is the track-only component of ``total`` (no controller or
+         *     zone hardware), so it can be compared like-for-like against the seasonal
+         *     roofline cost.
          */
         PermanentEstimate: {
             /** Enabled */
             enabled: boolean;
             /** Per Ft */
             per_ft: number;
+            /**
+             * Roofline Cost
+             * @default 0
+             */
+            roofline_cost: number;
             /** Total */
             total: number;
         };
@@ -18744,6 +18760,11 @@ export interface components {
             deposit?: components["schemas"]["DepositConfig"];
             financing?: components["schemas"]["FinancingConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
+            /**
+             * Roofline Comparison Enabled
+             * @default false
+             */
+            roofline_comparison_enabled: boolean;
             savings?: components["schemas"]["SavingsConfig"];
             tax?: components["schemas"]["TaxConfig"];
             /** Tier Order */
@@ -18770,6 +18791,8 @@ export interface components {
             deposit?: components["schemas"]["DepositConfig"] | null;
             financing?: components["schemas"]["FinancingConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
+            /** Roofline Comparison Enabled */
+            roofline_comparison_enabled?: boolean | null;
             savings?: components["schemas"]["SavingsConfig"] | null;
             tax?: components["schemas"]["TaxConfig"] | null;
             /** Tier Order */
@@ -19089,6 +19112,8 @@ export interface components {
             selected_monthly_payment: number;
             /** Selected Tier */
             selected_tier?: string | null;
+            /** Service */
+            service?: string | null;
             /** Terms */
             terms?: string | null;
             /** Tier Order */
@@ -19494,6 +19519,7 @@ export interface components {
             permanent_one_time: number;
             /** Permanent Perks */
             permanent_perks?: string[];
+            roofline?: components["schemas"]["PublicRooflineComparison"] | null;
             /** Temporary Multi Year */
             temporary_multi_year: number;
             /** Years */
@@ -19862,6 +19888,29 @@ export interface components {
             status: components["schemas"]["ReviewRequestStatusSchema"];
             /** Token */
             token: string;
+        };
+        /**
+         * PublicRooflineComparison
+         * @description Roofline-only, like-for-like cost comparison for the public page.
+         *
+         *     The headline seasonal total can include decor (trees/bushes/wreaths), which
+         *     makes it apples-to-oranges against permanent's roofline track. This block is
+         *     the honest version: permanent's one-time roofline install cost vs the
+         *     seasonal roofline cost per season, projected over the configured horizon.
+         *
+         *     Feet-free by construction like every other public model here — costs only,
+         *     never the measurement that produced them. Present only when the workspace
+         *     enables ``roofline_comparison_enabled`` and both sides are offered.
+         */
+        PublicRooflineComparison: {
+            /** Permanent Total */
+            permanent_total: number;
+            /** Savings */
+            savings: number;
+            /** Seasonal Multi Year */
+            seasonal_multi_year: number;
+            /** Seasonal Total */
+            seasonal_total: number;
         };
         /**
          * PurchasePhoneNumberRequest

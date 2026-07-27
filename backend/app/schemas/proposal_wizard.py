@@ -9,6 +9,7 @@ rendered by the public page). Client totals are never trusted.
 """
 
 import uuid
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +23,37 @@ from app.schemas.pricing import (
 
 # Product lines the unified builder can quote, in canonical display order.
 CATEGORY_ORDER = ("landscape", "permanent", "bistro", "christmas")
+
+# The three service paths a quote can come from, each mapping to the product
+# lines it owns. A quote is single-service in the rep experience: landscape
+# lighting, year-round permanent LED track, and seasonal Christmas are separate
+# branches, not toggles on one form. The frontend mirrors this map in
+# ``frontend/src/components/sales-wizard/use-sales-wizard.ts``.
+SERVICE_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "landscape": ("landscape", "bistro"),
+    "permanent": ("permanent",),
+    "christmas": ("christmas",),
+}
+
+
+def service_for_categories(categories: Sequence[str]) -> str | None:
+    """Which service path a set of product lines belongs to.
+
+    Returns ``"landscape"`` | ``"permanent"`` | ``"christmas"`` for a
+    single-service selection, ``"mixed"`` when the selection spans more than one
+    service path, and ``None`` when nothing recognizable was selected (the legacy
+    empty-categories payload, which the builder infers as landscape).
+    """
+    services = {
+        service
+        for service, lines in SERVICE_CATEGORIES.items()
+        if any(category in lines for category in categories)
+    }
+    if not services:
+        return None
+    if len(services) > 1:
+        return "mixed"
+    return next(iter(services))
 
 
 # --------------------------------------------------------------------------- #
@@ -261,6 +293,10 @@ class ProposalDocument(BaseModel):
     # Product lines included in this quote (canonical order) + their new sections.
     categories: list[str] = Field(default_factory=list)
     category_sections: list[ProposalCategorySection] = Field(default_factory=list)
+    # Which service path this quote came from: "landscape" | "permanent" |
+    # "christmas", "mixed" for a legacy cross-service payload, or null when no
+    # product line was recognized. Derived, never trusted from the client.
+    service: str | None = None
     # Selected tier's headline figures, surfaced for quick reads.
     selected_financed_total: float = 0
     selected_cash_total: float = 0

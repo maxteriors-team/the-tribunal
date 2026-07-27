@@ -63,23 +63,32 @@ class LinearFeetEstimateRequest(BaseModel):
 
 
 class PermanentEstimate(BaseModel):
-    """Permanent-lighting side of the estimate (rep view — includes per_ft)."""
+    """Permanent-lighting side of the estimate (rep view — includes per_ft).
+
+    ``roofline_cost`` is the track-only component of ``total`` (no controller or
+    zone hardware), so it can be compared like-for-like against the seasonal
+    roofline cost.
+    """
 
     enabled: bool
     total: float
     per_ft: float
+    roofline_cost: float = 0
 
 
 class ChristmasEstimate(BaseModel):
     """Seasonal-lighting side of the estimate (rep view — includes per_ft).
 
     ``items`` is the priced decor breakdown (one entry per selected category) so
-    the rep can see what makes up the seasonal total.
+    the rep can see what makes up the seasonal total. ``roofline_cost`` is the
+    roofline-only component of ``total`` (no decor, takedown, or storage) — the
+    like-for-like counterpart to :attr:`PermanentEstimate.roofline_cost`.
     """
 
     enabled: bool
     total: float
     per_ft: float
+    roofline_cost: float = 0
     items: list[SeasonalItemCost] = Field(default_factory=list)
 
 
@@ -250,6 +259,25 @@ class PublicComparisonPackage(BaseModel):
     recommended: bool = False
 
 
+class PublicRooflineComparison(BaseModel):
+    """Roofline-only, like-for-like cost comparison for the public page.
+
+    The headline seasonal total can include decor (trees/bushes/wreaths), which
+    makes it apples-to-oranges against permanent's roofline track. This block is
+    the honest version: permanent's one-time roofline install cost vs the
+    seasonal roofline cost per season, projected over the configured horizon.
+
+    Feet-free by construction like every other public model here — costs only,
+    never the measurement that produced them. Present only when the workspace
+    enables ``roofline_comparison_enabled`` and both sides are offered.
+    """
+
+    permanent_total: float  # one-time roofline install
+    seasonal_total: float  # roofline only, per season
+    seasonal_multi_year: float  # seasonal_total × years
+    savings: float  # seasonal_multi_year - permanent_total
+
+
 class PublicComparison(BaseModel):
     """Read-only, safe-fields-only comparison for the public token page.
 
@@ -277,3 +305,7 @@ class PublicComparison(BaseModel):
     # only when the workspace sells Christmas as packages. Feet-free (``total``
     # per package, never the roofline breakdown); empty for à la carte seasonal.
     christmas_packages: list[PublicComparisonPackage] = Field(default_factory=list)
+    # Roofline-only cost comparison, present only when the workspace turns on
+    # ``roofline_comparison_enabled`` and both sides are offered. ``None``
+    # otherwise, so the client page renders exactly as it does today by default.
+    roofline: PublicRooflineComparison | None = None

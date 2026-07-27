@@ -43,6 +43,7 @@ from app.schemas.estimate import (
     PublicComparison,
     PublicComparisonPackage,
     PublicPermanentComparison,
+    PublicRooflineComparison,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
@@ -138,6 +139,40 @@ def build_public_comparison_packages(
         )
         for pkg in packages
     ]
+
+
+def build_public_roofline_comparison(
+    config: PricingSettings,
+    computed: LinearFeetEstimateResult,
+) -> PublicRooflineComparison | None:
+    """Roofline-only, like-for-like cost comparison for the public page.
+
+    ``None`` unless the workspace opted in via ``roofline_comparison_enabled``
+    **and** both services are offered — so every existing workspace and every
+    already-shared link renders exactly as it does today.
+
+    The headline seasonal total can include decor (trees/bushes/wreaths), which
+    makes it apples-to-oranges against permanent's roofline track; this block
+    compares roofline to roofline. It deliberately uses the *à la carte* seasonal
+    roofline cost rather than the recommended package's: a package with
+    ``includes_roofline=False`` prices ``roofline_cost == 0``, which would render
+    a misleading $0. The à la carte figure is the true "what the roofline alone
+    costs each season" and is always well-defined. Feet-free — costs only.
+    """
+    if not config.roofline_comparison_enabled:
+        return None
+    if not (computed.permanent.enabled and computed.christmas.enabled):
+        return None
+
+    permanent_total = round(float(computed.permanent.roofline_cost), 2)
+    seasonal_total = round(float(computed.christmas.roofline_cost), 2)
+    seasonal_multi_year = round(seasonal_total * computed.years, 2)
+    return PublicRooflineComparison(
+        permanent_total=permanent_total,
+        seasonal_total=seasonal_total,
+        seasonal_multi_year=seasonal_multi_year,
+        savings=round(seasonal_multi_year - permanent_total, 2),
+    )
 
 
 # Statuses past which header/line edits and deletes are blocked: a quote the
@@ -1164,12 +1199,16 @@ class QuoteService:
         return LinearFeetEstimateResult(
             feet=float(req.feet),
             permanent=PermanentEstimate(
-                enabled=perm_enabled, total=perm_total, per_ft=float(perm.per_ft)
+                enabled=perm_enabled,
+                total=perm_total,
+                per_ft=float(perm.per_ft),
+                roofline_cost=float(perm.roofline_cost) if perm_enabled else 0.0,
             ),
             christmas=ChristmasEstimate(
                 enabled=xmas_enabled,
                 total=xmas_total,
                 per_ft=float(xmas_config.christmas.roofline_per_ft),
+                roofline_cost=float(xmas.roofline_cost) if xmas_enabled else 0.0,
                 items=list(xmas.items) if xmas_enabled else [],
             ),
             difference=difference,
@@ -1554,6 +1593,8 @@ class QuoteService:
             permanent_perks=computed.permanent_perks,
             christmas_perks=computed.christmas_perks,
             christmas_packages=christmas_packages,
+            # Opt-in roofline-vs-roofline cost block; None keeps today's payload.
+            roofline=build_public_roofline_comparison(config, computed),
         )
 
     # ------------------------------------------------------------------
