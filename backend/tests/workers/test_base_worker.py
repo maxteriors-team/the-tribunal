@@ -6,8 +6,9 @@ No external services, databases, or Redis required.
 """
 
 import asyncio
+import contextlib
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -75,6 +76,27 @@ class ErrorWorker(BaseWorker):
     async def _process_items(self) -> None:
         self.process_count += 1
         raise RuntimeError("Simulated processing error")
+
+
+class LoopCrashError(BaseException):
+    """A non-``Exception`` error that escapes the loop's ``except Exception``."""
+
+
+class CrashingWorker(BaseWorker):
+    """Worker whose run loop dies via a ``BaseException`` on the first cycle.
+
+    A plain ``Exception`` from ``_process_items`` is caught and logged by the
+    run loop; a ``BaseException`` escapes that guard and kills the task —
+    reproducing the silent worker death seen in production.
+    """
+
+    COMPONENT_NAME = "crashing_worker"
+
+    def __init__(self) -> None:
+        super().__init__(poll_interval=0)
+
+    async def _process_items(self) -> None:
+        raise LoopCrashError("boom")
 
 
 class TestBaseWorkerInit:
@@ -233,6 +255,56 @@ class TestHeartbeatAndLogging:
         # still written so /readyz reflects "loop is alive" rather than
         # "loop is wedged".
         assert fake_redis.setex.await_count >= 1
+
+    async def test_run_loop_crash_is_logged_with_the_exception(self) -> None:
+        """A ``BaseException`` that kills the run-loop task is logged loudly.
+
+        Regression: the task is fire-and-forget, so a ``BaseException`` the
+        loop's ``except Exception`` can't catch used to kill it silently — the
+        worker went quiet with a stale heartbeat and no traceback (the observed
+        production failure). The done-callback must surface the cause.
+        """
+        worker = CrashingWorker()
+        mock_logger = MagicMock()
+        worker.logger = mock_logger
+        await worker.start()
+        # The loop dies on its first cycle; await it so the error is retrieved.
+        assert worker._task is not None
+        with contextlib.suppress(BaseException):
+            await worker._task
+        await asyncio.sleep(0)  # let the done-callback run
+
+        crashes = [
+            call
+            for call in mock_logger.error.call_args_list
+            if call.args and call.args[0] == "worker_run_loop_crashed"
+        ]
+        assert crashes, "expected a worker_run_loop_crashed log"
+        assert crashes[0].kwargs.get("error") == "LoopCrashError"
+        assert crashes[0].kwargs.get("exc_info") is not None
+
+    async def test_clean_stop_is_not_reported_as_a_crash(self) -> None:
+        """A normal ``stop()`` must not be mistaken for an unexpected death."""
+        worker = ConcreteWorker(poll_interval=0)
+        mock_logger = MagicMock()
+        worker.logger = mock_logger
+        await worker.start()
+        await asyncio.sleep(0.02)
+        await worker.stop()
+        await asyncio.sleep(0)  # allow any pending done-callback to run
+
+        spurious = [
+            call
+            for call in mock_logger.error.call_args_list
+            if call.args
+            and call.args[0]
+            in {
+                "worker_run_loop_crashed",
+                "worker_run_loop_cancelled",
+                "worker_run_loop_exited",
+            }
+        ]
+        assert not spurious, f"clean stop should not log a death: {spurious}"
 
     async def test_record_items_processed_feeds_into_loop_completed_log(self) -> None:
         """``record_items_processed`` increments the per-cycle counter."""

@@ -108,6 +108,9 @@ class BaseWorker(ABC):
         """
         self.running = False
         self._task: asyncio.Task[None] | None = None
+        # Set only by :meth:`stop`, so :meth:`_on_run_loop_done` can tell an
+        # intentional shutdown from an unexpected death of the run-loop task.
+        self._stopping = False
         self._poll_interval = poll_interval or self.POLL_INTERVAL_SECONDS
         self._worker_label = self.COMPONENT_NAME or self.__class__.__name__.lower()
         self._items_this_cycle = 0
@@ -138,8 +141,15 @@ class BaseWorker(ABC):
             return
 
         self.running = True
+        self._stopping = False
         await self._on_start()
         self._task = asyncio.create_task(self._run_loop())
+        # The run loop is fire-and-forget (only ``stop`` awaits it), so a
+        # ``BaseException`` the loop's ``except Exception`` can't catch — or a
+        # raise from the heartbeat/sleep/logging path outside that guard — would
+        # otherwise kill the task silently: the worker just goes quiet with a
+        # stale heartbeat and no traceback. This callback makes that death loud.
+        self._task.add_done_callback(self._on_run_loop_done)
         self.logger.info(
             "Worker started",
             max_concurrency=self._max_concurrency,
@@ -161,6 +171,7 @@ class BaseWorker(ABC):
         4. Cancel the run-loop task and await it.
         """
         self.running = False
+        self._stopping = True
         await self._drain_inflight()
         if self._task:
             self._task.cancel()
@@ -169,6 +180,41 @@ class BaseWorker(ABC):
             self._task = None
         await self._on_stop()
         self.logger.info("Worker stopped")
+
+    def _on_run_loop_done(self, task: asyncio.Task[None]) -> None:
+        """Log why the run-loop task ended, unless we asked it to stop.
+
+        Registered as the run-loop task's done-callback so an unexpected exit is
+        never silent. Calling :meth:`asyncio.Task.exception` here also retrieves
+        the exception, suppressing asyncio's "Task exception was never
+        retrieved" warning. It only logs — restarting a dead worker is out of
+        scope here (a supervisor is a separate concern).
+        """
+        # Ignore a task we've already torn down or replaced (e.g. stop() set
+        # ``_task`` to None, or a restart swapped in a new one).
+        if task is not self._task or self._stopping:
+            return
+        if task.cancelled():
+            self.logger.error(
+                "worker_run_loop_cancelled",
+                worker=self._worker_label,
+                detail="run loop was cancelled without a stop() request",
+            )
+            return
+        exc = task.exception()
+        if exc is not None:
+            self.logger.error(
+                "worker_run_loop_crashed",
+                worker=self._worker_label,
+                error=type(exc).__name__,
+                exc_info=exc,
+            )
+        else:
+            self.logger.error(
+                "worker_run_loop_exited",
+                worker=self._worker_label,
+                detail="run loop returned without a stop() request",
+            )
 
     async def _drain_inflight(self) -> None:
         """Wait for in-flight per-item tasks to finish, bounded by timeout.
