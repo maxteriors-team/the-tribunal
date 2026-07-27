@@ -1244,9 +1244,7 @@ class QuoteService:
         title, pricing = self._price_estimate_side(config, req)
         line_items = self._estimate_line_items(pricing)
         if not line_items:
-            raise ValidationError(
-                "This estimate has nothing to quote yet — draw the design first."
-            )
+            raise ValidationError("This estimate has nothing to quote yet — draw the design first.")
 
         first_name, last_name = _split_name(req.client_name)
         contact_id = await self._resolve_or_create_contact(
