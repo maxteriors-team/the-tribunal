@@ -163,10 +163,16 @@ class TestReadyz:
         assert body["checks"]["postgres"]["error"] == "timeout"
         assert body["checks"]["redis"]["error"] == "timeout"
 
-    async def test_readyz_returns_503_when_worker_heartbeat_missing(
+    async def test_readyz_stays_200_when_worker_heartbeat_missing(
         self, client: AsyncClient
     ) -> None:
-        """Missing heartbeat ⇒ worker is wedged ⇒ /readyz flips to 503."""
+        """A wedged worker is reported, not fatal — the API can still serve traffic.
+
+        Gating readiness on heartbeats made Railway restart the container over a
+        stalled worker, which cold-started all ~28 workers at once, re-exhausted
+        the DB pool, and wedged the heartbeats again. Postgres and Redis were
+        healthy through every one of those restarts.
+        """
         with (
             patch(
                 "app.api.v1.health._check_postgres",
@@ -182,11 +188,59 @@ class TestReadyz:
             ),
         ):
             response = await client.get("/readyz")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "degraded"
+        assert body["checks"]["workers"]["ok"] is False
+        assert body["checks"]["workers"]["heartbeats"] == {"campaign_worker": False}
+
+    async def test_readyz_still_503s_when_postgres_is_down(self, client: AsyncClient) -> None:
+        """Relaxing the worker gate must not relax the dependency gate."""
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(False, "timeout")),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_worker_heartbeats",
+                new=AsyncMock(return_value=(True, {"campaign_worker": True}, None)),
+            ),
+        ):
+            response = await client.get("/readyz")
+        assert response.status_code == 503
+        assert response.json()["status"] == "unavailable"
+
+    async def test_workers_health_503s_on_missing_heartbeat(self, client: AsyncClient) -> None:
+        """The dedicated worker probe is where a wedged worker *does* fail."""
+        with patch(
+            "app.api.v1.health._check_worker_heartbeats",
+            new=AsyncMock(
+                return_value=(False, {"campaign_worker": False, "nudge_worker": True}, None)
+            ),
+        ):
+            response = await client.get("/workers/health")
         assert response.status_code == 503
         body = response.json()
         assert body["status"] == "unavailable"
-        assert body["checks"]["workers"]["ok"] is False
-        assert body["checks"]["workers"]["heartbeats"] == {"campaign_worker": False}
+        assert body["missing"] == ["campaign_worker"]
+
+    async def test_workers_health_200_when_all_heartbeats_fresh(
+        self, client: AsyncClient
+    ) -> None:
+        """All heartbeats fresh ⇒ the worker probe passes."""
+        with patch(
+            "app.api.v1.health._check_worker_heartbeats",
+            new=AsyncMock(return_value=(True, {"campaign_worker": True}, None)),
+        ):
+            response = await client.get("/workers/health")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["missing"] == []
 
     async def test_readyz_returns_200_when_all_heartbeats_present(
         self, client: AsyncClient

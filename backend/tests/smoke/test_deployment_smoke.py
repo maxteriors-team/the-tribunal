@@ -70,20 +70,37 @@ def test_livez_reports_ok(client: httpx.Client) -> None:
 
 
 def test_readyz_is_ready(client: httpx.Client) -> None:
-    """Readiness probe returns 200 and every dependency check passes.
+    """Readiness probe returns 200 and both gating dependencies pass.
 
-    A 503 here means the deployment booted but a dependency (Postgres, Redis,
-    or a background worker heartbeat) is unhealthy — the body lists which one.
+    A 503 here means the deployment booted but Postgres or Redis is unhealthy —
+    the body lists which one. Worker heartbeats are reported in the same payload
+    but do not gate readiness; ``test_workers_are_heartbeating`` covers those.
     """
     response = client.get("/readyz")
     assert response.status_code == 200, (
         f"/readyz returned {response.status_code}, not ready: {response.text}"
     )
     body = response.json()
-    assert body["status"] == "ok", body
+    assert body["status"] in {"ok", "degraded"}, body
     checks = body["checks"]
-    unhealthy = {name: c for name, c in checks.items() if not c.get("ok", False)}
+    gating = {"startup", "postgres", "redis"}
+    unhealthy = {
+        name: c for name, c in checks.items() if name in gating and not c.get("ok", False)
+    }
     assert not unhealthy, f"unhealthy dependencies: {unhealthy}"
+
+
+def test_workers_are_heartbeating(client: httpx.Client) -> None:
+    """Every background worker has a fresh heartbeat.
+
+    Deliberately separate from readiness: a wedged worker should page a human
+    without giving the orchestrator a reason to restart or drain the API.
+    """
+    response = client.get("/workers/health")
+    assert response.status_code == 200, (
+        f"workers unhealthy, missing heartbeats: {response.text}"
+    )
+    assert response.json()["missing"] == [], response.text
 
 
 def test_version_endpoint_serves_sha(client: httpx.Client) -> None:

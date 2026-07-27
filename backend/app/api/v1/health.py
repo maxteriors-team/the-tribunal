@@ -145,7 +145,20 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
     * ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished
       validating config and starting workers yet (or shutdown is in progress).
     * Either Postgres or Redis fails / times out (2s budget each).
-    * Any expected worker is missing a fresh heartbeat key.
+
+    Worker heartbeats are **reported but not gating**. This endpoint answers one
+    question for the orchestrator: "can this container serve HTTP traffic?" A
+    wedged nudge worker does not make the API unable to serve requests, but
+    failing readiness on it made Railway restart the whole container — which
+    cold-starts all ~28 workers at once, and ``start_all_workers`` runs each
+    worker's first cycle immediately (jitter is only applied *after* the first
+    sleep). That thundering herd re-exhausted the DB pool and wedged the
+    heartbeats again, so the restart loop sustained the very outage it was
+    reacting to. Every observed ``readyz_failed`` had ``postgres_ok=True`` and
+    ``redis_ok=True`` — the API was healthy and being restarted anyway.
+
+    Worker health is still surfaced in ``checks.workers`` here and, on its own,
+    at ``/workers/health``, which alerting should page on instead.
 
     Orchestrators (Railway, Kubernetes) use this to hold traffic on the
     previous container until the new one finishes booting and to drain a
@@ -182,7 +195,16 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
         },
     }
 
-    if not (postgres_ok and redis_ok and workers_ok):
+    missing_heartbeats = [label for label, ok in worker_states.items() if not ok]
+    if not workers_ok:
+        # Loud, but deliberately non-gating — see the docstring.
+        logger.warning(
+            "worker_heartbeats_degraded",
+            worker_err=worker_err,
+            missing_heartbeats=missing_heartbeats,
+        )
+
+    if not (postgres_ok and redis_ok):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         logger.warning(
             "readyz_failed",
@@ -192,11 +214,35 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
             redis_err=redis_err,
             workers_ok=workers_ok,
             worker_err=worker_err,
-            missing_heartbeats=[label for label, ok in worker_states.items() if not ok],
+            missing_heartbeats=missing_heartbeats,
         )
         return {"status": "unavailable", "checks": checks}
 
+    if not workers_ok:
+        return {"status": "degraded", "checks": checks}
+
     return {"status": "ok", "checks": checks}
+
+
+@router.get("/workers/health", tags=["Health"])
+async def workers_health(response: Response) -> dict[str, Any]:
+    """Worker-heartbeat probe — the gating check ``/readyz`` deliberately isn't.
+
+    Split out so alerting can page on wedged workers without an orchestrator
+    treating them as a reason to restart (or refuse traffic to) the API.
+    Returns 503 when any expected worker has no fresh heartbeat key.
+    """
+    workers_ok, worker_states, worker_err = await _check_worker_heartbeats()
+
+    if not workers_ok:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "status": "ok" if workers_ok else "unavailable",
+        "error": worker_err,
+        "heartbeats": worker_states,
+        "missing": [label for label, ok in worker_states.items() if not ok],
+    }
 
 
 @router.get("/version", tags=["Health"])

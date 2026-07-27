@@ -71793,7 +71793,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Readiness probe — startup complete + Postgres + Redis reachable.\n\nReturns HTTP 503 when:\n\n* ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished\n  validating config and starting workers yet (or shutdown is in progress).\n* Either Postgres or Redis fails / times out (2s budget each).\n* Any expected worker is missing a fresh heartbeat key.\n\nOrchestrators (Railway, Kubernetes) use this to hold traffic on the\nprevious container until the new one finishes booting and to drain a\ncontainer before it stops accepting requests.",
+        "description": "Readiness probe — startup complete + Postgres + Redis reachable.\n\nReturns HTTP 503 when:\n\n* ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished\n  validating config and starting workers yet (or shutdown is in progress).\n* Either Postgres or Redis fails / times out (2s budget each).\n\nWorker heartbeats are **reported but not gating**. This endpoint answers one\nquestion for the orchestrator: \"can this container serve HTTP traffic?\" A\nwedged nudge worker does not make the API unable to serve requests, but\nfailing readiness on it made Railway restart the whole container — which\ncold-starts all ~28 workers at once, and ``start_all_workers`` runs each\nworker's first cycle immediately (jitter is only applied *after* the first\nsleep). That thundering herd re-exhausted the DB pool and wedged the\nheartbeats again, so the restart loop sustained the very outage it was\nreacting to. Every observed ``readyz_failed`` had ``postgres_ok=True`` and\n``redis_ok=True`` — the API was healthy and being restarted anyway.\n\nWorker health is still surfaced in ``checks.workers`` here and, on its own,\nat ``/workers/health``, which alerting should page on instead.\n\nOrchestrators (Railway, Kubernetes) use this to hold traffic on the\nprevious container until the new one finishes booting and to drain a\ncontainer before it stops accepting requests.",
         "operationId": "readyz_readyz_get",
         "responses": {
           "200": {
@@ -71998,6 +71998,31 @@
         "summary": "Telnyx Voice Webhook",
         "tags": [
           "webhooks"
+        ]
+      }
+    },
+    "/workers/health": {
+      "get": {
+        "description": "Worker-heartbeat probe — the gating check ``/readyz`` deliberately isn't.\n\nSplit out so alerting can page on wedged workers without an orchestrator\ntreating them as a reason to restart (or refuse traffic to) the API.\nReturns 503 when any expected worker has no fresh heartbeat key.",
+        "operationId": "workers_health_workers_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Workers Health Workers Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Workers Health",
+        "tags": [
+          "Health",
+          "Health"
         ]
       }
     }
