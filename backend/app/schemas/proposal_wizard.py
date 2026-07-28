@@ -315,3 +315,55 @@ class ProposalDocument(BaseModel):
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
     notes: str | None = None
     terms: str | None = None
+
+
+# Fields of :class:`ProposalDocument` that may cross to the unauthenticated
+# client proposal page. Deliberately an ALLOWLIST, not a denylist: a new field
+# added to the document is withheld from clients until someone adds it here, so
+# leaking internal data takes an explicit act rather than an oversight.
+#
+# ``fulfillment`` is the field this guards today — distributor part numbers and
+# the bill-of-materials, which the client must never see.
+CLIENT_SAFE_DOCUMENT_FIELDS: frozenset[str] = frozenset(
+    {
+        "version",
+        "client",
+        "tier_order",
+        "tiers",
+        "selected_tier",
+        "headline_tier",
+        "additional_charges",
+        "care_plan",
+        "bistro",
+        "financing",
+        "night_preview",
+        "mockups",
+        "categories",
+        "category_sections",
+        "service",
+        "selected_financed_total",
+        "selected_cash_total",
+        "selected_monthly_payment",
+        "grand_financed_total",
+        "grand_cash_total",
+        "grand_monthly_payment",
+        "deposit_mode",
+        "deposit_value",
+        "deposit_amount",
+        "notes",
+        "terms",
+    }
+)
+
+
+def client_safe_document(document: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Copy a stored ``proposal_document`` down to its client-safe fields.
+
+    The stored snapshot mixes presentation data with staff-only data (see
+    :data:`CLIENT_SAFE_DOCUMENT_FIELDS`). Never hand the raw dict to the public
+    proposal payload — run it through here first. Returns a new dict; the
+    caller's snapshot is not mutated.
+    """
+    if document is None:
+        return None
+    return {k: v for k, v in document.items() if k in CLIENT_SAFE_DOCUMENT_FIELDS}

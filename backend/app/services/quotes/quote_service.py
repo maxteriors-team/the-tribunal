@@ -58,7 +58,11 @@ from app.schemas.proposal import (
     PublicProposalBranding,
     PublicProposalLineItem,
 )
-from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
+from app.schemas.proposal_wizard import (
+    ProposalDocument,
+    ProposalWizardPayload,
+    client_safe_document,
+)
 from app.schemas.quote import (
     PaginatedQuotes,
     QuoteConvertResponse,
@@ -78,6 +82,7 @@ from app.services.automations.events import (
     emit_automation_event,
 )
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.notifications import notify_workspace_event
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
 from app.services.quotes.proposal_pricing import (
@@ -178,6 +183,14 @@ def build_public_roofline_comparison(
 # Statuses past which header/line edits and deletes are blocked: a quote the
 # customer has decided on (or that lapsed) is a historical record.
 _LOCKED_STATUSES = frozenset({"approved", "declined", "expired"})
+
+
+def _fmt_qty(qty: object) -> str:
+    """Render a fulfillment quantity for a human: ``2`` not ``2.0``, ``1.5`` intact."""
+    try:
+        return f"{float(qty):g}"  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return "?"
 
 
 def _split_name(full_name: str | None) -> tuple[str | None, str | None]:
@@ -764,7 +777,66 @@ class QuoteService:
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))
+        await self._notify_fulfillment_parts(quote)
         return QuoteDetailResponse.model_validate(quote)
+
+    async def _notify_fulfillment_parts(self, quote: Quote) -> None:
+        """Email the workspace the distributor parts list for an approved quote.
+
+        The approved quote's ``proposal_document.fulfillment`` is the aggregated
+        SKU bill-of-materials for the selected tier — the list someone has to hand
+        the distributor to actually order the job. Sending it on approval turns a
+        buried JSONB field into the order sheet.
+
+        Best-effort and post-commit: the approval already succeeded and must not
+        be rolled back by a mail failure. Silent no-op when the quote carries no
+        parts (a flat, non-wizard quote).
+        """
+        document = quote.proposal_document or {}
+        raw_parts = document.get("fulfillment") or []
+        parts = [p for p in raw_parts if isinstance(p, dict) and str(p.get("sku") or "").strip()]
+        if not parts:
+            return
+
+        # ``derive_outbound_key`` inside the notifier dedupes per (event, user),
+        # so an approve retry can never double-order.
+        details = {
+            str(part["sku"]).strip(): (
+                f"Qty {_fmt_qty(part.get('qty', 0))}"
+                + (f" — {part['description']}" if part.get("description") else "")
+            )
+            for part in parts
+        }
+        client = document.get("client") or {}
+        client_name = " ".join(
+            str(client.get(field) or "").strip()
+            for field in ("first_name", "last_name")
+            if client.get(field)
+        ).strip()
+        where = client_name or "this job"
+        title = f"Order parts — {quote.number}"
+        body = f"{quote.number} for {where} was accepted. {len(parts)} SKUs to order."
+
+        try:
+            await notify_workspace_event(
+                self.db,
+                workspace_id=quote.workspace_id,
+                notification_type="quote_accepted",
+                title=title,
+                body=body,
+                data={"type": "quote_accepted", "quoteId": str(quote.id)},
+                email_subject=title,
+                email_heading="Parts to Order",
+                email_intro=body,
+                email_details=details,
+                dedupe_key=f"quote_fulfillment:{quote.id}",
+            )
+        except Exception:
+            self.log.exception(
+                "quote_fulfillment_notify_failed",
+                quote_id=str(quote.id),
+                workspace_id=str(quote.workspace_id),
+            )
 
     async def decline_quote(
         self,
@@ -916,7 +988,10 @@ class QuoteService:
             deposit_amount=deposit_due,
             deposit_paid=deposit_paid,
             deposit_required=deposit_due is not None and not deposit_paid,
-            proposal_document=quote.proposal_document,
+            # Allowlisted copy — the stored snapshot carries the staff-only
+            # fulfillment sheet (distributor SKUs), which must not reach the
+            # unauthenticated client page.
+            proposal_document=client_safe_document(quote.proposal_document),
             line_items=[
                 PublicProposalLineItem(
                     name=li.name,

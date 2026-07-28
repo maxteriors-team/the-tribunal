@@ -1,0 +1,144 @@
+"""The client proposal page must never see the internal fulfillment sheet.
+
+``quote.proposal_document`` mixes client presentation data with the staff-only
+SKU bill-of-materials the distributor order is built from. The public,
+no-auth ``/p/quotes/{token}`` payload embeds that snapshot, so the sanitizer in
+:func:`client_safe_document` is the only thing standing between a homeowner and
+our part numbers, and these tests pin it down:
+
+* the ``fulfillment`` key and every SKU string are gone from the wire payload;
+* the presentation fields the client page actually renders survive;
+* the allowlist stays in sync with ``ProposalDocument`` so a newly added field
+  fails here rather than silently shipping to clients.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from typing import Any
+
+import pytest
+
+from app.models.quote import Quote
+from app.models.workspace import Workspace
+from app.schemas.proposal_wizard import (
+    CLIENT_SAFE_DOCUMENT_FIELDS,
+    ProposalDocument,
+    client_safe_document,
+)
+from app.services.quotes import QuoteService
+
+# Real part numbers from the seeded Maxteriors price book.
+PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
+
+# Fields on ProposalDocument that are deliberately staff-only. Adding a field to
+# the document without classifying it here or in the allowlist fails the guard
+# test below — the whole point of the allowlist being opt-in.
+INTERNAL_ONLY_FIELDS = frozenset({"fulfillment"})
+
+
+def _document() -> dict[str, Any]:
+    """A stored snapshot carrying both client copy and the internal parts list."""
+    return {
+        "version": 1,
+        "client": {"first_name": "Dana", "last_name": "Homeowner"},
+        "tier_order": ["best"],
+        "tiers": [],
+        "selected_tier": "best",
+        "selected_financed_total": 5200.0,
+        "notes": "Install week of the 14th.",
+        "fulfillment": [
+            {"sku": "59409312", "description": "Luxor 300W Transformer", "qty": 1},
+            {"sku": "59409010", "description": "Luxor WiFi Module", "qty": 1},
+            {"sku": "BM-050-C-AB", "description": "Mounting Bracket", "qty": 4},
+        ],
+    }
+
+
+def test_allowlist_covers_every_document_field() -> None:
+    """Every ProposalDocument field is explicitly client-safe or internal-only.
+
+    Guards the opt-in property: a new field lands in neither set and trips here,
+    forcing a deliberate call instead of defaulting to exposed.
+    """
+    declared = set(ProposalDocument.model_fields)
+    classified = set(CLIENT_SAFE_DOCUMENT_FIELDS) | set(INTERNAL_ONLY_FIELDS)
+    assert declared - classified == set(), (
+        "New ProposalDocument field(s) are unclassified. Add each to "
+        "CLIENT_SAFE_DOCUMENT_FIELDS (client may see it) or to "
+        "INTERNAL_ONLY_FIELDS in this test (staff only)."
+    )
+    assert CLIENT_SAFE_DOCUMENT_FIELDS.isdisjoint(INTERNAL_ONLY_FIELDS)
+    # The allowlist must not name fields the document doesn't have (stale entries).
+    assert set(CLIENT_SAFE_DOCUMENT_FIELDS) - declared == set()
+
+
+def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
+    document = _document()
+    safe = client_safe_document(document)
+
+    assert safe is not None
+    assert "fulfillment" not in safe
+    # Client-facing copy survives untouched.
+    assert safe["selected_tier"] == "best"
+    assert safe["selected_financed_total"] == 5200.0
+    assert safe["notes"] == "Install week of the 14th."
+    assert safe["client"] == {"first_name": "Dana", "last_name": "Homeowner"}
+    # The caller's stored snapshot is not mutated.
+    assert "fulfillment" in document
+
+
+def test_sanitizer_passes_through_none() -> None:
+    assert client_safe_document(None) is None
+
+
+def test_sanitizer_strips_unknown_future_fields() -> None:
+    """An unrecognized key is withheld — opt-in, not opt-out."""
+    safe = client_safe_document({"selected_tier": "best", "internal_margin": 0.42})
+    assert safe == {"selected_tier": "best"}
+
+
+@pytest.mark.asyncio
+async def test_public_proposal_payload_contains_no_part_skus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end on the service: no SKU survives into the serialized payload.
+
+    Substring-searches the whole JSON body rather than checking one key, so a
+    SKU smuggled through some other field still fails.
+    """
+    workspace = Workspace(id=uuid.uuid4(), name="Maxteriors Lighting", slug="lit", settings={})
+    quote = Quote(
+        id=uuid.uuid4(),
+        workspace_id=workspace.id,
+        number="QUO-000042",
+        title="Backyard lighting",
+        status="sent",
+        currency="USD",
+        subtotal=5200,
+        tax_amount=0,
+        discount_amount=0,
+        total=5200,
+        proposal_document=_document(),
+    )
+    quote.line_items = []
+    quote.contact = None
+    quote.workspace = workspace
+
+    async def _load(self: object, token: str) -> Quote:
+        return quote
+
+    monkeypatch.setattr(QuoteService, "_load_by_token", _load)
+
+    proposal = await QuoteService(db=None).get_public_proposal("tok")  # type: ignore[arg-type]
+
+    assert proposal.proposal_document is not None
+    assert "fulfillment" not in proposal.proposal_document
+    body = json.dumps(proposal.model_dump(mode="json"))
+    for sku in PART_SKUS:
+        assert sku not in body, f"internal SKU {sku} leaked to the public proposal payload"
+    assert "Luxor WiFi Module" not in body
+    # Sanity: the client's own content still made it through.
+    assert "QUO-000042" in body
+    assert "Backyard lighting" in body
