@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { useIsMounted } from "@/hooks/useMounted";
 import { settingsApi } from "@/lib/api/settings";
 import { TIMEZONE_OPTIONS } from "@/lib/constants";
 import { queryKeys } from "@/lib/query-keys";
@@ -32,8 +33,11 @@ import { queryKeys } from "@/lib/query-keys";
 export function ProfileSettingsTab() {
   const queryClient = useQueryClient();
   const [profileSaved, setProfileSaved] = useState(false);
-  const { theme, setTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { resolvedTheme, setTheme } = useTheme();
+  // `resolvedTheme` is undefined during SSR, so hold the switch in its
+  // server-rendered state until mount to avoid a hydration mismatch.
+  const themeMounted = useIsMounted();
+  const isDark = themeMounted && resolvedTheme === "dark";
 
   // Track local edits separate from server state
   const [localEdits, setLocalEdits] = useState<{

@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NoWorkspaceGate } from "@/components/workspaces/no-workspace-gate";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useIsMounted } from "@/hooks/useMounted";
 import { useSetupStatus } from "@/hooks/useSetupStatus";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { nudgesApi } from "@/lib/api/nudges";
@@ -143,7 +144,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
   const router = useRouter();
   const { isPending: workspacePending } = useWorkspace();
   const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const workspaceId = useWorkspaceId();
   const { needsSetup } = useSetupStatus();
   const { data: nudgeStats } = useQuery({
@@ -161,6 +162,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
   const breadcrumbs = buildBreadcrumbs(pathname);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandMounted, setCommandMounted] = useState(false);
+  // next-themes cannot know the active theme during SSR, so `resolvedTheme` is
+  // undefined on the server. Gate the theme-dependent icon behind mount so the
+  // server and client render identical markup (otherwise React discards and
+  // re-renders this tree with a hydration mismatch).
+  const themeMounted = useIsMounted();
 
   const openCommandPalette = () => {
     setCommandMounted(true);
@@ -392,13 +398,17 @@ export function AppSidebar({ children }: AppSidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? (
-              <Sun className="size-4" />
+            {themeMounted ? (
+              resolvedTheme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <MoonStar className="size-4" />
+              )
             ) : (
-              <MoonStar className="size-4" />
+              <span className="size-4" aria-hidden />
             )}
           </Button>
         </header>
