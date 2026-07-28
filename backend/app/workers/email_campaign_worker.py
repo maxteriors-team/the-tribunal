@@ -80,6 +80,10 @@ class EmailCampaignWorker(BaseCampaignWorker):
             log.warning("Email campaign missing subject or body, skipping")
             return
 
+        # Claim enrollments FOR UPDATE SKIP LOCKED, mirroring the SMS
+        # ``CampaignWorker``. Without it a second replica reads the same
+        # ``PENDING`` rows before either flips them to ``SENT`` and the contact
+        # receives the campaign email twice.
         result = await db.execute(
             select(CampaignContact)
             .options(selectinload(CampaignContact.contact))
@@ -89,6 +93,7 @@ class EmailCampaignWorker(BaseCampaignWorker):
             )
             .order_by(CampaignContact.priority.desc(), CampaignContact.created_at)
             .limit(MAX_EMAILS_PER_TICK)
+            .with_for_update(skip_locked=True, of=CampaignContact)
         )
         pending = result.scalars().all()
         if not pending:

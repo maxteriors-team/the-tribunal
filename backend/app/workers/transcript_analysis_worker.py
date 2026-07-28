@@ -37,6 +37,10 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
 
     async def _process_batch(self) -> None:
         async with AsyncSessionLocal() as db:
+            # Claim the ``CallOutcome`` rows this batch will write back to,
+            # ``SKIP LOCKED`` so a second replica takes a different batch instead
+            # of paying OpenAI twice to analyze the same transcripts. ``of=`` keeps
+            # the lock off ``messages``, which is only read here.
             result = await db.execute(
                 select(Message)
                 .join(CallOutcome, CallOutcome.message_id == Message.id)
@@ -47,6 +51,7 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
                     CallOutcome.signals["analyzed"].astext.is_(None),
                 )
                 .limit(BATCH_SIZE)
+                .with_for_update(skip_locked=True, of=CallOutcome)
             )
             items: list[tuple[Message, CallOutcome, str]] = [
                 (m, m.call_outcome, m.transcript)

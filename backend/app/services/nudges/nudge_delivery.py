@@ -91,13 +91,21 @@ class NudgeDeliveryService:
         return True
 
     async def deliver_pending_nudges(self, db: AsyncSession, workspace_id: uuid.UUID) -> int:
-        """Deliver all pending nudges for a workspace. Returns count delivered."""
+        """Deliver all pending nudges for a workspace. Returns count delivered.
+
+        Rows are claimed ``FOR UPDATE SKIP LOCKED`` so a second backend replica
+        cannot pick up the same pending nudge and deliver it twice. Without the
+        claim both replicas read ``status == "pending"`` before either writes
+        ``status = "sent"``, and the operator gets duplicate SMS/email.
+        """
         result = await db.execute(
-            select(HumanNudge).where(
+            select(HumanNudge)
+            .where(
                 HumanNudge.workspace_id == workspace_id,
                 HumanNudge.status == "pending",
                 HumanNudge.due_date <= datetime.now(UTC),
             )
+            .with_for_update(skip_locked=True)
         )
         nudges = result.scalars().all()
 

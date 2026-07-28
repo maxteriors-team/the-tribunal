@@ -36,8 +36,16 @@ class ReputationWorker(RetryableWorker, BaseWorker):
     async def _process_items(self) -> None:
         """Update reputation for all active phone numbers."""
         async with AsyncSessionLocal() as db:
-            # Get all active phone numbers
-            result = await db.execute(select(PhoneNumber).where(PhoneNumber.is_active.is_(True)))
+            # Claim the active numbers FOR UPDATE SKIP LOCKED. This cycle advances
+            # warming stages and quarantines numbers, so a second replica running
+            # the same pass would double-advance warming and burn deliverability
+            # reputation faster than the ramp intends. SKIP LOCKED makes the
+            # second replica no-op for the tick rather than duplicate the work.
+            result = await db.execute(
+                select(PhoneNumber)
+                .where(PhoneNumber.is_active.is_(True))
+                .with_for_update(skip_locked=True)
+            )
             phones = result.scalars().all()
 
             updated_count = 0
