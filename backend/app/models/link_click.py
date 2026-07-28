@@ -3,10 +3,11 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.encryption import EncryptedString
 from app.db.base import Base
 
 
@@ -25,7 +26,10 @@ class LinkClick(Base):
     clicked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
-    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Visitor IP is personal data under GDPR, so it is Fernet-encrypted at rest.
+    # No lookup hash: clicks are only ever read back through ``short_link_id``
+    # and nothing filters or aggregates on the IP value.
+    ip_address: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     referer: Mapped[str | None] = mapped_column(Text, nullable=True)
 

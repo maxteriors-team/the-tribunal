@@ -17,6 +17,7 @@ from typing import ClassVar, Protocol
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_phone
 from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
 from app.models.phone_number import PhoneNumber
@@ -244,7 +245,7 @@ class CommandProcessorService:
         profile_result = await db.execute(
             select(HumanProfile).where(
                 and_(
-                    HumanProfile.phone_number == normalized_from,
+                    HumanProfile.phone_hash == hash_phone(normalized_from),
                     HumanProfile.workspace_id == workspace_id,
                     HumanProfile.is_active.is_(True),
                 )

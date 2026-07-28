@@ -438,11 +438,15 @@ async def get_contact_timeline(
     )
 
     if contact.phone_number and normalized_contact_phone:
+        # ``contact_phone`` is Fernet-encrypted; match on the deterministic
+        # lookup hash. The raw and normalized forms usually hash identically
+        # (``hash_phone`` strips formatting), collapsing this to one value.
         conv_query = conv_query.where(
             or_(
                 Conversation.contact_id == contact_id,
-                Conversation.contact_phone == contact.phone_number,
-                Conversation.contact_phone == normalized_contact_phone,
+                Conversation.contact_phone_hash.in_(
+                    sorted({hash_phone(contact.phone_number), hash_phone(normalized_contact_phone)})
+                ),
             )
         )
     else:
@@ -597,13 +601,15 @@ async def find_or_create_conversation(
     # If not found by contact_id, try finding by phone number
     if conversation is None:
         normalized_contact_phone = normalize_phone_safe(contact_phone) or contact_phone
+        # ``contact_phone`` is Fernet-encrypted; match on the deterministic
+        # lookup hash. The raw and normalized forms usually hash identically
+        # (``hash_phone`` strips formatting), collapsing this to one value.
         conv_result = await db.execute(
             select(Conversation)
             .where(
                 Conversation.workspace_id == workspace_id,
-                or_(
-                    Conversation.contact_phone == contact_phone,
-                    Conversation.contact_phone == normalized_contact_phone,
+                Conversation.contact_phone_hash.in_(
+                    sorted({hash_phone(contact_phone), hash_phone(normalized_contact_phone)})
                 ),
             )
             .order_by(Conversation.updated_at.desc())

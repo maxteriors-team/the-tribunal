@@ -4,10 +4,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, event
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString, LookupHash, hash_phone
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -19,7 +20,10 @@ class GlobalOptOut(Base):
 
     __tablename__ = "global_opt_outs"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "phone_number", name="uq_workspace_opt_out"),
+        # Uniqueness must live on the deterministic hash: ``phone_number`` is
+        # Fernet-encrypted and therefore ciphertext-unique on every insert, so a
+        # constraint on it would never actually suppress a duplicate opt-out.
+        UniqueConstraint("workspace_id", "phone_hash", name="uq_workspace_opt_out"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -29,7 +33,13 @@ class GlobalOptOut(Base):
         nullable=False,
         index=True,
     )
-    phone_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # PII at rest — ``phone_number`` is Fernet-encrypted via :class:`EncryptedString`.
+    # ``phone_hash`` holds the BLAKE2b-keyed deterministic hash and carries the
+    # index + unique constraint used for suppression-list lookups. Both are kept
+    # in sync by the ``before_insert``/``before_update`` hook below, so no write
+    # path can persist a number without its lookup hash.
+    phone_number: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    phone_hash: Mapped[str] = mapped_column(LookupHash(), nullable=False, index=True)
 
     # Opt-out details
     opted_out_at: Mapped[datetime] = mapped_column(
@@ -65,4 +75,19 @@ class GlobalOptOut(Base):
     workspace: Mapped["Workspace"] = relationship("Workspace")
 
     def __repr__(self) -> str:
-        return f"<GlobalOptOut(workspace_id={self.workspace_id}, phone_number={self.phone_number})>"
+        # Never interpolate ``phone_number`` — reprs land in logs/error reports and
+        # would defeat encrypting it at rest. ``phone_hash`` is only populated by
+        # the hook below at flush time, so guard against the transient state.
+        phone_hash = self.phone_hash
+        fragment = f"{phone_hash[:8]}..." if phone_hash else None
+        return f"<GlobalOptOut(workspace_id={self.workspace_id}, phone_hash={fragment})>"
+
+
+def _sync_opt_out_lookup_hashes(_mapper: object, _connection: object, target: GlobalOptOut) -> None:
+    """Keep the encrypted opt-out lookup hash in sync for all write paths."""
+    if target.phone_number:
+        target.phone_hash = hash_phone(target.phone_number)
+
+
+event.listen(GlobalOptOut, "before_insert", _sync_opt_out_lookup_hashes)
+event.listen(GlobalOptOut, "before_update", _sync_opt_out_lookup_hashes)

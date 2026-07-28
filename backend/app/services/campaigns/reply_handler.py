@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.encryption import hash_phone
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
@@ -347,7 +348,7 @@ async def _record_opt_out(
     existing_result = await db.execute(
         select(GlobalOptOut)
         .where(GlobalOptOut.workspace_id == campaign_contact.campaign.workspace_id)
-        .where(GlobalOptOut.phone_number == conversation.contact_phone)
+        .where(GlobalOptOut.phone_hash == hash_phone(conversation.contact_phone))
     )
     if existing_result.scalar_one_or_none() is not None:
         return

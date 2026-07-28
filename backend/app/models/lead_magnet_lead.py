@@ -4,10 +4,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, event
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -44,9 +45,19 @@ class LeadMagnetLead(Base):
     )
 
     # Contact information
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # PII at rest — ``email`` and ``phone_number`` are Fernet-encrypted via
+    # :class:`EncryptedString`. Their sibling ``*_hash`` columns hold the
+    # BLAKE2b-keyed deterministic hash and carry the index used for equality
+    # lookups. The ``before_insert``/``before_update`` hook below keeps them in
+    # sync so no write path can persist a value without its lookup hash.
+    email: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    email_hash: Mapped[str | None] = mapped_column(LookupHash(), nullable=True, index=True)
+    phone_number: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    phone_hash: Mapped[str | None] = mapped_column(LookupHash(), nullable=True, index=True)
+    # PII, same as the email/phone above — a lead's name sitting in cleartext
+    # beside its encrypted contact details would defeat the point. Nothing
+    # filters on it, so no lookup hash is needed.
+    name: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     # Link to CRM contact if created/matched
     contact_id: Mapped[int | None] = mapped_column(
@@ -85,4 +96,18 @@ class LeadMagnetLead(Base):
     source_offer: Mapped["Offer | None"] = relationship("Offer")
 
     def __repr__(self) -> str:
-        return f"<LeadMagnetLead(id={self.id}, email={self.email}, score={self.score})>"
+        email_hash = self.email_hash
+        email_fragment = f"{email_hash[:8]}..." if email_hash else None
+        return f"<LeadMagnetLead(id={self.id}, email_hash={email_fragment}, score={self.score})>"
+
+
+def _sync_lead_magnet_lead_lookup_hashes(
+    _mapper: object, _connection: object, target: LeadMagnetLead
+) -> None:
+    """Keep encrypted lead-magnet lead lookup hashes in sync for all write paths."""
+    target.email_hash = hash_value(target.email) if target.email else None
+    target.phone_hash = hash_phone(target.phone_number) if target.phone_number else None
+
+
+event.listen(LeadMagnetLead, "before_insert", _sync_lead_magnet_lead_lookup_hashes)
+event.listen(LeadMagnetLead, "before_update", _sync_lead_magnet_lead_lookup_hashes)

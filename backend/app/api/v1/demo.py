@@ -102,7 +102,7 @@ async def check_rate_limits(
     # Check phone rate limit: 2 requests per day
     phone_count_result = await db.execute(
         select(func.count(), func.min(DemoRequest.created_at)).where(
-            DemoRequest.phone_number == phone_number,
+            DemoRequest.phone_hash == hash_phone(phone_number),
             DemoRequest.created_at >= day_ago,
         )
     )

@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.webhooks.telnyx_parser import extract_phone_numbers
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.core.metrics import (
     observe_voice_call_completed,
     observe_voice_call_started,
@@ -77,18 +78,18 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             )
             return
 
-        # Get or create conversation
+        # Get or create conversation. The conversation phone columns are
+        # Fernet-encrypted, so match on the deterministic lookup hashes.
         conv_result = await db.execute(
             select(Conversation).where(
                 Conversation.workspace_id == workspace_id,
-                Conversation.workspace_phone == to_number,
-                Conversation.contact_phone == from_number,
+                Conversation.workspace_phone_hash == hash_phone(to_number),
+                Conversation.contact_phone_hash == hash_phone(from_number),
             )
         )
         conversation = conv_result.scalar_one_or_none()
 
         if not conversation:
-            from app.core.encryption import hash_phone
             from app.models.contact import Contact
             from app.utils.phone import phone_lookup_variants
 

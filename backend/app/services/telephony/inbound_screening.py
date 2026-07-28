@@ -40,6 +40,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_phone
 from app.models.conversation import (
     Conversation,
     ConversationStatus,
@@ -257,7 +258,7 @@ class InboundCallScreener:
             select(Conversation.id)
             .where(
                 Conversation.workspace_id == workspace_id,
-                Conversation.contact_phone == from_number,
+                Conversation.contact_phone_hash == hash_phone(from_number),
                 Conversation.status == ConversationStatus.BLOCKED,
             )
             .limit(1)
@@ -278,7 +279,7 @@ class InboundCallScreener:
             .join(Conversation, Message.conversation_id == Conversation.id)
             .where(
                 Conversation.workspace_id == workspace_id,
-                Conversation.contact_phone == from_number,
+                Conversation.contact_phone_hash == hash_phone(from_number),
                 Message.direction == MessageDirection.INBOUND,
                 Message.channel == MessageChannel.VOICE,
                 Message.created_at >= cutoff,

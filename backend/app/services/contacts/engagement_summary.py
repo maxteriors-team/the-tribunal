@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_phone
 from app.models.appointment import Appointment
 from app.models.call_outcome import CallOutcome
 from app.models.contact import Contact
@@ -32,11 +33,14 @@ async def get_engagement_summary(
 
     normalized_phone = normalize_phone_safe(contact.phone_number) if contact.phone_number else None
 
+    # ``contact_phone`` is Fernet-encrypted, so match on the deterministic lookup
+    # hash instead. The raw and normalized forms usually hash identically
+    # (``hash_phone`` strips formatting), collapsing this to a single value.
+    phone_hashes = sorted({hash_phone(p) for p in (contact.phone_number, normalized_phone) if p})
+
     conv_conditions = [Conversation.contact_id == contact.id]
-    if contact.phone_number:
-        conv_conditions.append(Conversation.contact_phone == contact.phone_number)
-    if normalized_phone:
-        conv_conditions.append(Conversation.contact_phone == normalized_phone)
+    if phone_hashes:
+        conv_conditions.append(Conversation.contact_phone_hash.in_(phone_hashes))
 
     conv_id_subq = (
         select(Conversation.id)

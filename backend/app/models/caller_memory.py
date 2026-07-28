@@ -23,11 +23,11 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString
 from app.db.base import Base
 from app.services.ai.embeddings import EMBEDDING_DIM
 
@@ -69,8 +69,12 @@ class CallerMemory(Base):
         index=True,
     )
 
-    # Short natural-language recap of what was discussed on the call.
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    # Short natural-language recap of what was discussed on the call. This is
+    # verbatim customer conversation content, so it is Fernet-encrypted at rest
+    # via :class:`EncryptedString`. No lookup hash: recall is chronological
+    # (``occurred_at``) or semantic (``embedding`` cosine distance) — nothing
+    # filters on the summary text itself.
+    summary: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
     # "inbound" | "outbound" — how the call that produced this memory was placed.
     direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
 

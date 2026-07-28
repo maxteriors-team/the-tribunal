@@ -7,6 +7,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_phone
 from app.models.opt_out import GlobalOptOut
 
 logger = structlog.get_logger()
@@ -57,7 +58,7 @@ class OptOutManager:
         result = await db.execute(
             select(GlobalOptOut).where(
                 GlobalOptOut.workspace_id == workspace_id,
-                GlobalOptOut.phone_number == phone_number,
+                GlobalOptOut.phone_hash == hash_phone(phone_number),
             )
         )
         return result.scalar_one_or_none() is not None
@@ -88,7 +89,7 @@ class OptOutManager:
         existing = await db.execute(
             select(GlobalOptOut).where(
                 GlobalOptOut.workspace_id == workspace_id,
-                GlobalOptOut.phone_number == phone_number,
+                GlobalOptOut.phone_hash == hash_phone(phone_number),
             )
         )
         if existing.scalar_one_or_none():
@@ -142,7 +143,7 @@ class OptOutManager:
         result = await db.execute(
             select(GlobalOptOut).where(
                 GlobalOptOut.workspace_id == workspace_id,
-                GlobalOptOut.phone_number == phone_number,
+                GlobalOptOut.phone_hash == hash_phone(phone_number),
             )
         )
         opt_out = result.scalar_one_or_none()

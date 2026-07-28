@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.models.appointment import Appointment
@@ -233,8 +234,8 @@ class ReminderWorker(RetryableWorker, BaseWorker):
                     select(Conversation)
                     .where(
                         and_(
-                            Conversation.workspace_phone == from_number,
-                            Conversation.contact_phone == contact_phone,
+                            Conversation.workspace_phone_hash == hash_phone(from_number),
+                            Conversation.contact_phone_hash == hash_phone(contact_phone),
                             Conversation.workspace_id == workspace.id,
                         )
                     )

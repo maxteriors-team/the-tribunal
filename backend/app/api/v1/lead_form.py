@@ -117,8 +117,8 @@ async def _action_auto_text(lead_source: LeadSource, contact: Contact, db: DB) -
                     Conversation,
                     lead_source.workspace_id,
                 ).where(
-                    Conversation.workspace_phone == norm_from,
-                    Conversation.contact_phone == norm_to,
+                    Conversation.workspace_phone_hash == hash_phone(norm_from),
+                    Conversation.contact_phone_hash == hash_phone(norm_to),
                 )
             )
             conversation = conv_result.scalar_one_or_none()

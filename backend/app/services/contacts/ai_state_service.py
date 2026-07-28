@@ -4,9 +4,10 @@ import uuid
 from typing import Any
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.encryption import hash_phone
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.agent import Agent
 from app.models.contact import Contact
@@ -198,14 +199,17 @@ class ContactAIStateService:
         if conversation is not None:
             return conversation
 
+        # ``contact_phone`` is Fernet-encrypted, so the match runs on the
+        # deterministic lookup hash. The raw and normalized forms usually hash
+        # identically (``hash_phone`` strips formatting), in which case the set
+        # collapses to a single value.
         conv_result = await self.db.execute(
             select(Conversation)
             .where(
                 Conversation.workspace_id == workspace_id,
                 Conversation.channel.in_(("sms", "imessage")),
-                or_(
-                    Conversation.contact_phone == contact_phone,
-                    Conversation.contact_phone == normalized_contact_phone,
+                Conversation.contact_phone_hash.in_(
+                    sorted({hash_phone(contact_phone), hash_phone(normalized_contact_phone)})
                 ),
             )
             .order_by(Conversation.updated_at.desc())

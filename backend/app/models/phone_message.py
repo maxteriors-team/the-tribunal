@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -77,10 +78,14 @@ class PhoneMessage(Base):
         index=True,
     )
 
-    # Structured capture fields.
-    caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    callback_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Structured capture fields. These carry caller-supplied PII (name, callback
+    # number) and the free-text reason they gave, so they are Fernet-encrypted at
+    # rest via :class:`EncryptedString`. No lookup hashes: every read path fetches
+    # these by ``PhoneMessage`` id / relationship and renders them, and nothing
+    # filters, joins, or dedupes on their values.
+    caller_name: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    callback_number: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    reason: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     urgency: Mapped[PhoneMessageUrgency] = mapped_column(
         SAEnum(
             PhoneMessageUrgency,
@@ -95,7 +100,7 @@ class PhoneMessage(Base):
     )
     # Free text — callers say things like "tomorrow afternoon" rather than a time.
     preferred_callback_time: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    message_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    message_body: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     # Operator workflow status.
     status: Mapped[PhoneMessageStatus] = mapped_column(
@@ -127,4 +132,4 @@ class PhoneMessage(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<PhoneMessage(id={self.id}, caller={self.caller_name}, urgency={self.urgency})>"
+        return f"<PhoneMessage(id={self.id}, urgency={self.urgency}, status={self.status})>"

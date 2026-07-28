@@ -20,8 +20,9 @@ from sqlalchemy import (
     Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
+from app.core.encryption import EncryptedString, LookupHash, hash_phone
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -109,8 +110,15 @@ class Conversation(Base):
 
     __tablename__ = "conversations"
     __table_args__ = (
+        # Uniqueness lives on the deterministic hashes, not the encrypted phone
+        # columns: Fernet ciphertext differs on every write, so a constraint on
+        # the plaintext columns would never collide and duplicate threads would
+        # slip through.
         UniqueConstraint(
-            "workspace_id", "workspace_phone", "contact_phone", name="uq_conversation_phones"
+            "workspace_id",
+            "workspace_phone_hash",
+            "contact_phone_hash",
+            name="uq_conversation_phones",
         ),
         Index(
             "ix_conversations_workspace_last_message_at",
@@ -142,13 +150,20 @@ class Conversation(Base):
         index=True,
     )
 
-    # Phone numbers
+    # Phone numbers — PII at rest. ``workspace_phone`` and ``contact_phone`` are
+    # Fernet-encrypted via :class:`EncryptedString`, which is non-deterministic:
+    # the same number encrypts differently on every write, so an index on these
+    # columns is useless and a ``WHERE`` equality test on them never matches. Every
+    # equality lookup must go through the sibling ``*_hash`` column, which holds
+    # the deterministic BLAKE2b-keyed hash, carries the index, and backs the
+    # ``uq_conversation_phones`` unique constraint. The hashes are maintained by
+    # :meth:`Conversation._sync_phone_lookup_hash` so they cannot drift.
     workspace_phone: Mapped[str] = mapped_column(
-        String(20), nullable=False, index=True
+        EncryptedString(), nullable=False
     )  # Our Telnyx number
-    contact_phone: Mapped[str] = mapped_column(
-        String(20), nullable=False, index=True
-    )  # Contact's phone
+    workspace_phone_hash: Mapped[str] = mapped_column(LookupHash(), nullable=False, index=True)
+    contact_phone: Mapped[str] = mapped_column(EncryptedString(), nullable=False)  # Contact's phone
+    contact_phone_hash: Mapped[str] = mapped_column(LookupHash(), nullable=False, index=True)
 
     # Status
     status: Mapped[ConversationStatus] = mapped_column(
@@ -180,7 +195,7 @@ class Conversation(Base):
 
     # Message preview (denormalized)
     unread_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_message_preview: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_message_preview: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -244,8 +259,30 @@ class Conversation(Base):
         "TestContact", back_populates="conversation"
     )
 
+    @validates("workspace_phone", "contact_phone")
+    def _sync_phone_lookup_hash(self, key: str, value: str) -> str:
+        """Keep each ``*_hash`` column in lockstep with its encrypted phone column.
+
+        Runs on every attribute set — constructor kwargs included — so it is
+        impossible to write a phone number without its lookup hash. Doing this
+        at assignment time (rather than in a ``before_insert`` hook like
+        :mod:`app.models.contact`) also keeps transient, not-yet-flushed
+        instances consistent, which is what the lookup queries rely on.
+        """
+        phone_hash = hash_phone(value) if value else value
+        if key == "contact_phone":
+            self.contact_phone_hash = phone_hash
+        else:
+            self.workspace_phone_hash = phone_hash
+        return value
+
     def __repr__(self) -> str:
-        return f"<Conversation(id={self.id}, contact_phone={self.contact_phone})>"
+        # Guard the slice: the hash is ``None`` on a transient instance that has
+        # not had a phone assigned yet, and SQLAlchemy calls ``__repr__`` when
+        # building flush/IntegrityError messages — raising here would mask the
+        # real error.
+        digest = self.contact_phone_hash[:8] if self.contact_phone_hash else "unset"
+        return f"<Conversation(id={self.id}, contact_phone_hash={digest}...)>"
 
 
 class BounceType(StrEnum):
@@ -315,12 +352,15 @@ class Message(Base):
         ),
         nullable=False,
     )
-    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Message content and email addressing are PII at rest — Fernet-encrypted.
+    # None of these are filtered/searched in SQL (only selected and processed in
+    # Python), so no lookup hashes are needed.
+    body: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
 
     # Email-specific fields
-    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    sender_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    subject: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    recipient_email: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    sender_email: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     # Delivery tracking
     status: Mapped[MessageStatus] = mapped_column(
@@ -383,8 +423,8 @@ class Message(Base):
 
     # Voice-specific
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    recording_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recording_url: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    transcript: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     booking_outcome: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # === Inbound spam screening & reason-based routing ===
