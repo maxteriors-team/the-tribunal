@@ -6,12 +6,23 @@ This service provides the core enrichment logic that can be called:
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
+
+import structlog
 
 from app.core.config import settings
 from app.services.scraping.ai_content_analyzer import AIContentAnalyzerService
 from app.services.scraping.lead_scorer import compute_lead_score_breakdown
 from app.services.scraping.website_scraper import WebsiteScraperError, WebsiteScraperService
+
+logger = structlog.get_logger()
+
+# Opaque, non-reflective failure text. Upstream exception strings can carry
+# internal network detail (and are attacker-steerable via the submitted URL),
+# and this value is both persisted in ``business_intel`` and re-served to API
+# callers via ``ContactResponse.business_intel`` / the import ``errors[]`` list.
+# Full detail is logged server-side instead.
+ENRICHMENT_ERROR_MESSAGE: Final[str] = "Website enrichment failed"
 
 
 async def enrich_contact_data(
@@ -100,9 +111,16 @@ async def enrich_contact_data(
         }
 
     except WebsiteScraperError as e:
-        # Store error in business_intel
+        logger.warning(
+            "enrichment_scrape_failed",
+            website_url=website_url,
+            company_name=company_name,
+            error_type=type(e).__name__,
+            error=str(e),
+        )
+        # Store an opaque error in business_intel (see ENRICHMENT_ERROR_MESSAGE).
         business_intel = google_places_data.copy()
-        business_intel["enrichment_error"] = str(e)
+        business_intel["enrichment_error"] = ENRICHMENT_ERROR_MESSAGE
         business_intel["enrichment_failed_at"] = datetime.now(UTC).isoformat()
 
         return {
@@ -113,13 +131,19 @@ async def enrich_contact_data(
             "decision_maker_name": None,
             "decision_maker_title": None,
             "enrichment_status": "failed",
-            "error": str(e),
+            "error": ENRICHMENT_ERROR_MESSAGE,
         }
 
     except Exception as e:
-        # Unexpected error
+        # Unexpected error — full traceback server-side, opaque text to callers.
+        logger.exception(
+            "enrichment_unexpected_error",
+            website_url=website_url,
+            company_name=company_name,
+            error_type=type(e).__name__,
+        )
         business_intel = google_places_data.copy()
-        business_intel["enrichment_error"] = f"Unexpected error: {e}"
+        business_intel["enrichment_error"] = ENRICHMENT_ERROR_MESSAGE
         business_intel["enrichment_failed_at"] = datetime.now(UTC).isoformat()
 
         return {
@@ -130,7 +154,7 @@ async def enrich_contact_data(
             "decision_maker_name": None,
             "decision_maker_title": None,
             "enrichment_status": "failed",
-            "error": f"Unexpected error: {e}",
+            "error": ENRICHMENT_ERROR_MESSAGE,
         }
 
     finally:

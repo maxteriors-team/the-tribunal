@@ -8,6 +8,8 @@ import httpx
 import structlog
 from bs4 import BeautifulSoup
 
+from app.services.scraping.url_guard import UnsafeURLError, validate_outbound_url
+
 logger = structlog.get_logger()
 
 # Social media URL patterns
@@ -55,6 +57,17 @@ class WebsiteScraperError(Exception):
     pass
 
 
+class BlockedURLError(WebsiteScraperError):
+    """Raised when a target URL (or a redirect hop) fails the SSRF egress guard.
+
+    Subclasses :class:`WebsiteScraperError` so existing callers keep handling it,
+    while callers that care can catch the blocked case specifically. The message
+    is the guard's opaque one — safe to surface to an API caller.
+    """
+
+    pass
+
+
 class WebsiteScraperService:
     """Service for scraping website metadata and social links."""
 
@@ -62,15 +75,18 @@ class WebsiteScraperService:
         self,
         timeout: float = 10.0,
         max_retries: int = 3,
+        max_redirects: int = 5,
     ) -> None:
         """Initialize the website scraper service.
 
         Args:
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts
+            max_redirects: Maximum redirect hops to follow (each one re-validated)
         """
         self.timeout = timeout
         self.max_retries = max_retries
+        self.max_redirects = max_redirects
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -79,7 +95,12 @@ class WebsiteScraperService:
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=5.0, read=self.timeout, write=10.0, pool=5.0),
                 limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-                follow_redirects=True,
+                # SSRF guard: httpx must NOT chase redirects itself. It would
+                # follow a 302 into link-local/private space inside the
+                # transport, after our pre-flight validation already passed —
+                # defeating any validate-once check. Hops are followed manually
+                # in _get_with_guarded_redirects, revalidating every target.
+                follow_redirects=False,
                 headers={
                     "User-Agent": (
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -244,6 +265,51 @@ class WebsiteScraperService:
             "tiktok_pixel": "analytics.tiktok.com" in html_lower,
         }
 
+    async def _get_with_guarded_redirects(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+    ) -> httpx.Response:
+        """GET ``url``, following redirects manually and validating every hop.
+
+        The client runs with ``follow_redirects=False`` on purpose: a pre-flight
+        check on the initial URL is worthless when a public host can answer 302
+        ``Location: http://169.254.169.254/...`` and httpx transparently fetches
+        it. Following hops here means every redirect target goes back through
+        :func:`validate_outbound_url` before a socket is opened for it.
+
+        Args:
+            client: HTTP client to use (must not follow redirects itself)
+            url: Already-validated absolute URL to fetch
+
+        Returns:
+            The first non-redirect response.
+
+        Raises:
+            BlockedURLError: If a redirect target fails the egress guard
+            WebsiteScraperError: If the redirect chain exceeds ``max_redirects``
+        """
+        current = url  # validated by the caller before the first request
+        for _hop in range(self.max_redirects + 1):
+            response = await client.get(current)
+            location = response.headers.get("location")
+            if not response.is_redirect or not location:
+                return response
+            # Relative Location values resolve against the URL we just fetched.
+            next_url = urljoin(str(response.url), location)
+            try:
+                current = await validate_outbound_url(next_url)
+            except UnsafeURLError as exc:
+                logger.warning(
+                    "scrape_redirect_blocked",
+                    reason=exc.reason,
+                    source_url=str(response.url),
+                    status_code=response.status_code,
+                )
+                raise BlockedURLError(str(exc)) from exc
+
+        raise WebsiteScraperError(f"Too many redirects (max {self.max_redirects})")
+
     async def scrape_website(self, url: str) -> dict[str, Any]:
         """Scrape a website for social links and metadata.
 
@@ -254,6 +320,7 @@ class WebsiteScraperService:
             Dictionary containing social_links and website_meta
 
         Raises:
+            BlockedURLError: If the URL (or a redirect hop) fails the SSRF guard
             WebsiteScraperError: If scraping fails after retries
         """
         log = logger.bind(url=url)
@@ -262,13 +329,21 @@ class WebsiteScraperService:
         if not url.startswith(("http://", "https://")):
             url = f"https://{url}"
 
+        # SSRF egress guard. Runs on the fully-normalized URL, before any socket
+        # is opened, and is never retried: a blocked target stays blocked.
+        try:
+            url = await validate_outbound_url(url)
+        except UnsafeURLError as exc:
+            log.warning("scrape_url_blocked", reason=exc.reason)
+            raise BlockedURLError(str(exc)) from exc
+
         client = await self._get_client()
         last_error: Exception | None = None
 
         for attempt in range(self.max_retries):
             try:
                 log.debug("scraping_attempt", attempt=attempt + 1)
-                response = await client.get(url)
+                response = await self._get_with_guarded_redirects(client, url)
                 response.raise_for_status()
 
                 html = response.text
@@ -290,6 +365,10 @@ class WebsiteScraperService:
                     "html_content": html,  # For AI analysis
                 }
 
+            except WebsiteScraperError:
+                # Our own deterministic failures (guard rejection, redirect
+                # overflow). Retrying only re-probes the blocked host.
+                raise
             except httpx.TimeoutException as e:
                 last_error = e
                 log.warning("scrape_timeout", attempt=attempt + 1)
@@ -307,7 +386,13 @@ class WebsiteScraperService:
                 last_error = e
                 log.warning("scrape_error", error=str(e), attempt=attempt + 1)
 
-        error_msg = f"Failed to scrape {url} after {self.max_retries} attempts"
-        if last_error:
-            error_msg = f"{error_msg}: {last_error}"
-        raise WebsiteScraperError(error_msg)
+        # Full upstream detail goes to the structured log only. The raised
+        # message is echoed back to API callers (enrichment errors, discovery
+        # warnings), so it must not carry upstream/network text.
+        log.warning(
+            "scrape_failed",
+            attempts=self.max_retries,
+            error_type=type(last_error).__name__ if last_error else None,
+            error=str(last_error) if last_error else None,
+        )
+        raise WebsiteScraperError(f"Failed to scrape website after {self.max_retries} attempts")
