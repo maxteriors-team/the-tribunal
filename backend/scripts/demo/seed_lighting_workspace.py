@@ -136,6 +136,9 @@ FIXTURES: dict[str, dict] = {
         "price": 386,
         "parts": [("59213092", "Cora Accent Black", 1)],
     },
+    # Intentionally identical to ``ess-path`` (same SKU, same price): the path
+    # light doesn't change between Starter and Professional. Not a duplicate to
+    # dedupe — the tiers differ on the other fixtures.
     "better-path": {
         "name": "Pathway Light",
         "price": 376,
