@@ -52,8 +52,10 @@ export function JobBrief({ job }: { job: Job }) {
           {site && (site.name || addressLines.length > 0) ? (
             <address className="text-sm not-italic">
               {site.name && <span className="block font-medium">{site.name}</span>}
-              {addressLines.map((line) => (
-                <span key={line} className="block text-muted-foreground">
+              {/* Index key: the lines are a fixed, never-reordered projection,
+                  and bad data can repeat one (line2 typed same as line1). */}
+              {addressLines.map((line, index) => (
+                <span key={index} className="block text-muted-foreground">
                   {line}
                 </span>
               ))}
