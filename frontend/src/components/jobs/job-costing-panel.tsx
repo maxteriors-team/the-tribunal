@@ -42,14 +42,20 @@ interface JobCostingPanelProps {
  * phone-width screen.
  */
 export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
-  const { can } = useCapabilities();
+  const { can, tier } = useCapabilities();
   // Revenue, profit, and margin are billing data. Technicians (jobs:read only)
   // log their time/expenses but must not see what the customer pays or the
   // job's margin — mirror the backend billing:read gate on /profitability.
   const canViewPnl = can("billing:read");
+  // The field tier sees no money on a job at all — no hourly rate, no labor
+  // cost, no expenses. Clock in/out stays as a plain start/stop so workers can
+  // still log their time. NOTE: this hides the UI only; the time-entry and
+  // expense payloads still carry amounts, so it is not yet a security boundary
+  // (server-side stripping is tracked separately).
+  const canSeeCosts = tier !== "field";
 
   const timeEntries = useJobTimeEntries(workspaceId, jobId);
-  const expenses = useJobExpenses(workspaceId, jobId);
+  const expenses = useJobExpenses(workspaceId, jobId, canSeeCosts);
   const pnl = useJobProfitability(workspaceId, jobId, canViewPnl);
 
   const clockIn = useClockIn(workspaceId, jobId);
@@ -70,7 +76,7 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
 
   const handleClockIn = () => {
     clockIn.mutate(
-      { rate: rate === "" ? 0 : Number(rate) },
+      { rate: !canSeeCosts || rate === "" ? 0 : Number(rate) },
       {
         onSuccess: () => toast.success("Clocked in"),
         onError: (err) => toast.error(getApiErrorMessage(err, "Failed to clock in")),
@@ -164,22 +170,24 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
       {/* Time tracking */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 space-y-1">
-            <Label htmlFor="clock-rate" className="text-xs">
-              Hourly rate
-            </Label>
-            <Input
-              id="clock-rate"
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              disabled={openTimer || busy}
-            />
-          </div>
+          {canSeeCosts && (
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="clock-rate" className="text-xs">
+                Hourly rate
+              </Label>
+              <Input
+                id="clock-rate"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+                disabled={openTimer || busy}
+              />
+            </div>
+          )}
           {openTimer ? (
             <Button variant="destructive" onClick={handleClockOut} disabled={busy}>
               {clockOut.isPending ? (
@@ -212,10 +220,12 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                       ? ` · ${entry.duration_hours}h`
                       : " · running"}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatCurrency(entry.rate, currency)}/h ·{" "}
-                    {formatCurrency(entry.labor_cost, currency)}
-                  </div>
+                  {canSeeCosts && (
+                    <div className="text-xs text-muted-foreground">
+                      {formatCurrency(entry.rate, currency)}/h ·{" "}
+                      {formatCurrency(entry.labor_cost, currency)}
+                    </div>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -233,74 +243,80 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
         )}
       </div>
 
-      {/* Expenses */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2 text-sm">
-          <DollarSign className="size-4" />
-          Expenses
-        </Label>
-        <div className="flex items-end gap-2">
-          <Input
-            placeholder="Description"
-            value={expenseDesc}
-            onChange={(e) => setExpenseDesc(e.target.value)}
-            className="flex-1"
-          />
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            placeholder="Amount"
-            value={expenseAmount}
-            onChange={(e) => setExpenseAmount(e.target.value)}
-            className="w-28"
-          />
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={handleAddExpense}
-            disabled={addExpense.isPending}
-            aria-label="Add expense"
-          >
-            {addExpense.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Plus className="size-4" />
-            )}
-          </Button>
-        </div>
+      {/* Expenses — every row is a dollar amount, so the whole section is
+          hidden from the field tier. */}
+      {canSeeCosts && (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm">
+            <DollarSign className="size-4" />
+            Expenses
+          </Label>
+          <div className="flex items-end gap-2">
+            <Input
+              placeholder="Description"
+              value={expenseDesc}
+              onChange={(e) => setExpenseDesc(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="Amount"
+              value={expenseAmount}
+              onChange={(e) => setExpenseAmount(e.target.value)}
+              className="w-28"
+            />
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={handleAddExpense}
+              disabled={addExpense.isPending}
+              aria-label="Add expense"
+            >
+              {addExpense.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+            </Button>
+          </div>
 
-        {(expenses.data ?? []).length > 0 && (
-          <ul className="divide-y rounded-md border text-sm">
-            {(expenses.data ?? []).map((expense) => (
-              <li key={expense.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                <div className="min-w-0">
-                  <div className="truncate">{expense.description}</div>
-                  {expense.category && (
-                    <div className="text-xs text-muted-foreground">{expense.category}</div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="tabular-nums">
-                    {formatCurrency(expense.amount, currency)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteExpense.mutate(expense.id)}
-                    disabled={deleteExpense.isPending}
-                    aria-label="Delete expense"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          {(expenses.data ?? []).length > 0 && (
+            <ul className="divide-y rounded-md border text-sm">
+              {(expenses.data ?? []).map((expense) => (
+                <li
+                  key={expense.id}
+                  className="flex items-center justify-between gap-2 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate">{expense.description}</div>
+                    {expense.category && (
+                      <div className="text-xs text-muted-foreground">{expense.category}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="tabular-nums">
+                      {formatCurrency(expense.amount, currency)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => deleteExpense.mutate(expense.id)}
+                      disabled={deleteExpense.isPending}
+                      aria-label="Delete expense"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

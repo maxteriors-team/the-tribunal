@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useJobs, useMyJobsCalendar } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import type { Job, JobListParams, JobTechnician } from "@/lib/api/jobs";
@@ -97,6 +98,12 @@ function JobCard({ job, onSelect }: { job: Job; onSelect: (job: Job) => void }) 
 
 export function JobsCalendar() {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  // jobs:write — admins/managers/dispatchers. Field technicians have jobs:read
+  // only: they see the board but every dispatch mutation (create, schedule,
+  // status, assign, delete) is rejected by the backend's WorkspaceDispatcher
+  // gate. Read-only follows the caller's capability, never the "My jobs" toggle.
+  const canWriteJobs = can("jobs:write");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [statusFilter, setStatusFilter] = useState<JobStatusFilter>("");
   const [mineOnly, setMineOnly] = useState(false);
@@ -200,18 +207,24 @@ export function JobsCalendar() {
               My jobs
             </Label>
           </div>
-          <Button onClick={() => setIsCreateOpen(true)}>
-            <Plus className="mr-2 size-4" />
-            New Job
-          </Button>
+          {canWriteJobs && (
+            <Button onClick={() => setIsCreateOpen(true)}>
+              <Plus className="mr-2 size-4" />
+              New Job
+            </Button>
+          )}
         </div>
       </div>
 
-      <NewJobDialog
-        workspaceId={workspaceId}
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-      />
+      {/* Mounted only for dispatchers: the create form's customer picker reads
+          the workspace contact list, which is 403 for a field technician. */}
+      {canWriteJobs && (
+        <NewJobDialog
+          workspaceId={workspaceId}
+          open={isCreateOpen}
+          onOpenChange={setIsCreateOpen}
+        />
+      )}
 
       <JobDetailDialog
         key={selectedJob?.id ?? "none"}
@@ -219,7 +232,7 @@ export function JobsCalendar() {
         job={selectedJob}
         open={selectedJob !== null}
         onOpenChange={(next) => !next && setSelectedJobId(null)}
-        readOnly={mineOnly}
+        readOnly={mineOnly || !canWriteJobs}
       />
 
       {/* Status filter (board view only) */}

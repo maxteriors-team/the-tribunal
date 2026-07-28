@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JobsCalendar } from "@/components/jobs/jobs-calendar";
 import type { Job, JobList, JobListParams } from "@/lib/api/jobs";
+import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
 
 /**
  * Regression cover for the dispatch board's "Unscheduled" queue.
@@ -17,22 +18,38 @@ import type { Job, JobList, JobListParams } from "@/lib/api/jobs";
  * that list too, while leaving the week list — and its "This week" count — alone.
  */
 
-const { listMock, useWorkspaceIdMock } = vi.hoisted(() => ({
+const { listMock, listMineMock, useWorkspaceIdMock, capabilitiesMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
+  listMineMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
+  capabilitiesMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/jobs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/jobs")>("@/lib/api/jobs");
   return {
     ...actual,
-    jobsApi: { ...actual.jobsApi, list: listMock },
+    jobsApi: { ...actual.jobsApi, list: listMock, listMine: listMineMock },
   };
 });
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
+
+// Capabilities come from the workspace membership role, which needs a provider.
+// Drive them from a role string through the *real* permission matrix so these
+// tests break if the matrix and the UI gates drift apart.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => capabilitiesMock(),
+}));
+
+function signedInAs(role: string) {
+  capabilitiesMock.mockReturnValue({
+    tier: roleTier(role),
+    can: (capability: Capability) => roleCan(role, capability),
+  });
+}
 
 // The child dialogs run their own fetches (technicians, costing) and have their
 // own tests. Stub them so this suite stays focused on the board's queue wiring,
@@ -41,8 +58,20 @@ vi.mock("@/components/jobs/new-job-dialog", () => ({
   NewJobDialog: () => null,
 }));
 vi.mock("@/components/jobs/job-detail-dialog", () => ({
-  JobDetailDialog: ({ job, open }: { job: Job | null; open: boolean }) =>
-    open && job ? <div data-testid="job-detail-dialog">Detail: {job.title}</div> : null,
+  JobDetailDialog: ({
+    job,
+    open,
+    readOnly,
+  }: {
+    job: Job | null;
+    open: boolean;
+    readOnly?: boolean;
+  }) =>
+    open && job ? (
+      <div data-testid="job-detail-dialog" data-readonly={String(Boolean(readOnly))}>
+        Detail: {job.title}
+      </div>
+    ) : null,
 }));
 
 function makeJob(overrides: Partial<Job> = {}): Job {
@@ -92,6 +121,7 @@ describe("JobsCalendar unscheduled queue", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useWorkspaceIdMock.mockReturnValue("ws-1");
+    signedInAs("owner");
     // Mirror the backend: the week-scoped list (has date_from/date_to) never
     // returns null-start jobs; the queue is a separate status=unscheduled fetch.
     listMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
@@ -153,5 +183,68 @@ describe("JobsCalendar unscheduled queue", () => {
         "Detail: Garage EV charger install",
       ),
     );
+  });
+});
+
+/**
+ * Role scoping for the dispatch board.
+ *
+ * The backend gates create/update/delete/schedule/assign on `WorkspaceDispatcher`,
+ * so a field technician (jobs:read only) got a fully editable dispatch panel that
+ * 403'd on every click. Read-only used to be wired to the "My jobs" toggle — a
+ * view preference — instead of the caller's capability.
+ */
+describe("JobsCalendar role scoping", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    listMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
+      Promise.resolve(
+        query.status === "unscheduled" ? jobList([queuedJob]) : jobList([scheduledJob]),
+      ),
+    );
+  });
+
+  // The seeded week job falls outside the current week, so open the job from
+  // the always-rendered "Unscheduled" queue instead.
+  async function openQueuedJob() {
+    const user = userEvent.setup();
+    const cards = await screen.findAllByRole("button", { name: /Garage EV charger install/i });
+    await user.click(cards[0]);
+    return waitFor(() => screen.getByTestId("job-detail-dialog"));
+  }
+
+  it("hides create and forces a read-only detail view for a field technician", async () => {
+    signedInAs("technician");
+    renderBoard();
+
+    await screen.findAllByText("Garage EV charger install");
+    // Creating a job is dispatcher-only, and its customer picker is 403 for a
+    // technician — the button must not be offered at all.
+    expect(screen.queryByRole("button", { name: /New Job/i })).not.toBeInTheDocument();
+
+    // Board view, "My jobs" off — read-only still has to come from the role.
+    expect(await openQueuedJob()).toHaveAttribute("data-readonly", "true");
+  });
+
+  it("keeps the full dispatch experience for a write-capable role", async () => {
+    signedInAs("owner");
+    renderBoard();
+
+    await screen.findAllByText("Garage EV charger install");
+    expect(screen.getByRole("button", { name: /New Job/i })).toBeInTheDocument();
+    expect(await openQueuedJob()).toHaveAttribute("data-readonly", "false");
+  });
+
+  it("still drops a dispatcher into read-only on their own calendar", async () => {
+    const user = userEvent.setup();
+    listMineMock.mockResolvedValue(jobList([queuedJob]));
+    signedInAs("dispatcher");
+    renderBoard();
+
+    await screen.findAllByText("Garage EV charger install");
+    await user.click(screen.getByLabelText("My jobs"));
+
+    expect(await openQueuedJob()).toHaveAttribute("data-readonly", "true");
   });
 });
