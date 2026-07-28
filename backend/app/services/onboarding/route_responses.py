@@ -14,6 +14,7 @@ from app.schemas.onboarding import (
 )
 from app.services.onboarding.exceptions import (
     OnboardingExternalServiceError,
+    OnboardingPermissionError,
     OnboardingServiceError,
     OnboardingUnprocessableError,
 )
@@ -23,7 +24,9 @@ from app.services.onboarding.workspace_setup import CampaignResult, OnboardingRe
 
 def onboarding_error_to_http_exception(exc: OnboardingServiceError) -> HTTPException:
     """Map onboarding service errors to the onboarding endpoint status codes."""
-    if isinstance(exc, OnboardingUnprocessableError):
+    if isinstance(exc, OnboardingPermissionError):
+        status_code = status.HTTP_403_FORBIDDEN
+    elif isinstance(exc, OnboardingUnprocessableError):
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     elif isinstance(exc, OnboardingExternalServiceError):
         status_code = status.HTTP_502_BAD_GATEWAY

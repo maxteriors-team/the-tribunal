@@ -16,7 +16,11 @@ from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.contacts import ImportResult
-from app.services.onboarding.exceptions import OnboardingValidationError, OnboardingWorkspaceError
+from app.services.onboarding.exceptions import (
+    OnboardingPermissionError,
+    OnboardingValidationError,
+    OnboardingWorkspaceError,
+)
 from app.services.onboarding.workspace_setup import (
     REACTIVATION_AGENT_NAME,
     CampaignInput,
@@ -96,14 +100,14 @@ def _assign_ids(add_calls: list[Any]) -> None:
                 obj.id = uuid.uuid4()
 
 
-def _workspace(user_id: int = 7) -> tuple[WorkspaceMembership, Workspace]:
+def _workspace(user_id: int = 7, role: str = "owner") -> tuple[WorkspaceMembership, Workspace]:
     workspace_id = uuid.uuid4()
     membership = WorkspaceMembership(
         id=uuid.uuid4(),
         user_id=user_id,
         workspace_id=workspace_id,
         is_default=True,
-        role="owner",
+        role=role,
     )
     workspace = Workspace(
         id=workspace_id,
@@ -174,6 +178,29 @@ async def test_get_user_workspace_raises_when_user_has_no_membership() -> None:
         await get_user_workspace(7, db)
 
     assert exc_info.value.message == "No workspace found. Please create a workspace first."
+
+
+@pytest.mark.parametrize("role", ["technician", "member", "sales_rep", "manager", "dispatcher"])
+async def test_onboarding_refuses_roles_without_workspace_manage(role: str) -> None:
+    """Defence in depth behind the API gate: onboarding rewrites the workspace's
+    Cal.com credential and buys a Telnyx number, so a non-admin membership must
+    be refused even if a caller reaches the service directly. ``is_default`` is
+    set here — it selects the target workspace and must confer no privilege."""
+    db = _db()
+    membership, _ = _workspace(user_id=7, role=role)
+    db.execute.side_effect = [_ExecuteResult(membership)]
+
+    with pytest.raises(OnboardingPermissionError):
+        await complete_onboarding(
+            db=db,
+            current_user_id=7,
+            request=OnboardingInput(calcom_api_key="cal_key", calcom_event_type_id=123),
+            telnyx_api_key="telnyx_key",
+            telnyx_service_factory=lambda api_key: _MockTelnyxService([]),
+        )
+
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
 
 
 async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> None:

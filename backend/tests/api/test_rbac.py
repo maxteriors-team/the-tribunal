@@ -25,6 +25,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import (
+    CanManageActiveWorkspace,
     CanManageComms,
     CanManageMembers,
     CanReadBilling,
@@ -34,9 +35,11 @@ from app.api.deps import (
     CanWriteCRM,
     CanWriteOutreach,
     CanWritePipelineOwn,
+    get_active_workspace_membership,
     get_current_user,
     get_db,
     get_membership,
+    require_active_workspace_capability,
     require_capability,
 )
 from app.core.permissions import Capability
@@ -119,6 +122,12 @@ _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
         ["owner", "admin", "manager"],
         ["sales_rep", "technician", "member"],
     ),
+    # Workspace-level setup (integrations, agents, buying numbers) is owner/admin.
+    (
+        Capability.WORKSPACE_MANAGE,
+        ["owner", "admin"],
+        ["manager", "dispatcher", "sales_rep", "technician", "member"],
+    ),
 ]
 
 
@@ -132,9 +141,39 @@ async def test_require_capability_allows_and_denies(
         assert await _run_gate(capability, role) is False, f"{role} should be denied {capability}"
 
 
+# --------------------------------------------------------------------------- #
+# 1b. Active-workspace gate (routes with no ``workspace_id`` path parameter)
+# --------------------------------------------------------------------------- #
+async def _run_active_gate(capability: Capability, role: str) -> bool:
+    """Return True if ``role`` passes ``require_active_workspace_capability``."""
+    dependency = require_active_workspace_capability(capability)
+    try:
+        await dependency(membership=_membership(role))  # type: ignore[arg-type]
+        return True
+    except HTTPException as exc:
+        assert exc.status_code == 403
+        return False
+
+
+async def test_active_workspace_gate_matches_the_capability_matrix() -> None:
+    """The workspace-less gate grades roles exactly like :func:`require_capability`."""
+    for role in ("owner", "admin"):
+        assert await _run_active_gate(Capability.WORKSPACE_MANAGE, role) is True, role
+    for role in ("manager", "dispatcher", "sales_rep", "technician", "member", "bogus_role"):
+        assert await _run_active_gate(Capability.WORKSPACE_MANAGE, role) is False, role
+
+
+async def test_active_workspace_gate_defers_when_user_has_no_workspace() -> None:
+    """No membership → no workspace to escalate into; the handler emits its own
+    "create a workspace first" error rather than a misleading 403."""
+    dependency = require_active_workspace_capability(Capability.WORKSPACE_MANAGE)
+    assert await dependency(membership=None) is None
+
+
 def test_capability_aliases_are_wired() -> None:
     """Each Annotated alias exists and is distinct (guards against copy-paste)."""
     aliases = [
+        CanManageActiveWorkspace,
         CanReadBilling,
         CanWriteBilling,
         CanWriteCRM,
@@ -166,6 +205,10 @@ def _client_as(role: str) -> AsyncClient:
 
     app.dependency_overrides[get_current_user] = _user_override
     app.dependency_overrides[get_membership] = _membership_override
+    # Routes without a ``workspace_id`` path parameter resolve the caller's active
+    # workspace instead. The stub deliberately carries no ``is_default`` attribute:
+    # a gate that consulted that flag as an authorization signal would blow up here.
+    app.dependency_overrides[get_active_workspace_membership] = _membership_override
     app.dependency_overrides[get_db] = _db_override
     # raise_app_exceptions=False: an *allowed* caller reaches the handler body,
     # which then trips over the mocked DB and 500s. We only assert the gate's
@@ -300,6 +343,58 @@ async def test_sales_cannot_delete_contacts_despite_authoring_outreach() -> None
             assert (await client.post(_url("/contacts/bulk-delete"), json={})).status_code == 403
         async with _client_as("manager") as client:
             assert (await client.delete(_url("/contacts/5"))).status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_onboarding_is_denied_to_non_admin_roles() -> None:
+    """Self-serve onboarding is owner/admin only.
+
+    These routes take no ``workspace_id``: they act on the caller's *default*
+    workspace, and any member can move their own default with
+    ``POST /workspaces/{id}/set-default``. Authentication alone therefore let a
+    field technician create an agent in, and overwrite the Cal.com credential of,
+    an employer's workspace — and spend the owner's money provisioning a Telnyx
+    number. Every route must be gated on ``workspace:manage``.
+    """
+    csv_upload = {"file": ("leads.csv", b"first_name,phone\nDana,+15125550123\n", "text/csv")}
+    onboard_body = {
+        "calcom_api_key": "cal_live_injected",
+        "calcom_event_type_id": "12345",
+        "area_code": "512",
+    }
+    try:
+        for role in ("technician", "member", "sales_rep", "manager", "dispatcher"):
+            async with _client_as(role) as client:
+                assert (
+                    await client.post("/api/v1/onboarding/onboard", json=onboard_body)
+                ).status_code == 403, role
+                assert (
+                    await client.post("/api/v1/onboarding/campaigns", files=csv_upload)
+                ).status_code == 403, role
+                assert (
+                    await client.post(
+                        "/api/v1/onboarding/parse-calcom-url",
+                        json={"url": "https://cal.com/dana/intro"},
+                    )
+                ).status_code == 403, role
+                assert (
+                    await client.get("/api/v1/onboarding/verify-calcom?api_key=cal_live_injected")
+                ).status_code == 403, role
+        # …and an admin still gets past the gate (the body then trips the mocked DB).
+        async with _client_as("admin") as client:
+            assert (
+                await client.post("/api/v1/onboarding/onboard", json=onboard_body)
+            ).status_code != 403
+            assert (
+                await client.post("/api/v1/onboarding/campaigns", files=csv_upload)
+            ).status_code != 403
+            assert (
+                await client.post(
+                    "/api/v1/onboarding/parse-calcom-url",
+                    json={"url": "https://cal.com/dana/intro"},
+                )
+            ).status_code != 403
     finally:
         _clear_overrides()
 

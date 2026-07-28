@@ -19,6 +19,7 @@ from app.db.session import get_db, transaction_boundary
 from app.models.api_key import APIKey
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.workspaces.membership import resolve_active_membership
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -350,6 +351,66 @@ def require_capability(
     return _require
 
 
+async def get_active_workspace_membership(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> WorkspaceMembership | None:
+    """Resolve the caller's membership in their *active* workspace, if any.
+
+    For the handful of routes that act on "the workspace I am in" without taking
+    a ``workspace_id`` path parameter (the self-serve onboarding flow). Delegates
+    to :func:`app.services.workspaces.membership.resolve_active_membership` — the
+    same resolution the onboarding service performs — so the membership gated
+    here is provably the one the handler goes on to mutate.
+
+    Unlike :func:`get_membership` this takes no ``workspace_id`` argument, so it
+    adds nothing to the OpenAPI schema of the routes it guards.
+
+    Returns ``None`` when the user belongs to no workspace: there is then no
+    workspace to escalate into, and the handler should emit its own "create a
+    workspace first" error rather than a misleading 403.
+    """
+    membership = await resolve_active_membership(current_user.id, db)
+    if membership is None:
+        return None
+
+    # An API key issued for workspace A must not act on the caller's default
+    # workspace B, exactly as on the ``/workspaces/{workspace_id}`` routes.
+    _enforce_api_key_workspace(request, membership.workspace_id)
+    _bind_identity_to_logs(workspace_id=membership.workspace_id)
+    return membership
+
+
+def require_active_workspace_capability(
+    *required: Capability,
+) -> Callable[[WorkspaceMembership | None], Awaitable[WorkspaceMembership | None]]:
+    """Gate a workspace-less route on the caller's role in their active workspace.
+
+    The capability-tier counterpart of :func:`require_capability` for routes with
+    no ``workspace_id`` path parameter. The verdict is based solely on the role
+    the caller holds in the resolved workspace — the ``is_default`` flag selects
+    the target workspace but grants nothing, since any member can set their own
+    default (``POST /workspaces/{workspace_id}/set-default``).
+
+    Unknown/legacy role strings resolve to the lowest tier (fail-closed).
+    """
+
+    async def _require(
+        membership: Annotated[WorkspaceMembership | None, Depends(get_active_workspace_membership)],
+    ) -> WorkspaceMembership | None:
+        if membership is None:
+            return None
+        if not all(role_can(membership.role, cap) for cap in required):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return membership
+
+    return _require
+
+
 async def get_transactional_db(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AsyncGenerator[AsyncSession, None]:
@@ -422,4 +483,12 @@ CanViewReports = Annotated[
 ]
 CanManageMembers = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.MEMBERS_MANAGE))
+]
+
+# Capability gate for routes that act on the caller's active workspace without a
+# ``workspace_id`` path parameter (self-serve onboarding). Adds no parameters to
+# the route signature, so the published OpenAPI contract is unchanged.
+CanManageActiveWorkspace = Annotated[
+    WorkspaceMembership | None,
+    Depends(require_active_workspace_capability(Capability.WORKSPACE_MANAGE)),
 ]

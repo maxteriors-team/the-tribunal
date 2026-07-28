@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from app.services.exceptions import ServiceError, ServiceUnavailableError, ValidationError
+from app.services.exceptions import (
+    PermissionDeniedError,
+    ServiceError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 
 
 class OnboardingValidationError(ValidationError):
     """Raised when onboarding input or workspace state is invalid."""
+
+
+class OnboardingPermissionError(PermissionDeniedError):
+    """Raised when the caller may not run onboarding against its workspace."""
 
 
 class OnboardingWorkspaceError(OnboardingValidationError):

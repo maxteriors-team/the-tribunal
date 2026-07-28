@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.permissions import Capability, role_can
 from app.db.scope import apply_workspace_scope
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
@@ -24,9 +25,14 @@ from app.services.agents.reactivation_template import (
 )
 from app.services.contacts import ContactImportService, ImportResult
 from app.services.onboarding.credentials import store_calcom_credentials
-from app.services.onboarding.exceptions import OnboardingValidationError, OnboardingWorkspaceError
+from app.services.onboarding.exceptions import (
+    OnboardingPermissionError,
+    OnboardingValidationError,
+    OnboardingWorkspaceError,
+)
 from app.services.reactivation.drip_bootstrap import auto_create_drip_for_imports
 from app.services.telephony.telnyx import PhoneNumberInfo, TelnyxSMSService
+from app.services.workspaces.membership import resolve_active_membership
 
 logger = structlog.get_logger()
 
@@ -95,27 +101,52 @@ DripBootstrapper = Callable[[AsyncSession, uuid.UUID, list[int]], Awaitable[None
 
 
 async def get_user_workspace(current_user_id: int, db: AsyncSession) -> Workspace:
-    """Resolve a user's default workspace, falling back to their first membership."""
-    result = await db.execute(
-        select(WorkspaceMembership).where(
-            WorkspaceMembership.user_id == current_user_id,
-            WorkspaceMembership.is_default.is_(True),
-        )
-    )
-    membership = result.scalar_one_or_none()
+    """Resolve a user's default workspace, falling back to their first membership.
 
-    if membership is None:
-        result = await db.execute(
-            select(WorkspaceMembership)
-            .where(WorkspaceMembership.user_id == current_user_id)
-            .order_by(WorkspaceMembership.created_at.asc())
-            .limit(1)
-        )
-        membership = result.scalar_one_or_none()
+    Resolution only — this grants nothing. Callers that read privileged state or
+    mutate the workspace must use :func:`get_managed_user_workspace`.
+    """
+    membership = await _resolve_onboarding_membership(current_user_id, db)
+    return await _load_active_workspace(membership, db)
 
+
+async def get_managed_user_workspace(current_user_id: int, db: AsyncSession) -> Workspace:
+    """Resolve the user's workspace and require ``workspace:manage`` within it.
+
+    Onboarding creates agents, overwrites the workspace's Cal.com credential, and
+    buys Telnyx numbers on the owner's account, so it is an owner/admin action.
+    The target workspace comes from the caller's default membership, and any
+    member can move their own default (``POST /workspaces/{id}/set-default``) —
+    so the check below is made against the role the caller holds **in the
+    resolved workspace**, never against the ``is_default`` flag itself.
+
+    Authorizing here, at the single point where the workspace is resolved, keeps
+    the permission decision atomic with the resolution it protects: the API
+    dependency in :mod:`app.api.deps` fails the request early, and this layer
+    stops any other caller from reaching the mutations behind it.
+    """
+    membership = await _resolve_onboarding_membership(current_user_id, db)
+    if not role_can(membership.role, Capability.WORKSPACE_MANAGE):
+        raise OnboardingPermissionError("You do not have permission to perform this action")
+    return await _load_active_workspace(membership, db)
+
+
+async def _resolve_onboarding_membership(
+    current_user_id: int,
+    db: AsyncSession,
+) -> WorkspaceMembership:
+    """Return the caller's active-workspace membership or raise the onboarding error."""
+    membership = await resolve_active_membership(current_user_id, db)
     if membership is None:
         raise OnboardingWorkspaceError("No workspace found. Please create a workspace first.")
+    return membership
 
+
+async def _load_active_workspace(
+    membership: WorkspaceMembership,
+    db: AsyncSession,
+) -> Workspace:
+    """Load the active workspace behind ``membership``."""
     ws_result = await db.execute(
         select(Workspace).where(
             Workspace.id == membership.workspace_id,
@@ -139,7 +170,7 @@ async def complete_onboarding(
     telnyx_service_factory: TelnyxServiceFactory = TelnyxSMSService,
 ) -> OnboardingResult:
     """Create the reactivation agent, store credentials, and best-effort provision SMS."""
-    workspace = await get_user_workspace(current_user_id, db)
+    workspace = await get_managed_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
     agent = await create_reactivation_agent(
@@ -278,7 +309,7 @@ async def launch_campaign_from_csv(
     now: Callable[[], datetime] | None = None,
 ) -> CampaignResult:
     """Import contacts from CSV, create a campaign, enroll contacts, and start it."""
-    workspace = await get_user_workspace(current_user_id, db)
+    workspace = await get_managed_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
     import_result = await import_onboarding_contacts(

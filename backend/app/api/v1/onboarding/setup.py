@@ -1,10 +1,24 @@
-"""Self-serve onboarding endpoints."""
+"""Self-serve onboarding endpoints.
+
+Every route here acts on the caller's *active* workspace (their default
+membership) rather than an explicit ``workspace_id``, and the actions are
+privileged: creating the reactivation agent, overwriting the workspace's Cal.com
+credential, and purchasing a Telnyx number on the owner's account. They are
+therefore gated on ``workspace:manage`` (owner/admin tier) via
+:data:`~app.api.deps.CanManageActiveWorkspace`, which authorizes the caller's
+role **in the resolved workspace**. Authentication alone is not enough: any
+member may point their default at another workspace they belong to with
+``POST /workspaces/{workspace_id}/set-default``.
+
+The gate is a dependency over the current user + DB session only, so it adds no
+parameters to these routes and leaves the published OpenAPI contract unchanged.
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
 
-from app.api.deps import DB, CurrentUser
+from app.api.deps import DB, CanManageActiveWorkspace, CurrentUser
 from app.schemas.onboarding import (
     LaunchCampaignResponse,
     OnboardRequest,
@@ -30,7 +44,7 @@ from app.services.onboarding.workspace_setup import (
     CampaignInput,
     OnboardingInput,
     complete_onboarding,
-    get_user_workspace,
+    get_managed_user_workspace,
     launch_campaign_from_csv,
 )
 
@@ -46,6 +60,7 @@ async def onboard(
     request: OnboardRequest,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageActiveWorkspace,
 ) -> OnboardResponse:
     """Complete onboarding in a single call."""
     try:
@@ -71,6 +86,7 @@ async def onboard(
 async def create_campaign(
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageActiveWorkspace,
     file: UploadFile,
     skip_duplicates: bool = Form(default=True),
     campaign_name: str | None = Form(default=None),
@@ -110,10 +126,11 @@ async def parse_calcom_url(
     request: ParseCalcomUrlRequest,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageActiveWorkspace,
 ) -> ParseCalcomUrlResponse:
     """Parse a Cal.com booking URL and resolve the event_type_id."""
     try:
-        workspace = await get_user_workspace(current_user.id, db)
+        workspace = await get_managed_user_workspace(current_user.id, db)
         api_key = await get_workspace_calcom_api_key(workspace.id, db)
         if api_key is None:
             api_key = request.api_key
@@ -134,6 +151,7 @@ async def parse_calcom_url(
 @router.get("/verify-calcom", response_model=VerifyCalcomResponse)
 async def verify_calcom(
     current_user: CurrentUser,
+    _gate: CanManageActiveWorkspace,
     api_key: str = Query(..., min_length=1, description="Cal.com API key to verify"),
 ) -> VerifyCalcomResponse:
     """Verify a Cal.com API key by calling the /me endpoint."""
