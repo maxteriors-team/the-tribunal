@@ -42,3 +42,9 @@ description = "Mac iMessage relay docstring smoke-test. `local-token` is a liter
 regexes = [
     '''^local-token$''',
 ]
+
+[[allowlists]]
+description = "Python keyword argument, not a credential. The generic-api-key rule reads `\"https://api.example.com\", is_outbound=True` in backend/tests/services/telephony/test_stream_auth.py as an `api...=value` assignment. The stream tokens in that suite are all minted at runtime by build_stream_url and verified by verify_stream_token; nothing is hardcoded. Scoped to the exact kwarg value (not the file path) so a real token later added to this token-handling suite is still flagged."
+regexes = [
+    '''^is_outbound=True$''',
+]
