@@ -167,12 +167,18 @@ function OnboardingFlow() {
         onboardedRef.current = true;
         phoneProvisionedRef.current = onboardResult.phone_provisioned;
 
-        // The onboard call created the workspace's first agent, so refresh the
-        // setup probe immediately — otherwise the cold-start card/nav linger on
-        // the cached "zero agents" result (finding RF-002).
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.agents.all(currentWorkspaceId),
-        });
+        // The onboard call stamped `onboarding_completed_at` and created an
+        // agent, so refresh both cached views immediately — otherwise the
+        // setup card/nav linger on the pre-onboarding workspace (finding
+        // RF-002).
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.workspaces.all(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.agents.all(currentWorkspaceId),
+          }),
+        ]);
       }
 
       // A CSV launch sends SMS, so it can't start without an SMS-capable number.

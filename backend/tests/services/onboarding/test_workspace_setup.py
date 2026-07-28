@@ -21,6 +21,7 @@ from app.services.onboarding.exceptions import (
     OnboardingValidationError,
     OnboardingWorkspaceError,
 )
+from app.services.agents import ensure_default_agent
 from app.services.onboarding.workspace_setup import (
     REACTIVATION_AGENT_NAME,
     CampaignInput,
@@ -28,6 +29,7 @@ from app.services.onboarding.workspace_setup import (
     complete_onboarding,
     get_user_workspace,
     launch_campaign_from_csv,
+    mark_onboarding_complete,
     provision_phone_number,
 )
 from app.services.telephony.telnyx import PhoneNumberInfo
@@ -240,6 +242,40 @@ async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> N
     assert Agent in added_types
     assert PhoneNumber in added_types
     db.commit.assert_awaited_once()
+    # The wizard finishing is the *only* thing that marks a workspace onboarded.
+    assert workspace.onboarding_completed_at is not None
+
+
+async def test_seeded_default_agent_leaves_workspace_un_onboarded() -> None:
+    """Regression: setup state must never be inferred from seeded rows.
+
+    ``POST /workspaces`` seeds a template agent at creation time, so a workspace
+    owns an agent seconds after birth while its operator has configured nothing.
+    Reading "has an agent" as "is onboarded" made the onboarding funnel
+    unreachable for every UI-created workspace, while registration-created ones
+    (no seeded agent) were prompted forever — the same question answered by
+    creation path rather than by operator action.
+    """
+    db = _db()
+    _, workspace = _workspace()
+    db.execute.side_effect = [_ExecuteResult(None)]
+
+    agent = await ensure_default_agent(db, workspace.id)
+
+    assert agent is not None
+    assert workspace.onboarding_completed_at is None
+
+
+async def test_mark_onboarding_complete_preserves_first_completion() -> None:
+    """Re-running the wizard must not rewrite when setup was actually finished."""
+    _, workspace = _workspace()
+    first = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    later = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+
+    mark_onboarding_complete(workspace, now=lambda: first)
+    mark_onboarding_complete(workspace, now=lambda: later)
+
+    assert workspace.onboarding_completed_at == first
 
 
 async def test_provision_phone_number_is_best_effort_on_telnyx_error() -> None:

@@ -35,6 +35,10 @@ class WorkspaceResponse(BaseModel):
     description: str | None
     settings: dict[str, typing.Any]
     is_active: bool
+    # ``None`` until the operator finishes the onboarding wizard. This is the
+    # only "is this workspace configured?" signal clients may use — counting
+    # seeded rows (default agent/pipeline) reports configured at creation time.
+    onboarding_completed_at: datetime | None
     created_at: datetime
     updated_at: datetime
     # The caller's role in this workspace, populated on per-workspace reads so

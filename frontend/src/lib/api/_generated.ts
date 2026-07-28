@@ -23552,6 +23552,8 @@ export interface components {
             is_active: boolean;
             /** Name */
             name: string;
+            /** Onboarding Completed At */
+            onboarding_completed_at: string | null;
             /** Role */
             role?: string | null;
             /** Settings */

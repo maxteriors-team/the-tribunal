@@ -200,6 +200,8 @@ async def complete_onboarding(
         telnyx_service_factory=telnyx_service_factory,
     )
 
+    mark_onboarding_complete(workspace, now=lambda: datetime.now(UTC))
+
     await db.commit()
 
     return OnboardingResult(
@@ -209,6 +211,27 @@ async def complete_onboarding(
         phone_number=phone.phone_number,
         calcom_connected=True,
     )
+
+
+def mark_onboarding_complete(
+    workspace: Workspace,
+    *,
+    now: Callable[[], datetime],
+) -> None:
+    """Stamp the workspace as onboarded, preserving an earlier completion.
+
+    This is the *only* place setup state is recorded. Callers must never infer it
+    from rows the system seeds on the operator's behalf: ``POST /workspaces``
+    provisions a template agent and a default pipeline at creation time, so
+    "a row exists" is true for a workspace that is seconds old and has never been
+    configured, while the registration path seeds no agent at all — the same
+    question got opposite answers purely by creation path.
+
+    Idempotent: re-running the wizard keeps the first completion timestamp, so
+    the value stays a truthful "when did this operator finish setup?".
+    """
+    if workspace.onboarding_completed_at is None:
+        workspace.onboarding_completed_at = now()
 
 
 async def create_reactivation_agent(

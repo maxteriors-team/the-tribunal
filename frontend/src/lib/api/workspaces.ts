@@ -8,6 +8,12 @@ export interface WorkspaceResponse {
   description: string | null;
   settings: Record<string, unknown>;
   is_active: boolean;
+  /**
+   * When the operator finished the onboarding wizard; `null` if they never did.
+   * The only trustworthy "is this workspace configured?" signal — see
+   * `useSetupStatus`.
+   */
+  onboarding_completed_at: string | null;
   created_at: string;
   updated_at: string;
   /** The caller's role in this workspace; populated on per-workspace reads. */

@@ -40169,6 +40169,18 @@
             "title": "Name",
             "type": "string"
           },
+          "onboarding_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onboarding Completed At"
+          },
           "role": {
             "anyOf": [
               {
@@ -40202,6 +40214,7 @@
           "description",
           "settings",
           "is_active",
+          "onboarding_completed_at",
           "created_at",
           "updated_at"
         ],

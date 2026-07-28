@@ -46,6 +46,17 @@ class Workspace(Base):
         JSONB, default=dict, nullable=False
     )  # timezone, business_hours
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # When the operator actually finished the self-serve onboarding wizard
+    # (:func:`app.services.onboarding.workspace_setup.complete_onboarding`).
+    # ``None`` means "never onboarded" and is the only signal the setup gate may
+    # key off. Do not infer setup state from rows the system seeds on the
+    # operator's behalf (the default agent, the default pipeline): a workspace
+    # created through ``POST /workspaces`` owns a template agent at birth, so
+    # "has an agent" reported "configured" seconds after creation and made the
+    # onboarding funnel unreachable for every UI-created workspace.
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

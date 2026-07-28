@@ -98,6 +98,12 @@ async def create_workspace(
 
     # Seed a working AI follow-up agent from an existing template so a brand-new
     # workspace's /agents experience "just works" without authoring a prompt.
+    #
+    # This agent is seeded *for* the operator, so it says nothing about whether
+    # they configured anything: the workspace stays `onboarding_completed_at =
+    # NULL` until the wizard actually completes. Never treat "has an agent" as
+    # "is onboarded" — that inference made the onboarding funnel unreachable for
+    # every workspace created through this endpoint.
     await ensure_default_agent(db, workspace.id)
 
     await db.commit()

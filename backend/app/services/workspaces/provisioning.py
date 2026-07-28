@@ -97,6 +97,14 @@ async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
 
     # Mirror create_workspace: provision a default pipeline so the opportunities
     # board renders and the promotion flow has a pipeline to open into.
+    #
+    # Deliberately no `ensure_default_agent` here, and deliberately no
+    # `onboarding_completed_at`: a freshly provisioned personal workspace has
+    # never been configured, so it must be offered onboarding. Seeding an agent
+    # to "match" create_workspace would not make the two paths consistent in any
+    # useful way — setup state is the explicit
+    # :attr:`Workspace.onboarding_completed_at` stamp, written only when the
+    # wizard completes.
     await ensure_default_pipeline(db, workspace.id)
     await db.flush()
 

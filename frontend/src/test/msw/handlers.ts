@@ -35,6 +35,7 @@ export const stubWorkspace: WorkspaceWithMembership = {
     description: null,
     settings: {},
     is_active: true,
+    onboarding_completed_at: FIXED_NOW,
     created_at: FIXED_NOW,
     updated_at: FIXED_NOW,
   },
