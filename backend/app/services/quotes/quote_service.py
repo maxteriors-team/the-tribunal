@@ -24,7 +24,11 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
+from app.db.scope import assert_workspace_owned
 from app.models.catalog import CatalogItem
+from app.models.contact import Contact
+from app.models.field_service import ServiceLocation
+from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
@@ -215,6 +219,46 @@ class QuoteService:
         self.log = logger.bind(component="quote_service")
 
     # ------------------------------------------------------------------
+    # Reference validation (tenant-safe)
+    # ------------------------------------------------------------------
+
+    async def _validate_refs(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        contact_id: int | None = None,
+        service_location_id: uuid.UUID | None = None,
+        opportunity_id: uuid.UUID | None = None,
+    ) -> None:
+        """Validate client-supplied references belong to ``workspace_id``.
+
+        Only ids that were actually supplied are checked. A foreign id 404s
+        exactly like a missing one, so a caller cannot bind a quote to another
+        tenant's contact and have the platform email/SMS that contact (which
+        would echo their decrypted details back in the response).
+        """
+        if contact_id is not None:
+            await assert_workspace_owned(
+                self.db, Contact, contact_id, workspace_id, detail="Contact not found"
+            )
+        if service_location_id is not None:
+            await assert_workspace_owned(
+                self.db,
+                ServiceLocation,
+                service_location_id,
+                workspace_id,
+                detail="Service location not found",
+            )
+        if opportunity_id is not None:
+            await assert_workspace_owned(
+                self.db,
+                Opportunity,
+                opportunity_id,
+                workspace_id,
+                detail="Opportunity not found",
+            )
+
+    # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
     # ------------------------------------------------------------------
 
@@ -333,7 +377,6 @@ class QuoteService:
         phone = (phone or "").strip() or None
 
         from app.core.encryption import hash_phone, hash_value
-        from app.models.contact import Contact
 
         if email:
             match = await self.db.execute(
@@ -461,6 +504,12 @@ class QuoteService:
         created_by_id: int | None = None,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
+        await self._validate_refs(
+            workspace_id,
+            contact_id=quote_in.contact_id,
+            service_location_id=quote_in.service_location_id,
+            opportunity_id=quote_in.opportunity_id,
+        )
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=quote_in.contact_id,
@@ -542,6 +591,13 @@ class QuoteService:
         )
         if quote.status in _LOCKED_STATUSES:
             raise ConflictError(f"Cannot edit a {quote.status} quote")
+
+        await self._validate_refs(
+            workspace_id,
+            contact_id=quote_in.contact_id,
+            service_location_id=quote_in.service_location_id,
+            opportunity_id=quote_in.opportunity_id,
+        )
 
         for field in (
             "contact_id",
@@ -1123,6 +1179,12 @@ class QuoteService:
         # Wizard quotes must carry a contact so an approved quote can convert into
         # a scheduled job. Use the explicit contact, else resolve/create one from
         # the collected client details (email then phone) within this workspace.
+        await self._validate_refs(
+            workspace_id,
+            contact_id=payload.contact_id,
+            service_location_id=payload.service_location_id,
+            opportunity_id=payload.opportunity_id,
+        )
         contact_id = payload.contact_id
         if contact_id is None:
             contact_id = await self._resolve_wizard_contact(workspace_id, payload)

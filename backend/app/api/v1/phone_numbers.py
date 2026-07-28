@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.api.deps import DB, CanManageComms, CanReadCRM, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
+from app.db.scope import apply_workspace_scope, assert_workspace_owned
 from app.models.phone_number import PhoneNumber
 from app.schemas.phone_number import (
     PaginatedPhoneNumbers,
@@ -33,9 +34,8 @@ async def list_phone_numbers(
     sms_enabled: bool | None = None,
     active_only: bool = True,
 ) -> PaginatedPhoneNumbers:
-    """List phone numbers (shared across workspaces for now)."""
-    # Phone numbers are shared across workspaces - don't filter by workspace_id
-    query = select(PhoneNumber)
+    """List the workspace's phone numbers."""
+    query = apply_workspace_scope(select(PhoneNumber), PhoneNumber, workspace_id)
 
     if active_only:
         query = query.where(PhoneNumber.is_active.is_(True))
@@ -57,22 +57,14 @@ async def get_phone_number(
     db: DB,
     membership: CanReadCRM,
 ) -> PhoneNumber:
-    """Get a phone number by ID (shared across workspaces)."""
-    # Phone numbers are shared across workspaces - don't filter by workspace_id
-    result = await db.execute(
-        select(PhoneNumber).where(
-            PhoneNumber.id == phone_number_id,
-        )
+    """Get one of the workspace's phone numbers by ID."""
+    return await assert_workspace_owned(
+        db,
+        PhoneNumber,
+        phone_number_id,
+        workspace_id,
+        detail="Phone number not found",
     )
-    phone_number = result.scalar_one_or_none()
-
-    if not phone_number:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Phone number not found",
-        )
-
-    return phone_number
 
 
 @router.put("/{phone_number_id}", response_model=PhoneNumberResponse)

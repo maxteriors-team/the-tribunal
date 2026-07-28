@@ -23,7 +23,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
+from app.db.scope import assert_workspace_owned
+from app.models.contact import Contact
 from app.models.invoice import Invoice, InvoiceLineItem
+from app.models.opportunity import Opportunity
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceDetailResponse,
@@ -54,6 +57,37 @@ class InvoiceService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.log = logger.bind(component="invoice_service")
+
+    # ------------------------------------------------------------------
+    # Reference validation (tenant-safe)
+    # ------------------------------------------------------------------
+
+    async def _validate_refs(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        contact_id: int | None = None,
+        opportunity_id: uuid.UUID | None = None,
+    ) -> None:
+        """Validate client-supplied references belong to ``workspace_id``.
+
+        Only ids that were actually supplied are checked. A foreign id 404s
+        exactly like a missing one, so a caller cannot bill another tenant's
+        contact and have the platform email that contact (which would echo
+        their decrypted details back in the response).
+        """
+        if contact_id is not None:
+            await assert_workspace_owned(
+                self.db, Contact, contact_id, workspace_id, detail="Contact not found"
+            )
+        if opportunity_id is not None:
+            await assert_workspace_owned(
+                self.db,
+                Opportunity,
+                opportunity_id,
+                workspace_id,
+                detail="Opportunity not found",
+            )
 
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
@@ -152,6 +186,11 @@ class InvoiceService:
         created_by_id: int | None = None,
     ) -> InvoiceDetailResponse:
         """Create a draft invoice with its initial line items and computed totals."""
+        await self._validate_refs(
+            workspace_id,
+            contact_id=invoice_in.contact_id,
+            opportunity_id=invoice_in.opportunity_id,
+        )
         invoice = Invoice(
             workspace_id=workspace_id,
             contact_id=invoice_in.contact_id,
@@ -225,6 +264,12 @@ class InvoiceService:
         )
         if invoice.status == "void":
             raise ConflictError("Cannot edit a voided invoice")
+
+        await self._validate_refs(
+            workspace_id,
+            contact_id=invoice_in.contact_id,
+            opportunity_id=invoice_in.opportunity_id,
+        )
 
         for field in (
             "contact_id",

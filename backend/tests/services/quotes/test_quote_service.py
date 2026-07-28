@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
@@ -212,6 +213,52 @@ async def test_approve_and_decline_guards() -> None:
         assert declined.decline_reason == "too expensive"
         with pytest.raises(ConflictError):
             await svc.approve_quote(ws.id, q2.id)
+
+
+async def test_create_rejects_another_workspaces_references() -> None:
+    """A foreign contact/site/deal id 404s instead of binding to the quote.
+
+    Without this the quote could be emailed/texted to another tenant's contact,
+    echoing their decrypted email/phone back in the response.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other = await _make_workspace(db)
+        their_contact = await _make_contact(db, other.id)
+        their_location = await _make_location(db, other.id, their_contact.id)
+        svc = QuoteService(db)
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.create_quote(ws.id, QuoteCreate(contact_id=their_contact.id, line_items=[]))
+        assert exc.value.status_code == 404
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.create_quote(
+                ws.id, QuoteCreate(service_location_id=their_location.id, line_items=[])
+            )
+        assert exc.value.status_code == 404
+
+        # A non-existent id is indistinguishable from a foreign one.
+        with pytest.raises(HTTPException) as exc:
+            await svc.create_quote(ws.id, QuoteCreate(opportunity_id=uuid.uuid4(), line_items=[]))
+        assert exc.value.status_code == 404
+
+
+async def test_update_rejects_another_workspaces_contact() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other = await _make_workspace(db)
+        their_contact = await _make_contact(db, other.id)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(ws.id, QuoteCreate(line_items=[]))
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.update_quote(ws.id, quote.id, QuoteUpdate(contact_id=their_contact.id))
+        assert exc.value.status_code == 404
+
+        # The quote is left untouched.
+        fetched = await svc.get_quote(ws.id, quote.id)
+        assert fetched.contact_id is None
 
 
 async def test_locked_quote_rejects_edits() -> None:
