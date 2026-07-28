@@ -5,7 +5,7 @@
  * Everything is scoped under `.sales-wizard` so the dark/gold brand never
  * collides with the SaaS dashboard theme (which owns bare `:root`). Per-business
  * accent is a one-line swap of `--gold`. Component classes (screens, wizard,
- * presentation, night preview) are appended in the same file as the React
+ * presentation) are appended in the same file as the React
  * screens are built, keeping the ported markup and its CSS together.
  *
  * Font faces come from `./fonts.ts` via `next/font` and are referenced through
@@ -535,42 +535,12 @@
   .night-launch-btn.saved { border-color: rgba(63, 166, 106, 0.55); color: #7fd0a0; background: linear-gradient(135deg, #0c1a12, #0a0f0b); }
   .night-launch-btn.saved:hover { border-color: #3fa66a; color: #9fe0ba; box-shadow: 0 0 40px rgba(63, 166, 106, 0.15); }
   .night-launch-sub { margin-top: 8px; font-size: 11px; line-height: 1.5; color: var(--t4); font-style: italic; font-family: var(--font-cormorant), serif; text-align: center; }
-  #screen-night { min-height: 100vh; background: #05060c; }
-  #screen-night.active { display: flex; flex-direction: column; }
-  .night-nav { position: sticky; top: 0; z-index: 50; min-height: 54px; background: rgba(5, 6, 12, 0.97); backdrop-filter: blur(20px); border-bottom: 1px solid var(--bdr); display: flex; align-items: center; justify-content: space-between; padding: 8px 18px; gap: 10px; flex-wrap: wrap; }
-  .night-nav-brand { font-size: 9px; font-weight: 700; letter-spacing: 0.30em; text-transform: uppercase; color: var(--gold-d); }
-  .night-nav-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .night-stage { position: relative; flex: 1; min-height: 340px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #05060c; touch-action: none; }
-  #night-canvas { max-width: 100%; max-height: 100%; display: block; cursor: crosshair; touch-action: none; }
-  .night-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--t4); font-family: var(--font-cormorant), serif; font-style: italic; font-size: 18px; padding: 24px; pointer-events: none; }
-  .night-toolbar { background: var(--s1); border-top: 1px solid var(--gold-d); padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 14px; }
-  .night-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .night-types { display: flex; gap: 6px; flex-wrap: wrap; }
-  .night-type-btn { padding: 9px 13px; background: var(--s2); border: 1px solid var(--bdr); color: var(--t3); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
-  .night-type-btn.active { border-color: var(--gold); color: var(--gold); background: #1f1c14; }
-  .night-file-btn { padding: 9px 14px; background: var(--gold); color: #0a0a0a; border: none; font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
-  .night-mini-btn { padding: 9px 12px; background: transparent; color: var(--t3); border: 1px solid var(--bdr); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
-  .night-mini-btn:hover { border-color: var(--bdr-g); color: var(--gold); }
-  .night-sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
-  @media (min-width: 680px) { .night-sliders { grid-template-columns: repeat(4, 1fr); } }
-  .night-slider-wrap { display: flex; flex-direction: column; gap: 5px; }
-  .night-slider-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--t3); display: flex; justify-content: space-between; }
-  .night-slider-label span { color: var(--gold-d); }
-  .night-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: var(--bdr); outline: none; border-radius: 2px; }
-  .night-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--gold); cursor: pointer; border: 2px solid #0a0a0a; }
-  .night-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--gold); cursor: pointer; border: 2px solid #0a0a0a; }
-  .night-hint { font-size: 11px; color: var(--t4); font-style: italic; font-family: var(--font-cormorant), serif; }
   /* Lights / Roofline mode + measure-step toggles */
-  .night-mode-toggle { display: inline-flex; border: 1px solid var(--bdr); overflow: hidden; }
-  .night-mode-toggle button { padding: 9px 14px; background: var(--s2); border: none; border-right: 1px solid var(--bdr); color: var(--t3); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
-  .night-mode-toggle button:last-child { border-right: none; }
-  .night-mode-toggle button.active { border-color: var(--gold); color: var(--gold); background: #1f1c14; }
-  .night-select { padding: 9px 12px; background: var(--s2); border: 1px solid var(--bdr); color: var(--t2); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; }
-  .night-select:focus { outline: none; border-color: var(--gold); }
-  .night-measure-readout { display: flex; align-items: baseline; gap: 12px; padding: 10px 12px; background: var(--s2); border: 1px solid var(--bdr); }
-  .night-feet { font-family: var(--font-cormorant), serif; font-size: 30px; font-weight: 300; color: var(--gold); line-height: 1; }
-  .night-feet-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); }
 
+  /* Per-service value propositions on the presentation. The designer's
+     `estimator.css` owns the block's own styling; this only spaces it into the
+     presentation rhythm and lets the gold theme through. */
+  .pvalue-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.2s both; }
   .pnight-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.16s both; }
   .pnight-frame { border: 1px solid var(--bdr-g); position: relative; line-height: 0; background: #05060c; }
   .pnight-frame img { width: 100%; height: auto; display: block; }
@@ -638,9 +608,6 @@
     .present-nav-brand { line-height: 1.35; letter-spacing: 0.24em; white-space: normal; text-align: center; }
     .present-nav-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
     .back-btn, .send-email-nav-btn { min-height: 38px; padding: 9px 8px; font-size: 8px; letter-spacing: 0.08em; text-align: center; }
-    .night-nav { align-items: stretch; padding: 10px 14px; }
-    .night-nav-brand { text-align: center; line-height: 1.35; letter-spacing: 0.20em; width: 100%; }
-    .night-nav-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
   }
   @media (max-width: 520px) {
     #screen-calc { padding: 30px 14px 78px; }
@@ -660,7 +627,6 @@
     .fix-line-total { min-width: auto; }
     .tier-tabs { grid-template-columns: 1fr; }
     .tier-tab { min-height: 44px; }
-    .bistro-prod-toggle, .night-sliders { grid-template-columns: 1fr; }
     .bistro-feet-wrap { align-items: stretch; flex-direction: column; }
     .bistro-feet-input { width: 100%; }
     .present-body { padding: 42px 16px 72px; }
@@ -675,7 +641,6 @@
   }
   @media (max-width: 360px) {
     .wizard-title { font-size: 27px; }
-    .present-nav-actions, .night-nav-actions { grid-template-columns: 1fr; }
     .pkg-price { font-size: 42px; }
     .pkg-card.better .pkg-price { font-size: 46px; }
   }

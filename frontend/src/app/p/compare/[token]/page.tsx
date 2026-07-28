@@ -6,6 +6,7 @@ import { use } from "react";
 import { ComparisonCard } from "@/components/estimator/comparison-card";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { publicComparisonsApi } from "@/lib/api/public-comparisons";
+import { clientThemeClass } from "@/lib/estimator/services";
 import { queryKeys } from "@/lib/query-keys";
 
 import "@/components/estimator/estimator.css";
@@ -49,6 +50,12 @@ export default function PublicComparisonPage({
   // page stays cohesive for every workspace regardless of its brand color; the
   // business is identified by its name text rather than a brand accent that
   // could clash with the theme.
+  //
+  // It is applied only when the seasonal side is actually on offer. A homeowner
+  // comparing permanent-only lighting — or buying year-round landscape work —
+  // should not be handed a Christmas page; without it they get the neutral
+  // brass-on-black base, which reads as premium architectural lighting.
+  const theme = clientThemeClass(data.christmas.enabled ? ["christmas"] : []);
 
   // Seasonal Good/Better/Best ladder (feet-free totals only). The recommended
   // tier (rep's pick, else most-inclusive) also labels the summary seasonal card
@@ -57,7 +64,7 @@ export default function PublicComparisonPage({
   const recommended = packages.find((pkg) => pkg.recommended) ?? null;
 
   return (
-    <div className="cmp-view cmp-festive">
+    <div className={`cmp-view ${theme}`.trim()}>
       {data.business_name ? (
         <div style={{ textAlign: "center", paddingTop: 32 }}>
           <span className="cmp-brand">{data.business_name}</span>

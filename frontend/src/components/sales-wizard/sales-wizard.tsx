@@ -1,21 +1,32 @@
 "use client";
 
 /**
- * Sales Wizard root — hosts the three screens (calculator, presentation,
- * night preview) inside the scoped `.sales-wizard` dark/gold theme. All state
- * lives in `useSalesWizard`, which mirrors the selection to the backend for
- * authoritative pricing.
+ * Sales Wizard root — hosts the calculator and presentation screens inside the
+ * scoped `.sales-wizard` dark/gold theme, plus the shared Light Designer for the
+ * photo work. All state lives in `useSalesWizard`, which mirrors the selection
+ * to the backend for authoritative pricing.
+ *
+ * The designer is the same component the Quotes hub renders, so there is one
+ * photo tool: what the rep draws here saves onto the proposal and pushes its
+ * measured fixtures and roofline feet back into this quote.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+import { LightDesigner } from "@/components/estimator/light-designer";
+import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
+import {
+  resolveTierFixtures,
+  type FixtureType,
+} from "@/lib/estimator/fixtures";
+import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
 
 import { CalculatorScreen } from "./calculator-screen";
 import { salesWizardFontVars } from "./fonts";
-import { NightPreviewScreen } from "./night-preview-screen";
 import { PresentationScreen } from "./presentation-screen";
 import { useSalesWizard, type ServiceKey } from "./use-sales-wizard";
 import "./theme.css";
 
-type Screen = "calc" | "present" | "night";
+type Screen = "calc" | "present" | "design";
 
 interface SalesWizardProps {
   workspaceId: string;
@@ -36,6 +47,91 @@ export function SalesWizard({
     setScreen(next);
     window.scrollTo(0, 0);
   };
+
+  const {
+    night,
+    setNight,
+    setQty,
+    setChristmas,
+    hasCategory,
+    toggleCategory,
+    activeService,
+    activeTier,
+    pricing,
+    catalog,
+  } = wizard;
+
+  // The quote's own service seeds the designer's toggle, so opening the tool
+  // from a Christmas quote starts on Christmas rather than landscape.
+  const initialServices = useMemo<DesignerServiceKey[]>(
+    () => (night.services.length ? night.services : [activeService]),
+    [night.services, activeService],
+  );
+
+  const proposalHost = useMemo<DesignerProposalHost>(
+    () => ({
+      initial: {
+        design: night.design,
+        dusk: night.dusk,
+        photo: night.photo,
+        services: initialServices,
+      },
+      tierKey: activeTier,
+      onPhotoChange: (photo) => setNight({ photo }),
+      onClose: () => {
+        setScreen("calc");
+        window.scrollTo(0, 0);
+      },
+      onSave: (snapshot) => {
+        setNight({
+          image: snapshot.image,
+          design: snapshot.design,
+          dusk: snapshot.dusk,
+          services: snapshot.services,
+        });
+
+        // A drawn fixture type resolves to the product THIS package sells, so
+        // the quote gets the right SKU and the crew gets its parts list. A type
+        // the package doesn't sell resolves to nothing and is skipped here —
+        // the designer already told the rep, and silently substituting another
+        // package's product would quote hardware nobody agreed to.
+        const resolution = resolveTierFixtures(pricing, catalog, activeTier);
+        for (const [type, count] of Object.entries(snapshot.fixtures)) {
+          const itemId = resolution[type as FixtureType]?.itemId;
+          if (itemId && count > 0) setQty(itemId, count);
+        }
+
+        // A measured roofline only drives seasonal pricing, so it is scoped to
+        // the christmas branch — measuring on a landscape quote must never
+        // switch the service path underneath the rep.
+        if (activeService === "christmas" && snapshot.rooflineFeet > 0) {
+          setChristmas({ roofline_feet: String(snapshot.rooflineFeet) });
+          if (!hasCategory("christmas")) toggleCategory("christmas");
+        }
+      },
+    }),
+    [
+      night.design,
+      night.dusk,
+      night.photo,
+      initialServices,
+      activeTier,
+      pricing,
+      catalog,
+      setNight,
+      setQty,
+      setChristmas,
+      hasCategory,
+      toggleCategory,
+      activeService,
+    ],
+  );
+
+  if (screen === "design") {
+    // Rendered outside the `.sales-wizard` theme: the designer ships its own
+    // scoped `estimator.css`, exactly as it renders in the Quotes hub.
+    return <LightDesigner workspaceId={workspaceId} proposal={proposalHost} />;
+  }
 
   return (
     <div className={`sales-wizard ${salesWizardFontVars}`}>
@@ -59,16 +155,14 @@ export function SalesWizard({
           wizard={wizard}
           brandName={brandName}
           onPresent={() => show("present")}
-          onOpenNight={() => show("night")}
+          onOpenNight={() => show("design")}
         />
-      ) : screen === "present" ? (
+      ) : (
         <PresentationScreen
           wizard={wizard}
           brandName={brandName}
           onBack={() => show("calc")}
         />
-      ) : (
-        <NightPreviewScreen wizard={wizard} onClose={() => show("calc")} />
       )}
     </div>
   );

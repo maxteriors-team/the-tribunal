@@ -1,15 +1,23 @@
 "use client";
 
 /**
- * Holiday-Home-Concepts-style light designer (authenticated rep tool).
+ * Light Designer — the one place a rep designs lighting on a photo of the home.
  *
  * The rep uploads a house photo, sets the scale from a known measurement, then
- * draws glowing C9 roofline, mini-lights on bushes/trees, and places wreaths
- * directly on the photo. The drawn design is mapped to feet/counts and priced
- * **server-side** into a live permanent-vs-seasonal comparison — the canvas
- * never computes money. A "Client preview" renders the exact feet-free
- * comparison the homeowner gets; "Save & share" mints a public link and can
- * email it to the customer.
+ * draws the job: landscape fixtures from the workspace price book (uplights,
+ * spots, path lights, wall washes, bistro), glowing C9 roofline, mini-lights on
+ * bushes and trees, and wreaths. Dusk is a slider, so the customer watches their
+ * own house light up.
+ *
+ * What the canvas produces is geometry — feet and counts, never money:
+ *
+ * - Holiday work is priced **server-side** into a live permanent-vs-seasonal
+ *   comparison; "Client preview" renders the exact feet-free comparison the
+ *   homeowner gets and "Save & share" mints a public link.
+ * - Landscape fixtures resolve to real price-book items, so each one carries its
+ *   SKU and bill-of-materials through to the quote and the technician's parts
+ *   list. When the Quote Builder hosts this tool (the `proposal` prop) the
+ *   counts flow straight into the wizard, which prices the tier server-side.
  *
  * Layout: tool/product palette (left), photo design stage (center), itemized
  * estimate + customer/share (right).
@@ -20,30 +28,57 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
-import { buildCatalog, indexProducts } from "@/lib/estimator/catalog";
+import {
+  buildBistroCatalog,
+  buildCatalog,
+  indexProducts,
+} from "@/lib/estimator/catalog";
 import {
   designScale,
   designToEstimateInputs,
   hasDesign,
 } from "@/lib/estimator/design";
+import { exportDesignJpeg } from "@/lib/estimator/export";
+import {
+  FIXTURE_TYPES,
+  buildFixturePalette,
+  hasLandscapeFixtures,
+  resolveTierFixtures,
+  type FixtureType,
+} from "@/lib/estimator/fixtures";
 import { resolveSelectedPackage, packageName } from "@/lib/estimator/packages";
 import { fileToPhoto } from "@/lib/estimator/photo";
-import type { PhotoInfo } from "@/lib/estimator/types";
+import {
+  SERVICES,
+  clientThemeClass,
+  type ServiceKey,
+} from "@/lib/estimator/services";
+import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
-import type { LinearFeetEstimateRequest } from "@/types/estimate";
+import type {
+  EstimateRenderRequest,
+  LinearFeetEstimateRequest,
+} from "@/types/estimate";
 
 import { AIRenderModal } from "./ai-render";
 import { ComparisonCard, type ComparisonView } from "./comparison-card";
 import { editorReducer, initialEditorState } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
 import { LightCanvas } from "./light-canvas";
+import type { DesignerProposalHost } from "./proposal-host";
+import { ServiceValueProps } from "./service-value-props";
 import { ToolPalette } from "./tool-palette";
 import "./estimator.css";
 
 type ViewMode = "rep" | "client";
 
-interface RooflineEstimatorProps {
+interface LightDesignerProps {
   workspaceId: string;
+  /**
+   * Set when the Quote Builder hosts the designer: the drawing is saved onto the
+   * in-progress proposal instead of shared as a standalone estimate.
+   */
+  proposal?: DesignerProposalHost;
 }
 
 // Params for the catalog probe: a feet=0 estimate that returns the workspace's
@@ -61,14 +96,43 @@ const CATALOG_PARAMS: LinearFeetEstimateRequest = {
   christmas_items: {},
 };
 
-export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
+export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const hosted = Boolean(proposal);
 
-  const [photo, setPhoto] = useState<PhotoInfo | null>(null);
-  const [state, dispatch] = useReducer(editorReducer, undefined, initialEditorState);
-  const { design } = state;
+  const [photo, setPhoto] = useState<PhotoInfo | null>(
+    proposal?.initial?.photo ?? null,
+  );
+  const [state, dispatch] = useReducer(editorReducer, undefined, () => {
+    const base = initialEditorState();
+    return {
+      ...base,
+      design: proposal?.initial?.design ?? base.design,
+      dusk: proposal?.initial?.dusk ?? base.dusk,
+    };
+  });
+  const { design, dusk } = state;
 
   const [viewMode, setViewMode] = useState<ViewMode>("rep");
+  // Which services this design covers. Multi-select: one photo of a house can
+  // carry landscape fixtures, permanent track, and Christmas at once, and the
+  // customer should see each one argued on its own terms.
+  const [services, setServices] = useState<ServiceKey[]>(
+    () => proposal?.initial?.services ?? ["landscape"],
+  );
+  const sells = (key: ServiceKey) => services.includes(key);
+  const toggleService = (key: ServiceKey) => {
+    setServices((prev) => {
+      // Never let the rep switch every service off — the palette would be empty
+      // with no way back. The last one stays on until another is picked.
+      if (prev.includes(key)) {
+        return prev.length === 1 ? prev : prev.filter((s) => s !== key);
+      }
+      return SERVICES.filter((spec) => spec.key === key || prev.includes(spec.key)).map(
+        (spec) => spec.key,
+      );
+    });
+  };
   const [takedown, setTakedown] = useState(false);
   const [storage, setStorage] = useState(false);
   // The rep's chosen Good/Better/Best seasonal package (a ChristmasPackage key).
@@ -95,6 +159,16 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     null,
   );
   const [aiOpen, setAiOpen] = useState(false);
+  const [savingProposal, setSavingProposal] = useState(false);
+  // What was last written onto the proposal, kept with the exact drawing it was
+  // rendered from: the confirmation then falls away on the next stroke instead
+  // of vouching for a stale image.
+  const [saved, setSaved] = useState<{
+    at: string;
+    design: Design;
+    dusk: number;
+  } | null>(null);
+  const [saveError, setSaveError] = useState(false);
 
   // ---- Catalog (drawable palette) ---------------------------------------
   // Independent of the current design, so products are available the moment a
@@ -105,7 +179,52 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     enabled: Boolean(photo),
     staleTime: 5 * 60_000,
   });
-  const products = useMemo(() => buildCatalog(catalog), [catalog]);
+
+  // The landscape half of the palette is the workspace price book, so a fixture
+  // drawn on the photo is a real inventory item with a SKU behind it.
+  const { data: priceBook } = useQuery({
+    queryKey: queryKeys.salesWizard.catalog(workspaceId),
+    queryFn: () => salesWizardApi.listCatalog(workspaceId),
+    enabled: Boolean(photo),
+    staleTime: 5 * 60_000,
+  });
+
+  // Pricing config drives both the fixture-type resolution and whether the
+  // client-facing roofline comparison is shown.
+  const { data: pricing } = useQuery({
+    queryKey: queryKeys.salesWizard.pricing(workspaceId),
+    queryFn: () => salesWizardApi.getPricing(workspaceId),
+    staleTime: 5 * 60_000,
+  });
+
+  // Which package the fixture types resolve against: the tier the rep is
+  // quoting when hosted, else the workspace's headline package. Change the
+  // package and every drawn fixture re-resolves to that package's product —
+  // no redrawing, and the SKUs follow.
+  const tierKey =
+    proposal?.tierKey ?? pricing?.tier_order?.[0] ?? pricing?.tiers?.[0]?.key ?? null;
+  const tierLabel =
+    (pricing?.tiers ?? []).find((t) => t.key === tierKey)?.tab ??
+    (pricing?.tiers ?? []).find((t) => t.key === tierKey)?.label ??
+    "this package";
+  const fixtureResolution = useMemo(
+    () => resolveTierFixtures(pricing, priceBook, tierKey),
+    [pricing, priceBook, tierKey],
+  );
+  const sellsLandscape = hasLandscapeFixtures(fixtureResolution);
+
+  // The palette carries only the selected services, so a Christmas-only quote
+  // never shows uplights and a landscape-only quote never shows wreaths.
+  const products = useMemo(() => {
+    const landscape =
+      sells("landscape") && sellsLandscape
+        ? [...buildFixturePalette(fixtureResolution), ...buildBistroCatalog(priceBook)]
+        : [];
+    const holiday = buildCatalog(catalog).filter((product) =>
+      product.style === "permanent" ? sells("permanent") : sells("christmas"),
+    );
+    return [...landscape, ...holiday];
+  }, [services, sellsLandscape, fixtureResolution, priceBook, catalog]);
   const productById = useMemo(() => indexProducts(products), [products]);
 
   // ---- Design → server estimate inputs ----------------------------------
@@ -113,12 +232,35 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     () =>
       photo
         ? designToEstimateInputs(design, productById, photo.width)
-        : { feet: 0, christmas_items: {} },
+        : { feet: 0, christmas_items: {}, fixtures: {}, bistro_feet: 0 },
     [design, productById, photo],
   );
   const feet = inputs.feet;
   const designHas = hasDesign(design);
   const { calibrated } = designScale(design, photo?.width ?? 0);
+
+  // Placed fixtures, resolved through the current package into the product the
+  // crew will actually pull. Counts only — the wizard prices them server-side.
+  const fixtureLines = useMemo(
+    () =>
+      FIXTURE_TYPES.map((spec) => {
+        const count = inputs.fixtures[spec.type] ?? 0;
+        const resolved = fixtureResolution[spec.type];
+        return {
+          type: spec.type,
+          label: spec.label,
+          count,
+          productName: resolved.item?.name ?? null,
+          sku: resolved.itemId,
+        };
+      }).filter((line) => line.count > 0),
+    [inputs.fixtures, fixtureResolution],
+  );
+  // Types the rep drew that this package doesn't sell. Never substituted with a
+  // product from another package — the rep is told, and picks.
+  const unresolvedFixtures = fixtureLines.filter((line) => !line.sku);
+  const fixtureCount = fixtureLines.reduce((sum, line) => sum + line.count, 0);
+  const hasLandscape = fixtureCount > 0 || inputs.bistro_feet > 0;
 
   const estimateParams = useMemo<LinearFeetEstimateRequest>(
     () => ({
@@ -142,10 +284,15 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     ],
   );
 
+  // Holiday pricing only: a landscape-only design has nothing for the roofline
+  // comparison endpoint to price, and the Quote Builder owns landscape money.
+  const hasHolidayDesign =
+    feet > 0 || Object.keys(inputs.christmas_items).length > 0;
+
   const { data: estimate, isFetching } = useQuery({
     queryKey: queryKeys.estimator.compute(workspaceId, estimateParams),
     queryFn: () => estimatorApi.estimate(workspaceId, estimateParams),
-    enabled: Boolean(photo) && designHas,
+    enabled: Boolean(photo) && hasHolidayDesign,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
@@ -161,14 +308,6 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   const christmasTotal = selectedPkg
     ? selectedPkg.pricing.total
     : (estimate?.christmas.total ?? 0);
-
-  // The client-visible roofline cost comparison is a workspace setting, so the
-  // rep preview needs the pricing config to know whether the homeowner sees it.
-  const { data: pricing } = useQuery({
-    queryKey: queryKeys.salesWizard.pricing(workspaceId),
-    queryFn: () => salesWizardApi.getPricing(workspaceId),
-    staleTime: 5 * 60_000,
-  });
 
   // Mirror of the server's ``build_public_roofline_comparison`` so the preview
   // shows exactly what the shared page will render (same pattern as
@@ -210,6 +349,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       const info = await fileToPhoto(file);
       dispatch({ type: "RESET" });
       setPhoto(info);
+      proposal?.onPhotoChange(info);
       setViewMode("rep");
       setTakedown(false);
       setStorage(false);
@@ -219,6 +359,37 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
       resetShare();
     } catch {
       window.alert("Could not read that image file.");
+    }
+  };
+
+  // ---- Save onto the proposal (Quote Builder host) -----------------------
+  const saveToProposal = async () => {
+    if (!photo || !proposal || savingProposal) return;
+    setSavingProposal(true);
+    setSaveError(false);
+    try {
+      const image = await exportDesignJpeg(photo, design, productById, { dusk });
+      proposal.onSave({
+        image,
+        design,
+        dusk,
+        services,
+        fixtures: inputs.fixtures as Partial<Record<FixtureType, number>>,
+        rooflineFeet: feet,
+        bistroFeet: inputs.bistro_feet,
+      });
+      setSaved({
+        at: new Date().toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        design,
+        dusk,
+      });
+    } catch {
+      setSaveError(true);
+    } finally {
+      setSavingProposal(false);
     }
   };
 
@@ -263,7 +434,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
   // deliver it to the customer — so emailing never depends on remembering to
   // press "Save & share" beforehand.
   const emailPending = shareMutation.isPending || deliverMutation.isPending;
-  const canEmail = designHas && clientEmail.trim().length > 0;
+  const canEmail = hasHolidayDesign && clientEmail.trim().length > 0;
   const emailEstimate = async () => {
     if (!canEmail || emailPending) return;
     try {
@@ -291,6 +462,14 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     };
   const onPermanentRateChange = makeRateHandler(setPerFtOverride);
   const onChristmasRateChange = makeRateHandler(setChristmasPerFtOverride);
+
+  // The AI render prompt follows what was actually drawn: a landscape design
+  // must never come back looking like a Christmas installation.
+  const renderMode: EstimateRenderRequest["mode"] = hasLandscape
+    ? "landscape"
+    : estimate?.permanent.enabled && !estimate?.christmas.enabled
+      ? "permanent"
+      : "seasonal";
 
   const clientView: ComparisonView | null = estimate
     ? {
@@ -327,6 +506,11 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
     if (shareUrl) void navigator.clipboard?.writeText(shareUrl);
   };
 
+  // Derived, not stored: the drawing is replaced immutably on every edit, so a
+  // reference match means the saved composite still shows what is on screen.
+  const savedAt =
+    saved && saved.design === design && saved.dusk === dusk ? saved.at : null;
+
   return (
     <div className="cmp-view est-app">
       <div className="est-topbar">
@@ -347,10 +531,31 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
             onChange={onFile}
           />
           {photo ? (
+            <div
+              className="est-service-toggle"
+              role="group"
+              aria-label="Services in this design"
+            >
+              {SERVICES.map((spec) => (
+                <button
+                  key={spec.key}
+                  type="button"
+                  className={sells(spec.key) ? "active" : ""}
+                  aria-pressed={sells(spec.key)}
+                  title={spec.summary}
+                  onClick={() => toggleService(spec.key)}
+                >
+                  {spec.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {photo && !hosted ? (
             <div className="est-mode-toggle" role="group" aria-label="View mode">
               <button
                 type="button"
                 className={viewMode === "rep" ? "active" : ""}
+                aria-pressed={viewMode === "rep"}
                 onClick={() => setViewMode("rep")}
               >
                 Rep view
@@ -358,6 +563,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
               <button
                 type="button"
                 className={viewMode === "client" ? "active" : ""}
+                aria-pressed={viewMode === "client"}
                 onClick={() => setViewMode("client")}
               >
                 Client preview
@@ -376,11 +582,46 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
               }
               onClick={() => setAiOpen(true)}
             >
-              ✨ AI render
+              AI render
             </button>
+          ) : null}
+          {proposal ? (
+            <>
+              <button
+                className="est-btn primary"
+                type="button"
+                disabled={!photo || !designHas || savingProposal}
+                title={
+                  photo && designHas
+                    ? undefined
+                    : "Add a photo and draw the design first"
+                }
+                onClick={() => void saveToProposal()}
+              >
+                {savingProposal ? "Saving…" : "Save to proposal"}
+              </button>
+              <button
+                className="est-btn"
+                type="button"
+                onClick={proposal.onClose}
+              >
+                Back to quote
+              </button>
+            </>
           ) : null}
         </div>
       </div>
+
+      {hosted && (savedAt || saveError) ? (
+        <div
+          className={`est-hosted-status${saveError ? " error" : ""}`}
+          role="status"
+        >
+          {saveError
+            ? "Couldn’t save the design — try again."
+            : `Saved to the proposal at ${savedAt}. It shows on the presentation and the client’s page.`}
+        </div>
+      ) : null}
 
       {photo ? (
         <>
@@ -393,219 +634,311 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
               dispatch={dispatch}
             />
             <div className="est-side">
-              <EstimatePanel
-                estimate={estimate}
-                isFetching={isFetching}
-                feet={feet}
-                calibrated={calibrated}
-                hasDesign={designHas}
-                selectedPackage={selectedPackage}
-                onSelectPackage={setSelectedPackage}
-              />
-
-              <div className="est-options">
-                <label className="est-opt-check">
-                  <input
-                    type="checkbox"
-                    checked={takedown}
-                    onChange={(e) => setTakedown(e.target.checked)}
-                  />
-                  Include seasonal takedown
-                </label>
-                <label className="est-opt-check">
-                  <input
-                    type="checkbox"
-                    checked={storage}
-                    onChange={(e) => setStorage(e.target.checked)}
-                  />
-                  Include off-season storage
-                </label>
-                {estimate?.permanent.enabled ? (
-                  <label className="est-opt-rate">
-                    <span>Permanent $/ft</span>
-                    <input
-                      className="est-input"
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="decimal"
-                      value={perFtOverride ?? ""}
-                      placeholder={String(estimate.permanent.per_ft)}
-                      onChange={(e) => onPermanentRateChange(e.target.value)}
-                      aria-label="Internal permanent linear-foot rate override"
-                    />
-                    <span className="est-internal-badge">Internal</span>
-                  </label>
-                ) : null}
-                {estimate?.christmas.enabled ? (
-                  <label className="est-opt-rate">
-                    <span>Seasonal $/ft</span>
-                    <input
-                      className="est-input"
-                      type="number"
-                      min={0}
-                      step={1}
-                      inputMode="decimal"
-                      value={christmasPerFtOverride ?? ""}
-                      placeholder={String(estimate.christmas.per_ft)}
-                      onChange={(e) => onChristmasRateChange(e.target.value)}
-                      aria-label="Internal seasonal linear-foot rate override"
-                    />
-                    <span className="est-internal-badge">Internal</span>
-                  </label>
-                ) : null}
-              </div>
-
-              <div className="est-customer">
-                <div className="est-customer-title">Save to customer</div>
-                <div className="est-customer-fields">
-                  <input
-                    className="est-input"
-                    type="text"
-                    placeholder="Customer name"
-                    autoComplete="off"
-                    value={clientName}
-                    onChange={(e) => editCustomer(setClientName)(e.target.value)}
-                    aria-label="Customer name"
-                  />
-                  <input
-                    className="est-input"
-                    type="email"
-                    placeholder="Email"
-                    autoComplete="off"
-                    value={clientEmail}
-                    onChange={(e) => editCustomer(setClientEmail)(e.target.value)}
-                    aria-label="Customer email"
-                  />
-                  <input
-                    className="est-input"
-                    type="tel"
-                    placeholder="Phone"
-                    autoComplete="off"
-                    value={clientPhone}
-                    onChange={(e) => editCustomer(setClientPhone)(e.target.value)}
-                    aria-label="Customer phone"
-                  />
-                </div>
-                <div className="est-customer-hint">
-                  Add a phone number to save this estimate to a customer record.
-                  Without one you can still share the link.
-                </div>
-                <button
-                  className="est-btn primary est-save-btn"
-                  type="button"
-                  disabled={!canEmail || emailPending}
-                  title={
-                    canEmail
-                      ? undefined
-                      : "Draw the design and add a customer email to send the estimate"
-                  }
-                  onClick={() => void emailEstimate()}
-                >
-                  {emailPending ? "Sending…" : "✉ Email estimate"}
-                </button>
-                <button
-                  className="est-btn est-save-btn"
-                  type="button"
-                  disabled={!designHas || shareMutation.isPending}
-                  onClick={() => shareMutation.mutate()}
-                >
-                  {shareMutation.isPending ? "Saving…" : "Save & share link only"}
-                </button>
-                {deliverMutation.isError || shareMutation.isError ? (
-                  <div className="est-send-row">
-                    <span className="est-send-error">
-                      Couldn’t send — check the email and try again.
-                    </span>
-                  </div>
-                ) : null}
-
-                {estimate &&
-                (estimate.permanent.enabled || estimate.christmas.enabled) ? (
-                  <div className="est-quote-convert">
-                    <div className="est-quote-convert-title">
-                      Turn this design into a quote
-                    </div>
-                    {estimate.permanent.enabled ? (
-                      <button
-                        className="est-btn primary est-save-btn"
-                        type="button"
-                        disabled={!designHas || quotePending}
-                        onClick={() => createQuoteMutation.mutate("permanent")}
-                      >
-                        {quotePending
-                          ? "Creating…"
-                          : estimate.christmas.enabled
-                            ? "Create permanent quote"
-                            : "Create quote"}
-                      </button>
-                    ) : null}
-                    {estimate.christmas.enabled ? (
-                      <button
-                        className="est-btn est-save-btn"
-                        type="button"
-                        disabled={!designHas || quotePending}
-                        onClick={() => createQuoteMutation.mutate("seasonal")}
-                      >
-                        {quotePending
-                          ? "Creating…"
-                          : estimate.permanent.enabled
-                            ? "Create seasonal quote"
-                            : "Create quote"}
-                      </button>
-                    ) : null}
-                    <div className="est-customer-hint">
-                      Creates a draft quote with itemized, server-priced lines.
-                      Review and send it from Quotes.
-                    </div>
-                    {quoteResult ? (
-                      <div className="est-saved-note">
-                        ✓ Quote {quoteResult.number} created ·{" "}
-                        <Link href="/quotes" className="est-quote-link">
-                          Open in Quotes →
-                        </Link>
+              {hasLandscape ? (
+                <div className="ep-panel">
+                  <div className="ep-title">Landscape fixtures</div>
+                  <div className="ep-lines">
+                    {fixtureLines.map((line) => (
+                      <div className="ep-line" key={line.type}>
+                        <span className="ep-line-name">
+                          {line.label}
+                          <span
+                            className={`ep-line-sku${line.sku ? "" : " missing"}`}
+                          >
+                            {line.sku
+                              ? `${line.productName} · ${line.sku}`
+                              : `Not sold in ${tierLabel}`}
+                          </span>
+                        </span>
+                        <span className="ep-line-amount">×{line.count}</span>
                       </div>
-                    ) : null}
-                    {createQuoteMutation.isError ? (
-                      <div className="est-send-row">
-                        <span className="est-send-error">
-                          Couldn’t create the quote — draw a design, then try
-                          again.
+                    ))}
+                    {inputs.bistro_feet > 0 ? (
+                      <div className="ep-line">
+                        <span className="ep-line-name">
+                          Bistro / string lighting
+                        </span>
+                        <span className="ep-line-amount">
+                          {inputs.bistro_feet} ft
                         </span>
                       </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
-
-              {shareUrl ? (
-                <div className="est-share">
-                  {savedToCustomer ? (
-                    <div className="est-saved-note">
-                      ✓ Saved to customer
-                      {clientName.trim() ? ` · ${clientName.trim()}` : ""}
-                    </div>
+                  {unresolvedFixtures.length > 0 ? (
+                    <p className="ep-pkg-warn">
+                      {tierLabel} doesn’t include{" "}
+                      {unresolvedFixtures.map((l) => l.label.toLowerCase()).join(" or ")}
+                      . Pick a package that sells{" "}
+                      {unresolvedFixtures.length > 1 ? "them" : "it"}, or remove{" "}
+                      {unresolvedFixtures.length > 1 ? "those" : "that"} from the
+                      photo.
+                    </p>
                   ) : null}
-                  <div className="est-share-link">
-                    <input value={shareUrl} readOnly aria-label="Client link" />
-                    <button className="est-btn" type="button" onClick={copyLink}>
-                      Copy
-                    </button>
-                  </div>
-                  {sentTo ? (
-                    <div className="est-send-row">
-                      <span className="est-sent-note">✓ Sent to {sentTo}</span>
-                    </div>
+                  <p className="ep-pkg-hint">
+                    {hosted
+                      ? `Priced as ${tierLabel}. Saving pushes these counts into the quote, where the server prices them and expands each fixture’s parts list for the crew.`
+                      : `Showing ${tierLabel} products. Landscape fixtures are priced in the Quote Builder, which expands each fixture’s parts list for the crew.`}
+                  </p>
+                  {!hosted ? (
+                    <Link
+                      className="est-btn est-save-btn"
+                      href="/sales-wizard?service=landscape"
+                    >
+                      Price these in Quote Builder
+                    </Link>
                   ) : null}
                 </div>
+              ) : null}
+
+              {hasHolidayDesign || !hasLandscape ? (
+                <EstimatePanel
+                  estimate={estimate}
+                  isFetching={isFetching}
+                  feet={feet}
+                  calibrated={calibrated}
+                  hasDesign={hasHolidayDesign}
+                  selectedPackage={selectedPackage}
+                  onSelectPackage={setSelectedPackage}
+                />
+              ) : null}
+
+              {!hosted ? (
+                <>
+                  <div className="est-options">
+                    <label className="est-opt-check">
+                      <input
+                        type="checkbox"
+                        checked={takedown}
+                        onChange={(e) => setTakedown(e.target.checked)}
+                      />
+                      Include seasonal takedown
+                    </label>
+                    <label className="est-opt-check">
+                      <input
+                        type="checkbox"
+                        checked={storage}
+                        onChange={(e) => setStorage(e.target.checked)}
+                      />
+                      Include off-season storage
+                    </label>
+                    {estimate?.permanent.enabled ? (
+                      <label className="est-opt-rate">
+                        <span>Permanent $/ft</span>
+                        <input
+                          className="est-input"
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="decimal"
+                          value={perFtOverride ?? ""}
+                          placeholder={String(estimate.permanent.per_ft)}
+                          onChange={(e) => onPermanentRateChange(e.target.value)}
+                          aria-label="Internal permanent linear-foot rate override"
+                        />
+                        <span className="est-internal-badge">Internal</span>
+                      </label>
+                    ) : null}
+                    {estimate?.christmas.enabled ? (
+                      <label className="est-opt-rate">
+                        <span>Seasonal $/ft</span>
+                        <input
+                          className="est-input"
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="decimal"
+                          value={christmasPerFtOverride ?? ""}
+                          placeholder={String(estimate.christmas.per_ft)}
+                          onChange={(e) => onChristmasRateChange(e.target.value)}
+                          aria-label="Internal seasonal linear-foot rate override"
+                        />
+                        <span className="est-internal-badge">Internal</span>
+                      </label>
+                    ) : null}
+                  </div>
+
+                  <div className="est-customer">
+                    <div className="est-customer-title">Save to customer</div>
+                    <div className="est-customer-fields">
+                      <input
+                        className="est-input"
+                        type="text"
+                        placeholder="Customer name"
+                        autoComplete="off"
+                        value={clientName}
+                        onChange={(e) =>
+                          editCustomer(setClientName)(e.target.value)
+                        }
+                        aria-label="Customer name"
+                      />
+                      <input
+                        className="est-input"
+                        type="email"
+                        placeholder="Email"
+                        autoComplete="off"
+                        value={clientEmail}
+                        onChange={(e) =>
+                          editCustomer(setClientEmail)(e.target.value)
+                        }
+                        aria-label="Customer email"
+                      />
+                      <input
+                        className="est-input"
+                        type="tel"
+                        placeholder="Phone"
+                        autoComplete="off"
+                        value={clientPhone}
+                        onChange={(e) =>
+                          editCustomer(setClientPhone)(e.target.value)
+                        }
+                        aria-label="Customer phone"
+                      />
+                    </div>
+                    <div className="est-customer-hint">
+                      Add a phone number to save this estimate to a customer
+                      record. Without one you can still share the link.
+                    </div>
+                    <button
+                      className="est-btn primary est-save-btn"
+                      type="button"
+                      disabled={!canEmail || emailPending}
+                      title={
+                        canEmail
+                          ? undefined
+                          : "Draw the holiday design and add a customer email to send the estimate"
+                      }
+                      onClick={() => void emailEstimate()}
+                    >
+                      {emailPending ? "Sending…" : "Email estimate"}
+                    </button>
+                    <button
+                      className="est-btn est-save-btn"
+                      type="button"
+                      disabled={!hasHolidayDesign || shareMutation.isPending}
+                      onClick={() => shareMutation.mutate()}
+                    >
+                      {shareMutation.isPending
+                        ? "Saving…"
+                        : "Save & share link only"}
+                    </button>
+                    {deliverMutation.isError || shareMutation.isError ? (
+                      <div className="est-send-row">
+                        <span className="est-send-error">
+                          Couldn’t send — check the email and try again.
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {estimate &&
+                    (estimate.permanent.enabled ||
+                      estimate.christmas.enabled) ? (
+                      <div className="est-quote-convert">
+                        <div className="est-quote-convert-title">
+                          Turn this design into a quote
+                        </div>
+                        {estimate.permanent.enabled ? (
+                          <button
+                            className="est-btn primary est-save-btn"
+                            type="button"
+                            disabled={!hasHolidayDesign || quotePending}
+                            onClick={() =>
+                              createQuoteMutation.mutate("permanent")
+                            }
+                          >
+                            {quotePending
+                              ? "Creating…"
+                              : estimate.christmas.enabled
+                                ? "Create permanent quote"
+                                : "Create quote"}
+                          </button>
+                        ) : null}
+                        {estimate.christmas.enabled ? (
+                          <button
+                            className="est-btn est-save-btn"
+                            type="button"
+                            disabled={!hasHolidayDesign || quotePending}
+                            onClick={() =>
+                              createQuoteMutation.mutate("seasonal")
+                            }
+                          >
+                            {quotePending
+                              ? "Creating…"
+                              : estimate.permanent.enabled
+                                ? "Create seasonal quote"
+                                : "Create quote"}
+                          </button>
+                        ) : null}
+                        <div className="est-customer-hint">
+                          Creates a draft quote with itemized, server-priced
+                          lines. Review and send it from Quotes.
+                        </div>
+                        {quoteResult ? (
+                          <div className="est-saved-note">
+                            Quote {quoteResult.number} created ·{" "}
+                            <Link href="/quotes" className="est-quote-link">
+                              Open in Quotes
+                            </Link>
+                          </div>
+                        ) : null}
+                        {createQuoteMutation.isError ? (
+                          <div className="est-send-row">
+                            <span className="est-send-error">
+                              Couldn’t create the quote — draw a design, then try
+                              again.
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {shareUrl ? (
+                    <div className="est-share">
+                      {savedToCustomer ? (
+                        <div className="est-saved-note">
+                          Saved to customer
+                          {clientName.trim() ? ` · ${clientName.trim()}` : ""}
+                        </div>
+                      ) : null}
+                      <div className="est-share-link">
+                        <input
+                          value={shareUrl}
+                          readOnly
+                          aria-label="Client link"
+                        />
+                        <button
+                          className="est-btn"
+                          type="button"
+                          onClick={copyLink}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      {sentTo ? (
+                        <div className="est-send-row">
+                          <span className="est-sent-note">Sent to {sentTo}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </div>
 
-          {viewMode === "client" && clientView ? (
-            // Festive theme so the preview mirrors the client's holiday page.
-            <div className="est-client-preview cmp-festive">
-              <ComparisonCard view={clientView} />
+          {viewMode === "client" && !hosted ? (
+            // The client theme follows what's being sold: a Christmas quote gets
+            // the holiday palette, a landscape quote stays brass-on-black. The
+            // preview mirrors whatever the homeowner will actually see.
+            <div
+              className={`est-client-preview ${clientThemeClass(services)}`.trim()}
+            >
+              <ServiceValueProps
+                services={services}
+                pricing={pricing}
+                tierKey={tierKey}
+              />
+              {clientView ? <ComparisonCard view={clientView} /> : null}
             </div>
           ) : null}
 
@@ -615,6 +948,7 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
               photo={photo}
               design={design}
               productById={productById}
+              mode={renderMode}
               onClose={() => setAiOpen(false)}
             />
           ) : null}
@@ -630,8 +964,9 @@ export function RooflineEstimator({ workspaceId }: RooflineEstimatorProps) {
             </div>
             <h1>Design their lights on a photo</h1>
             <p>
-              Upload a straight-on photo of the home, set the scale, then draw
-              glowing roofline, mini-lights, and wreaths. Pricing updates live.
+              Upload a straight-on photo of the home, set the scale, then place
+              landscape fixtures and draw glowing roofline, mini-lights, and
+              wreaths. Drag the dusk slider to show it lit.
             </p>
             <button
               className="est-btn primary"

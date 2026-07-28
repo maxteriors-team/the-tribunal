@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
-import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
+import { LightDesigner } from "@/components/estimator/light-designer";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { QuotesList } from "@/components/quotes/quotes-list";
 import type { ServiceKey } from "@/components/sales-wizard/use-sales-wizard";
@@ -35,7 +35,7 @@ import { useWorkspace } from "@/providers/workspace-provider";
 import type { PricingSettings } from "@/types/sales-wizard";
 
 // Deep-linkable tabs so the command palette / `/estimator` redirect can land the
-// rep straight on the Photo Designer (`?tab=designer`).
+// rep straight on the Light Designer (`?tab=designer`).
 const TAB_VALUES = new Set(["quotes", "designer"]);
 
 // A quote covers one service, so the branch is chosen here rather than mid-quote.
@@ -72,7 +72,7 @@ const SERVICE_ENTRIES: {
   },
 ];
 
-function PhotoDesignerTab() {
+function LightDesignerTab() {
   const { currentWorkspaceId, isPending } = useWorkspace();
   return (
     <div className="h-full overflow-y-auto">
@@ -81,7 +81,7 @@ function PhotoDesignerTab() {
           Loading workspace…
         </div>
       ) : (
-        <RooflineEstimator workspaceId={currentWorkspaceId} />
+        <LightDesigner workspaceId={currentWorkspaceId} />
       )}
     </div>
   );
@@ -112,8 +112,8 @@ function QuotesHub() {
             Quotes &amp; Estimates
           </h1>
           <p className="text-sm text-muted-foreground">
-            Build a quote, design lights on a photo, then send, approve, and
-            convert wins into jobs and invoices — all in one place.
+            Build a quote, design the lights on a photo of the home, then send,
+            approve, and convert wins into jobs and invoices — all in one place.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -168,7 +168,7 @@ function QuotesHub() {
             </TabsTrigger>
             <TabsTrigger value="designer" className="gap-2">
               <Ruler className="size-4" />
-              Photo Designer
+              Light Designer
             </TabsTrigger>
           </TabsList>
         </div>
@@ -184,7 +184,7 @@ function QuotesHub() {
           value="designer"
           className="min-h-0 flex-1 overflow-hidden pt-4"
         >
-          <PhotoDesignerTab />
+          <LightDesignerTab />
         </TabsContent>
       </Tabs>
     </div>

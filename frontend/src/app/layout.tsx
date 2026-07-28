@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   title: "AI CRM - Unified Customer Communications",
   description:
     "AI-powered CRM for managing customer relationships through voice, SMS, and email",
+  // This is a private CRM: nothing here should ever land in a search index.
+  // Every route inherits this unless it explicitly overrides `robots`.
+  robots: { index: false, follow: false, nocache: true },
   // iOS "Add to Home Screen" polish: full-screen standalone app with a
   // proper title under the icon (Android reads the same from manifest.ts).
   appleWebApp: {

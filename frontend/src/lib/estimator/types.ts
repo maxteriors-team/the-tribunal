@@ -17,10 +17,18 @@ export type { Point };
 /** Linear products are traced (priced per foot); each products are placed (priced per unit). */
 export type ProductKind = "linear" | "each";
 
-/** Which estimator surface a product belongs to. Phase 1 draws `seasonal` only. */
-export type Mode = "seasonal" | "permanent";
+/** Which product line a drawable belongs to (groups the palette). */
+export type Mode = "seasonal" | "permanent" | "landscape";
 
-/** How a product's lights are rendered on the canvas. */
+/**
+ * How a product's lights are rendered on the canvas.
+ *
+ * The first block is holiday strand/decor work; the second is landscape
+ * lighting, where a fixture throws a beam or a pool of light rather than
+ * hanging bulbs. The four landscape styles are exactly the four fixture types
+ * the palette offers (see `fixtures.ts`), so what a rep draws reads on the photo
+ * the way that fixture actually throws light.
+ */
 export type RenderStyle =
   | "c9"
   | "mini"
@@ -28,7 +36,25 @@ export type RenderStyle =
   | "stake"
   | "wreath"
   | "treewrap"
-  | "permanent";
+  | "permanent"
+  | "uplight"
+  | "ingrade"
+  | "pathlight"
+  | "downlight"
+  | "bistro";
+
+/** Landscape fixture styles — placed, and rendered as a beam or a light pool. */
+export const LANDSCAPE_STYLES = [
+  "uplight",
+  "ingrade",
+  "pathlight",
+  "downlight",
+] as const satisfies readonly RenderStyle[];
+
+/** Whether a style is a landscape fixture (vs a strand or a decor item). */
+export function isLandscapeStyle(style: RenderStyle): boolean {
+  return (LANDSCAPE_STYLES as readonly RenderStyle[]).includes(style);
+}
 
 /**
  * Where a drawn product's measured quantity lands in the server estimate
@@ -40,10 +66,17 @@ export type RenderStyle =
  * - `christmas` → `christmas_items[category][option]` (linear feet for `per_ft`
  *   categories like mini-lights/garland, a count for `each` categories like
  *   trees/bushes/wreaths).
+ * - `landscape` → a count of one fixture *type* (uplight / in-grade / path /
+ *   downlight). The customer's chosen package resolves the type to a real
+ *   price-book product, so the quote gets the right SKU and the crew gets its
+ *   parts list — and switching package re-resolves without redrawing.
+ * - `bistro` → linear feet of string lighting for the wizard's bistro add-on.
  */
 export type DrawTarget =
   | { field: "roofline" }
-  | { field: "christmas"; category: string; option: string };
+  | { field: "christmas"; category: string; option: string }
+  | { field: "landscape"; fixtureType: string }
+  | { field: "bistro" };
 
 export interface Product {
   id: string;
@@ -69,6 +102,19 @@ export interface Product {
    * Purely cosmetic — never affects the measured feet or the server price.
    */
   bulbScale?: number;
+  /**
+   * Price-book SKU this entry resolves to under the current package — the same
+   * stable key the wizard and the fulfillment sheet use, so a fixture drawn on
+   * the photo is traceable to inventory and the technician's parts list. Null
+   * when the package doesn't sell the type; absent for holiday products, which
+   * are priced from the pricing config rather than the catalog.
+   */
+  sku?: string | null;
+  /**
+   * The resolved product's own name (“ZDC Color Uplight”) shown under the type
+   * label, so the rep can see what the package actually installs.
+   */
+  productName?: string | null;
   target: DrawTarget;
 }
 

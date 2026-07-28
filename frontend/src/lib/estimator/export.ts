@@ -1,22 +1,24 @@
 /**
- * Flatten a light design over its photo into a single JPEG for the AI render.
+ * Flatten a light design over its photo into a single JPEG.
  *
  * Draws the exact glow engine the on-screen editor uses (`drawScene`) onto an
- * offscreen canvas at the photo's native aspect — chrome off, night on — then
- * exports a bounded-width JPEG data URL. This is the only thing sent to the
- * server render endpoint: the drawn design, never any price or measurement.
+ * offscreen canvas at the photo's native aspect — chrome off, dusk on — then
+ * exports a bounded-width JPEG data URL. Used for the AI render upload and for
+ * the composite saved onto a proposal, so the customer sees exactly what the
+ * rep drew: the design, never any price or measurement.
  *
  * Bounded to `maxWidth` (default 1280px) so the upload stays light; the AI model
  * doesn't need full resolution and smaller payloads render faster and cheaper.
  */
 import { designScale } from "./design";
 import { loadImage } from "./photo";
-import { drawScene } from "./render";
+import { DEFAULT_DUSK, drawScene } from "./render";
 import type { Design, PhotoInfo, Product } from "./types";
 
 export interface ExportOptions {
   maxWidth?: number;
-  nightMode?: boolean;
+  /** How dark the scene reads, 0 (daylight) to `MAX_DUSK`. */
+  dusk?: number;
   /** JPEG quality 0–1. */
   quality?: number;
 }
@@ -31,7 +33,7 @@ export async function exportDesignJpeg(
   productById: Map<string, Product>,
   options: ExportOptions = {},
 ): Promise<string> {
-  const { maxWidth = 1280, nightMode = true, quality = 0.9 } = options;
+  const { maxWidth = 1280, dusk = DEFAULT_DUSK, quality = 0.9 } = options;
 
   const img = await loadImage(photo.dataUrl);
   const nw = img.naturalWidth || photo.width;
@@ -50,7 +52,7 @@ export async function exportDesignJpeg(
   const { pxPerFt } = designScale(design, nw);
   drawScene(ctx, img, design, productById, pxPerFt, {
     viewScale: scale,
-    nightMode,
+    dusk,
     showChrome: false,
   });
 

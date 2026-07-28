@@ -1,9 +1,10 @@
 /**
- * One distinct icon + tint per seasonal product type, shared by every surface
- * that shows a customer their options (the quote builder rows, the canvas
- * palette). Keeping the mapping here means a wreath reads the same — a gold ring
- * — whether the rep is drawing on a photo or scanning the priced quote, so
- * customers recognize "60 in wreath" vs "large tree" at a glance.
+ * One distinct icon + tint per product type, shared by every surface that shows
+ * a customer their options (the quote builder rows, the canvas palette).
+ * Keeping the mapping here means a wreath reads the same — a gold ring —
+ * whether the rep is drawing on a photo or scanning the priced quote, so
+ * customers recognize "60 in wreath" vs "large tree" at a glance. Landscape
+ * fixtures share the scheme so one palette can mix both product lines.
  *
  * Tints are muted festive hues chosen to stay legible on both the light app
  * palette and the wizard's dark, gold-accented surface. They are not brand
@@ -12,7 +13,12 @@
 import {
   Cable,
   CircleDashed,
+  Disc,
+  LampFloor,
+  LampWallDown,
+  LampWallUp,
   Lightbulb,
+  PartyPopper,
   Shrub,
   Sparkles,
   Spline,
@@ -31,7 +37,7 @@ export interface SeasonalIconSpec {
   label: string;
 }
 
-/** Semantic product types a seasonal option can map to. */
+/** Semantic product types a drawable option can map to. */
 type SeasonalKind =
   | "roofline"
   | "mini"
@@ -39,7 +45,12 @@ type SeasonalKind =
   | "tree"
   | "bush"
   | "wreath"
-  | "permanent";
+  | "permanent"
+  | "uplight"
+  | "ingrade"
+  | "pathlight"
+  | "downlight"
+  | "bistro";
 
 const SPECS: Record<SeasonalKind, SeasonalIconSpec> = {
   roofline: { Icon: Lightbulb, tint: "#f4a72c", label: "Roofline C9 bulbs" },
@@ -49,6 +60,13 @@ const SPECS: Record<SeasonalKind, SeasonalIconSpec> = {
   bush: { Icon: Shrub, tint: "#8bbf4d", label: "Bush / shrub" },
   wreath: { Icon: CircleDashed, tint: "#d9a441", label: "Wreath" },
   permanent: { Icon: Cable, tint: "#8ea0b5", label: "Permanent track" },
+  // Landscape fixtures: the glyph mirrors how the fixture throws light, so the
+  // palette distinguishes an uplight from a downlight before the rep reads it.
+  uplight: { Icon: LampWallUp, tint: "#e8b45c", label: "Uplight" },
+  ingrade: { Icon: Disc, tint: "#f0d08a", label: "In-grade well light" },
+  pathlight: { Icon: LampFloor, tint: "#c9a26b", label: "Path light" },
+  downlight: { Icon: LampWallDown, tint: "#b98f5a", label: "Downlight" },
+  bistro: { Icon: PartyPopper, tint: "#e6c07b", label: "Bistro string lighting" },
 };
 
 const FALLBACK = SPECS.roofline;
@@ -72,6 +90,11 @@ const STYLE_KIND: Record<RenderStyle, SeasonalKind> = {
   wreath: "wreath",
   treewrap: "tree",
   permanent: "permanent",
+  uplight: "uplight",
+  ingrade: "ingrade",
+  pathlight: "pathlight",
+  downlight: "downlight",
+  bistro: "bistro",
 };
 
 /** Icon spec for a workspace decor category key. Falls back to roofline. */

@@ -2,24 +2,32 @@
  * Canvas glow engine for the light designer (pure canvas, no React).
  *
  * Ported from the in-house Maxteriors light-estimator. Renders traced runs
- * (C9 / mini / garland / stake / permanent) and placed items (wreath / wrapped
- * tree) as additively-blended glowing bulbs on a photo, plus the editor chrome
- * (draft line, selection handles, calibration ruler). Bulb sprites are
- * pre-rendered per color and cached; gradients respect the canvas transform, so
- * the same code paths drive the on-screen editor and a full-resolution export.
+ * (C9 / mini / garland / stake / permanent / bistro) and placed items (wreath /
+ * wrapped tree / landscape fixtures) as additively-blended glowing light on a
+ * photo, plus the editor chrome (draft line, selection handles, calibration
+ * ruler). Bulb sprites are pre-rendered per color and cached; gradients respect
+ * the canvas transform, so the same code paths drive the on-screen editor and a
+ * full-resolution export.
  *
  * Coordinates are image-space pixels. `pxPerFt` sizes bulbs to real-world scale.
  */
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
+import { isLandscapeStyle } from "./types";
 import type {
   Calibration,
   Design,
   PlacedItem,
   Product,
+  RenderStyle,
   Run,
   Selection,
 } from "./types";
+
+/** Darkening applied at full dusk, matching the retired night-preview canvas. */
+export const MAX_DUSK = 0.92;
+/** Default dusk for a fresh design — dark enough to sell, light enough to place. */
+export const DEFAULT_DUSK = 0.52;
 
 // ---------------------------------------------------------------------------
 // Bulb sprite cache — pre-rendered radial glow per color, drawn scaled.
@@ -177,6 +185,24 @@ export function drawRunLights(
       });
       break;
     }
+    case "bistro": {
+      // Festoon hangs between the points the rep clicked, so each span sags
+      // instead of following the traced line dead straight.
+      const spacing = Math.max(inch * (product.spacingIn || 24), 2);
+      const r = Math.max(inch * 1.5, minR, 1.4) * scale;
+      let index = 0;
+      for (let i = 1; i < points.length; i += 1) {
+        const curve = sagPoints(points[i - 1], points[i], spacing);
+        strokePath(ctx, curve, "rgba(20,26,38,0.45)", Math.max(inch * 0.5, 1));
+        for (const p of curve.slice(0, -1)) {
+          drawBulb(ctx, p, r, colors[index % colors.length]);
+          index += 1;
+        }
+      }
+      const last = points[points.length - 1];
+      if (last) drawBulb(ctx, last, r, colors[index % colors.length]);
+      break;
+    }
     case "c9":
     default: {
       strokePath(ctx, points, "rgba(15,20,30,0.4)", Math.max(inch * 0.5, 1));
@@ -190,6 +216,136 @@ export function drawRunLights(
   }
 }
 
+/**
+ * Sample a sagging span between two anchors as a quadratic curve, one sample
+ * per `spacing` of arc. Sag depth scales with the span so a short jump between
+ * two posts hangs shallow and a long run across a patio hangs deep.
+ */
+function sagPoints(a: Point, b: Point, spacing: number): Point[] {
+  const len = distance(a, b);
+  const sag = len * 0.14;
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2 + sag * 2;
+  const steps = Math.max(2, Math.round(len / Math.max(spacing, 1)));
+  const out: Point[] = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const u = 1 - t;
+    out.push({
+      x: u * u * a.x + 2 * u * t * cx + t * t * b.x,
+      y: u * u * a.y + 2 * u * t * cy + t * t * b.y,
+    });
+  }
+  return out;
+}
+
+/**
+ * Beam geometry for a landscape fixture, in image pixels.
+ *
+ * `sizePx` is always the **throw** the rep dragged: how far the light reaches.
+ * `dir` is -1 for fixtures that aim up from the ground and +1 for a downlight
+ * throwing from a soffit or a tree, so one cone routine covers both. Path lights
+ * have no cone (they pool on the ground) and return `null`.
+ */
+function beamGeometry(
+  style: RenderStyle,
+  sizePx: number,
+): { reach: number; topW: number; dir: -1 | 1 } | null {
+  switch (style) {
+    // In-grade is flush in the ground: a tight, dramatic graze up a wall.
+    case "ingrade":
+      return { reach: sizePx, topW: sizePx * 0.26, dir: -1 };
+    case "uplight":
+      return { reach: sizePx, topW: sizePx * 0.52, dir: -1 };
+    case "downlight":
+      return { reach: sizePx, topW: sizePx * 0.62, dir: 1 };
+    default:
+      return null;
+  }
+}
+
+/** Ground-pool geometry (path light, and the splash under a downlight). */
+const POOL_SQUASH = 0.42;
+
+function drawPool(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  color: string,
+  peak: number,
+): void {
+  const radius = Math.max(r, 1);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, POOL_SQUASH);
+  // The gradient must be built *inside* the translated/scaled space, centred on
+  // the origin the arc is drawn at. A canvas gradient is transformed by the CTM
+  // when it paints, so one created in the parent space lands at (2x, 2y) — the
+  // pool then fills with its own transparent outer stop, i.e. a path light that
+  // silently renders nothing while still being counted and billed.
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+  g.addColorStop(0, rgba(color, peak));
+  g.addColorStop(0.4, rgba(color, peak * 0.42));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * A landscape fixture's throw. `item.sizePx` is the throw distance — beam length
+ * for uplight / in-grade / downlight, pool diameter for a path light — so the
+ * rep resizes the *light*, which is what the customer is buying.
+ */
+function drawLandscapeFixture(
+  ctx: CanvasRenderingContext2D,
+  item: PlacedItem,
+  product: Product,
+): void {
+  const color = product.colors[0] ?? "#ffd98a";
+  const { x, y } = item.at;
+  const size = Math.max(item.sizePx, 2);
+
+  if (product.style === "pathlight") {
+    drawPool(ctx, x, y, size / 2, color, 0.62);
+    return;
+  }
+
+  const beam = beamGeometry(product.style, size);
+  if (!beam) return;
+  const { reach, topW, dir } = beam;
+  const baseW = Math.max(1.5, topW * 0.18);
+  ctx.save();
+  ctx.translate(x, y);
+  const g = ctx.createLinearGradient(0, 0, 0, dir * reach);
+  g.addColorStop(0, rgba(color, 0.5));
+  g.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-baseW / 2, 0);
+  ctx.lineTo(baseW / 2, 0);
+  ctx.lineTo(topW / 2, dir * reach);
+  ctx.lineTo(-topW / 2, dir * reach);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // A downlight lands on something; show the splash where the beam hits.
+  if (dir === 1) drawPool(ctx, x, y + reach, topW / 2, color, 0.34);
+
+  const lensR = Math.max(2, topW * 0.34);
+  const lens = ctx.createRadialGradient(x, y, 0, x, y, lensR);
+  lens.addColorStop(0, rgba(color, 0.62));
+  lens.addColorStop(1, rgba(color, 0));
+  ctx.fillStyle = lens;
+  ctx.beginPath();
+  ctx.arc(x, y, lensR, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawPlacedItem(
   ctx: CanvasRenderingContext2D,
   item: PlacedItem,
@@ -199,6 +355,11 @@ export function drawPlacedItem(
 ): void {
   const inch = Math.max(pxPerFt / 12, 0.2);
   const colors = product.colors.length > 0 ? product.colors : ["#ffd98a"];
+
+  if (isLandscapeStyle(product.style)) {
+    drawLandscapeFixture(ctx, item, product);
+    return;
+  }
 
   if (product.style === "treewrap") {
     const h = item.sizePx;
@@ -308,7 +469,12 @@ export interface SceneOpts {
   draftRun?: DraftRun | null;
   draftCalPoint?: Point | null;
   hoverPt?: Point | null;
-  nightMode?: boolean;
+  /**
+   * How far past sunset the scene reads, 0 (daylight photo) to `MAX_DUSK`.
+   * Continuous rather than a night on/off switch so the rep can drag the sun
+   * down while the customer watches the house light up.
+   */
+  dusk?: number;
   showChrome?: boolean;
   calibrateTool?: boolean;
 }
@@ -327,8 +493,9 @@ export function drawScene(
 
   ctx.drawImage(photo, 0, 0);
 
-  if (opts.nightMode) {
-    ctx.fillStyle = "rgba(4,10,32,0.52)";
+  const dusk = Math.min(Math.max(opts.dusk ?? 0, 0), MAX_DUSK);
+  if (dusk > 0) {
+    ctx.fillStyle = `rgba(4,10,32,${dusk})`;
     ctx.fillRect(0, 0, photo.naturalWidth, photo.naturalHeight);
   }
 
@@ -342,9 +509,12 @@ export function drawScene(
   for (const item of design.items) {
     const p = productById.get(item.productId);
     if (!p) continue;
-    ctx.globalCompositeOperation = "source-over";
+    // Decor (wreaths, wrapped trees) paints opaque greenery, so it draws over
+    // the photo; a landscape fixture is pure light and stays additive.
+    const additive = isLandscapeStyle(p.style);
+    if (!additive) ctx.globalCompositeOperation = "source-over";
     drawPlacedItem(ctx, item, p, pxPerFt, minR);
-    ctx.globalCompositeOperation = "lighter";
+    if (!additive) ctx.globalCompositeOperation = "lighter";
   }
   if (opts.draftRun && opts.draftRun.points.length > 0) {
     const pts = opts.hoverPt
@@ -374,7 +544,13 @@ export function drawScene(
     }
   } else if (opts.selection?.kind === "item") {
     const item = design.items.find((i) => i.id === opts.selection!.id);
-    if (item) {
+    const product = item ? productById.get(item.productId) : undefined;
+    if (item && product && isLandscapeStyle(product.style)) {
+      // A beam is directional: ring the fixture itself and trace its throw,
+      // rather than drawing a circle centred on a light that only goes up.
+      drawFixtureSelection(ctx, item, product, vs);
+      handleSquare(ctx, resizeHandlePos(item, product), 5 / vs);
+    } else if (item) {
       const r = item.sizePx / 2 + 6 / vs;
       ctx.save();
       ctx.strokeStyle = "rgba(245,200,66,0.9)";
@@ -418,10 +594,56 @@ export function withRunOverrides(product: Product, run: Run): Product {
   };
 }
 
-export function resizeHandlePos(item: PlacedItem): Point {
+/**
+ * Where the resize grip sits for a placed item. Decor is resized from its
+ * lower-right corner; a landscape fixture is resized by its throw, so the grip
+ * rides at the end of the beam (or the edge of the pool) it actually controls.
+ */
+export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
+  if (product && isLandscapeStyle(product.style)) {
+    const beam = beamGeometry(product.style, item.sizePx);
+    if (!beam) {
+      const r = item.sizePx / 2;
+      return { x: item.at.x + r, y: item.at.y + r * POOL_SQUASH };
+    }
+    return { x: item.at.x, y: item.at.y + beam.dir * beam.reach };
+  }
   const r = item.sizePx / 2;
   const d = r * Math.SQRT1_2 + 0.35 * r;
   return { x: item.at.x + d, y: item.at.y + d };
+}
+
+/** Dashed outline of a landscape fixture's throw, drawn while it is selected. */
+function drawFixtureSelection(
+  ctx: CanvasRenderingContext2D,
+  item: PlacedItem,
+  product: Product,
+  vs: number,
+): void {
+  const { x, y } = item.at;
+  ctx.save();
+  ctx.strokeStyle = "rgba(245,200,66,0.9)";
+  ctx.lineWidth = 1.6 / vs;
+  ctx.setLineDash([7 / vs, 5 / vs]);
+  const beam = beamGeometry(product.style, item.sizePx);
+  if (!beam) {
+    const r = item.sizePx / 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * POOL_SQUASH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    const far = y + beam.dir * beam.reach;
+    ctx.beginPath();
+    ctx.moveTo(x - beam.topW / 2, far);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + beam.topW / 2, far);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(x, y, 7 / vs, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function handleSquare(
@@ -513,10 +735,26 @@ function roundRect(
 }
 
 /** Hit-test helper: an item's body radius in image pixels. */
-export function itemHitRadius(item: PlacedItem): number {
+/**
+ * Grab radius for a placed item. Decor is grabbed anywhere inside it; a
+ * landscape fixture is grabbed by the fixture, not by the beam — otherwise a
+ * long throw would swallow every click across half the house.
+ */
+export function itemHitRadius(item: PlacedItem, product?: Product): number {
+  if (product && isLandscapeStyle(product.style)) {
+    if (product.style === "pathlight") {
+      return Math.min(item.sizePx / 2, Math.max(14, item.sizePx * 0.22));
+    }
+    return Math.max(14, item.sizePx * 0.14);
+  }
   return item.sizePx / 2;
 }
 
-export function itemHit(item: PlacedItem, p: Point, slack: number): boolean {
-  return distance(item.at, p) <= itemHitRadius(item) + slack;
+export function itemHit(
+  item: PlacedItem,
+  p: Point,
+  slack: number,
+  product?: Product,
+): boolean {
+  return distance(item.at, p) <= itemHitRadius(item, product) + slack;
 }

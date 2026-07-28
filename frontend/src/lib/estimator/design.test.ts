@@ -230,3 +230,73 @@ describe("buildCatalog bridge", () => {
     expect(wreathProduct?.sizeFt).toBeGreaterThan(0);
   });
 });
+
+describe("designToEstimateInputs — landscape", () => {
+  const uplight: Product = {
+    id: "fixture-best-zd-up",
+    name: "ZD Uplight",
+    category: "landscape",
+    kind: "each",
+    price: 411,
+    style: "uplight",
+    colors: ["#ffd98a"],
+    spacingIn: 0,
+    sizeFt: 14,
+    sku: "best-zd-up",
+    target: { field: "landscape", fixtureType: "uplight" },
+  };
+
+  const bistro: Product = {
+    id: "fixture-bistro-color",
+    name: "Bistro String Lighting",
+    category: "landscape",
+    kind: "linear",
+    price: 18,
+    style: "bistro",
+    colors: ["#ffd98a"],
+    spacingIn: 24,
+    sizeFt: 0,
+    sku: "bistro-color",
+    target: { field: "bistro" },
+  };
+
+  const productById = indexProducts([uplight, bistro]);
+
+  it("counts each placed fixture by type, for the package to resolve", () => {
+    const items: PlacedItem[] = [
+      { id: "i1", productId: uplight.id, at: { x: 10, y: 10 }, sizePx: 100 },
+      { id: "i2", productId: uplight.id, at: { x: 40, y: 10 }, sizePx: 100 },
+      { id: "i3", productId: uplight.id, at: { x: 70, y: 10 }, sizePx: 100 },
+    ];
+    const out = designToEstimateInputs(
+      { calibration: cal, runs: [], items },
+      productById,
+      PHOTO_W,
+    );
+    expect(out.fixtures).toEqual({ uplight: 3 });
+    // Landscape counts never leak into the holiday buckets.
+    expect(out.feet).toBe(0);
+    expect(out.christmas_items).toEqual({});
+  });
+
+  it("measures a traced bistro strand in whole feet", () => {
+    // 10 px/ft from the shared calibration → a 400px span is 40 ft.
+    const runs: Run[] = [
+      {
+        id: "r1",
+        productId: bistro.id,
+        points: [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+        ],
+      },
+    ];
+    const out = designToEstimateInputs(
+      { calibration: cal, runs, items: [] },
+      productById,
+      PHOTO_W,
+    );
+    expect(out.bistro_feet).toBe(40);
+    expect(out.feet).toBe(0);
+  });
+});

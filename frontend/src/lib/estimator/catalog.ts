@@ -17,6 +17,7 @@
  * with the tool palette.
  */
 import type { LinearFeetEstimateResult } from "@/types/estimate";
+import type { CatalogItemResponse } from "@/types/sales-wizard";
 
 import type { DrawTarget, Product, RenderStyle } from "./types";
 
@@ -81,6 +82,11 @@ export const SPACING_OPTIONS: Record<RenderStyle, number[]> = {
   wreath: [],
   treewrap: [],
   permanent: [6, 9, 12],
+  uplight: [],
+  ingrade: [],
+  pathlight: [],
+  downlight: [],
+  bistro: [12, 18, 24, 36],
 };
 
 export const STYLE_LABELS: Record<RenderStyle, string> = {
@@ -91,6 +97,11 @@ export const STYLE_LABELS: Record<RenderStyle, string> = {
   wreath: "Wreath",
   treewrap: "Tree wrap",
   permanent: "Permanent track",
+  uplight: "Uplight",
+  ingrade: "In-grade",
+  pathlight: "Path light",
+  downlight: "Downlight",
+  bistro: "Bistro string",
 };
 
 /** Default bulb spacing (inches) when a linear product first renders. */
@@ -102,6 +113,11 @@ const DEFAULT_SPACING: Record<RenderStyle, number> = {
   wreath: 0,
   treewrap: 0,
   permanent: 9,
+  uplight: 0,
+  ingrade: 0,
+  pathlight: 0,
+  downlight: 0,
+  bistro: 24,
 };
 
 const ROOFLINE_TARGET: DrawTarget = { field: "roofline" };
@@ -210,6 +226,35 @@ export function buildCatalog(
         target: { field: "christmas", category: cat.key, option: opt.key },
       });
     }
+  }
+  return products;
+}
+
+/**
+ * Bistro / festoon strands from the price book. Unlike the four landscape
+ * fixture *types* (see `fixtures.ts`), string lighting is traced and priced per
+ * linear foot by the wizard's bistro add-on, so it stays a drawable product.
+ */
+export function buildBistroCatalog(
+  items: readonly CatalogItemResponse[] | null | undefined,
+): Product[] {
+  const products: Product[] = [];
+  for (const item of items ?? []) {
+    if (!item.is_active || item.kind === "service") continue;
+    if (!/\b(bistro|festoon|string)\b/.test(item.name.toLowerCase())) continue;
+    products.push({
+      id: `bistro-${item.sku ?? item.id}`,
+      name: item.name,
+      category: "landscape",
+      kind: "linear",
+      price: item.unit_price,
+      style: "bistro",
+      colors: COLOR_PRESETS["Warm White"],
+      spacingIn: DEFAULT_SPACING.bistro,
+      sizeFt: 0,
+      sku: item.sku ?? null,
+      target: { field: "bistro" },
+    });
   }
   return products;
 }

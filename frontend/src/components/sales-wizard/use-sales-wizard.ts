@@ -11,7 +11,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { salesWizardApi } from "@/lib/api/sales-wizard";
-import { REFERENCE_PRESETS, type Point } from "@/lib/estimator/measure";
+import { DEFAULT_DUSK } from "@/lib/estimator/render";
+import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
+import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import type {
   CatalogItemResponse,
@@ -142,35 +144,33 @@ function countsToList(
     .map(([key, quantity]) => ({ key, quantity }));
 }
 
-export interface NightLight {
-  nx: number;
-  ny: number;
-  /** Second anchor — only for string ("bistro") lights. */
-  nx2?: number;
-  ny2?: number;
-  type: string;
-  glow: number;
-  intensity: number;
-  spread: number;
-  warmth: number;
-}
-
 /** How a wizard deposit's value is read: percent of total, or a flat amount. */
 export type DepositMode = "percentage" | "fixed";
 
+/**
+ * The Light Designer's output as the proposal carries it.
+ *
+ * The rep designs in the shared designer (one photo tool for every product
+ * line); the wizard keeps the composited image plus the drawing itself, so
+ * re-opening the designer resumes exactly where they left off. `photo` stays in
+ * memory only — the saved snapshot carries the flattened composite, never the
+ * multi-megabyte original.
+ */
 export interface NightPreviewState {
   /** Composited "lit at night" JPEG data-URL saved into the proposal. */
   image: string | null;
-  lights: NightLight[];
+  /** The drawing, so re-opening the designer restores it. */
+  design: Design | null;
+  /** Dusk level the composite was rendered at. */
   dusk: number;
-  // ── Roofline "measure-as-you-draw" trace (persists so re-opening the night
-  // screen restores the drawing; rides into the opaque `night_preview` snapshot).
-  /** Key of the chosen `REFERENCE_PRESETS` object used to set the pixel scale. */
-  referenceKey: string;
-  /** Two canvas points marking the known-width reference object. */
-  referencePts: Point[];
-  /** Traced roofline polyline, in canvas pixels. */
-  rooflinePts: Point[];
+  /** Source photo, held in memory for the current session only. */
+  photo: PhotoInfo | null;
+  /**
+   * Services the design covers. Drives the client-facing value propositions on
+   * the presentation and the shared page, so a landscape + Christmas design
+   * argues both cases instead of blending them into one list.
+   */
+  services: DesignerServiceKey[];
 }
 
 export interface ClientDraft {
@@ -331,11 +331,10 @@ export function useSalesWizard(
   );
   const [night, setNightState] = useState<NightPreviewState>({
     image: null,
-    lights: [],
-    dusk: 0.55,
-    referenceKey: REFERENCE_PRESETS[0].key,
-    referencePts: [],
-    rooflinePts: [],
+    design: null,
+    dusk: DEFAULT_DUSK,
+    photo: null,
+    services: [],
   });
   // Upfront deposit the rep requests on the quote. Value is a raw string so
   // typing feels native; empty/0 means "use the workspace default".
@@ -554,11 +553,12 @@ export function useSalesWizard(
       night_preview: night.image
         ? {
             image: night.image,
-            lights: night.lights,
+            // Opaque to the server (JSONB): the drawing rides along so a later
+            // edit re-opens the designer with the same runs, items and scale,
+            // and the services drive the client's value propositions.
+            design: night.design,
             dusk: night.dusk,
-            reference_key: night.referenceKey,
-            reference_pts: night.referencePts,
-            roofline_pts: night.rooflinePts,
+            services: night.services,
           }
         : null,
       mockups: mockups

@@ -3,7 +3,7 @@
  *
  * A trimmed port of the in-house light-estimator store: it owns only the
  * *design* slice (calibration, runs, items) plus the interaction state the
- * canvas needs (tool, selection, night mode) and a bounded undo/redo history.
+ * canvas needs (tool, selection, dusk) and a bounded undo/redo history.
  * Products, pricing, and customer/share state live in the host component
  * (`roofline-estimator.tsx`), which drives the server-authoritative estimate —
  * this reducer never touches money.
@@ -11,6 +11,7 @@
  * The host runs it with `useReducer(editorReducer, undefined, initialEditorState)`
  * and passes `state`/`dispatch` to the canvas, palette, and estimate panel.
  */
+import { DEFAULT_DUSK, MAX_DUSK } from "@/lib/estimator/render";
 import type {
   Calibration,
   Design,
@@ -28,7 +29,12 @@ export interface EditorState {
   design: Design;
   tool: Tool;
   selection: Selection;
-  nightMode: boolean;
+  /**
+   * How far past sunset the photo reads, 0 (daylight) to `MAX_DUSK`. Continuous
+   * rather than a night on/off switch: the rep drags the sun down in front of
+   * the customer, which is the moment the design sells itself.
+   */
+  dusk: number;
   past: Design[];
   future: Design[];
 }
@@ -36,7 +42,7 @@ export interface EditorState {
 export type EditorAction =
   | { type: "SET_TOOL"; tool: Tool }
   | { type: "SET_SELECTION"; selection: Selection }
-  | { type: "SET_NIGHT"; on: boolean }
+  | { type: "SET_DUSK"; dusk: number }
   | { type: "ADD_RUN"; run: Run }
   | {
       type: "UPDATE_RUN";
@@ -59,6 +65,12 @@ export type EditorAction =
   | { type: "SET_CALIBRATION"; calibration: Calibration | null; transient?: boolean }
   | { type: "CLEAR_DESIGN" }
   | { type: "RESET"; design?: Design }
+  /**
+   * Roll back an in-progress transient drag without touching history — used
+   * when a gesture supersedes a drag (a second finger lands mid-drag on a
+   * tablet), so the abandoned move leaves nothing behind and costs no undo.
+   */
+  | { type: "REVERT_TRANSIENT"; design: Design }
   | { type: "COMMIT_HISTORY"; before: Design }
   | { type: "UNDO" }
   | { type: "REDO" };
@@ -68,7 +80,7 @@ export function initialEditorState(): EditorState {
     design: EMPTY_DESIGN,
     tool: { type: "select" },
     selection: null,
-    nightMode: true,
+    dusk: DEFAULT_DUSK,
     past: [],
     future: [],
   };
@@ -102,8 +114,8 @@ export function editorReducer(
       return { ...state, tool: action.tool, selection: null };
     case "SET_SELECTION":
       return { ...state, selection: action.selection };
-    case "SET_NIGHT":
-      return { ...state, nightMode: action.on };
+    case "SET_DUSK":
+      return { ...state, dusk: Math.min(Math.max(action.dusk, 0), MAX_DUSK) };
 
     case "ADD_RUN":
       return {
@@ -191,9 +203,12 @@ export function editorReducer(
       // New photo → drop the whole design and history.
       return {
         ...initialEditorState(),
-        nightMode: state.nightMode,
+        dusk: state.dusk,
         design: action.design ?? EMPTY_DESIGN,
       };
+
+    case "REVERT_TRANSIENT":
+      return { ...state, design: action.design };
 
     case "COMMIT_HISTORY": {
       if (JSON.stringify(action.before) === JSON.stringify(state.design)) {

@@ -5,6 +5,26 @@ import { getBackendUrl } from "./src/lib/utils/backend-url";
 
 const BACKEND_URL = getBackendUrl();
 
+// Security headers applied to every route. The app is a private CRM, so we
+// also hard-block search indexing at the HTTP layer (belt-and-braces with
+// app/robots.ts and the `robots` metadata in app/layout.tsx).
+const SECURITY_HEADERS = [
+  {
+    key: "X-Robots-Tag",
+    value: "noindex, nofollow, noarchive, nosnippet, noimageindex",
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Permissions-Policy",
+    value: "geolocation=(), microphone=(), camera=()",
+  },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+];
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prestyj/pixel"],
   turbopack: { root: __dirname },
@@ -32,6 +52,39 @@ const nextConfig: NextConfig = {
         // Proxy all API calls to the backend (avoids CORS issues)
         source: "/api/:path*",
         destination: `${BACKEND_URL}/api/:path*`,
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        // Everything except /embed/* : the dashboard must never be framable,
+        // so we send both the legacy X-Frame-Options and the modern CSP
+        // `frame-ancestors` directive.
+        source: "/((?!embed).*)",
+        headers: [
+          ...SECURITY_HEADERS,
+          { key: "X-Frame-Options", value: "DENY" },
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'none'",
+          },
+        ],
+      },
+      {
+        // DELIBERATE EXCEPTION - DO NOT "FIX" THIS.
+        // /embed/[publicId] is the chat/voice widget that customers embed in
+        // an <iframe> on their own websites. Sending X-Frame-Options: DENY or
+        // frame-ancestors 'none' here would break every live customer embed.
+        // We still require the parent page to be served over HTTPS.
+        source: "/embed/:path*",
+        headers: [
+          ...SECURITY_HEADERS,
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors https:",
+          },
+        ],
       },
     ];
   },

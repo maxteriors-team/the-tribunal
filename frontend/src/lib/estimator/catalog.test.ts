@@ -105,3 +105,4 @@ describe("buildCatalog permanent roofline", () => {
     ).toBeUndefined();
   });
 });
+

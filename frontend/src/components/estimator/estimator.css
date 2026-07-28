@@ -398,9 +398,13 @@
 /* Rep-only light designer (HHC-style three-pane editor)                    */
 /* ======================================================================== */
 
+/* Fills its host (the Quotes tab or the Quote Builder) so the photo stays put
+   and only the estimate rail scrolls — a rep mid-pitch should never have to
+   scroll the house out of view to read a number. */
 .est-app {
   display: flex;
   flex-direction: column;
+  height: 100%;
   min-height: 100%;
   color: var(--t2);
 }
@@ -425,12 +429,32 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Confirmation strip shown when the Quote Builder hosts the designer. */
+.est-hosted-status {
+  flex: 0 0 auto;
+  padding: 9px 18px;
+  font-size: 12px;
+  color: #9fe3bd;
+  background: rgba(63, 166, 106, 0.1);
+  border-bottom: 1px solid rgba(76, 175, 125, 0.4);
+}
+
+.est-hosted-status.error {
+  color: #ffb4a8;
+  background: rgba(220, 90, 74, 0.1);
+  border-bottom-color: rgba(220, 90, 74, 0.45);
 }
 
 .est-main {
   display: flex;
   flex: 1 1 auto;
   min-height: 520px;
+  /* The rails scroll internally; the canvas keeps the remaining space. */
+  overflow: hidden;
 }
 
 /* ---- Shared controls (buttons / inputs / toggle / badge) ---- */
@@ -500,6 +524,44 @@
   color: var(--black);
 }
 
+/* Which services this design covers. Multi-select and visually distinct from
+   the rep/client view switch next to it: these are *additive* choices (a house
+   can get all three), so selected chips read as filled-in, not as one radio. */
+.est-service-toggle {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--bdr);
+  border-radius: 999px;
+}
+
+.est-service-toggle button {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--t3);
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.est-service-toggle button:hover {
+  color: var(--t1);
+  border-color: var(--bdr-g);
+}
+
+.est-service-toggle button.active {
+  background: rgba(212, 175, 90, 0.16);
+  border-color: var(--bdr-g);
+  color: var(--gold);
+}
+
 .est-internal-badge {
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -550,7 +612,7 @@
 .tp-tool,
 .tp-product {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 9px;
   width: 100%;
   text-align: left;
@@ -588,6 +650,7 @@
   display: inline-flex;
   gap: 2px;
   flex: 0 0 auto;
+  margin-top: 8px;
 }
 
 .tp-swatch i {
@@ -597,15 +660,21 @@
   display: inline-block;
 }
 
+/* Price-book fixture names run long ("ZDC Modern Color Path Light"), and a rep
+   scanning the rail has to tell them apart — so wrap to a second line rather
+   than truncating every landscape entry to the same prefix. */
 .tp-product-name {
   flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Fixture names run long ("ZDC Modern Color Path Light") and a rep has to
+     tell them apart, so wrap rather than truncate — but keep enough width that
+     a word never has to break mid-syllable. */
+  min-width: 9ch;
+  overflow-wrap: break-word;
+  line-height: 1.3;
 }
 
 .tp-product-price {
+  margin-top: 4px;
   color: var(--t4);
   font-size: 11px;
   flex: 0 0 auto;
@@ -730,6 +799,39 @@
   right: 12px;
 }
 
+/* Tablet: the "LIGHT DESIGNER" wordmark wraps to two lines and pushes the
+   controls onto a second row, and the tab directly above it already says
+   Light Designer — so drop the duplicate and give the row back to the tools. */
+@media (max-width: 1280px) {
+  .est-topbar .cmp-brand {
+    display: none;
+  }
+
+  .est-topbar {
+    justify-content: flex-end;
+  }
+}
+
+/* Tablet: the canvas is narrow enough that the scale chip and the dusk
+   controls collide, so cap each cluster's width and let them wrap. */
+@media (max-width: 1280px) {
+  .lc-overlay.top-left,
+  .lc-overlay.top-right {
+    max-width: calc(50% - 16px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .lc-chip,
+  .lc-dusk {
+    padding-block: 5px;
+  }
+
+  .lc-dusk-slider {
+    width: 64px;
+  }
+}
+
 .lc-overlay.bottom-right {
   bottom: 12px;
   right: 12px;
@@ -744,9 +846,16 @@
   left: 50%;
   transform: translateX(-50%);
   max-width: 80%;
+  /* Purely informational: on a narrow canvas (tablet) it overlaps the zoom /
+     Fit controls, and on touch those buttons are the primary way to zoom — so
+     the hint must never swallow the tap that reaches them. */
+  pointer-events: none;
 }
 
 .lc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: rgba(10, 14, 26, 0.85);
   border: 1px solid var(--bdr);
   color: var(--t1);
@@ -755,6 +864,65 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.lc-chip:hover {
+  border-color: var(--bdr-g);
+}
+
+.lc-chip-glyph {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* Dusk: the designer's signature control — the rep drags the sun down while the
+   customer watches their own house light up. */
+.lc-dusk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 14, 26, 0.85);
+  border: 1px solid var(--bdr);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.lc-dusk-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.lc-dusk-slider {
+  width: 110px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.lc-dusk-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lc-dusk-value {
+  font-size: 11px;
+  color: var(--t4);
+  min-width: 30px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 980px) {
+  .lc-dusk-slider {
+    width: 72px;
+  }
 }
 
 .lc-chip-ok {
@@ -997,6 +1165,35 @@
 
 .ep-line-name {
   color: var(--t2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The price-book SKU behind a placed fixture — what inventory and the crew
+   actually pull, so it stays visible while the rep is still drawing. */
+.ep-line-sku {
+  font-size: 11px;
+  color: var(--t4);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* A type the chosen package doesn't sell: stated, never silently substituted. */
+.ep-line-sku.missing {
+  color: #e8a17a;
+  font-variant-numeric: normal;
+}
+
+.ep-pkg-warn {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(220, 130, 74, 0.4);
+  border-radius: 9px;
+  background: rgba(220, 130, 74, 0.09);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #f0b795;
 }
 
 .ep-line-amount {
@@ -1408,10 +1605,45 @@
 }
 
 /* ---- Responsive: stack the three panes on narrow screens ---- */
+/* Tablet landscape (iPad ~1194 wide): three panes still fit, but the fixed
+   rails leave the photo — the thing being sold — the smallest pane. Trim them
+   so the canvas keeps the majority of the width. */
+@media (max-width: 1280px) and (min-width: 901px) {
+  .tp-rail {
+    width: 200px;
+  }
+
+  .est-side {
+    width: 280px;
+  }
+}
+
 @media (max-width: 900px) {
+  /* Stacked: the page scrolls as one column instead of three inner scrollers,
+     which is the only workable shape on a phone or an iPad held upright.
+     The photo leads — a rep opening this in front of a customer must see the
+     house immediately, not a price list they have to scroll past. */
+  .est-app {
+    height: auto;
+  }
+
   .est-main {
     flex-direction: column;
     min-height: 0;
+    overflow: visible;
+  }
+
+  .lc-wrap {
+    order: 1;
+    min-height: min(58vh, 460px);
+  }
+
+  .tp-rail {
+    order: 2;
+  }
+
+  .est-side {
+    order: 3;
   }
 
   .tp-rail,
@@ -1419,10 +1651,15 @@
     width: 100%;
     border: none;
     border-bottom: 1px solid var(--bdr);
+    overflow: visible;
   }
 
-  .lc-wrap {
-    min-height: 420px;
+  /* The palette sits under the photo now, so it can breathe — but cap it so a
+     long price book doesn't bury the estimate below it. */
+  .tp-rail {
+    max-height: 52vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--bdr);
   }
 }
 

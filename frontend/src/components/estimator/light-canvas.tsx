@@ -8,13 +8,15 @@
  * photo. Every stroke renders through the ported `drawScene` glow engine; the
  * geometry it captures is fed back to the host, which prices it server-side.
  *
- * State (design/tool/selection/night + history) lives in the host's editor
+ * State (design/tool/selection/dusk + history) lives in the host's editor
  * reducer, passed in as `state`/`dispatch`, so the palette and estimate panel
  * stay in sync with what's on the canvas.
  */
+import { Moon, Sunrise } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -31,10 +33,17 @@ import {
   snapAngle,
 } from "@/lib/estimator/geometry";
 import { loadImage } from "@/lib/estimator/photo";
-import { drawScene, itemHit, resizeHandlePos } from "@/lib/estimator/render";
+import {
+  MAX_DUSK,
+  drawScene,
+  itemHit,
+  resizeHandlePos,
+} from "@/lib/estimator/render";
+import { isLandscapeStyle } from "@/lib/estimator/types";
 import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
 
 import {
+  EMPTY_DESIGN,
   nextId,
   type EditorAction,
   type EditorState,
@@ -62,7 +71,7 @@ interface LightCanvasProps {
 }
 
 export function LightCanvas({ photo, products, state, dispatch }: LightCanvasProps) {
-  const { design, tool, selection, nightMode } = state;
+  const { design, tool, selection, dusk } = state;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -76,8 +85,17 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   const [calDraft, setCalDraft] = useState<Point | null>(null);
   const [hoverPt, setHoverPt] = useState<Point | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
+  /** Live touch/mouse pointers on the canvas, for multi-touch gestures. */
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  /** A touch press whose action is held until the finger lifts (see below). */
+  const tapRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [pendingCal, setPendingCal] = useState<{ a: Point; b: Point } | null>(null);
+  // "Before": the untouched daylight photo, for the side-by-side moment with the
+  // customer. A toggle rather than a press-and-hold so it works from the
+  // keyboard and on touch.
+  const [showBefore, setShowBefore] = useState(false);
+  const duskId = useId();
 
   const productById = useMemo(() => indexProducts(products), [products]);
   const { ftPerPx, pxPerFt, calibrated } = designScale(design, photo.width);
@@ -154,19 +172,29 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       dpr * view.oy,
     );
 
-    drawScene(ctx, img, design, productById, pxPerFt, {
-      viewScale: view.scale,
-      selection,
-      draftRun:
-        draft.length > 0 && activeProduct
-          ? { points: draft, product: activeProduct }
-          : null,
-      draftCalPoint: calDraft,
-      hoverPt: tool.type === "draw" || tool.type === "calibrate" ? hoverPt : null,
-      nightMode,
-      showChrome: true,
-      calibrateTool: tool.type === "calibrate",
-    });
+    drawScene(
+      ctx,
+      img,
+      showBefore ? EMPTY_DESIGN : design,
+      productById,
+      pxPerFt,
+      {
+        viewScale: view.scale,
+        selection: showBefore ? null : selection,
+        draftRun:
+          !showBefore && draft.length > 0 && activeProduct
+            ? { points: draft, product: activeProduct }
+            : null,
+        draftCalPoint: showBefore ? null : calDraft,
+        hoverPt:
+          !showBefore && (tool.type === "draw" || tool.type === "calibrate")
+            ? hoverPt
+            : null,
+        dusk: showBefore ? 0 : dusk,
+        showChrome: !showBefore,
+        calibrateTool: tool.type === "calibrate",
+      },
+    );
   }, [
     view,
     design,
@@ -177,7 +205,8 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     activeProduct,
     calDraft,
     hoverPt,
-    nightMode,
+    dusk,
+    showBefore,
     tool.type,
   ]);
 
@@ -206,6 +235,29 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       };
     },
     [view],
+  );
+
+  /**
+   * Is this image-space point actually on the photo?
+   *
+   * The canvas is larger than the photo (letterboxing around it while panning
+   * and zooming), and a click out there used to create a real, billed fixture
+   * that rendered nowhere — the customer is quoted hardware they never see and
+   * the crew gets parts for it. Geometry is only allowed on the photo.
+   */
+  const insidePhoto = useCallback(
+    (pt: Point) =>
+      pt.x >= 0 && pt.y >= 0 && pt.x <= photo.width && pt.y <= photo.height,
+    [photo.width, photo.height],
+  );
+
+  /** Keep a dragged point on the photo so an existing item can't be lost. */
+  const clampToPhoto = useCallback(
+    (pt: Point): Point => ({
+      x: Math.min(Math.max(pt.x, 0), photo.width),
+      y: Math.min(Math.max(pt.y, 0), photo.height),
+    }),
+    [photo.width, photo.height],
   );
 
   const zoomAt = useCallback(
@@ -346,10 +398,79 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     };
   }, [dispatch, fitView, zoomCenter]);
 
+  // ---- touch gestures -----------------------------------------------------
+  // A tablet has no middle mouse button and no spacebar, so without this a rep
+  // on an iPad can zoom (via the on-screen buttons) but can never pan — leaving
+  // them stuck looking at one corner of a zoomed photo. Two fingers pinch to
+  // zoom and drag to pan, which is what a touch user already expects; one
+  // finger keeps drawing.
+  const gestureRef = useRef<{
+    dist: number;
+    cx: number;
+    cy: number;
+    ox: number;
+    oy: number;
+    scale: number;
+  } | null>(null);
+
+  const beginGesture = useCallback(() => {
+    const pts = [...pointersRef.current.values()];
+    if (pts.length !== 2) return;
+    const [a, b2] = pts;
+    gestureRef.current = {
+      dist: Math.max(1, Math.hypot(b2.x - a.x, b2.y - a.y)),
+      cx: (a.x + b2.x) / 2,
+      cy: (a.y + b2.y) / 2,
+      ox: view.ox,
+      oy: view.oy,
+      scale: view.scale,
+    };
+  }, [view]);
+
+  const updateGesture = useCallback(() => {
+    const g = gestureRef.current;
+    const pts = [...pointersRef.current.values()];
+    if (!g || pts.length !== 2) return;
+    const [a, b2] = pts;
+    const dist = Math.max(1, Math.hypot(b2.x - a.x, b2.y - a.y));
+    const cx = (a.x + b2.x) / 2;
+    const cy = (a.y + b2.y) / 2;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const scale = Math.min(Math.max(g.scale * (dist / g.dist), 0.05), 12);
+    const k = scale / g.scale;
+    // Zoom about the pinch midpoint, then follow the midpoint as it travels, so
+    // the photo stays under the fingers instead of sliding away from them.
+    const gx = g.cx - rect.left;
+    const gy = g.cy - rect.top;
+    setView({
+      scale,
+      ox: gx - (gx - g.ox) * k + (cx - g.cx),
+      oy: gy - (gy - g.oy) * k + (cy - g.cy),
+    });
+  }, []);
+
   // ---- pointer events -----------------------------------------------------
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (pendingCal) return;
     canvasRef.current?.setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Second finger down: abandon whatever the first finger started (an
+    // accidental dot or a stray vertex) and treat it as a pinch instead.
+    if (pointersRef.current.size === 2) {
+      const drag = dragRef.current;
+      if (drag && drag.mode !== "pan") {
+        dispatch({ type: "REVERT_TRANSIENT", design: drag.before });
+      }
+      dragRef.current = null;
+      tapRef.current = null;
+      setPanning(false);
+      beginGesture();
+      return;
+    }
+    if (pointersRef.current.size > 2) return;
 
     if (e.button === 1 || spaceDown) {
       dragRef.current = {
@@ -364,11 +485,33 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     }
     if (e.button !== 0) return;
 
-    let p = toImage(e.clientX, e.clientY);
+    // Touch: creation waits for the finger to lift.
+    //
+    // A pinch starts as one finger touching a frame or two before the second.
+    // If "place" fired on touch-down, every attempt to zoom would leave a stray
+    // fixture on the photo — counted, priced, and sent to the crew. Deferring
+    // to release lets a second finger cancel it. Mouse and pen keep acting on
+    // press, where there is no such ambiguity and the immediacy is the feel.
+    if (e.pointerType === "touch" && tool.type !== "select") {
+      tapRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    applyToolPress(e.clientX, e.clientY, e.shiftKey);
+  };
+
+  /**
+   * Act on a press at a client point: extend a calibration, add a trace point,
+   * or place a fixture. Shared by the immediate (mouse) and deferred (touch)
+   * paths so both behave identically once the intent is unambiguous.
+   */
+  const applyToolPress = (clientX: number, clientY: number, shift: boolean) => {
+    let p = toImage(clientX, clientY);
     const slack = 8 / view.scale;
 
     switch (tool.type) {
       case "calibrate": {
+        if (!insidePhoto(p)) return;
         const cal = design.calibration;
         if (cal && distance(p, cal.a) < slack * 1.5) {
           dragRef.current = { mode: "cal-a", before: design };
@@ -381,21 +524,22 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         if (!calDraft) {
           setCalDraft(p);
         } else {
-          if (e.shiftKey) p = snapAngle(calDraft, p);
+          if (shift) p = snapAngle(calDraft, p);
           setPendingCal({ a: calDraft, b: p });
           setCalDraft(null);
         }
         return;
       }
       case "draw": {
-        if (e.shiftKey && draft.length > 0) {
+        if (!insidePhoto(p)) return;
+        if (shift && draft.length > 0) {
           p = snapAngle(draft[draft.length - 1], p);
         }
         setDraft((d) => [...d, p]);
         return;
       }
       case "place": {
-        if (!activeProduct) return;
+        if (!activeProduct || !insidePhoto(p)) return;
         const sizePx = Math.max(12, activeProduct.sizeFt * pxPerFt);
         dispatch({
           type: "ADD_ITEM",
@@ -422,7 +566,11 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         }
         if (selection?.kind === "item") {
           const item = design.items.find((i) => i.id === selection.id);
-          if (item && distance(resizeHandlePos(item), p) < slack * 1.6) {
+          const itemProduct = item ? productById.get(item.productId) : undefined;
+          if (
+            item &&
+            distance(resizeHandlePos(item, itemProduct), p) < slack * 1.6
+          ) {
             dragRef.current = { mode: "resize", itemId: item.id, before: design };
             return;
           }
@@ -430,7 +578,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         // 2) items (topmost first)
         for (let i = design.items.length - 1; i >= 0; i -= 1) {
           const item = design.items[i];
-          if (itemHit(item, p, slack)) {
+          if (itemHit(item, p, slack, productById.get(item.productId))) {
             dispatch({
               type: "SET_SELECTION",
               selection: { kind: "item", id: item.id },
@@ -470,6 +618,13 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (gestureRef.current) {
+      updateGesture();
+      return;
+    }
     const drag = dragRef.current;
     let p = toImage(e.clientX, e.clientY);
 
@@ -495,7 +650,8 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       case "vertex": {
         const run = design.runs.find((r) => r.id === drag.runId);
         if (!run) return;
-        const points = run.points.map((v, i) => (i === drag.index ? p : v));
+        const at = clampToPhoto(p);
+        const points = run.points.map((v, i) => (i === drag.index ? at : v));
         dispatch({
           type: "UPDATE_RUN",
           id: drag.runId,
@@ -505,8 +661,16 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         return;
       }
       case "run": {
-        const dx = p.x - drag.start.x;
-        const dy = p.y - drag.start.y;
+        const xs = drag.points.map((v) => v.x);
+        const ys = drag.points.map((v) => v.y);
+        const dx = Math.min(
+          Math.max(p.x - drag.start.x, -Math.min(...xs)),
+          photo.width - Math.max(...xs),
+        );
+        const dy = Math.min(
+          Math.max(p.y - drag.start.y, -Math.min(...ys)),
+          photo.height - Math.max(...ys),
+        );
         const points = drag.points.map((v) => ({ x: v.x + dx, y: v.y + dy }));
         dispatch({
           type: "UPDATE_RUN",
@@ -520,7 +684,12 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         dispatch({
           type: "UPDATE_ITEM",
           id: drag.itemId,
-          patch: { at: { x: p.x - drag.offset.x, y: p.y - drag.offset.y } },
+          patch: {
+            at: clampToPhoto({
+              x: p.x - drag.offset.x,
+              y: p.y - drag.offset.y,
+            }),
+          },
           transient: true,
         });
         return;
@@ -528,7 +697,13 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       case "resize": {
         const item = design.items.find((i) => i.id === drag.itemId);
         if (!item) return;
-        const sizePx = Math.max(10, distance(item.at, p) * 2 * 0.82);
+        const resized = productById.get(item.productId);
+        // A landscape beam is sized by its throw (the grip sits at the far end),
+        // decor by its diameter (the grip sits on its bounding corner).
+        const sizePx =
+          resized && isLandscapeStyle(resized.style)
+            ? Math.max(10, distance(item.at, p))
+            : Math.max(10, distance(item.at, p) * 2 * 0.82);
         dispatch({
           type: "UPDATE_ITEM",
           id: drag.itemId,
@@ -541,15 +716,35 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       case "cal-b": {
         const cal = design.calibration;
         if (!cal) return;
+        const at = clampToPhoto(p);
         const calibration =
-          drag.mode === "cal-a" ? { ...cal, a: p } : { ...cal, b: p };
+          drag.mode === "cal-a" ? { ...cal, a: at } : { ...cal, b: at };
         dispatch({ type: "SET_CALIBRATION", calibration, transient: true });
         return;
       }
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    pointersRef.current.delete(e.pointerId);
+
+    const tap = tapRef.current;
+    if (tap && tap.id === e.pointerId) {
+      tapRef.current = null;
+      // A finger that slid was a scroll/gesture attempt, not a placement.
+      const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y);
+      if (!gestureRef.current && moved < 12) {
+        applyToolPress(e.clientX, e.clientY, e.shiftKey);
+      }
+    }
+
+    if (gestureRef.current) {
+      // Lifting one finger of a pinch ends the gesture rather than handing the
+      // remaining finger a half-finished drag.
+      if (pointersRef.current.size < 2) gestureRef.current = null;
+      else beginGesture();
+      return;
+    }
     const drag = dragRef.current;
     dragRef.current = null;
     setPanning(false);
@@ -596,6 +791,8 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         ? "default"
         : "crosshair";
 
+  const duskPercent = Math.round(dusk * 100);
+
   return (
     <div ref={containerRef} className="lc-wrap">
       <canvas
@@ -605,6 +802,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />
@@ -625,12 +823,36 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       <div className="lc-overlay top-right">
         <button
           type="button"
-          className={`lc-chip ${nightMode ? "lc-chip-on" : ""}`}
-          onClick={() => dispatch({ type: "SET_NIGHT", on: !nightMode })}
-          title="Toggle night preview"
+          className={`lc-chip ${showBefore ? "lc-chip-on" : ""}`}
+          aria-pressed={showBefore}
+          onClick={() => setShowBefore((v) => !v)}
+          title="Show the untouched daylight photo"
         >
-          {nightMode ? "🌙 Night preview" : "☀️ Day photo"}
+          <Sunrise className="lc-chip-glyph" aria-hidden="true" />
+          Before
         </button>
+        <div className="lc-dusk">
+          <label className="lc-dusk-label" htmlFor={duskId}>
+            <Moon className="lc-chip-glyph" aria-hidden="true" />
+            Dusk
+          </label>
+          <input
+            id={duskId}
+            className="lc-dusk-slider"
+            type="range"
+            min={0}
+            max={Math.round(MAX_DUSK * 100)}
+            step={1}
+            value={duskPercent}
+            disabled={showBefore}
+            onChange={(e) =>
+              dispatch({ type: "SET_DUSK", dusk: Number(e.target.value) / 100 })
+            }
+          />
+          <output className="lc-dusk-value" htmlFor={duskId}>
+            {duskPercent}%
+          </output>
+        </div>
       </div>
 
       <div className="lc-overlay bottom-right">

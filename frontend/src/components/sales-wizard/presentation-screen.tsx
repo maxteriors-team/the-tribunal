@@ -3,11 +3,16 @@
 /**
  * Screen 2 — the client-facing presentation, rendered entirely from the
  * server-computed ProposalDocument (financed all-inclusive package cards,
- * financing with a 0% APR term picker, Care Plan + bistro upsells, night
- * preview). Cash/check figures stay internal to the builder.
+ * financing with a 0% APR term picker, Care Plan + bistro upsells, the lit
+ * design preview). Cash/check figures stay internal to the builder.
+ *
+ * Each service in the design argues for itself here: a quote covering landscape
+ * and Christmas shows both value-prop blocks, not one blended list.
  */
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { ServiceValueProps } from "@/components/estimator/service-value-props";
 
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
 
@@ -205,6 +210,16 @@ export function PresentationScreen({
                 Your home, after dark &#8212; design preview
               </div>
             </div>
+          </div>
+        ) : null}
+
+        {wizard.night.services.length ? (
+          <div className="pvalue-section">
+            <ServiceValueProps
+              services={wizard.night.services}
+              pricing={wizard.pricing}
+              tierKey={wizard.activeTier}
+            />
           </div>
         ) : null}
 

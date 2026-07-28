@@ -403,13 +403,13 @@ export function CalculatorScreen({
                 onClick={onOpenNight}
               >
                 {wizard.night.image
-                  ? "\u2713\u00a0 Design saved \u2014 edit the lit photo"
-                  : "\u263e\u00a0 Night Preview: Light the Design on Their Photo"}
+                  ? "Design saved \u2014 edit the lit photo"
+                  : "Open the Light Designer"}
               </button>
               <div className="night-launch-sub">
                 {wizard.night.image
                   ? "Saved to this proposal \u2014 it shows on the client’s shared page and the quote is filed on their customer record."
-                  : "Paint uplights, path, spot and wash lighting onto a photo of the home to preview the finished design after dark. It saves into the proposal as a visual mockup."}
+                  : "Place uplights, spots, path lights and wall washes on a photo of the home, then drag dusk down to show it lit. Saving pushes the fixture counts into this quote and files the image with the proposal."}
               </div>
               <div className="wizard-nav">
                 <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>

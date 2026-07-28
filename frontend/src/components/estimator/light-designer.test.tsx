@@ -2,8 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RooflineEstimator } from "@/components/estimator/roofline-estimator";
+import { LightDesigner } from "@/components/estimator/light-designer";
+import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
 import { estimatorApi } from "@/lib/api/estimator";
+import { salesWizardApi } from "@/lib/api/sales-wizard";
+import { designToEstimateInputs } from "@/lib/estimator/design";
 import type { LinearFeetEstimateResult } from "@/types/estimate";
 
 // Server pricing is always mocked — the component only ever sends feet/counts.
@@ -17,6 +20,14 @@ vi.mock("@/lib/api/estimator", () => ({
   },
 }));
 
+// The workspace price book + pricing config drive the landscape fixture types.
+vi.mock("@/lib/api/sales-wizard", () => ({
+  salesWizardApi: {
+    listCatalog: vi.fn(),
+    getPricing: vi.fn(),
+  },
+}));
+
 // jsdom can't decode images or drive a real canvas, so mock the photo loader:
 // upload resolves a fixed PhotoInfo and the canvas gets a fake decoded image.
 vi.mock("@/lib/estimator/photo", () => ({
@@ -26,18 +37,30 @@ vi.mock("@/lib/estimator/photo", () => ({
   loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
 }));
 
+// jsdom can't flatten a canvas, so the composite is a fixed data URL.
+vi.mock("@/lib/estimator/export", () => ({
+  exportDesignJpeg: vi.fn().mockResolvedValue("data:image/jpeg;base64,LIT"),
+}));
+
 // The glow engine is exercised in render.test.ts; here it's a no-op so the
 // canvas component mounts without a 2D context.
 vi.mock("@/lib/estimator/render", () => ({
   drawScene: vi.fn(),
   itemHit: vi.fn(() => false),
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
+  DEFAULT_DUSK: 0.52,
+  MAX_DUSK: 0.92,
 }));
 
 // jsdom can't produce traced geometry (getBoundingClientRect is all zeros), so
 // force a measured design: hasDesign true + a fixed mapped payload. The mapping
 // math itself is unit-tested in design.test.ts.
-const MAPPED = { feet: 100, christmas_items: {} };
+const MAPPED = {
+  feet: 100,
+  christmas_items: {},
+  fixtures: {},
+  bistro_feet: 0,
+};
 vi.mock("@/lib/estimator/design", () => ({
   designToEstimateInputs: vi.fn(() => MAPPED),
   hasDesign: vi.fn(() => true),
@@ -120,19 +143,56 @@ const WITH_PACKAGES: LinearFeetEstimateResult = {
   ],
 };
 
+// A price book + a single package that sells an uplight and a path light, so a
+// drawn "Uplight" resolves to a real SKU exactly as it does in production.
+const PRICE_BOOK = [
+  {
+    id: "id-up",
+    workspace_id: "ws_1",
+    name: "ZD Uplight",
+    description: null,
+    sku: "best-zd-up",
+    kind: "product",
+    unit_price: 411,
+    taxable: true,
+    is_active: true,
+    attributes: null,
+    components: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+] as unknown as Awaited<ReturnType<typeof salesWizardApi.listCatalog>>;
+
+const PRICING = {
+  tier_order: ["best"],
+  tiers: [
+    {
+      key: "best",
+      label: "Best — The Premier",
+      tab: "Best",
+      points: ["Color change from your phone"],
+      sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+    },
+  ],
+  landscape: { perks: ["Lit walkways every night"] },
+  permanent: { perks: ["Never hang lights again"] },
+  christmas: { perks: ["Takedown and storage included"] },
+  roofline_comparison_enabled: false,
+} as unknown as Awaited<ReturnType<typeof salesWizardApi.getPricing>>;
+
 function stubCanvas() {
   // Returning null makes the canvas draw() bail cleanly (no jsdom "not
   // implemented" noise) — rendering is covered by render.test.ts.
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 }
 
-function renderEstimator() {
+function renderEstimator(proposal?: DesignerProposalHost) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <RooflineEstimator workspaceId="ws_1" />
+      <LightDesigner workspaceId="ws_1" proposal={proposal} />
     </QueryClientProvider>,
   );
 }
@@ -144,9 +204,21 @@ async function uploadPhoto(container: HTMLElement) {
   await waitFor(() => expect(container.querySelector("canvas")).not.toBeNull());
 }
 
-describe("RooflineEstimator", () => {
+/**
+ * Turn a service on. The palette only carries the selected services, so a test
+ * that expects Christmas decor has to opt into Christmas first — same as a rep.
+ */
+function enableService(name: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
+describe("LightDesigner", () => {
   beforeEach(() => {
     stubCanvas();
+    // Reset the design mapping each test; landscape cases override it.
+    vi.mocked(designToEstimateInputs).mockReturnValue(MAPPED);
+    vi.mocked(salesWizardApi.listCatalog).mockResolvedValue(PRICE_BOOK);
+    vi.mocked(salesWizardApi.getPricing).mockResolvedValue(PRICING);
     vi.mocked(estimatorApi.estimate).mockResolvedValue(ESTIMATE);
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "",
@@ -172,13 +244,22 @@ describe("RooflineEstimator", () => {
 
     await uploadPhoto(container);
 
-    // After upload: the tool palette + a drawable roofline product + estimate panel.
+    // After upload: the tool palette + the landscape fixture types + estimate.
     expect(screen.getByRole("heading", { name: /^Tools$/i })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /C9 Roofline — Warm White/i }),
+      screen.getByRole("button", { name: /Select & edit/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Select & edit/i }),
+      await screen.findByRole("button", { name: /^Uplight/i }),
+    ).toBeInTheDocument();
+
+    // Christmas is a separate service: its products appear once it's toggled on.
+    expect(
+      screen.queryByRole("button", { name: /C9 Roofline — Warm White/i }),
+    ).toBeNull();
+    enableService(/^Christmas$/);
+    expect(
+      await screen.findByRole("button", { name: /C9 Roofline — Warm White/i }),
     ).toBeInTheDocument();
 
     // The design is priced server-side (feet is the only measured input sent).
@@ -193,6 +274,7 @@ describe("RooflineEstimator", () => {
   it("derives the decor palette from the workspace christmas catalog", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Christmas$/);
 
     // The `each` wreath category becomes a placeable decor product.
     await waitFor(() =>
@@ -278,6 +360,7 @@ describe("RooflineEstimator", () => {
     vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Christmas$/);
     // Rep panel priced the packages (the picker buttons are present).
     await screen.findByRole("button", { name: /Premier/i });
 
@@ -290,8 +373,8 @@ describe("RooflineEstimator", () => {
       return el as HTMLElement;
     });
 
-    // The preview carries the festive client theme, so it mirrors what the
-    // homeowner sees on /p/compare rather than the neutral rep chrome.
+    // This design sells Christmas, so the preview carries the festive theme —
+    // mirroring what the homeowner sees on /p/compare.
     expect(preview).toHaveClass("cmp-festive");
 
     // All three tiers surface to the client…
@@ -393,5 +476,154 @@ describe("RooflineEstimator", () => {
     expect(
       await screen.findByText(/Sent to buyer@example\.com/i),
     ).toBeInTheDocument();
+  });
+
+  // ── Quote Builder host: the one photo tool, embedded in the wizard ────────
+
+  it("swaps the standalone share flow for save-to-proposal when the Quote Builder hosts it", async () => {
+    const proposal: DesignerProposalHost = {
+      onSave: vi.fn(),
+      onPhotoChange: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const { container } = renderEstimator(proposal);
+    await uploadPhoto(container);
+
+    expect(proposal.onPhotoChange).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 1200 }),
+    );
+    expect(
+      screen.getByRole("button", { name: /save to proposal/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /back to quote/i }),
+    ).toBeInTheDocument();
+    // The wizard owns the customer and the quote, so the standalone share and
+    // convert flows stay out of the way.
+    expect(screen.queryByText("Save to customer")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /client preview/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hands the host the composite plus the measured fixtures on save", async () => {
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 100,
+      christmas_items: {},
+      fixtures: { uplight: 4 },
+      bistro_feet: 32,
+    });
+
+    const onSave = vi.fn();
+    const proposal: DesignerProposalHost = {
+      onSave,
+      onPhotoChange: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const { container } = renderEstimator(proposal);
+    await uploadPhoto(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /save to proposal/i }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    // Counts leave the designer keyed by fixture *type*; the host resolves each
+    // type to the product its chosen package sells.
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: "data:image/jpeg;base64,LIT",
+        fixtures: { uplight: 4 },
+        services: ["landscape"],
+        rooflineFeet: 100,
+        bistroFeet: 32,
+      }),
+    );
+    expect(
+      await screen.findByText(/Saved to the proposal at/i),
+    ).toBeInTheDocument();
+  });
+
+  it("tallies drawn fixture types against the product the package sells", async () => {
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: { uplight: 4 },
+      bistro_feet: 0,
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    expect(await screen.findByText("Landscape fixtures")).toBeInTheDocument();
+    expect(screen.getByText("×4")).toBeInTheDocument();
+    // The rep drew a *type*; the package resolves it to the real product and
+    // the SKU the crew pulls.
+    await waitFor(() =>
+      expect(container.querySelector(".ep-line-sku")?.textContent).toBe(
+        "ZD Uplight · best-zd-up",
+      ),
+    );
+  });
+
+  it("says so when the package doesn't sell a fixture type the rep drew", async () => {
+    // The seeded package sells an uplight only, so a drawn downlight resolves
+    // to nothing — surfaced, never silently swapped for another package's part.
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: { downlight: 2 },
+      bistro_feet: 0,
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    expect(
+      await screen.findByText(/doesn’t include downlight/i),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".ep-line-sku.missing")).not.toBeNull();
+  });
+
+  it("keeps the Christmas theme off a landscape client preview", async () => {
+    // A homeowner buying year-round brass landscape lighting should never be
+    // handed a holiday page — the theme follows what's actually being sold.
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    fireEvent.click(screen.getByRole("button", { name: /client preview/i }));
+
+    const preview = await waitFor(() => {
+      const el = container.querySelector(".est-client-preview");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(preview).not.toHaveClass("cmp-festive");
+
+    // Adding Christmas to the quote brings the holiday palette back.
+    enableService(/^Christmas$/);
+    await waitFor(() =>
+      expect(container.querySelector(".est-client-preview")).toHaveClass(
+        "cmp-festive",
+      ),
+    );
+  });
+
+  it("gives each selected service its own client-facing value propositions", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    enableService(/^Christmas$/);
+    fireEvent.click(screen.getByRole("button", { name: /client preview/i }));
+
+    // Landscape leads with the chosen package's own point; Christmas argues its
+    // own case rather than sharing one blended list.
+    expect(
+      await screen.findByText("Architectural Landscape Lighting"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Seasonal Christmas Lighting"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Color change from your phone")).toBeInTheDocument();
+    expect(
+      screen.getByText("Takedown and storage included"),
+    ).toBeInTheDocument();
+    // Permanent isn't being sold here, so its pitch stays off the page.
+    expect(screen.queryByText("Never hang lights again")).toBeNull();
   });
 });

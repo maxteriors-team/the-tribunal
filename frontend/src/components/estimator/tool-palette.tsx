@@ -8,6 +8,10 @@
  * Products come from the server-derived catalog; their prices are display-only
  * rates. Picking a product arms the draw/place tool; selecting a run on the
  * canvas reveals its spacing/color overrides here.
+ *
+ * The rail is grouped by product line — landscape fixtures from the price book,
+ * then holiday strands and decor — so one palette covers everything the rep
+ * sells on a photo instead of a separate tool per product line.
  */
 import {
   MousePointer2,
@@ -40,10 +44,15 @@ interface ToolPaletteProps {
   dispatch: Dispatch<EditorAction>;
 }
 
+/**
+ * The colors a product installs in. Capped at four dots: past that the swatch
+ * starts eating the name column, and "multicolor" reads the same at four dots
+ * as at six — but a truncated product name does not.
+ */
 function Swatch({ colors }: { colors: string[] }) {
   return (
     <span className="tp-swatch">
-      {colors.slice(0, 5).map((c, i) => (
+      {colors.slice(0, 4).map((c, i) => (
         <i key={`${c}-${i}`} style={{ background: c, boxShadow: `0 0 6px ${c}` }} />
       ))}
     </span>
@@ -53,8 +62,10 @@ function Swatch({ colors }: { colors: string[] }) {
 export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
   const { tool, selection, design } = state;
 
-  const linear = products.filter((p) => p.kind === "linear");
-  const each = products.filter((p) => p.kind === "each");
+  const landscape = products.filter((p) => p.category === "landscape");
+  const holiday = products.filter((p) => p.category !== "landscape");
+  const linear = holiday.filter((p) => p.kind === "linear");
+  const each = holiday.filter((p) => p.kind === "each");
   const canUndo = state.past.length > 0;
   const canRedo = state.future.length > 0;
   const hasDrawn = design.runs.length > 0 || design.items.length > 0;
@@ -90,59 +101,49 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
       </div>
 
       <div className="tp-section tp-grow">
-        {linear.length > 0 ? <h2>Draw lights</h2> : null}
-        {linear.map((p) => {
-          const { Icon, tint } = seasonalIconForStyle(p.style);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
-              onClick={() =>
-                dispatch({ type: "SET_TOOL", tool: { type: "draw", productId: p.id } })
-              }
-              title={`Trace along the photo — ${formatCurrency(p.price)}/ft`}
-            >
-              <span
-                className="tp-cat-icon"
-                style={{ color: tint, background: tintSurface(tint) }}
-                aria-hidden="true"
-              >
-                <Icon className="tp-glyph" />
-              </span>
-              <Swatch colors={p.colors} />
-              <span className="tp-product-name">{p.name}</span>
-              <span className="tp-product-price">{formatCurrency(p.price)}/ft</span>
-            </button>
-          );
-        })}
+        {landscape.length > 0 ? (
+          <>
+            <h2>Landscape fixtures</h2>
+            {landscape.map((p) => (
+              <ProductButton
+                key={p.id}
+                product={p}
+                active={isActiveProduct(p.id)}
+                dispatch={dispatch}
+              />
+            ))}
+          </>
+        ) : null}
 
-        {each.length > 0 ? <h2 className="tp-mt">Place decor</h2> : null}
-        {each.map((p) => {
-          const { Icon, tint } = seasonalIconForStyle(p.style);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              className={`tp-product ${isActiveProduct(p.id) ? "active" : ""}`}
-              onClick={() =>
-                dispatch({ type: "SET_TOOL", tool: { type: "place", productId: p.id } })
-              }
-              title={`Click the photo to place — ${formatCurrency(p.price)} each`}
-            >
-              <span
-                className="tp-cat-icon"
-                style={{ color: tint, background: tintSurface(tint) }}
-                aria-hidden="true"
-              >
-                <Icon className="tp-glyph" />
-              </span>
-              <Swatch colors={p.colors} />
-              <span className="tp-product-name">{p.name}</span>
-              <span className="tp-product-price">{formatCurrency(p.price)}</span>
-            </button>
-          );
-        })}
+        {linear.length > 0 ? (
+          <>
+            <h2 className={landscape.length > 0 ? "tp-mt" : undefined}>
+              Draw lights
+            </h2>
+            {linear.map((p) => (
+              <ProductButton
+                key={p.id}
+                product={p}
+                active={isActiveProduct(p.id)}
+                dispatch={dispatch}
+              />
+            ))}
+          </>
+        ) : null}
+
+        {each.length > 0 ? (
+          <>
+            <h2 className="tp-mt">Place decor</h2>
+            {each.map((p) => (
+              <ProductButton
+                key={p.id}
+                product={p}
+                active={isActiveProduct(p.id)}
+                dispatch={dispatch}
+              />
+            ))}
+          </>
+        ) : null}
 
         {selectedRun ? (
           <div className="tp-run-options">
@@ -186,6 +187,59 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
         </button>
       </div>
     </aside>
+  );
+}
+
+/**
+ * One drawable in the rail. Linear products arm the trace tool and price per
+ * foot; placed products (landscape fixtures, wreaths, trees) arm the place tool
+ * and price per unit. Prices are the catalog's display rate — the server still
+ * prices the quote.
+ */
+function ProductButton({
+  product,
+  active,
+  dispatch,
+}: {
+  product: Product;
+  active: boolean;
+  dispatch: Dispatch<EditorAction>;
+}) {
+  const { Icon, tint } = seasonalIconForStyle(product.style);
+  const linear = product.kind === "linear";
+  const price = linear
+    ? `${formatCurrency(product.price)}/ft`
+    : formatCurrency(product.price);
+  return (
+    <button
+      type="button"
+      className={`tp-product ${active ? "active" : ""}`}
+      aria-pressed={active}
+      onClick={() =>
+        dispatch({
+          type: "SET_TOOL",
+          tool: linear
+            ? { type: "draw", productId: product.id }
+            : { type: "place", productId: product.id },
+        })
+      }
+      title={
+        linear
+          ? `Trace along the photo — ${price}`
+          : `Click the photo to place — ${price} each`
+      }
+    >
+      <span
+        className="tp-cat-icon"
+        style={{ color: tint, background: tintSurface(tint) }}
+        aria-hidden="true"
+      >
+        <Icon className="tp-glyph" />
+      </span>
+      <Swatch colors={product.colors} />
+      <span className="tp-product-name">{product.name}</span>
+      <span className="tp-product-price">{price}</span>
+    </button>
   );
 }
 

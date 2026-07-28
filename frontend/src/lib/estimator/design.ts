@@ -11,6 +11,10 @@
  *   `christmas_items[category][option]` in linear feet.
  * - A placed `christmas` `each` item (tree, bush, wreath) →
  *   `christmas_items[category][option]` as a +1 count.
+ * - A placed `landscape` fixture → a +1 count for that fixture *type*. The
+ *   chosen package resolves the type to a real price-book product, so the
+ *   Quote Builder can set that product's quantity and price it server-side.
+ * - A `bistro` run → linear feet for the wizard's string-lighting add-on.
  *
  * Scale comes from the design's calibration line; uncalibrated photos fall back
  * to an assumed width so a rep still gets a ballpark before setting the scale.
@@ -54,6 +58,10 @@ export function designScale(design: Design, photoWidth: number): DesignScale {
 export interface DesignEstimateInputs {
   feet: number;
   christmas_items: ChristmasItemsSelection;
+  /** Placed landscape fixtures, counted by fixture type (uplight, path…). */
+  fixtures: Record<string, number>;
+  /** Linear feet of bistro / festoon string lighting traced on the photo. */
+  bistro_feet: number;
 }
 
 /**
@@ -69,7 +77,9 @@ export function designToEstimateInputs(
   const { ftPerPx } = designScale(design, photoWidth);
 
   let rooflineFt = 0;
+  let bistroFt = 0;
   const raw: ChristmasItemsSelection = {};
+  const landscape: Record<string, number> = {};
   const addChristmas = (category: string, option: string, value: number) => {
     const bucket = raw[category] ?? (raw[category] = {});
     bucket[option] = (bucket[option] ?? 0) + value;
@@ -82,15 +92,22 @@ export function designToEstimateInputs(
     if (ft <= 0) continue;
     if (product.target.field === "roofline") {
       rooflineFt += ft;
-    } else {
+    } else if (product.target.field === "bistro") {
+      bistroFt += ft;
+    } else if (product.target.field === "christmas") {
       addChristmas(product.target.category, product.target.option, ft);
     }
   }
 
   for (const item of design.items) {
     const product = productById.get(item.productId);
-    if (!product || product.target.field !== "christmas") continue;
-    addChristmas(product.target.category, product.target.option, 1);
+    if (!product) continue;
+    if (product.target.field === "christmas") {
+      addChristmas(product.target.category, product.target.option, 1);
+    } else if (product.target.field === "landscape") {
+      const type = product.target.fixtureType;
+      landscape[type] = (landscape[type] ?? 0) + 1;
+    }
   }
 
   // Round every bucket to a whole unit: feet round to whole feet, counts are
@@ -106,7 +123,12 @@ export function designToEstimateInputs(
     }
   }
 
-  return { feet: Math.round(rooflineFt), christmas_items };
+  return {
+    feet: Math.round(rooflineFt),
+    christmas_items,
+    fixtures: landscape,
+    bistro_feet: Math.round(bistroFt),
+  };
 }
 
 /** True when the design has anything drawn or placed. */
