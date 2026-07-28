@@ -14,6 +14,14 @@ overwrites the ``pricing`` settings block. Nothing else in the workspace is
 touched. "Fork the data, not the code": a second lighting brand is this script
 with different numbers, pointed at its own workspace.
 
+DESTRUCTIVE to operator edits: the ``pricing`` block is **replaced wholesale**,
+not merged (see ``seed()`` below). Anything an operator tuned in Settings →
+Pricing — seasonal/Christmas rates, permanent roofline — is erased on the next
+run. Once real operators are editing pricing in the UI, either fold the live
+block into ``PRICING`` first or stop running this against that workspace.
+Routine price/name changes belong in the Price Book UI or the pricing API.
+See ``docs/price-book-editing.md``.
+
 Run:
     cd backend && uv run python -m scripts.demo.seed_lighting_workspace --workspace <slug-or-uuid>
 """
@@ -191,8 +199,10 @@ PRICING: dict = {
             "by its lending partners. See wisetack.com/faqs."
         ),
     },
+    # OFF: one price everywhere — the all-inclusive financed total.
+    # Matches the live wizard (CONFIG.cashDiscount.enabled: false).
     "cash_discount": {
-        "enabled": True,
+        "enabled": False,
         "card_reserve_rate": 0.03,
         "label": "Cash / Check Pricing",
     },
@@ -579,7 +589,11 @@ async def seed(workspace_ref: str) -> None:
                 item.components = components
                 updated += 1
 
-        # ── Pricing settings (overwrite the whole block, validated above) ──
+        # ── Pricing settings ──
+        # Wholesale replace, NOT a merge — unlike the PUT /settings/.../pricing
+        # endpoint, which merges per top-level block. Every operator edit made in
+        # Settings → Pricing (seasonal, permanent roofline) is discarded here.
+        # Pull the live block into PRICING before re-running on a live workspace.
         settings = dict(workspace.settings or {})
         settings[SETTINGS_KEY] = validated.model_dump(mode="json")
         workspace.settings = settings
