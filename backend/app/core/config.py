@@ -176,7 +176,9 @@ class Settings(BaseSettings):
     ad_library_snapshot_rendering_enabled: bool = False
     # Worker enable flags + poll cadence for the ad-library pipeline.
     ad_library_discovery_worker_enabled: bool = True
-    ad_library_discovery_poll_interval: int = 15
+    # Discovery jobs are queued by operators and run for minutes, so a slower
+    # pickup poll is invisible while removing 3 no-op queries/min.
+    ad_library_discovery_poll_interval: int = 60
     ad_monitor_worker_enabled: bool = True
     ad_monitor_poll_interval: int = 300
     prospect_enrichment_worker_enabled: bool = True
@@ -193,7 +195,9 @@ class Settings(BaseSettings):
     # --- People discovery + buying signals (Apollo-parity) ---
     # Web people-extraction discovery worker + crawl caps.
     web_people_discovery_worker_enabled: bool = True
-    web_people_discovery_poll_interval: int = 20
+    # Same reasoning as ad_library_discovery: crawl jobs are long-running, so
+    # pickup latency is dominated by the crawl itself, not the poll cadence.
+    web_people_discovery_poll_interval: int = 60
     # Max first-party pages crawled per company domain during people extraction.
     web_people_max_pages_per_domain: int = 8
     # Max people emitted per company domain in one discovery run.
@@ -253,7 +257,12 @@ class Settings(BaseSettings):
     # ``RUN_BACKGROUND_WORKERS=false`` on API-only deployments that should serve
     # HTTP/WebSocket traffic without starting polling loops in-process.
     run_background_workers: bool = True
-    campaign_poll_interval: int = 5
+    # Drives campaign_worker and message_test_worker, the two hottest loops.
+    # These only pace *outbound* sends — inbound replies arrive via Telnyx
+    # webhooks, so this interval is not user-facing latency. At 5s the pair
+    # issued ~1,440 no-op queries/hour against a database whose entire message
+    # history was 26 rows; 30s keeps bulk sends prompt while cutting that 6x.
+    campaign_poll_interval: int = 30
     ai_response_delay_ms: int = 2000
 
     # Enrichment

@@ -46,10 +46,12 @@ def test_pool_absorbs_a_worker_burst_without_starving_requests() -> None:
 
     The frequently-polling workers alone can demand more than the old ceiling:
     ``campaign_worker`` and ``message_test_worker`` each fan out to
-    ``MAX_CONCURRENCY=10`` every ``campaign_poll_interval`` (5s) and
-    ``voice_campaign_worker`` adds 5 more every 10s. At 15 total connections
-    those three could exhaust the pool on their own, leaving nothing for the
-    request path.
+    ``MAX_CONCURRENCY=10`` every ``campaign_poll_interval`` and
+    ``voice_campaign_worker`` adds 5 more. At 15 total connections those three
+    could exhaust the pool on their own, leaving nothing for the request path.
+
+    The poll interval has since been relaxed, which makes the burst rarer but
+    not smaller — concurrency, not cadence, sets the peak demand.
     """
     burst_from_hot_workers = 10 + 10 + 5
 
