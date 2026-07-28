@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Plus, Clock, Inbox } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Plus, Clock, Inbox } from "lucide-react";
 import { motion } from "motion/react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -30,6 +30,7 @@ import {
   buildJobsQueryParams,
   jobStatusColors,
   jobStatusLabel,
+  jobSiteShortLine,
   jobsForDay,
   technicianInitials,
   unscheduledJobs,
@@ -71,7 +72,22 @@ function TechnicianChips({ technicians }: { technicians: JobTechnician[] }) {
   );
 }
 
-function JobCard({ job, onSelect }: { job: Job; onSelect: (job: Job) => void }) {
+/**
+ * A job on the board. `showBrief` adds the customer and street line — worth the
+ * two extra rows in the single-column agenda a worker reads on a phone, but not
+ * in the seven-across week grid, where a column is too narrow to show either
+ * without truncating them to nothing.
+ */
+function JobCard({
+  job,
+  onSelect,
+  showBrief = false,
+}: {
+  job: Job;
+  onSelect: (job: Job) => void;
+  showBrief?: boolean;
+}) {
+  const siteLine = jobSiteShortLine(job.service_location);
   return (
     <motion.button
       type="button"
@@ -84,6 +100,15 @@ function JobCard({ job, onSelect }: { job: Job; onSelect: (job: Job) => void }) 
       {job.scheduled_start && (
         <p className="text-[11px] text-muted-foreground">
           {formatDate(job.scheduled_start, { pattern: "h:mm a" })}
+        </p>
+      )}
+      {showBrief && job.customer && (
+        <p className="text-[11px] text-muted-foreground truncate">{job.customer.name}</p>
+      )}
+      {showBrief && siteLine && (
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <MapPin className="size-3 shrink-0" />
+          <span className="truncate">{siteLine}</span>
         </p>
       )}
       <Badge variant="outline" className={`${jobStatusColors[job.status]} text-[10px] py-0`}>
@@ -237,7 +262,7 @@ export function JobsCalendar() {
 
       {/* Status filter (board view only) */}
       {!mineOnly && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
             {JOB_STATUS_OPTIONS.map((opt) => (
               <button
@@ -306,6 +331,7 @@ export function JobsCalendar() {
                   <JobCard
                     key={job.id}
                     job={job}
+                    showBrief
                     onSelect={(selected) => setSelectedJobId(selected.id)}
                   />
                 ))}
@@ -325,6 +351,7 @@ export function JobsCalendar() {
                 <JobCard
                   key={job.id}
                   job={job}
+                  showBrief
                   onSelect={(selected) => setSelectedJobId(selected.id)}
                 />
               ))}

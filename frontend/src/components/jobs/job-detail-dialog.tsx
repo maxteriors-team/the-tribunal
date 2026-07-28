@@ -4,6 +4,7 @@ import { CalendarClock, Loader2, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import {
@@ -106,6 +107,16 @@ export function JobDetailDialog({
   if (!job) return null;
 
   const windowError = jobWindowError(start, end);
+  // The customer's name, never the raw `contact_id`: a technician can't resolve
+  // a database id, and the API now embeds the name for exactly this reason.
+  const subtitle =
+    [
+      job.customer?.name,
+      job.scheduled_start &&
+        formatDate(job.scheduled_start, { pattern: "EEE, MMM d 'at' h:mm a" }),
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Not scheduled yet";
   const busy =
     scheduleJob.isPending ||
     updateJob.isPending ||
@@ -174,19 +185,17 @@ export function JobDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-[520px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-h-[88vh] overflow-y-auto p-4 sm:max-w-[560px] sm:p-6">
+        {/* Left-aligned at every width: the header sits above an address and a
+            scope list, and `DialogHeader`'s mobile default centres it. */}
+        <DialogHeader className="text-left">
+          <DialogTitle className="flex flex-wrap items-center gap-2 pr-6">
             {job.title}
             <Badge variant="outline" className={jobStatusColors[job.status]}>
               {jobStatusLabel(job.status)}
             </Badge>
           </DialogTitle>
-          <DialogDescription>
-            Customer #{job.contact_id}
-            {job.scheduled_start &&
-              ` · ${formatDate(job.scheduled_start, { pattern: "EEE, MMM d 'at' h:mm a" })}`}
-          </DialogDescription>
+          <DialogDescription>{subtitle}</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
@@ -195,9 +204,9 @@ export function JobDetailDialog({
             <TabsTrigger value="field-work">Field work</TabsTrigger>
           </TabsList>
           <TabsContent value="details" className="space-y-5 pt-2">
-          {job.description && (
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{job.description}</p>
-          )}
+          {/* Site, customer, access notes and scope: the technician's "what am I
+              doing and where", and useful to dispatch too. */}
+          <JobBrief job={job} />
 
           {readOnly ? (
             <div className="space-y-1.5">
@@ -236,7 +245,9 @@ export function JobDetailDialog({
                   <CalendarClock className="size-4" />
                   Time window
                 </Label>
-                <div className="grid grid-cols-2 gap-3">
+                {/* Stacked on a phone: two `datetime-local` inputs side by side
+                    clip their own value at 390px wide. */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
                     aria-label="Start"
                     type="datetime-local"

@@ -4,14 +4,37 @@ import type { Job } from "@/lib/api/jobs";
 
 import {
   buildJobsQueryParams,
+  formatJobSiteAddress,
+  formatLineItemQuantity,
   isoToLocalInput,
+  jobSiteAddressLines,
+  jobSiteMapsUrl,
+  jobSiteShortLine,
   jobStatusLabel,
   jobWindowError,
   jobsForDay,
   localToIso,
   technicianInitials,
   unscheduledJobs,
+  type JobSite,
 } from "./job-derivations";
+
+function makeSite(overrides: Partial<JobSite> = {}): JobSite {
+  return {
+    id: "site-1",
+    name: "Helen Vasquez residence",
+    address_line1: "4412 Ridgeview Dr",
+    address_line2: null,
+    city: "Austin",
+    state: "TX",
+    postal_code: "78731",
+    country: "US",
+    access_notes: null,
+    latitude: null,
+    longitude: null,
+    ...overrides,
+  };
+}
 
 function makeJob(overrides: Partial<Job> = {}): Job {
   return {
@@ -111,6 +134,77 @@ describe("localToIso / isoToLocalInput", () => {
 
   it("produces a minute-precision local value", () => {
     expect(isoToLocalInput("2026-05-20T15:00:00.000Z")).toHaveLength(16);
+  });
+});
+
+describe("jobSiteAddressLines", () => {
+  it("splits the site into street, unit and city/state/zip lines", () => {
+    expect(jobSiteAddressLines(makeSite({ address_line2: "Unit B" }))).toEqual([
+      "4412 Ridgeview Dr",
+      "Unit B",
+      "Austin, TX 78731",
+    ]);
+  });
+
+  it("drops missing parts instead of emitting stray separators", () => {
+    expect(
+      jobSiteAddressLines(makeSite({ address_line1: null, state: null, postal_code: null })),
+    ).toEqual(["Austin"]);
+    expect(formatJobSiteAddress(makeSite({ city: null, state: null, postal_code: null }))).toBe(
+      "4412 Ridgeview Dr",
+    );
+  });
+
+  it("keeps a non-US country and omits the implied US one", () => {
+    expect(jobSiteAddressLines(makeSite({ country: "CA" }))).toContain("CA");
+    expect(jobSiteAddressLines(makeSite())).not.toContain("US");
+  });
+
+  it("treats a missing site as no address at all", () => {
+    expect(jobSiteAddressLines(null)).toEqual([]);
+    expect(formatJobSiteAddress(undefined)).toBe("");
+    expect(jobSiteShortLine(null)).toBe("");
+  });
+
+  it("falls back from street to city to site name for the short line", () => {
+    expect(jobSiteShortLine(makeSite())).toBe("4412 Ridgeview Dr");
+    expect(jobSiteShortLine(makeSite({ address_line1: null }))).toBe("Austin");
+    expect(jobSiteShortLine(makeSite({ address_line1: null, city: null }))).toBe(
+      "Helen Vasquez residence",
+    );
+  });
+});
+
+describe("jobSiteMapsUrl", () => {
+  it("prefers the map pin so a bad address still routes", () => {
+    expect(jobSiteMapsUrl(makeSite({ latitude: 30.35, longitude: -97.77 }))).toBe(
+      "https://maps.google.com/?q=30.35,-97.77",
+    );
+  });
+
+  it("falls back to the URL-encoded address", () => {
+    expect(jobSiteMapsUrl(makeSite())).toBe(
+      "https://maps.google.com/?q=4412%20Ridgeview%20Dr%2C%20Austin%2C%20TX%2078731",
+    );
+  });
+
+  it("returns null when there is nothing to navigate to", () => {
+    expect(jobSiteMapsUrl(null)).toBeNull();
+    expect(
+      jobSiteMapsUrl(makeSite({ address_line1: null, city: null, state: null, postal_code: null })),
+    ).toBeNull();
+  });
+});
+
+describe("formatLineItemQuantity", () => {
+  it("drops the trailing zeros the API sends on whole quantities", () => {
+    expect(formatLineItemQuantity(1)).toBe("1");
+    expect(formatLineItemQuantity(2.0)).toBe("2");
+    expect(formatLineItemQuantity(2.5)).toBe("2.5");
+  });
+
+  it("never renders NaN at a technician", () => {
+    expect(formatLineItemQuantity(Number.NaN)).toBe("—");
   });
 });
 

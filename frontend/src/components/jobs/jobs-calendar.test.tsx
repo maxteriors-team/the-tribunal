@@ -248,3 +248,64 @@ describe("JobsCalendar role scoping", () => {
     expect(await openQueuedJob()).toHaveAttribute("data-readonly", "true");
   });
 });
+
+/**
+ * The agenda a worker actually reads on a phone.
+ *
+ * A job card that only shows a title and a time doesn't say where to drive, so
+ * the single-column agenda (and the unscheduled queue that shares its card)
+ * also carries the customer and the street line from the job's embedded site.
+ * The seven-across week grid stays lean — a column there is too narrow.
+ */
+describe("JobsCalendar job cards", () => {
+  const sitedJob = makeJob({
+    id: "job-sited",
+    title: "Soft wash — two-story siding",
+    status: "unscheduled",
+    scheduled_start: null,
+    scheduled_end: null,
+    customer: { id: 1349, name: "Helen Vasquez", phone_number: "+15125550142" },
+    service_location: {
+      id: "site-1",
+      name: "Helen Vasquez residence",
+      address_line1: "4412 Ridgeview Dr",
+      address_line2: null,
+      city: "Austin",
+      state: "TX",
+      postal_code: "78731",
+      country: "US",
+      access_notes: null,
+      latitude: null,
+      longitude: null,
+    },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    signedInAs("technician");
+  });
+
+  it("puts the customer and street line on the agenda card", async () => {
+    listMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
+      Promise.resolve(query.status === "unscheduled" ? jobList([sitedJob]) : jobList([])),
+    );
+    renderBoard();
+
+    const card = (await screen.findAllByRole("button", { name: /Soft wash/i }))[0];
+    expect(within(card).getByText("Helen Vasquez")).toBeInTheDocument();
+    expect(within(card).getByText("4412 Ridgeview Dr")).toBeInTheDocument();
+    expect(card.textContent).not.toMatch(/[$€£]/);
+  });
+
+  it("renders a card with no customer or site without crashing", async () => {
+    listMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
+      Promise.resolve(query.status === "unscheduled" ? jobList([queuedJob]) : jobList([])),
+    );
+    renderBoard();
+
+    const card = (await screen.findAllByRole("button", { name: /Garage EV charger install/i }))[0];
+    expect(within(card).getByText("Garage EV charger install")).toBeInTheDocument();
+    expect(within(card).getByText("Unassigned")).toBeInTheDocument();
+  });
+});

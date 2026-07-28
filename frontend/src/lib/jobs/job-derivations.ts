@@ -11,6 +11,10 @@ import { isSameDay } from "@/lib/utils/date";
 
 export type JobStatusFilter = "" | JobStatus;
 
+/** The price-free site/scope projections the API embeds on a job. */
+export type JobSite = NonNullable<Job["service_location"]>;
+export type JobLineItem = NonNullable<Job["line_items"]>[number];
+
 export interface JobStatusOption {
   value: JobStatusFilter;
   label: string;
@@ -86,6 +90,64 @@ export function isoToLocalInput(iso: string | null): string {
   const date = new Date(iso);
   const localMs = date.getTime() - date.getTimezoneOffset() * 60_000;
   return new Date(localMs).toISOString().slice(0, 16);
+}
+
+/**
+ * Job-site address as display lines: street, unit, then "City, ST 12345".
+ *
+ * Every part is optional on `JobSiteSummary`, so each line is dropped when its
+ * pieces are missing rather than rendering stray commas. `country` is only
+ * meaningful for non-US sites; the product is US-only, so "US" is left off.
+ */
+export function jobSiteAddressLines(site: JobSite | null | undefined): string[] {
+  if (!site) return [];
+  const cityStateZip = [
+    site.city,
+    [site.state, site.postal_code].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const country = site.country && !/^(US|USA)$/i.test(site.country) ? site.country : "";
+  return [site.address_line1, site.address_line2, cityStateZip, country]
+    .map((part) => part?.trim() ?? "")
+    .filter(Boolean);
+}
+
+/** The address on one line, e.g. for a maps query or a compact card. */
+export function formatJobSiteAddress(site: JobSite | null | undefined): string {
+  return jobSiteAddressLines(site).join(", ");
+}
+
+/**
+ * Shortest line that still tells a worker where a job is, for job cards:
+ * the street, else the city, else the site's own name.
+ */
+export function jobSiteShortLine(site: JobSite | null | undefined): string {
+  if (!site) return "";
+  return (site.address_line1 || site.city || site.name || "").trim();
+}
+
+/**
+ * Maps deep link for the job site, or null when it can't be located.
+ *
+ * Prefers the pin (`latitude`/`longitude`) over the typed address so a rural or
+ * misspelled address still routes. `maps.google.com/?q=` is the link the rest of
+ * the app already uses, and phones hand it to their native maps app.
+ */
+export function jobSiteMapsUrl(site: JobSite | null | undefined): string | null {
+  if (!site) return null;
+  const { latitude, longitude } = site;
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    return `https://maps.google.com/?q=${latitude},${longitude}`;
+  }
+  const address = formatJobSiteAddress(site);
+  return address ? `https://maps.google.com/?q=${encodeURIComponent(address)}` : null;
+}
+
+/** Line-item quantity without trailing zeros: 1 -> "1", 2.5 -> "2.5". */
+export function formatLineItemQuantity(quantity: number): string {
+  if (!Number.isFinite(quantity)) return "—";
+  return String(Math.round(quantity * 100) / 100);
 }
 
 /** Build the jobs list query params for the active week + status filter. */
