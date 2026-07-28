@@ -18,12 +18,15 @@ from fastapi import APIRouter, Query
 from app.api.deps import (
     DB,
     CanReadBilling,
+    CurrentMembership,
     CurrentUser,
     TransactionalDB,
     WorkspaceAccess,
     WorkspaceDispatcher,
 )
+from app.core.permissions import Capability, role_can
 from app.models.field_service import JobStatus
+from app.models.workspace import WorkspaceMembership
 from app.schemas.job import (
     JobAssignRequest,
     JobCreate,
@@ -43,6 +46,16 @@ from app.schemas.job_costing import (
 from app.services.jobs import JobCostingService, JobService
 
 router = APIRouter()
+
+
+def _can_see_costs(membership: WorkspaceMembership) -> bool:
+    """Whether this caller may see money on a job (rates, labour cost, expenses).
+
+    ``billing:read`` is the same capability that guards ``/profitability``, so
+    one tier boundary governs every monetary field on a job. The field tier
+    (``jobs:read`` only) is below it.
+    """
+    return role_can(membership.role, Capability.BILLING_READ)
 
 
 @router.get("", response_model=JobListResponse)
@@ -184,20 +197,28 @@ async def unassign_technician(
 # --------------------------------------------------------------------------- #
 # Field execution: time tracking, expenses, profitability.
 #
-# Time-entry and expense reads/writes are open to any workspace member, so a
-# field technician (not necessarily a dispatcher) can clock in and log expenses
-# on a job. Profitability is the exception: it exposes customer revenue/profit/
-# margin and is gated on ``billing:read`` (see ``job_profitability``). Every call
-# is workspace-scoped in the service.
+# Time entries stay open to any workspace member — a field technician must be
+# able to clock in/out and see whether the timer is running — but the money on
+# them (``rate``, ``labor_cost``) is redacted to 0 for callers without
+# ``billing:read``, and a rate they submit is discarded. Expense *reads* are
+# gated outright: an expense row is nothing but a cost, so there is no price-free
+# projection worth serving. Profitability stays gated as before.
+#
+# This is the server-side half of the UI hiding done in edc79b5, which was a
+# display filter only: the payloads still carried the amounts. Every call is
+# workspace-scoped in the service.
 # --------------------------------------------------------------------------- #
 @router.get("/{job_id}/time-entries", response_model=list[TimeEntryResponse])
 async def list_time_entries(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
     db: DB,
 ) -> list[TimeEntryResponse]:
-    """List a job's time entries, newest first."""
-    return await JobCostingService(db).list_time_entries(job_id, workspace.id)
+    """List a job's time entries, newest first (money redacted below billing:read)."""
+    return await JobCostingService(db).list_time_entries(
+        job_id, workspace.id, include_costs=_can_see_costs(membership)
+    )
 
 
 @router.post("/{job_id}/time-entries/clock-in", response_model=TimeEntryResponse, status_code=201)
@@ -205,12 +226,17 @@ async def clock_in(
     job_id: uuid.UUID,
     payload: ClockInRequest,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
     """Start the clock on a job (rejected if a timer is already running)."""
     return await JobCostingService(db).clock_in(
-        job_id, workspace.id, payload, created_by_id=current_user.id
+        job_id,
+        workspace.id,
+        payload,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
     )
 
 
@@ -218,10 +244,13 @@ async def clock_in(
 async def clock_out(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
     """Stop the job's running timer."""
-    return await JobCostingService(db).clock_out(job_id, workspace.id)
+    return await JobCostingService(db).clock_out(
+        job_id, workspace.id, include_costs=_can_see_costs(membership)
+    )
 
 
 @router.post("/{job_id}/time-entries", response_model=TimeEntryResponse, status_code=201)
@@ -229,12 +258,17 @@ async def add_time_entry(
     job_id: uuid.UUID,
     payload: TimeEntryCreate,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
     """Log a completed time entry with an explicit start and end."""
     return await JobCostingService(db).add_time_entry(
-        job_id, workspace.id, payload, created_by_id=current_user.id
+        job_id,
+        workspace.id,
+        payload,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
     )
 
 
@@ -253,9 +287,16 @@ async def delete_time_entry(
 async def list_expenses(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CanReadBilling,
     db: DB,
 ) -> list[JobExpenseResponse]:
-    """List a job's expenses, newest first."""
+    """List a job's expenses, newest first.
+
+    Gated on ``billing:read``: every field on an expense is a cost the customer
+    never sees and a technician has no operational use for. A field technician
+    may still *record* one (POST below) — that only echoes back the amount they
+    submitted — but cannot read the job's costs back out.
+    """
     return await JobCostingService(db).list_expenses(job_id, workspace.id)
 
 
@@ -267,7 +308,12 @@ async def add_expense(
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> JobExpenseResponse:
-    """Record a cost incurred on a job."""
+    """Record a cost incurred on a job.
+
+    Open to any workspace member so a technician can still log that a cost
+    happened; the response only reflects the amount the caller just supplied, so
+    it discloses nothing they did not already know.
+    """
     return await JobCostingService(db).add_expense(
         job_id, workspace.id, payload, created_by_id=current_user.id
     )

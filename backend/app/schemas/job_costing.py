@@ -15,7 +15,12 @@ from pydantic import BaseModel, ConfigDict, Field
 # Time entries
 # --------------------------------------------------------------------------- #
 class ClockInRequest(BaseModel):
-    """Start the clock on a job (open-ended time entry)."""
+    """Start the clock on a job (open-ended time entry).
+
+    ``rate`` is ignored (forced to 0) for callers without ``billing:read``, so a
+    field technician's clock-in is a plain start/stop and cannot poison the
+    workspace's labour costs.
+    """
 
     technician_id: uuid.UUID | None = None
     rate: float = Field(default=0.0, ge=0, description="Hourly cost rate")
@@ -23,7 +28,10 @@ class ClockInRequest(BaseModel):
 
 
 class TimeEntryCreate(BaseModel):
-    """Log a completed time entry with an explicit start and end."""
+    """Log a completed time entry with an explicit start and end.
+
+    ``rate`` is ignored (forced to 0) for callers without ``billing:read``.
+    """
 
     technician_id: uuid.UUID | None = None
     started_at: datetime
@@ -33,18 +41,29 @@ class TimeEntryCreate(BaseModel):
 
 
 class TimeEntryResponse(BaseModel):
-    """A time entry as returned by the API."""
+    """A time entry as returned by the API.
+
+    **Money is redacted for callers without ``billing:read``.** A field
+    technician keeps full read access to this endpoint — they need it to see
+    whether a timer is running and to clock in/out — but ``rate`` and
+    ``labor_cost`` are served as ``0`` to them, so no cost data crosses the wire
+    even to someone reading the raw response. See
+    :meth:`app.services.jobs.costing_service.JobCostingService._time_entry_response`.
+    """
 
     id: uuid.UUID
     job_id: uuid.UUID
     technician_id: uuid.UUID | None = None
     started_at: datetime
     ended_at: datetime | None = None
+    # Redacted to 0 for callers without billing:read.
     rate: float
     note: str | None = None
     # Server-computed: hours between start and end (0 while the clock runs).
+    # Operational, not money — always served.
     duration_hours: float
     # Server-computed: duration_hours * rate (0 while the clock runs).
+    # Redacted to 0 for callers without billing:read.
     labor_cost: float
     created_at: datetime
     updated_at: datetime

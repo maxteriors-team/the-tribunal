@@ -5,6 +5,14 @@ job, time entry, and expense is validated to belong to the caller's workspace
 through :mod:`app.db.scope`, so a caller can never read or mutate another
 tenant's rows. Money math uses ``float`` rounded to two decimals to match the
 invoice/quote services.
+
+**Cost visibility is a parameter of every time-entry read.** Callers pass
+``include_costs`` (the route derives it from ``billing:read``); when false the
+``rate``/``labor_cost`` fields are served as 0 and a client-supplied rate is
+discarded on write. The field tier therefore keeps its operational view of a job
+(is a timer running, how many hours) with no pricing attached. Expenses are
+gated at the route instead — an expense row is nothing *but* money, so there is
+no price-free projection worth serving (see :mod:`app.api.v1.jobs`).
 """
 
 from __future__ import annotations
@@ -60,22 +68,39 @@ class JobCostingService:
             self.db, Technician, technician_id, workspace_id, detail="Technician not found"
         )
 
+    @staticmethod
+    def _rate_for(requested: float, *, include_costs: bool) -> float:
+        """The rate to persist: a caller who cannot read money cannot set it.
+
+        Without ``billing:read`` the submitted rate is dropped rather than
+        rejected, so a technician's clock-in still succeeds as a plain start/stop
+        and cannot silently inflate the job's labour cost.
+        """
+        return requested if include_costs else 0.0
+
     # ------------------------------------------------------------------ #
     # Response building
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _time_entry_response(entry: TimeEntry) -> TimeEntryResponse:
+    def _time_entry_response(entry: TimeEntry, *, include_costs: bool = True) -> TimeEntryResponse:
+        """Serialize a time entry, redacting money unless the caller may see it.
+
+        ``include_costs=False`` (no ``billing:read``) zeroes ``rate`` and
+        ``labor_cost``. The hours and start/end stay: they are how a technician
+        knows the clock is running, and they carry no pricing.
+        """
         hours = _duration_hours(entry.started_at, entry.ended_at)
+        rate = float(entry.rate or 0) if include_costs else 0.0
         return TimeEntryResponse(
             id=entry.id,
             job_id=entry.job_id,
             technician_id=entry.technician_id,
             started_at=entry.started_at,
             ended_at=entry.ended_at,
-            rate=float(entry.rate or 0),
+            rate=rate,
             note=entry.note,
             duration_hours=hours,
-            labor_cost=round(hours * float(entry.rate or 0), 2),
+            labor_cost=round(hours * rate, 2),
             created_at=entry.created_at,
             updated_at=entry.updated_at,
         )
@@ -84,7 +109,7 @@ class JobCostingService:
     # Time entries
     # ------------------------------------------------------------------ #
     async def list_time_entries(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID, *, include_costs: bool = True
     ) -> list[TimeEntryResponse]:
         await self._assert_job(job_id, workspace_id)
         rows = (
@@ -98,7 +123,7 @@ class JobCostingService:
             .scalars()
             .all()
         )
-        return [self._time_entry_response(row) for row in rows]
+        return [self._time_entry_response(row, include_costs=include_costs) for row in rows]
 
     async def _open_entry(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> TimeEntry | None:
         """Return the job's currently-running entry, if any."""
@@ -124,6 +149,7 @@ class JobCostingService:
         payload: ClockInRequest,
         *,
         created_by_id: int | None = None,
+        include_costs: bool = True,
     ) -> TimeEntryResponse:
         """Open a running time entry. Rejected if the job already has one."""
         await self._assert_job(job_id, workspace_id)
@@ -138,7 +164,7 @@ class JobCostingService:
             technician_id=payload.technician_id,
             started_at=datetime.now(UTC),
             ended_at=None,
-            rate=payload.rate,
+            rate=self._rate_for(payload.rate, include_costs=include_costs),
             note=payload.note,
             created_by_id=created_by_id,
         )
@@ -146,9 +172,11 @@ class JobCostingService:
         await self.db.flush()
         await self.db.refresh(entry)
         self.log.info("time_clock_in", job_id=str(job_id), entry_id=str(entry.id))
-        return self._time_entry_response(entry)
+        return self._time_entry_response(entry, include_costs=include_costs)
 
-    async def clock_out(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> TimeEntryResponse:
+    async def clock_out(
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID, *, include_costs: bool = True
+    ) -> TimeEntryResponse:
         """Close the job's running time entry."""
         await self._assert_job(job_id, workspace_id)
         entry = await self._open_entry(job_id, workspace_id)
@@ -158,7 +186,7 @@ class JobCostingService:
         await self.db.flush()
         await self.db.refresh(entry)
         self.log.info("time_clock_out", job_id=str(job_id), entry_id=str(entry.id))
-        return self._time_entry_response(entry)
+        return self._time_entry_response(entry, include_costs=include_costs)
 
     async def add_time_entry(
         self,
@@ -167,6 +195,7 @@ class JobCostingService:
         payload: TimeEntryCreate,
         *,
         created_by_id: int | None = None,
+        include_costs: bool = True,
     ) -> TimeEntryResponse:
         """Log a completed time entry from an explicit start/end."""
         await self._assert_job(job_id, workspace_id)
@@ -181,14 +210,14 @@ class JobCostingService:
             technician_id=payload.technician_id,
             started_at=payload.started_at,
             ended_at=payload.ended_at,
-            rate=payload.rate,
+            rate=self._rate_for(payload.rate, include_costs=include_costs),
             note=payload.note,
             created_by_id=created_by_id,
         )
         self.db.add(entry)
         await self.db.flush()
         await self.db.refresh(entry)
-        return self._time_entry_response(entry)
+        return self._time_entry_response(entry, include_costs=include_costs)
 
     async def delete_time_entry(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, entry_id: uuid.UUID

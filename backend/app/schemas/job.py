@@ -87,8 +87,79 @@ class TechnicianSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class JobSiteSummary(BaseModel):
+    """Where the work happens, as a field worker needs it.
+
+    Embedded on the job because the field tier holds ``jobs:read`` only: a
+    technician is denied ``GET /workspaces/{id}/service-locations`` and
+    ``/contacts`` (both ``crm:read``), so they cannot resolve the site
+    themselves. Address and access notes are decrypted by the ORM on read.
+
+    Operational fields only — address, access notes, map pin. No pricing, and
+    no customer CRM state.
+    """
+
+    id: uuid.UUID
+    name: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    # Gate codes, pets, parking — what the tech needs to get on site.
+    access_notes: str | None = None
+    # Map pin for routing.
+    latitude: float | None = None
+    longitude: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class JobCustomerSummary(BaseModel):
+    """Who to meet on site, and how to reach them.
+
+    Deliberately the *narrowest* customer projection in the API — name and phone
+    only. It is served to the field tier, which has no ``crm:read``, so it must
+    not become a back door onto the contact record: no email, lead score, status,
+    tags, notes, or lifecycle. Widen this only with an explicit field-workflow
+    reason.
+    """
+
+    id: int
+    name: str = Field(..., description="Customer display name")
+    phone_number: str | None = Field(None, description="Direct line for the tech on site")
+
+
+class JobLineItemSummary(BaseModel):
+    """One unit of scope of work — deliberately price-free.
+
+    Projected from the linked invoice's line items. A separate schema from
+    :class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one
+    carries ``unit_price``, ``discount``, and ``total``, and a field technician
+    must never receive money on a job payload. Write-capable tiers still get the
+    priced view from the invoice/quote endpoints; this projection only governs
+    what rides on the job.
+
+    Adding a money field here leaks it to every technician — don't.
+    """
+
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    quantity: float
+
+    model_config = {"from_attributes": True}
+
+
 class JobResponse(BaseModel):
-    """Job response, including its assigned technicians."""
+    """Job response: the work order plus everything needed to execute it.
+
+    Carries the job site, the customer's name/phone, and the scope of work so a
+    field technician — who holds ``jobs:read`` and nothing else — can answer
+    "what am I doing, and where" from this payload alone. Every embedded
+    projection is price-free.
+    """
 
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -104,6 +175,11 @@ class JobResponse(BaseModel):
     external_source: str | None
     external_id: str | None
     technicians: list[TechnicianSummary] = Field(default_factory=list)
+    # Null when the job has no site linked (``service_location_id`` is nullable).
+    service_location: JobSiteSummary | None = None
+    customer: JobCustomerSummary | None = None
+    # Empty when the job has no linked invoice, or that invoice has no lines.
+    line_items: list[JobLineItemSummary] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

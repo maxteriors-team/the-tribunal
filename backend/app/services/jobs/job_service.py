@@ -8,11 +8,20 @@ caller cannot bind a job to another tenant's rows.
 Job ``status`` is derived/maintained here in one place \u2014 on create, update, and
 schedule \u2014 rather than being set ad hoc by callers, so it never drifts out of
 sync with the time window.
+
+A job response is *self-contained for the field*: the site address, the
+customer's name and phone, and the scope of work are embedded, because the field
+tier holds ``jobs:read`` only and is denied the contact/service-location
+endpoints it would otherwise need to resolve them. Everything embedded is
+price-free (see :class:`app.schemas.job.JobLineItemSummary`). The relations that
+feeds are eager-loaded and line items are fetched one query per *page* rather
+than one per job, so widening the payload did not add an N+1.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -35,8 +44,13 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
-from app.models.invoice import Invoice
-from app.schemas.job import JobResponse, TechnicianSummary
+from app.models.invoice import Invoice, InvoiceLineItem
+from app.schemas.job import (
+    JobCustomerSummary,
+    JobLineItemSummary,
+    JobResponse,
+    TechnicianSummary,
+)
 from app.services.automations.events import (
     EVENT_JOB_COMPLETED,
     EVENT_JOB_SCHEDULED,
@@ -48,6 +62,15 @@ _STATUS_EVENTS: dict[JobStatus, str] = {
     JobStatus.SCHEDULED: EVENT_JOB_SCHEDULED,
     JobStatus.COMPLETED: EVENT_JOB_COMPLETED,
 }
+
+# Relations every job response embeds. Eager-loaded on every read path so
+# serialization never lazy-loads (which would raise under asyncio) and never
+# degrades into a per-row query.
+_LOAD_OPTIONS = (
+    selectinload(Job.technicians),
+    selectinload(Job.contact),
+    selectinload(Job.service_location),
+)
 
 
 class JobService:
@@ -111,24 +134,85 @@ class JobService:
     # Response building
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _to_response(job: Job) -> JobResponse:
-        """Build a response from a job with its ``technicians`` loaded."""
+    def _to_response(job: Job, line_items: Sequence[InvoiceLineItem] = ()) -> JobResponse:
+        """Build a response from a job with :data:`_LOAD_OPTIONS` relations loaded.
+
+        ``service_location`` is populated by ``model_validate`` straight off the
+        eager-loaded relation; the customer is mapped by hand so only name and
+        phone cross the boundary (see :class:`JobCustomerSummary`).
+        """
         response = JobResponse.model_validate(job)
         response.technicians = [
             TechnicianSummary.model_validate(tech)
             for tech in sorted(job.technicians, key=lambda t: t.name)
         ]
+        contact = job.contact
+        if contact is not None:
+            response.customer = JobCustomerSummary(
+                id=contact.id,
+                name=contact.full_name,
+                phone_number=contact.phone_number,
+            )
+        response.line_items = [JobLineItemSummary.model_validate(item) for item in line_items]
         return response
 
+    async def _line_items_by_invoice(
+        self, workspace_id: uuid.UUID, invoice_ids: set[uuid.UUID]
+    ) -> dict[uuid.UUID, list[InvoiceLineItem]]:
+        """Scope-of-work lines for the given invoices, in one query.
+
+        One statement for a whole page of jobs rather than one per job, so the
+        calendar's query count stays flat as the day fills up. Joined through
+        :class:`Invoice` and filtered on ``workspace_id`` so a stale or tampered
+        ``job.invoice_id`` can never reach another tenant's lines.
+        """
+        if not invoice_ids:
+            return {}
+        rows = (
+            (
+                await self.db.execute(
+                    select(InvoiceLineItem)
+                    .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+                    .where(
+                        Invoice.workspace_id == workspace_id,
+                        InvoiceLineItem.invoice_id.in_(invoice_ids),
+                    )
+                    .order_by(InvoiceLineItem.invoice_id, InvoiceLineItem.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        grouped: dict[uuid.UUID, list[InvoiceLineItem]] = defaultdict(list)
+        for row in rows:
+            grouped[row.invoice_id].append(row)
+        return grouped
+
+    async def _to_responses(
+        self, jobs: Sequence[Job], workspace_id: uuid.UUID
+    ) -> list[JobResponse]:
+        """Serialize a page of jobs, batching their scope-of-work lookup."""
+        grouped = await self._line_items_by_invoice(
+            workspace_id, {job.invoice_id for job in jobs if job.invoice_id is not None}
+        )
+        return [
+            self._to_response(job, grouped.get(job.invoice_id, ()) if job.invoice_id else ())
+            for job in jobs
+        ]
+
+    async def _one_response(self, job: Job, workspace_id: uuid.UUID) -> JobResponse:
+        """Serialize a single job (same embedding rules as a page)."""
+        return (await self._to_responses([job], workspace_id))[0]
+
     async def _load(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> Job:
-        """Fetch a workspace-owned job with technicians eagerly loaded, or 404."""
+        """Fetch a workspace-owned job with response relations loaded, or 404."""
         return await assert_workspace_owned(
             self.db,
             Job,
             job_id,
             workspace_id,
             detail="Job not found",
-            options=[selectinload(Job.technicians)],
+            options=list(_LOAD_OPTIONS),
         )
 
     # ------------------------------------------------------------------ #
@@ -162,15 +246,15 @@ class JobService:
             )
 
         query = select_workspace_owned(
-            Job, workspace_id, *criteria, options=[selectinload(Job.technicians)]
+            Job, workspace_id, *criteria, options=list(_LOAD_OPTIONS)
         ).order_by(Job.scheduled_start.is_(None), Job.scheduled_start, Job.created_at.desc())
         rows = (await self.db.execute(query)).scalars().all()
-        items = [self._to_response(row) for row in rows]
+        items = await self._to_responses(rows, workspace_id)
         return {"items": items, "total": len(items)}
 
     async def get(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> JobResponse:
         job = await self._load(job_id, workspace_id)
-        return self._to_response(job)
+        return await self._one_response(job, workspace_id)
 
     async def list_for_user(
         self,
@@ -218,10 +302,10 @@ class JobService:
             criteria.append(Job.scheduled_start <= date_to)
 
         query = select_workspace_owned(
-            Job, workspace_id, *criteria, options=[selectinload(Job.technicians)]
+            Job, workspace_id, *criteria, options=list(_LOAD_OPTIONS)
         ).order_by(Job.scheduled_start.is_(None), Job.scheduled_start, Job.created_at.desc())
         rows = (await self.db.execute(query)).scalars().all()
-        items = [self._to_response(row) for row in rows]
+        items = await self._to_responses(rows, workspace_id)
         return {"items": items, "total": len(items)}
 
     # ------------------------------------------------------------------ #
@@ -289,7 +373,7 @@ class JobService:
 
         # A job created already inside a time window lands ``scheduled``.
         await self._emit_status_event(job, prior_status=None)
-        return self._to_response(await self._load(job.id, workspace_id))
+        return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
     async def update(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, data: dict[str, Any]
@@ -321,7 +405,7 @@ class JobService:
 
         await self.db.flush()
         await self._emit_status_event(job, prior_status)
-        return self._to_response(await self._load(job.id, workspace_id))
+        return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
     async def schedule(
         self,
@@ -339,7 +423,7 @@ class JobService:
             job.status = JobStatus.SCHEDULED
         await self.db.flush()
         await self._emit_status_event(job, prior_status)
-        return self._to_response(await self._load(job.id, workspace_id))
+        return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
     async def assign_technicians(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, technician_ids: Sequence[uuid.UUID]
@@ -363,7 +447,7 @@ class JobService:
         # The viewonly ``technicians`` collection was loaded by ``_load``; expire
         # it so the reload below reflects the new tags rather than the cache.
         self.db.expire(job, ["technicians"])
-        return self._to_response(await self._load(job.id, workspace_id))
+        return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
     async def unassign_technician(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, technician_id: uuid.UUID
@@ -380,7 +464,7 @@ class JobService:
         # Core DELETE bypasses the ORM; expire the cached collection so the
         # reload reflects the removal.
         self.db.expire(job, ["technicians"])
-        return self._to_response(await self._load(job.id, workspace_id))
+        return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
     async def delete(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
         job = await assert_workspace_owned(
