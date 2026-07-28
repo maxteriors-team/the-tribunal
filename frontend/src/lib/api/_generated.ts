@@ -4416,12 +4416,21 @@ export interface paths {
         /**
          * List Expenses
          * @description List a job's expenses, newest first.
+         *
+         *     Gated on ``billing:read``: every field on an expense is a cost the customer
+         *     never sees and a technician has no operational use for. A field technician
+         *     may still *record* one (POST below) — that only echoes back the amount they
+         *     submitted — but cannot read the job's costs back out.
          */
         get: operations["list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get"];
         put?: never;
         /**
          * Add Expense
          * @description Record a cost incurred on a job.
+         *
+         *     Open to any workspace member so a technician can still log that a cost
+         *     happened; the response only reflects the amount the caller just supplied, so
+         *     it discloses nothing they did not already know.
          */
         post: operations["add_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses_post"];
         delete?: never;
@@ -4503,7 +4512,7 @@ export interface paths {
         };
         /**
          * List Time Entries
-         * @description List a job's time entries, newest first.
+         * @description List a job's time entries, newest first (money redacted below billing:read).
          */
         get: operations["list_time_entries_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_get"];
         put?: never;
@@ -11935,6 +11944,10 @@ export interface components {
         /**
          * ClockInRequest
          * @description Start the clock on a job (open-ended time entry).
+         *
+         *     ``rate`` is ignored (forced to 0) for callers without ``billing:read``, so a
+         *     field technician's clock-in is a plain start/stop and cannot poison the
+         *     workspace's labour costs.
          */
         ClockInRequest: {
             /** Note */
@@ -14914,6 +14927,30 @@ export interface components {
             title: string;
         };
         /**
+         * JobCustomerSummary
+         * @description Who to meet on site, and how to reach them.
+         *
+         *     Deliberately the *narrowest* customer projection in the API — name and phone
+         *     only. It is served to the field tier, which has no ``crm:read``, so it must
+         *     not become a back door onto the contact record: no email, lead score, status,
+         *     tags, notes, or lifecycle. Widen this only with an explicit field-workflow
+         *     reason.
+         */
+        JobCustomerSummary: {
+            /** Id */
+            id: number;
+            /**
+             * Name
+             * @description Customer display name
+             */
+            name: string;
+            /**
+             * Phone Number
+             * @description Direct line for the tech on site
+             */
+            phone_number?: string | null;
+        };
+        /**
          * JobExpenseCreate
          * @description Record a cost incurred on a job.
          */
@@ -14964,6 +15001,32 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * JobLineItemSummary
+         * @description One unit of scope of work — deliberately price-free.
+         *
+         *     Projected from the linked invoice's line items. A separate schema from
+         *     :class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one
+         *     carries ``unit_price``, ``discount``, and ``total``, and a field technician
+         *     must never receive money on a job payload. Write-capable tiers still get the
+         *     priced view from the invoice/quote endpoints; this projection only governs
+         *     what rides on the job.
+         *
+         *     Adding a money field here leaks it to every technician — don't.
+         */
+        JobLineItemSummary: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number;
         };
         /**
          * JobListResponse
@@ -15053,7 +15116,12 @@ export interface components {
         };
         /**
          * JobResponse
-         * @description Job response, including its assigned technicians.
+         * @description Job response: the work order plus everything needed to execute it.
+         *
+         *     Carries the job site, the customer's name/phone, and the scope of work so a
+         *     field technician — who holds ``jobs:read`` and nothing else — can answer
+         *     "what am I doing, and where" from this payload alone. Every embedded
+         *     projection is price-free.
          */
         JobResponse: {
             /** Contact Id */
@@ -15065,6 +15133,7 @@ export interface components {
             created_at: string;
             /** Crew Id */
             crew_id: string | null;
+            customer?: components["schemas"]["JobCustomerSummary"] | null;
             /** Description */
             description: string | null;
             /** External Id */
@@ -15078,10 +15147,13 @@ export interface components {
             id: string;
             /** Invoice Id */
             invoice_id?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["JobLineItemSummary"][];
             /** Scheduled End */
             scheduled_end: string | null;
             /** Scheduled Start */
             scheduled_start: string | null;
+            service_location?: components["schemas"]["JobSiteSummary"] | null;
             /** Service Location Id */
             service_location_id: string | null;
             status: components["schemas"]["JobStatus"];
@@ -15115,6 +15187,45 @@ export interface components {
              * Format: date-time
              */
             scheduled_start: string;
+        };
+        /**
+         * JobSiteSummary
+         * @description Where the work happens, as a field worker needs it.
+         *
+         *     Embedded on the job because the field tier holds ``jobs:read`` only: a
+         *     technician is denied ``GET /workspaces/{id}/service-locations`` and
+         *     ``/contacts`` (both ``crm:read``), so they cannot resolve the site
+         *     themselves. Address and access notes are decrypted by the ORM on read.
+         *
+         *     Operational fields only — address, access notes, map pin. No pricing, and
+         *     no customer CRM state.
+         */
+        JobSiteSummary: {
+            /** Access Notes */
+            access_notes?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** State */
+            state?: string | null;
         };
         /**
          * JobStatus
@@ -22385,6 +22496,8 @@ export interface components {
         /**
          * TimeEntryCreate
          * @description Log a completed time entry with an explicit start and end.
+         *
+         *     ``rate`` is ignored (forced to 0) for callers without ``billing:read``.
          */
         TimeEntryCreate: {
             /**
@@ -22410,6 +22523,13 @@ export interface components {
         /**
          * TimeEntryResponse
          * @description A time entry as returned by the API.
+         *
+         *     **Money is redacted for callers without ``billing:read``.** A field
+         *     technician keeps full read access to this endpoint — they need it to see
+         *     whether a timer is running and to clock in/out — but ``rate`` and
+         *     ``labor_cost`` are served as ``0`` to them, so no cost data crosses the wire
+         *     even to someone reading the raw response. See
+         *     :meth:`app.services.jobs.costing_service.JobCostingService._time_entry_response`.
          */
         TimeEntryResponse: {
             /**

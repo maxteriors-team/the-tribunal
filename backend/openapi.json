@@ -9269,7 +9269,7 @@
         "type": "object"
       },
       "ClockInRequest": {
-        "description": "Start the clock on a job (open-ended time entry).",
+        "description": "Start the clock on a job (open-ended time entry).\n\n``rate`` is ignored (forced to 0) for callers without ``billing:read``, so a\nfield technician's clock-in is a plain start/stop and cannot poison the\nworkspace's labour costs.",
         "properties": {
           "note": {
             "anyOf": [
@@ -17107,6 +17107,38 @@
         "title": "JobCreate",
         "type": "object"
       },
+      "JobCustomerSummary": {
+        "description": "Who to meet on site, and how to reach them.\n\nDeliberately the *narrowest* customer projection in the API — name and phone\nonly. It is served to the field tier, which has no ``crm:read``, so it must\nnot become a back door onto the contact record: no email, lead score, status,\ntags, notes, or lifecycle. Widen this only with an explicit field-workflow\nreason.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Customer display name",
+            "title": "Name",
+            "type": "string"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Direct line for the tech on site",
+            "title": "Phone Number"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "JobCustomerSummary",
+        "type": "object"
+      },
       "JobExpenseCreate": {
         "description": "Record a cost incurred on a job.",
         "properties": {
@@ -17239,6 +17271,42 @@
           "updated_at"
         ],
         "title": "JobExpenseResponse",
+        "type": "object"
+      },
+      "JobLineItemSummary": {
+        "description": "One unit of scope of work — deliberately price-free.\n\nProjected from the linked invoice's line items. A separate schema from\n:class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one\ncarries ``unit_price``, ``discount``, and ``total``, and a field technician\nmust never receive money on a job payload. Write-capable tiers still get the\npriced view from the invoice/quote endpoints; this projection only governs\nwhat rides on the job.\n\nAdding a money field here leaks it to every technician — don't.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "quantity"
+        ],
+        "title": "JobLineItemSummary",
         "type": "object"
       },
       "JobListResponse": {
@@ -17424,7 +17492,7 @@
         "type": "object"
       },
       "JobResponse": {
-        "description": "Job response, including its assigned technicians.",
+        "description": "Job response: the work order plus everything needed to execute it.\n\nCarries the job site, the customer's name/phone, and the scope of work so a\nfield technician — who holds ``jobs:read`` and nothing else — can answer\n\"what am I doing, and where\" from this payload alone. Every embedded\nprojection is price-free.",
         "properties": {
           "contact_id": {
             "title": "Contact Id",
@@ -17446,6 +17514,16 @@
               }
             ],
             "title": "Crew Id"
+          },
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobCustomerSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "description": {
             "anyOf": [
@@ -17497,6 +17575,13 @@
             ],
             "title": "Invoice Id"
           },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/JobLineItemSummary"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
           "scheduled_end": {
             "anyOf": [
               {
@@ -17520,6 +17605,16 @@
               }
             ],
             "title": "Scheduled Start"
+          },
+          "service_location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobSiteSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "service_location_id": {
             "anyOf": [
@@ -17596,6 +17691,131 @@
           "scheduled_end"
         ],
         "title": "JobScheduleRequest",
+        "type": "object"
+      },
+      "JobSiteSummary": {
+        "description": "Where the work happens, as a field worker needs it.\n\nEmbedded on the job because the field tier holds ``jobs:read`` only: a\ntechnician is denied ``GET /workspaces/{id}/service-locations`` and\n``/contacts`` (both ``crm:read``), so they cannot resolve the site\nthemselves. Address and access notes are decrypted by the ORM on read.\n\nOperational fields only — address, access notes, map pin. No pricing, and\nno customer CRM state.",
+        "properties": {
+          "access_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Notes"
+          },
+          "address_line1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line1"
+          },
+          "address_line2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line2"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "JobSiteSummary",
         "type": "object"
       },
       "JobStatus": {
@@ -37317,7 +37537,7 @@
         "type": "object"
       },
       "TimeEntryCreate": {
-        "description": "Log a completed time entry with an explicit start and end.",
+        "description": "Log a completed time entry with an explicit start and end.\n\n``rate`` is ignored (forced to 0) for callers without ``billing:read``.",
         "properties": {
           "ended_at": {
             "format": "date-time",
@@ -37367,7 +37587,7 @@
         "type": "object"
       },
       "TimeEntryResponse": {
-        "description": "A time entry as returned by the API.",
+        "description": "A time entry as returned by the API.\n\n**Money is redacted for callers without ``billing:read``.** A field\ntechnician keeps full read access to this endpoint — they need it to see\nwhether a timer is running and to clock in/out — but ``rate`` and\n``labor_cost`` are served as ``0`` to them, so no cost data crosses the wire\neven to someone reading the raw response. See\n:meth:`app.services.jobs.costing_service.JobCostingService._time_entry_response`.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -56787,7 +57007,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses": {
       "get": {
-        "description": "List a job's expenses, newest first.",
+        "description": "List a job's expenses, newest first.\n\nGated on ``billing:read``: every field on an expense is a cost the customer\nnever sees and a technician has no operational use for. A field technician\nmay still *record* one (POST below) — that only echoes back the amount they\nsubmitted — but cannot read the job's costs back out.",
         "operationId": "list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get",
         "parameters": [
           {
@@ -56848,7 +57068,7 @@
         ]
       },
       "post": {
-        "description": "Record a cost incurred on a job.",
+        "description": "Record a cost incurred on a job.\n\nOpen to any workspace member so a technician can still log that a cost\nhappened; the response only reflects the amount the caller just supplied, so\nit discloses nothing they did not already know.",
         "operationId": "add_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses_post",
         "parameters": [
           {
@@ -57107,7 +57327,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries": {
       "get": {
-        "description": "List a job's time entries, newest first.",
+        "description": "List a job's time entries, newest first (money redacted below billing:read).",
         "operationId": "list_time_entries_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_get",
         "parameters": [
           {
