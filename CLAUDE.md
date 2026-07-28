@@ -36,8 +36,9 @@ The Tribunal is a proprietary AI-powered CRM command center for capturing leads,
 - Migration CI shape for model/migration changes: `make ci.migrations`.
 - Full local CI parity: `make ci.all`.
 - Frontend e2e on PRs: `cd frontend && npm run e2e` after installing Playwright Chromium.
-- Local DB backup/restore targets: `make db.backup.local`; `make db.restore.local f=backend/backups/<file>.dump`.
-- Encryption-key rotation workflow: `make rotate.encryption-key`.
+- Local DB backup/restore targets: `make db.backup.local`; `make db.restore.local f=backend/backups/<file>.dump.enc`.
+- **Database dumps are encrypted at creation** (AES-256-CBC + PBKDF2) and written `.dump.enc` mode 600. The key lives OUTSIDE the repo at `$(BACKUP_KEY)`, default `~/.the-tribunal-backup-keys/backups.key`, and is auto-generated on first backup. Losing that key makes every dump unrecoverable, so keep a copy in a password manager. Never write a plaintext `pg_dump` into `backend/backups/` — a prod dump is a full cleartext copy of customer PII and predates the field-level encryption inside the database, which makes it strictly more sensitive than the database itself.
+- Encryption-key rotation workflow: `make rotate.encryption-key`. The rotation script fails loudly (non-zero exit) if a declared target column is not actually an `EncryptedString`, or if every row in a table was skipped — a rotation that silently no-ops is a failure, not a success.
 
 ## Runtime and deployment facts
 

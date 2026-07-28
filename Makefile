@@ -15,6 +15,9 @@ BACKEND_DIR       := backend
 FRONTEND_DIR      := frontend
 OPENAPI_ARTIFACTS := $(BACKEND_DIR)/openapi.json $(FRONTEND_DIR)/src/lib/api/_generated.ts
 BACKUP_DIR        := backend/backups
+# Kept outside the repo so a dump key can never be committed. Override to point
+# at a shared secret store.
+BACKUP_KEY        ?= $(HOME)/.the-tribunal-backup-keys/backups.key
 DB_USER           := aicrm
 DB_NAME           := aicrm
 DB_CONTAINER      := aicrm-postgres
@@ -285,40 +288,68 @@ rotate.encryption-key: ## Interactive rotation of ENCRYPTION_KEY on Railway + re
 	@./scripts/ops/rotate_encryption_key.sh
 
 .PHONY: db.backup.local
-db.backup.local: ## pg_dump the local dev Postgres (custom format) into backend/backups/.
+db.backup.local: ## pg_dump the local dev Postgres, encrypted, into backend/backups/.
 	@mkdir -p $(BACKUP_DIR)
+	@$(MAKE) --no-print-directory _backup.keycheck
 	@stamp=$$(date +%Y%m%d-%H%M%S); \
-		out="$(BACKUP_DIR)/$(DB_NAME)-$$stamp.dump"; \
+		out="$(BACKUP_DIR)/$(DB_NAME)-$$stamp.dump.enc"; \
 		echo "▶ dumping $(DB_NAME) from container $(DB_CONTAINER) → $$out"; \
-		docker exec $(DB_CONTAINER) pg_dump -Fc -U $(DB_USER) -d $(DB_NAME) > "$$out"; \
-		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1))"
+		docker exec $(DB_CONTAINER) pg_dump -Fc -U $(DB_USER) -d $(DB_NAME) \
+			| openssl enc -aes-256-cbc -pbkdf2 -iter 250000 -salt -out "$$out" -pass file:$(BACKUP_KEY); \
+		if [ ! -s "$$out" ]; then echo "✗ dump is empty"; rm -f "$$out"; exit 1; fi; \
+		chmod 600 "$$out"; \
+		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1)) — encrypted, mode 600"
 
 .PHONY: db.backup.prod
-db.backup.prod: ## pg_dump a remote/prod Postgres (read-only) into backend/backups/. Usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:5432/db'
+db.backup.prod: ## pg_dump a remote/prod Postgres (read-only), encrypted, into backend/backups/. Usage: make db.backup.prod DATABASE_URL='postgresql://[REDACTED]@host:5432/db'
 	@if [ -z "$(DATABASE_URL)" ]; then \
-		echo "✗ missing DATABASE_URL — usage: make db.backup.prod DATABASE_URL='postgresql://user:pass@host:port/db'"; \
+		echo "✗ missing DATABASE_URL — usage: make db.backup.prod DATABASE_URL='postgresql://[REDACTED]@host:port/db'"; \
 		echo "  Use the PUBLIC url (Railway → Postgres → Connect → 'Public Network', host *.proxy.rlwy.net); the internal *.railway.internal host is unreachable from here."; \
 		echo "  The +asyncpg suffix is stripped automatically."; \
 		exit 1; \
 	fi
 	@mkdir -p $(BACKUP_DIR)
+	@$(MAKE) --no-print-directory _backup.keycheck
 	@stamp=$$(date +%Y%m%d-%H%M%S); \
-		out="$(BACKUP_DIR)/prod-$$stamp.dump"; \
+		out="$(BACKUP_DIR)/prod-$$stamp.dump.enc"; \
 		url="$$(echo '$(DATABASE_URL)' | sed -E 's#\+asyncpg##; s#\+psycopg2##')"; \
 		echo "▶ pg_dump (read-only, custom format) of prod → $$out"; \
-		docker run --rm -i postgres:18 pg_dump -Fc "$$url" > "$$out"; \
+		docker run --rm -i postgres:18 pg_dump -Fc "$$url" \
+			| openssl enc -aes-256-cbc -pbkdf2 -iter 250000 -salt -out "$$out" -pass file:$(BACKUP_KEY); \
 		if [ ! -s "$$out" ]; then echo "✗ dump is empty — check DATABASE_URL / network"; rm -f "$$out"; exit 1; fi; \
-		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1)) — verify before pushing/migrating"
+		chmod 600 "$$out"; \
+		echo "✓ wrote $$out ($$(du -h "$$out" | cut -f1)) — encrypted, mode 600"
+
+# A prod dump is a full cleartext copy of customer PII, and it predates the
+# field-level encryption inside the database — so an unencrypted dump on disk is
+# strictly more sensitive than the database itself (audit C-3). Written
+# encrypted at creation so a stolen laptop, a synced folder, or any local
+# process cannot read it. The key lives outside the repo; losing it means losing
+# the backups, so keep a copy in a password manager.
+.PHONY: _backup.keycheck
+_backup.keycheck:
+	@if [ ! -f "$(BACKUP_KEY)" ]; then \
+		mkdir -p "$$(dirname $(BACKUP_KEY))"; chmod 700 "$$(dirname $(BACKUP_KEY))"; \
+		openssl rand -base64 48 > "$(BACKUP_KEY)"; chmod 600 "$(BACKUP_KEY)"; \
+		echo "▶ generated a new backup encryption key at $(BACKUP_KEY)"; \
+		echo "  BACK THIS UP NOW (password manager). Without it these dumps are unrecoverable."; \
+	fi
 
 .PHONY: db.restore.local
-db.restore.local: ## Restore a pg_dump file into local dev DB. Usage: make db.restore.local f=backend/backups/<file>.dump
-	@if [ -z "$(f)" ]; then echo "✗ missing file — usage: make db.restore.local f=path/to/dump"; exit 1; fi
+db.restore.local: ## Restore a dump into local dev DB (handles .enc). Usage: make db.restore.local f=backend/backups/<file>.dump.enc
+	@if [ -z "$(f)" ]; then echo "✗ missing file — usage: make db.restore.local f=path/to/dump[.enc]"; exit 1; fi
 	@if [ ! -f "$(f)" ]; then echo "✗ file not found: $(f)"; exit 1; fi
+	@case "$(f)" in *.enc) \
+		if [ ! -f "$(BACKUP_KEY)" ]; then echo "✗ encrypted dump but no key at $(BACKUP_KEY)"; exit 1; fi ;; \
+	esac
 	@echo "⚠  this will OVERWRITE the local $(DB_NAME) database with $(f)"
 	@read -r -p "continue? [y/N] " reply; \
 		case "$$reply" in [yY]|[yY][eE][sS]) ;; *) echo "aborted"; exit 1 ;; esac
-	@docker exec -i $(DB_CONTAINER) pg_restore --clean --if-exists \
-		-U $(DB_USER) -d $(DB_NAME) < "$(f)"
+	@case "$(f)" in \
+		*.enc) openssl enc -d -aes-256-cbc -pbkdf2 -iter 250000 -in "$(f)" -pass file:$(BACKUP_KEY) \
+			| docker exec -i $(DB_CONTAINER) pg_restore --clean --if-exists -U $(DB_USER) -d $(DB_NAME) ;; \
+		*) docker exec -i $(DB_CONTAINER) pg_restore --clean --if-exists -U $(DB_USER) -d $(DB_NAME) < "$(f)" ;; \
+	esac
 	@echo "✓ restored $(f)"
 
 # ─── Housekeeping ──────────────────────────────────────────────────────────────
