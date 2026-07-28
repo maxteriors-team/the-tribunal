@@ -43,6 +43,7 @@ from app.services.audio import (
     convert_telnyx_to_openai,
 )
 from app.services.calls.live_call_registry import LiveCall, get_live_call_registry
+from app.services.telephony.stream_auth import verify_stream_token
 from app.websockets.connection_limits import (
     HeartbeatMonitor,
     acquire_connection_slot,
@@ -321,6 +322,7 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
     websocket: WebSocket,
     call_id: str,
     is_outbound: bool = Query(default=False),
+    token: str | None = Query(default=None),
 ) -> None:
     """Bridge between Telnyx media stream and voice AI provider.
 
@@ -331,10 +333,20 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
     - OpenAI Realtime API (default)
     - Grok (xAI) Realtime API
 
+    Security:
+        ``call_id`` is a Telnyx call control ID, not a secret — it is logged on
+        every voice webhook and travels in this URL. Authorization therefore
+        rests on the short-lived HMAC ticket minted by
+        ``TelnyxVoiceService.build_stream_url`` and verified here **before**
+        ``accept()``. Without it, anyone who observed a call control ID could
+        join a live customer call, inject audio into the tenant's AI agent, and
+        spend that tenant's AI credits.
+
     Args:
         websocket: WebSocket connection from Telnyx
         call_id: Telnyx call control ID
         is_outbound: If True, this is an outbound call and the AI uses an outbound opener
+        token: Signed stream ticket bound to ``call_id``
     """
     connection_start = time.time()
     log = logger.bind(endpoint="voice_stream_bridge", call_id=call_id, is_outbound=is_outbound)
@@ -349,6 +361,13 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
         client_port=websocket.client.port if websocket.client else "unknown",
         headers=_safe_headers(dict(websocket.headers)) if hasattr(websocket, "headers") else {},
     )
+
+    # Authorize BEFORE accept() and before any database lookup, so an
+    # unauthenticated peer never reaches tenant data or a provider session.
+    if not verify_stream_token(call_id, token):
+        log.warning("voice_bridge_auth_failed", reason="invalid_or_missing_stream_token")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     # Global backpressure: cap total concurrent voice bridges across the
     # process. Telnyx will retry on WS_1013 (try again later).

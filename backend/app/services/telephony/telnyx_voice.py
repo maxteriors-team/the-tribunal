@@ -22,6 +22,7 @@ from app.services.idempotency import (
     idempotency_headers,
     resolve_message_idempotency,
 )
+from app.services.telephony.stream_auth import STREAM_TOKEN_PARAM, mint_stream_token
 
 logger = structlog.get_logger()
 
@@ -1077,12 +1078,13 @@ class TelnyxVoiceService:
         """
         from app.models.contact import Contact
 
-        # Look for existing conversation
+        # Look for existing conversation. The phone columns are Fernet-encrypted,
+        # so the match runs on the deterministic lookup hashes.
         result = await db.execute(
             select(Conversation).where(
                 Conversation.workspace_id == workspace_id,
-                Conversation.workspace_phone == workspace_phone,
-                Conversation.contact_phone == contact_phone,
+                Conversation.workspace_phone_hash == hash_phone(workspace_phone),
+                Conversation.contact_phone_hash == hash_phone(contact_phone),
             )
         )
         conversation = result.scalar_one_or_none()
@@ -1128,6 +1130,11 @@ class TelnyxVoiceService:
     ) -> str:
         """Build WebSocket URL for audio streaming.
 
+        The URL carries a short-lived HMAC ticket bound to ``call_control_id``.
+        The bridge verifies that ticket before accepting the socket, because
+        the call control ID by itself is not a secret — it is logged on every
+        voice webhook and travels in this very URL.
+
         Args:
             call_control_id: Telnyx call control ID
             api_base_url: Base API URL (e.g., https://example.com)
@@ -1140,9 +1147,10 @@ class TelnyxVoiceService:
         ws_base = api_base_url.replace("https://", "wss://").replace("http://", "ws://")
         # Path is /voice/stream/ (not /ws/voice/stream/)
         stream_url = f"{ws_base}/voice/stream/{call_control_id}"
+        params = [f"{STREAM_TOKEN_PARAM}={mint_stream_token(call_control_id)}"]
         if is_outbound:
-            stream_url += "?is_outbound=true"
-        return stream_url
+            params.append("is_outbound=true")
+        return f"{stream_url}?{'&'.join(params)}"
 
     async def start_audio_streaming(
         self,

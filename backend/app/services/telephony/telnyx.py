@@ -596,12 +596,14 @@ class TelnyxSMSService:
         Returns:
             Existing or new conversation
         """
-        # Look for existing conversation by exact normalized match
+        # Look for existing conversation by exact normalized match. The phone
+        # columns are Fernet-encrypted, so the match runs on the deterministic
+        # lookup hashes.
         result = await db.execute(
             select(Conversation).where(
                 Conversation.workspace_id == workspace_id,
-                Conversation.workspace_phone == workspace_phone,
-                Conversation.contact_phone == contact_phone,
+                Conversation.workspace_phone_hash == hash_phone(workspace_phone),
+                Conversation.contact_phone_hash == hash_phone(contact_phone),
             )
         )
         conversation = result.scalar_one_or_none()
