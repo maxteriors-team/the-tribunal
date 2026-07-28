@@ -1,3 +1,11 @@
+# BUILD IDENTITY: Railway sets RAILWAY_GIT_COMMIT_SHA only for deploys that
+# originated from a GitHub trigger. This service is deployed manually with
+# `railway up`, which uploads a tarball carrying no git metadata (.railwayignore
+# excludes .git/), so that variable is never set here and GET /version reported
+# {"sha": "unknown"}. Deploy with `make deploy.backend`, which writes
+# app/build_info.json into the upload; app/core/build_info.py reads it at
+# runtime. Nixpacks copies the upload verbatim, so no build arg is involved and
+# no Railway dashboard variable is required.
 [build]
 builder = "nixpacks"
 
@@ -6,7 +14,15 @@ preDeployCommand = ["alembic upgrade head"]
 # Default service topology is API + in-process workers. To scale API replicas,
 # set RUN_BACKGROUND_WORKERS=false on this service and run a separate
 # backend-workers service with startCommand = "uv run backend-workers".
-startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'"
+# SECURITY: never use --forwarded-allow-ips=* here. `*` sets uvicorn's
+# always_trust flag, which makes it take the LEFTMOST X-Forwarded-For entry --
+# a value any client can forge -- as request.client.host, defeating every
+# IP-based rate limit and poisoning audit records. The explicit private/loopback
+# set below keeps always_trust off, so uvicorn walks X-Forwarded-For in reverse
+# and returns the real client IP appended by Railway's edge proxy. Railway's
+# edge reaches this container over the internal network, and no external client
+# can originate from a private source address.
+startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8'"
 healthcheckPath = "/readyz"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"

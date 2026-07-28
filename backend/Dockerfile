@@ -60,6 +60,14 @@ COPY --from=builder --chown=app:app /app/alembic /app/alembic
 COPY --from=builder --chown=app:app /app/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=app:app /app/static /app/static
 
+# Build identity for GET /version. Declared last so it never invalidates the
+# dependency/source layers above. Railway builds this service with nixpacks and
+# stamps app/build_info.json instead (see scripts/ops/deploy_backend.sh); this
+# arg is the equivalent for plain `docker build`:
+#   docker build --build-arg BUILD_COMMIT_SHA="$(git rev-parse HEAD)" .
+ARG BUILD_COMMIT_SHA=""
+ENV BUILD_COMMIT_SHA=${BUILD_COMMIT_SHA}
+
 USER app
 
 EXPOSE 8000
@@ -67,8 +75,16 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8000/livez || exit 1
 
+# SECURITY: never use --forwarded-allow-ips=*. `*` sets uvicorn's always_trust
+# flag, which makes it take the LEFTMOST X-Forwarded-For entry -- a value any
+# client can forge -- as request.client.host, defeating every IP-based rate
+# limit and poisoning audit records. The explicit private/loopback set below
+# keeps always_trust off, so uvicorn walks X-Forwarded-For in reverse and
+# returns the real client IP appended by the edge proxy. The edge reaches this
+# container over the internal network, and no external client can originate
+# from a private source address.
 CMD ["uvicorn", "app.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--proxy-headers", \
-     "--forwarded-allow-ips=*"]
+     "--forwarded-allow-ips=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8"]
