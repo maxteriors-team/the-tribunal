@@ -99,6 +99,13 @@ Tunables (env vars):
 - `WS_PATH_TEMPLATE` — path template, default `/voice/stream/{call_id}`.
   If your edge mounts the route at `/ws/voice/stream/{call_id}`, set
   `WS_PATH_TEMPLATE=/ws/voice/stream/{call_id}`.
+- `STREAM_TOKEN` — **required.** The bridge now verifies a short-lived HMAC
+  ticket bound to `call_id` before accepting the socket, so a connection with
+  no `?token=` is closed with 1008 and every VU will report a connect error.
+  Mint one against the target environment's `SECRET_KEY`:
+  `uv run python -c "from app.services.telephony.stream_auth import mint_stream_token; print(mint_stream_token('<call_id>'))"`
+  Tickets expire after 5 minutes, so mint immediately before a run and keep
+  `HOLD_SECONDS` in mind — the check happens once, at handshake.
 
 **Pass criteria:** `ws_connect_errors < 5` across the whole run,
 `ws_session_duration p95` within 10s of the configured hold.

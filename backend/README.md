@@ -175,7 +175,10 @@ The committed `backend/railway.toml` keeps the existing single-service default:
 
 ```toml
 [deploy]
-startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=*'"
+# SECURITY: never use --forwarded-allow-ips=*. It makes uvicorn trust the
+# leftmost X-Forwarded-For entry, letting any client forge its own IP and
+# bypass every IP-based rate limit.
+startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fd00::/8'"
 ```
 
 For one API service that also runs workers, leave `RUN_BACKGROUND_WORKERS=true`

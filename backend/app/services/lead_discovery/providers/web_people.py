@@ -11,7 +11,9 @@ Compliance (see the plan's hard constraints):
 
 * Only first-party company pages reachable from the company domain are crawled
   — **never** LinkedIn or gated networks.
-* ``WebsiteScraperService`` honors robots/ToS and timeouts.
+* ``WebsiteScraperService`` honors robots/ToS and timeouts, and applies the
+  SSRF egress guard (``scraping.url_guard``) to every URL and redirect hop, so
+  a client-supplied ``params.domain`` can't point the crawl at internal hosts.
 * A per-domain page cap (``web_people_max_pages_per_domain``) and a polite
   inter-fetch delay bound the crawl. Per-workspace quota is enforced by
   ``scraping_limiter`` at the API launch boundary.
@@ -380,6 +382,8 @@ class WebPeopleLeadProvider(BaseLeadDiscoveryProvider):
     async def _crawl_domain(self, host: str) -> _Crawl:
         crawl = _Crawl()
         max_pages = settings.web_people_max_pages_per_domain
+        # ``host`` is client-supplied (params.domain) — the scraper validates
+        # this URL against the SSRF egress guard before it opens a socket.
         start_url = f"https://{host}"
         visited: set[str] = set()
 

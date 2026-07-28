@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.core.rate_limit_helpers import raise_rate_limited
 from app.models.demo_request import DemoRequest
 from app.services.rate_limiting.embed_limiter import (
@@ -121,7 +122,7 @@ class EmbedAccessService:
 
         phone_count_result = await self.db.execute(
             select(func.count(), func.min(DemoRequest.created_at)).where(
-                DemoRequest.phone_number == phone_number,
+                DemoRequest.phone_hash == hash_phone(phone_number),
                 DemoRequest.created_at >= day_ago,
             )
         )

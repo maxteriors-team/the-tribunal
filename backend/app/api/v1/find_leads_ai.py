@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
@@ -27,6 +28,8 @@ from app.services.scraping.enrichment_service import enrich_contact_data
 from app.services.scraping.google_places import GooglePlacesError, GooglePlacesService
 from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -207,8 +210,17 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
     for i, result in enumerate(enrichment_results):
         if isinstance(result, BaseException):
             lead_name = leads_to_enrich[i][0].name if i < len(leads_to_enrich) else "unknown"
-            error_type = type(result).__name__
-            errors.append(f"Enrichment failed for {lead_name}: {error_type}: {result!s}")
+            # Never reflect upstream exception text: the lead website is
+            # client-supplied, so the error string is an attacker-steerable
+            # exfiltration channel. Detail stays in the server log.
+            logger.warning(
+                "lead_enrichment_task_failed",
+                workspace_id=str(workspace.id),
+                lead_name=lead_name,
+                error_type=type(result).__name__,
+                error=str(result),
+            )
+            errors.append(f"Enrichment failed for {lead_name}")
             enrichment_failed += 1
             lead_details.append(LeadImportDetail(name=lead_name, status="enrichment_failed"))
             continue
@@ -292,8 +304,13 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
                     decision_maker_title=dm_title,
                 )
             )
-        except Exception as e:
-            errors.append(f"Failed to import {lead.name}: {e!s}")
+        except Exception:
+            logger.exception(
+                "lead_import_failed",
+                workspace_id=str(workspace.id),
+                lead_name=lead.name,
+            )
+            errors.append(f"Failed to import {lead.name}")
 
     if imported > 0:
         await db.commit()
