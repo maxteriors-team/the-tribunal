@@ -19,8 +19,9 @@ import {
  * First-run onboarding gate (finding RF-002).
  *
  * Rendered inside the authenticated app shell. When the current workspace has
- * never completed setup (no AI agent yet) *and the caller may configure the
- * workspace*, it:
+ * never completed setup (no `onboarding_completed_at` stamp — never "has no AI
+ * agent", which is true of workspaces the system seeded an agent for at creation
+ * time) *and the caller may configure the workspace*, it:
  *
  *  1. force-redirects to /onboarding exactly once per workspace on first
  *     authenticated landing, then
