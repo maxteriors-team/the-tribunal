@@ -14,6 +14,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.opportunities import ensure_default_pipeline
+from app.services.workspaces import set_default_membership
 from app.utils.pii import mask_email
 
 # Workspace ID used by frontend. Overridable via env var for non-default deployments;
@@ -103,13 +104,17 @@ async def create_workspace_membership(
         print(f"Membership already exists for user {mask_email(user.email)} in {workspace.name}")
         return existing
 
+    # Promote through the shared helper so a re-seed against a user who already
+    # has a default demotes it instead of creating a second one.
     membership = WorkspaceMembership(
         user_id=user.id,
         workspace_id=workspace.id,
         role="owner",
-        is_default=True,
+        is_default=False,
     )
     db.add(membership)
+    await db.flush()
+    await set_default_membership(db, user.id, workspace.id)
     await db.commit()
     await db.refresh(membership)
     print(f"Created membership for {mask_email(user.email)} in {workspace.name} (role=owner)")

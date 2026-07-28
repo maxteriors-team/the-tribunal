@@ -40,6 +40,7 @@ from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.workspaces import set_default_membership
 
 USER_EMAIL = "promote-e2e@example.com"
 USER_PASSWORD = "Passw0rd!2026"
@@ -135,9 +136,13 @@ async def main() -> None:
                     user_id=user.id,
                     workspace_id=ws.id,
                     role="owner",
-                    is_default=True,
+                    is_default=False,
                 )
             )
+            await db.flush()
+            # Promote via the shared helper so a re-run moves an existing
+            # default instead of leaving the user with two.
+            await set_default_membership(db, user.id, ws.id)
 
         # --- default pipeline ---
         pipeline = (

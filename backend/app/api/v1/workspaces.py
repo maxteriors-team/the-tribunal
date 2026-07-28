@@ -28,7 +28,7 @@ from app.schemas.workspace import (
 )
 from app.services.agents import ensure_default_agent
 from app.services.opportunities import ensure_default_pipeline
-from app.services.workspaces import bulk_create_members
+from app.services.workspaces import bulk_create_members, set_default_membership
 
 router = APIRouter()
 
@@ -83,14 +83,20 @@ async def create_workspace(
     db.add(workspace)
     await db.flush()
 
-    # Create membership (owner)
+    # Create membership (owner). The new workspace becomes the caller's default,
+    # which means demoting whatever was default before: flagging this row without
+    # clearing the old one left the user with two defaults, and the resolvers
+    # behind /onboarding and /billing then raised MultipleResultsFound — a 500 on
+    # every one of those routes for anyone who ever created a second workspace.
     membership = WorkspaceMembership(
         user_id=current_user.id,
         workspace_id=workspace.id,
         role="owner",
-        is_default=True,
+        is_default=False,
     )
     db.add(membership)
+    await db.flush()
+    await set_default_membership(db, current_user.id, workspace.id)
 
     # Provision a default pipeline so opportunities (e.g. ad-library promotions)
     # land in a real pipeline and the opportunities board has columns to render.
@@ -147,12 +153,10 @@ async def set_default_workspace(
     db: DB,
 ) -> WorkspaceWithMembership:
     """Set a workspace as the user's default workspace."""
-    # Clear is_default for all other memberships of this user
-    all_memberships_result = await db.execute(
-        select(WorkspaceMembership).where(WorkspaceMembership.user_id == membership.user_id)
-    )
-    for m in all_memberships_result.scalars().all():
-        m.is_default = m.workspace_id == workspace.id
+    # Ordered clear-then-promote in one place. The previous per-object loop let
+    # the ORM flush the demotions and the promotion in an arbitrary order, which
+    # transiently holds two default rows and now trips the partial unique index.
+    await set_default_membership(db, membership.user_id, workspace.id)
 
     await db.commit()
     await db.refresh(membership)

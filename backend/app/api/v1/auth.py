@@ -310,11 +310,20 @@ async def issue_ws_ticket(current_user: CurrentUser) -> dict[str, str]:
 @router.get("/me", response_model=UserWithWorkspace)
 async def get_me(current_user: CurrentUser, db: DB) -> dict[str, Any]:
     """Get current user info with default workspace."""
+    # Ordered, not just limited: with duplicate default rows (historical data —
+    # see app.services.workspaces.membership.resolve_active_membership) an
+    # unordered LIMIT 1 returns an arbitrary workspace, so the same user could be
+    # handed a different default_workspace_id on consecutive requests. The
+    # tie-break matches every other resolver.
     result = await db.execute(
         select(WorkspaceMembership)
         .where(
             WorkspaceMembership.user_id == current_user.id,
             WorkspaceMembership.is_default.is_(True),
+        )
+        .order_by(
+            WorkspaceMembership.created_at.asc(),
+            WorkspaceMembership.id.asc(),
         )
         .limit(1)
     )

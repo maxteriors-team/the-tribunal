@@ -5,7 +5,17 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -134,7 +144,19 @@ class WorkspaceMembership(Base):
     """User membership in a workspace."""
 
     __tablename__ = "workspace_memberships"
-    __table_args__ = (UniqueConstraint("user_id", "workspace_id", name="uq_user_workspace"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "workspace_id", name="uq_user_workspace"),
+        # A user has at most one default membership. Partial, because they may
+        # hold any number of non-default ones. Writers must clear before
+        # promoting (a partial unique index cannot be DEFERRABLE in Postgres) —
+        # see app.services.workspaces.membership.set_default_membership.
+        Index(
+            "uq_workspace_membership_default_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[int] = mapped_column(

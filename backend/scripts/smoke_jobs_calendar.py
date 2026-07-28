@@ -59,6 +59,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.field_service import Technician
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.workspaces import set_default_membership
 from app.utils.pii import mask_email
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -126,9 +127,13 @@ async def _seed_worker(db: AsyncSession, workspace: Workspace) -> tuple[User, Te
                 user_id=worker.id,
                 workspace_id=workspace.id,
                 role="technician",
-                is_default=True,
+                is_default=False,
             )
         )
+        await db.flush()
+        # Promote via the shared helper: a re-run against a worker who already
+        # has a default elsewhere must move it, not add a second one.
+        await set_default_membership(db, worker.id, workspace.id)
         print("Added worker membership (role=technician)")
 
     technician = (

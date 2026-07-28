@@ -58,12 +58,27 @@ def _stripe_client() -> stripe.StripeClient:
 
 
 async def _get_user_workspace_id(current_user: CurrentUser, db: DB) -> uuid.UUID:
-    """Resolve the user's default (or first) workspace ID."""
+    """Resolve the user's default (or first) workspace ID.
+
+    Bounded and ordered rather than assuming a single default row: historical
+    data carries duplicate defaults (``POST /workspaces`` used to add one without
+    clearing the old), and an unbounded ``scalar_one_or_none()`` here raised
+    ``MultipleResultsFound`` — a 500 on every billing route for those users. The
+    tie-break matches :func:`resolve_active_membership` and the repair migration,
+    so a user is never billed against one workspace here while being onboarded
+    into another there.
+    """
     result = await db.execute(
-        select(WorkspaceMembership).where(
+        select(WorkspaceMembership)
+        .where(
             WorkspaceMembership.user_id == current_user.id,
             WorkspaceMembership.is_default.is_(True),
         )
+        .order_by(
+            WorkspaceMembership.created_at.asc(),
+            WorkspaceMembership.id.asc(),
+        )
+        .limit(1)
     )
     membership = result.scalar_one_or_none()
 
@@ -71,7 +86,10 @@ async def _get_user_workspace_id(current_user: CurrentUser, db: DB) -> uuid.UUID
         result = await db.execute(
             select(WorkspaceMembership)
             .where(WorkspaceMembership.user_id == current_user.id)
-            .order_by(WorkspaceMembership.created_at.asc())
+            .order_by(
+                WorkspaceMembership.created_at.asc(),
+                WorkspaceMembership.id.asc(),
+            )
             .limit(1)
         )
         membership = result.scalar_one_or_none()
