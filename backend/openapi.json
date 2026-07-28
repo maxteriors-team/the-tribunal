@@ -65060,7 +65060,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/phone-numbers": {
       "get": {
-        "description": "List phone numbers (shared across workspaces for now).",
+        "description": "List the workspace's phone numbers.",
         "operationId": "list_phone_numbers_api_v1_workspaces__workspace_id__phone_numbers_get",
         "parameters": [
           {
@@ -65394,7 +65394,7 @@
         ]
       },
       "get": {
-        "description": "Get a phone number by ID (shared across workspaces).",
+        "description": "Get one of the workspace's phone numbers by ID.",
         "operationId": "get_phone_number_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__get",
         "parameters": [
           {
@@ -72066,7 +72066,7 @@
     },
     "/version": {
       "get": {
-        "description": "Return the build's git SHA from ``RAILWAY_GIT_COMMIT_SHA``.",
+        "description": "Return the commit SHA of the running build.\n\nResolved in order from ``RAILWAY_GIT_COMMIT_SHA`` (git-triggered Railway\nbuilds), ``BUILD_COMMIT_SHA`` (build arg), then the ``app/build_info.json``\nstamp that ``make deploy.backend`` bakes into ``railway up`` uploads,\nfalling back to ``\"unknown\"``. ``source`` reports which one answered, so an\n``\"unknown\"`` reading is diagnosable from the response alone.",
         "operationId": "version_version_get",
         "responses": {
           "200": {

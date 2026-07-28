@@ -16,7 +16,8 @@ What each probe proves:
 
 * ``/livez``  — the process is up and the event loop is responsive.
 * ``/readyz`` — startup finished and Postgres + Redis + workers are reachable.
-* ``/version`` — the build endpoint responds with a SHA payload.
+* ``/version`` — the deployment reports the actual commit it is running, so
+  "did my deploy land?" is one HTTP call instead of log archaeology.
 * ``/api/v1/auth/me`` (no token) — the API router is mounted and auth is
   enforced, i.e. protected data is not served to anonymous callers.
 * Security headers on ``/livez`` — the real app middleware served the response
@@ -26,6 +27,7 @@ What each probe proves:
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 
 import httpx
@@ -36,6 +38,10 @@ SMOKE_BASE_URL = os.getenv("SMOKE_BASE_URL", "").rstrip("/")
 # Generous per-request budget: a freshly deployed container may cold-start and
 # the readiness probe itself allows ~2s per dependency.
 _REQUEST_TIMEOUT_SECONDS = 20.0
+
+# An abbreviated or full git SHA, optionally flagged as built from a dirty tree
+# by ``scripts/ops/deploy_backend.sh``. Deliberately excludes ``"unknown"``.
+_COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{7,40}(-dirty)?")
 
 pytestmark = [
     pytest.mark.smoke,
@@ -84,9 +90,7 @@ def test_readyz_is_ready(client: httpx.Client) -> None:
     assert body["status"] in {"ok", "degraded"}, body
     checks = body["checks"]
     gating = {"startup", "postgres", "redis"}
-    unhealthy = {
-        name: c for name, c in checks.items() if name in gating and not c.get("ok", False)
-    }
+    unhealthy = {name: c for name, c in checks.items() if name in gating and not c.get("ok", False)}
     assert not unhealthy, f"unhealthy dependencies: {unhealthy}"
 
 
@@ -97,18 +101,31 @@ def test_workers_are_heartbeating(client: httpx.Client) -> None:
     without giving the orchestrator a reason to restart or drain the API.
     """
     response = client.get("/workers/health")
-    assert response.status_code == 200, (
-        f"workers unhealthy, missing heartbeats: {response.text}"
-    )
+    assert response.status_code == 200, f"workers unhealthy, missing heartbeats: {response.text}"
     assert response.json()["missing"] == [], response.text
 
 
 def test_version_endpoint_serves_sha(client: httpx.Client) -> None:
-    """The build/version endpoint responds with a non-empty SHA string."""
+    """The deployment identifies the exact commit it is running.
+
+    ``"unknown"`` is a failure here, not an acceptable default: it is what this
+    endpoint returned for every manual deploy until the build stamp existed,
+    and it forced deploy verification to fall back to correlating Railway log
+    timestamps with worker poll cadence mid-incident.
+
+    A ``-dirty`` suffix is accepted — it is an honest report that the uploaded
+    tree had uncommitted changes, which is worth seeing rather than hiding.
+    """
     response = client.get("/version")
     assert response.status_code == 200, response.text
-    sha = response.json().get("sha")
-    assert isinstance(sha, str) and sha, f"missing build sha: {response.text}"
+    body = response.json()
+    sha = body.get("sha")
+    assert isinstance(sha, str) and _COMMIT_SHA_PATTERN.fullmatch(sha), (
+        f"/version must report the deployed commit, got sha={sha!r} "
+        f"source={body.get('source')!r}. Deploy with `make deploy.backend` — a bare "
+        "`railway up` ships no build stamp, and Railway only sets "
+        "RAILWAY_GIT_COMMIT_SHA for git-triggered builds."
+    )
 
 
 def test_protected_route_rejects_anonymous(client: httpx.Client) -> None:

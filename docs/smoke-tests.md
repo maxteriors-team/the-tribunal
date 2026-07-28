@@ -13,7 +13,7 @@ test database.
 |---|---|
 | `GET /livez` → `200 {"status":"ok"}` | Process up, event loop responsive |
 | `GET /readyz` → `200`, all checks `ok` | Startup finished; Postgres + Redis + worker heartbeats healthy |
-| `GET /version` → `200`, non-empty `sha` | Build/version endpoint serving |
+| `GET /version` → `200`, `sha` is a real commit | The expected commit is live — `"unknown"` fails the test (deploy with `make deploy.backend`) |
 | `GET /api/v1/auth/me` (no token) → `401` | API router mounted **and** auth enforced (no anonymous data leak) |
 | Security headers on `/livez` | Response came from the app middleware, not an upstream error page |
 

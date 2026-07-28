@@ -276,6 +276,10 @@ audit.secrets: ## Scan the working tree for committed secrets (gitleaks).
 
 # ─── Ops ───────────────────────────────────────────────────────────────────────
 
+.PHONY: deploy.backend
+deploy.backend: ## Deploy the backend to Railway with the commit SHA baked in (so /version reports it). Extra args pass through to `railway up`.
+	@./scripts/ops/deploy_backend.sh
+
 .PHONY: rotate.encryption-key
 rotate.encryption-key: ## Interactive rotation of ENCRYPTION_KEY on Railway + re-encrypt rows.
 	@./scripts/ops/rotate_encryption_key.sh

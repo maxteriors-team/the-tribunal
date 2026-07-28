@@ -7,20 +7,20 @@ Three orthogonal endpoints follow the Kubernetes/Railway convention:
 * ``/readyz`` — readiness: external dependencies (Postgres + Redis) reachable
   within a 2-second budget. Returns 503 if either probe fails or times out so
   load balancers can drain the instance.
-* ``/version`` — build identifier sourced from the ``RAILWAY_GIT_COMMIT_SHA``
-  environment variable (falls back to ``"unknown"``).
+* ``/version`` — the commit SHA of the running build, resolved by
+  :func:`app.core.build_info.resolve_build_info` (falls back to ``"unknown"``).
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import text
 
+from app.core.build_info import resolve_build_info
 from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal
 from app.workers import WORKER_SPECS
@@ -247,6 +247,13 @@ async def workers_health(response: Response) -> dict[str, Any]:
 
 @router.get("/version", tags=["Health"])
 async def version() -> dict[str, str]:
-    """Return the build's git SHA from ``RAILWAY_GIT_COMMIT_SHA``."""
-    sha = os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown")
-    return {"sha": sha}
+    """Return the commit SHA of the running build.
+
+    Resolved in order from ``RAILWAY_GIT_COMMIT_SHA`` (git-triggered Railway
+    builds), ``BUILD_COMMIT_SHA`` (build arg), then the ``app/build_info.json``
+    stamp that ``make deploy.backend`` bakes into ``railway up`` uploads,
+    falling back to ``"unknown"``. ``source`` reports which one answered, so an
+    ``"unknown"`` reading is diagnosable from the response alone.
+    """
+    info = resolve_build_info()
+    return {"sha": info.sha, "source": info.source}

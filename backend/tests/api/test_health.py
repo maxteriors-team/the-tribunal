@@ -9,6 +9,7 @@ without a live Postgres or Redis.
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -19,6 +20,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
+from app.core import build_info
 from app.websockets.voice_bridge import router as voice_bridge_router
 from app.websockets.voice_test import router as voice_test_router
 
@@ -228,9 +230,7 @@ class TestReadyz:
         assert body["status"] == "unavailable"
         assert body["missing"] == ["campaign_worker"]
 
-    async def test_workers_health_200_when_all_heartbeats_fresh(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_workers_health_200_when_all_heartbeats_fresh(self, client: AsyncClient) -> None:
         """All heartbeats fresh ⇒ the worker probe passes."""
         with patch(
             "app.api.v1.health._check_worker_heartbeats",
@@ -464,20 +464,47 @@ class TestWorkerHeartbeatProbe:
 
 
 class TestVersion:
-    """GET /version — git SHA from RAILWAY_GIT_COMMIT_SHA."""
+    """GET /version — the deployed commit SHA plus the source that supplied it.
+
+    Source precedence itself is pinned in ``tests/core/test_build_info.py``;
+    these cover the HTTP contract. The stamp path is redirected at a
+    nonexistent file so a real ``backend/app/build_info.json`` left behind by
+    an interrupted deploy can't change the outcome.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_build_stamp(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(build_info, "BUILD_STAMP_PATH", tmp_path / "absent.json")
 
     async def test_version_returns_sha_from_env(self, client: AsyncClient) -> None:
         with patch.dict(os.environ, {"RAILWAY_GIT_COMMIT_SHA": "abc123def"}):
             response = await client.get("/version")
         assert response.status_code == 200
-        assert response.json() == {"sha": "abc123def"}
+        assert response.json() == {"sha": "abc123def", "source": "railway_git_env"}
 
-    async def test_version_defaults_to_unknown_when_env_missing(self, client: AsyncClient) -> None:
+    async def test_version_reads_the_build_stamp_when_env_is_missing(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The ``railway up`` path: no Railway git vars, SHA baked into the image."""
+        stamp = tmp_path / "build_info.json"
+        stamp.write_text('{"sha": "c0ffee1234567"}', encoding="utf-8")
+        monkeypatch.setattr(build_info, "BUILD_STAMP_PATH", stamp)
+
+        env = {k: v for k, v in os.environ.items() if k != "RAILWAY_GIT_COMMIT_SHA"}
+        with patch.dict(os.environ, env, clear=True):
+            response = await client.get("/version")
+
+        assert response.status_code == 200
+        assert response.json() == {"sha": "c0ffee1234567", "source": "build_stamp"}
+
+    async def test_version_defaults_to_unknown_when_no_source_exists(
+        self, client: AsyncClient
+    ) -> None:
         env = {k: v for k, v in os.environ.items() if k != "RAILWAY_GIT_COMMIT_SHA"}
         with patch.dict(os.environ, env, clear=True):
             response = await client.get("/version")
         assert response.status_code == 200
-        assert response.json() == {"sha": "unknown"}
+        assert response.json() == {"sha": "unknown", "source": "unknown"}
 
 
 class TestAuthEndpointErrors:

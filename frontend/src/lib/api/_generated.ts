@@ -6248,7 +6248,7 @@ export interface paths {
         };
         /**
          * List Phone Numbers
-         * @description List phone numbers (shared across workspaces for now).
+         * @description List the workspace's phone numbers.
          */
         get: operations["list_phone_numbers_api_v1_workspaces__workspace_id__phone_numbers_get"];
         put?: never;
@@ -6328,7 +6328,7 @@ export interface paths {
         };
         /**
          * Get Phone Number
-         * @description Get a phone number by ID (shared across workspaces).
+         * @description Get one of the workspace's phone numbers by ID.
          */
         get: operations["get_phone_number_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__get"];
         /**
@@ -8007,7 +8007,13 @@ export interface paths {
         };
         /**
          * Version
-         * @description Return the build's git SHA from ``RAILWAY_GIT_COMMIT_SHA``.
+         * @description Return the commit SHA of the running build.
+         *
+         *     Resolved in order from ``RAILWAY_GIT_COMMIT_SHA`` (git-triggered Railway
+         *     builds), ``BUILD_COMMIT_SHA`` (build arg), then the ``app/build_info.json``
+         *     stamp that ``make deploy.backend`` bakes into ``railway up`` uploads,
+         *     falling back to ``"unknown"``. ``source`` reports which one answered, so an
+         *     ``"unknown"`` reading is diagnosable from the response alone.
          */
         get: operations["version_version_get"];
         put?: never;

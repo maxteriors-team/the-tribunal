@@ -39,6 +39,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-build-stamp
+        name: block committing the deploy build stamp
+        entry: bash -c 'echo "✗ backend/app/build_info.json is a deploy-time artifact written by scripts/ops/deploy_backend.sh and deleted after upload. Committing it makes GET /version report a stale SHA — worse than \"unknown\". Run: git rm --cached backend/app/build_info.json"; exit 1'
+        language: system
+        files: ^backend/app/build_info\.json$
+        pass_filenames: false
       - id: frontend-eslint
         name: frontend eslint (staged ts/tsx)
         entry: bash -c 'cd frontend && npm run lint'
