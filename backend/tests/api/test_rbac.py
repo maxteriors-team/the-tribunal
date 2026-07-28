@@ -306,6 +306,8 @@ async def test_field_technician_is_locked_to_operational_surfaces() -> None:
         "/campaigns",
         "/catalog-items",  # price book
         "/invoices",
+        "/quotes",  # sell-side money
+        "/opportunities",  # pipeline value
     ]
     try:
         async with _client_as("technician") as client:
@@ -747,5 +749,67 @@ async def test_job_expenses_are_denied_to_the_field_tier() -> None:
                 assert (
                     await client.get(_url(f"/jobs/{JOB_ID}/profitability"))
                 ).status_code != 403, role
+    finally:
+        _clear_overrides()
+
+
+@asynccontextmanager
+async def _time_entries_client_as(role: str, entry: TimeEntry) -> AsyncIterator[AsyncClient]:
+    """Drive the real ``/time-entries`` route with the real service over one row.
+
+    Everything below the route is genuine — :class:`JobCostingService` and its
+    serializer both run — so the only thing under test is whether the *route*
+    hands the service the caller's cost visibility. Only the two DB round trips
+    are faked: the job-ownership assertion and the row fetch.
+    """
+    scalars = MagicMock()
+    scalars.all.return_value = [entry]
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    async def _db_override() -> AsyncIterator[AsyncMock]:
+        yield db
+
+    with patch.object(JobCostingService, "_assert_job", AsyncMock(return_value=None)):
+        async with _jobs_client_as(role) as client:
+            from app.main import app
+
+            app.dependency_overrides[get_db] = _db_override
+            yield client
+
+
+async def test_time_entry_money_is_redacted_by_the_route_not_just_the_serializer() -> None:
+    """The field tier and a billing role read the *same* row and see different money.
+
+    ``test_time_entry_hides_rate_and_labor_cost_below_billing_read`` covers the
+    serializer in isolation, but the serializer is only ever as good as the
+    ``include_costs`` the route passes it — and
+    ``JobCostingService.list_time_entries`` defaults that argument to ``True``.
+    A route that stopped forwarding the caller's tier would therefore re-leak
+    every rate while the unit test stayed green. This drives the HTTP boundary
+    to close that gap."""
+    try:
+        async with _time_entries_client_as("technician", _time_entry(rate=92.5)) as client:
+            tech_resp = await client.get(_url(f"/jobs/{JOB_ID}/time-entries"))
+        _clear_overrides()
+        async with _time_entries_client_as("owner", _time_entry(rate=92.5)) as client:
+            owner_resp = await client.get(_url(f"/jobs/{JOB_ID}/time-entries"))
+
+        assert (tech_resp.status_code, owner_resp.status_code) == (200, 200)
+        tech_entry = tech_resp.json()[0]
+        owner_entry = owner_resp.json()[0]
+
+        # The owner sees what is actually on the row: 3h at $92.50 = $277.50.
+        assert (owner_entry["rate"], owner_entry["labor_cost"]) == (92.5, 277.5)
+        # The technician reads the same row with the money zeroed…
+        assert (tech_entry["rate"], tech_entry["labor_cost"]) == (0.0, 0.0)
+        # …and no priced value survives anywhere in the raw body.
+        assert not re.search(r"92\.5|277\.5", tech_resp.text), tech_resp.text
+        # Hours are operational, not monetary: both tiers keep them so the
+        # timer and the payroll export still agree on elapsed time.
+        assert tech_entry["duration_hours"] == owner_entry["duration_hours"] == 3.0
     finally:
         _clear_overrides()
