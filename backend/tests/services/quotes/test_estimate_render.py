@@ -45,11 +45,21 @@ def _fake_client(b64: str | None) -> AsyncMock:
 def test_default_prompt_varies_by_mode_and_stays_under_cap() -> None:
     seasonal = default_render_prompt("seasonal")
     permanent = default_render_prompt("permanent")
+    landscape = default_render_prompt("landscape")
     assert "C9 Christmas lights" in seasonal
     assert "permanent LED track lighting" in permanent
+    assert "architectural landscape lighting" in landscape
     # OpenAI caps the image-edit prompt at 1000 characters.
     assert len(seasonal) <= 1000
     assert len(permanent) <= 1000
+    assert len(landscape) <= 1000
+
+
+def test_landscape_prompt_never_sells_a_holiday_installation() -> None:
+    """A landscape design must not come back looking like Christmas lights."""
+    landscape = default_render_prompt("landscape")
+    assert "holiday" not in landscape.lower()
+    assert "christmas" not in landscape.lower()
 
 
 def test_unknown_mode_falls_back_to_seasonal_prompt() -> None:

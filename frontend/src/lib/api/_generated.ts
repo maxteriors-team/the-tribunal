@@ -13589,8 +13589,10 @@ export interface components {
          * @description A composited design image to turn into a photorealistic night render.
          *
          *     ``image`` is the rep's drawn lighting design flattened over the customer
-         *     photo, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal
-         *     vs permanent prompt; ``prompt`` optionally overrides it. This boundary carries
+         *     photo, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the product
+         *     line's prompt (seasonal, permanent, or landscape) so a landscape design is
+         *     never rendered back to the homeowner as a holiday installation; ``prompt``
+         *     optionally overrides it. This boundary carries
          *     **no dollars and no feet** — it only transforms an image via the workspace's
          *     OpenAI credential, server-side, so the browser never handles a key.
          */
@@ -13605,7 +13607,7 @@ export interface components {
              * @default seasonal
              * @enum {string}
              */
-            mode: "seasonal" | "permanent";
+            mode: "seasonal" | "permanent" | "landscape";
             /** Prompt */
             prompt?: string | null;
         };
@@ -15270,6 +15272,18 @@ export interface components {
             priority?: number | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * LandscapeConfig
+         * @description Client-facing framing for the landscape-lighting service.
+         *
+         *     Pricing itself comes from the tiers + catalog; this only carries the value
+         *     propositions the homeowner reads, so an operator can speak to their market
+         *     without a code change.
+         */
+        LandscapeConfig: {
+            /** Perks */
+            perks?: string[];
         };
         /**
          * LaunchCampaignResponse
@@ -18796,6 +18810,7 @@ export interface components {
             comparison_years: number;
             deposit?: components["schemas"]["DepositConfig"];
             financing?: components["schemas"]["FinancingConfig"];
+            landscape?: components["schemas"]["LandscapeConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
             /**
              * Roofline Comparison Enabled
@@ -18827,6 +18842,7 @@ export interface components {
             comparison_years?: number | null;
             deposit?: components["schemas"]["DepositConfig"] | null;
             financing?: components["schemas"]["FinancingConfig"] | null;
+            landscape?: components["schemas"]["LandscapeConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
             /** Roofline Comparison Enabled */
             roofline_comparison_enabled?: boolean | null;

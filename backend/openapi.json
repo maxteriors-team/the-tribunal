@@ -13965,7 +13965,7 @@
         "type": "object"
       },
       "EstimateRenderRequest": {
-        "description": "A composited design image to turn into a photorealistic night render.\n\n``image`` is the rep's drawn lighting design flattened over the customer\nphoto, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the seasonal\nvs permanent prompt; ``prompt`` optionally overrides it. This boundary carries\n**no dollars and no feet** — it only transforms an image via the workspace's\nOpenAI credential, server-side, so the browser never handles a key.",
+        "description": "A composited design image to turn into a photorealistic night render.\n\n``image`` is the rep's drawn lighting design flattened over the customer\nphoto, as a base64 ``data:`` URL (PNG/JPEG/WebP). ``mode`` picks the product\nline's prompt (seasonal, permanent, or landscape) so a landscape design is\nnever rendered back to the homeowner as a holiday installation; ``prompt``\noptionally overrides it. This boundary carries\n**no dollars and no feet** — it only transforms an image via the workspace's\nOpenAI credential, server-side, so the browser never handles a key.",
         "properties": {
           "image": {
             "description": "base64 data URL of the composited design",
@@ -13977,7 +13977,8 @@
             "default": "seasonal",
             "enum": [
               "seasonal",
-              "permanent"
+              "permanent",
+              "landscape"
             ],
             "title": "Mode",
             "type": "string"
@@ -17976,6 +17977,20 @@
           }
         },
         "title": "KnowledgeDocumentUpdate",
+        "type": "object"
+      },
+      "LandscapeConfig": {
+        "description": "Client-facing framing for the landscape-lighting service.\n\nPricing itself comes from the tiers + catalog; this only carries the value\npropositions the homeowner reads, so an operator can speak to their market\nwithout a code change.",
+        "properties": {
+          "perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Perks",
+            "type": "array"
+          }
+        },
+        "title": "LandscapeConfig",
         "type": "object"
       },
       "LaunchCampaignResponse": {
@@ -27697,6 +27712,9 @@
           "financing": {
             "$ref": "#/components/schemas/FinancingConfig"
           },
+          "landscape": {
+            "$ref": "#/components/schemas/LandscapeConfig"
+          },
           "permanent": {
             "$ref": "#/components/schemas/PermanentConfig"
           },
@@ -27809,6 +27827,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/FinancingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "landscape": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandscapeConfig"
               },
               {
                 "type": "null"

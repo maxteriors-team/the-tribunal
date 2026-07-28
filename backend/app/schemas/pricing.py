@@ -472,6 +472,34 @@ class ChristmasConfig(BaseModel):
 # --------------------------------------------------------------------------- #
 # Top-level pricing config
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Landscape lighting (tier-based fixture design)
+# --------------------------------------------------------------------------- #
+def _default_landscape_perks() -> list[str]:
+    """Client-facing selling points for landscape lighting (operator-editable)."""
+    return [
+        "Your home is the one people notice on the street after dark",
+        "Safe, lit walkways, steps, and driveway every night of the year",
+        "A lit house is a harder target — no dark corners to hide in",
+        "Solid brass and copper fixtures that patina instead of corroding",
+        "Low-voltage LED: pennies a night to run, decades of fixture life",
+        "Designed on a photo of your home before a single fixture is installed",
+    ]
+
+
+class LandscapeConfig(BaseModel):
+    """Client-facing framing for the landscape-lighting service.
+
+    Pricing itself comes from the tiers + catalog; this only carries the value
+    propositions the homeowner reads, so an operator can speak to their market
+    without a code change.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    perks: list[str] = Field(default_factory=_default_landscape_perks)
+
+
 class PricingSettings(BaseModel):
     """The full sales-pricing config for a workspace (read view, lenient).
 
@@ -492,6 +520,7 @@ class PricingSettings(BaseModel):
     care_plan: CarePlanConfig = Field(default_factory=CarePlanConfig)
     savings: SavingsConfig = Field(default_factory=SavingsConfig)
     bistro: BistroConfig = Field(default_factory=BistroConfig)
+    landscape: LandscapeConfig = Field(default_factory=LandscapeConfig)
     permanent: PermanentConfig = Field(default_factory=PermanentConfig)
     christmas: ChristmasConfig = Field(default_factory=ChristmasConfig)
     # Horizon (seasons) for the permanent-vs-temporary multi-year savings pitch.
@@ -661,6 +690,7 @@ class PricingSettingsUpdate(BaseModel):
     care_plan: CarePlanConfig | None = None
     savings: SavingsConfig | None = None
     bistro: BistroConfig | None = None
+    landscape: LandscapeConfig | None = None
     permanent: PermanentConfig | None = None
     christmas: ChristmasConfig | None = None
     comparison_years: int | None = Field(default=None, ge=1, le=30)

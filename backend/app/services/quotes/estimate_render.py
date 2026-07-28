@@ -56,19 +56,40 @@ _LIGHTS = {
         "professional C9 Christmas lights along the rooflines, lit garland, "
         "glowing bushes and holiday decor exactly where they are drawn"
     ),
+    "landscape": (
+        "professional architectural landscape lighting: warm uplights grazing "
+        "the facade, columns and trees, path lights along the walkway, and "
+        "downlights washing the hardscape exactly where the beams are drawn"
+    ),
+}
+
+# The closing line differs by product line: a landscape design must not be sold
+# back to the homeowner as a holiday installation photo.
+_CLOSERS = {
+    "landscape": ("Dusk sky, magazine-quality architectural landscape lighting photo."),
+    "permanent": "Dusk sky, magazine-quality permanent lighting installation photo.",
+    "seasonal": "Dusk sky, magazine-quality holiday lighting installation photo.",
 }
 
 
 def default_render_prompt(mode: str) -> str:
-    """Return the default night-render prompt for a seasonal/permanent design."""
+    """Return the default night-render prompt for the design's product line."""
     lights = _LIGHTS.get(mode, _LIGHTS["seasonal"])
+    closer = _CLOSERS.get(mode, _CLOSERS["seasonal"])
+    fixtures = (
+        "Replace the drawn beams and glow pools with realistic fixtures casting "
+        "soft warm light on the walls, plantings and walkways."
+        if mode == "landscape"
+        else (
+            "Replace the drawn glowing dots with realistic light bulbs casting a "
+            "soft warm glow on the walls and roof."
+        )
+    )
     return (
         f"Turn this into a photorealistic professional night photograph of this "
         f"exact house with {lights}. Keep the architecture, windows, doors, "
-        "rooflines, landscaping, and camera angle exactly the same. Replace the "
-        "drawn glowing dots with realistic light bulbs casting a soft warm glow "
-        "on the walls and roof. Dusk sky, magazine-quality holiday lighting "
-        "installation photo."
+        f"rooflines, landscaping, and camera angle exactly the same. {fixtures} "
+        f"{closer}"
     )
 
 
