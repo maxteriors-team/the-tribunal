@@ -79,6 +79,11 @@ export interface AppNavSection {
  * First-run setup entry (finding RF-002). Rendered at the top of the sidebar
  * only while the workspace is unconfigured, so users who skip the auto-redirect
  * to /onboarding can always find their way back to finish setup.
+ *
+ * Setup configures the whole workspace (calendar credentials, lead import,
+ * first campaign), so it carries `workspace:manage` like any other admin
+ * surface and must be run through `canSeeNavItem` — `/onboarding` is outside the
+ * field-technician allowlist, so field techs never see it.
  */
 export const setupNavItem: AppNavItem = {
   title: "Finish setup",
@@ -86,6 +91,7 @@ export const setupNavItem: AppNavItem = {
   icon: Rocket,
   sidebar: true,
   commandPalette: true,
+  requires: "workspace:manage",
 };
 
 export const workspaceNavItems: AppNavItem[] = [
@@ -154,7 +160,7 @@ export const workspaceNavItems: AppNavItem[] = [
     // Folded into the unified Quotes & Estimates hub as a tab (one quoting home
     // instead of competing estimator routes); kept in the command palette and
     // reachable by URL, but out of the sidebar. Deep-links straight to the tab.
-    title: "Photo Designer",
+    title: "Light Designer",
     url: "/quotes?tab=designer",
     icon: Ruler,
     sidebar: false,
@@ -441,7 +447,7 @@ export const breadcrumbLabels: Record<string, string> = {
   opportunities: "Opportunities",
   quotes: "Quotes & Estimates",
   "sales-wizard": "Quote Builder",
-  estimator: "Photo Designer",
+  estimator: "Light Designer",
   invoices: "Invoices",
   "christmas-lights": "Christmas Light Estimator",
   new: "New",

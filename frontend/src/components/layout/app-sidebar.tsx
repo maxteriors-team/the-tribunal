@@ -248,6 +248,11 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
   const { tier, can } = useCapabilities();
   const visibleSidebarSections = getVisibleSidebarSections(tier, can);
+  // The setup entry is rendered outside the sections above, so it has to go
+  // through the same visibility gate by hand — otherwise the field-technician
+  // allowlist never filters it and a technician gets an owner-only
+  // "Finish setup" link into the setup wizard.
+  const showSetupNav = needsSetup && canSeeNavItem(setupNavItem, tier, can);
 
   // Field technicians are operational-only: keep them on the jobs schedule and
   // its calendar. This is UX, not the security boundary — the API enforces the
@@ -272,7 +277,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         </SidebarHeader>
 
         <SidebarContent className="app-scrollbar">
-          {needsSetup && (
+          {showSetupNav && (
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>{renderSidebarItem(setupNavItem)}</SidebarMenu>

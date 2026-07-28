@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useSetupStatus } from "@/hooks/useSetupStatus";
 import {
   dismissSetupCard,
@@ -18,7 +19,8 @@ import {
  * First-run onboarding gate (finding RF-002).
  *
  * Rendered inside the authenticated app shell. When the current workspace has
- * never completed setup (no AI agent yet), it:
+ * never completed setup (no AI agent yet) *and the caller may configure the
+ * workspace*, it:
  *
  *  1. force-redirects to /onboarding exactly once per workspace on first
  *     authenticated landing, then
@@ -26,17 +28,31 @@ import {
  *     still find their way back (the persistent sidebar entry is the other half
  *     of discoverability).
  *
- * Returns `null` when the workspace is configured, still loading, or the card
- * has been dismissed.
+ * Setup is an owner/admin job (Cal.com credentials, lead import, launching the
+ * first campaign), so everything here is gated on `workspace:manage` — mirroring
+ * the backend gate. Without it a field technician was force-redirected into the
+ * owner wizard on first login and shown workspace-setup UI on every page.
+ *
+ * Returns `null` when the workspace is configured, still loading, the caller
+ * cannot manage the workspace, or the card has been dismissed.
  */
 export function SetupGate() {
   const { isLoading, needsSetup, workspaceId } = useSetupStatus();
+  const { can } = useCapabilities();
+  const canManageWorkspace = can("workspace:manage");
   const router = useRouter();
   const pathname = usePathname();
   const [cardHidden, setCardHidden] = useState(false);
 
   useEffect(() => {
+    // `isLoading` covers the workspace probe, so the membership role (and with
+    // it `canManageWorkspace`) has resolved by the time we get past it. The tier
+    // fails closed to "field" while loading, so acting earlier would bounce a
+    // real owner/admin away from setup mid-load.
     if (isLoading || !needsSetup || !workspaceId) return;
+    // Never drag a member who cannot configure the workspace (field technicians
+    // and other non-admin tiers) into the owner setup wizard.
+    if (!canManageWorkspace) return;
     // Onboarding itself is not wrapped in this shell, but guard anyway.
     if (pathname.startsWith("/onboarding")) return;
     if (hasAutoRedirectedToOnboarding(workspaceId)) return;
@@ -45,12 +61,13 @@ export function SetupGate() {
     // is never trapped bouncing back to the wizard.
     markAutoRedirectedToOnboarding(workspaceId);
     router.replace("/onboarding");
-  }, [isLoading, needsSetup, workspaceId, pathname, router]);
+  }, [isLoading, needsSetup, workspaceId, canManageWorkspace, pathname, router]);
 
   if (
     isLoading ||
     !needsSetup ||
     !workspaceId ||
+    !canManageWorkspace ||
     cardHidden ||
     isSetupCardDismissed(workspaceId)
   ) {

@@ -5,6 +5,7 @@ import type { Capability } from "@/lib/permissions";
 import {
   canSeeNavItem,
   isFieldOperationalPath,
+  setupNavItem,
   workspaceNavItems,
   toolsNavItems,
   type AppNavItem,
@@ -69,8 +70,27 @@ describe("real nav items under the field tier", () => {
   });
 });
 
-describe("Photo Designer nav item (folded into the Quotes hub)", () => {
-  const designer = workspaceNavItems.find((i) => i.title === "Photo Designer");
+describe("setupNavItem (first-run \"Finish setup\" entry)", () => {
+  it("is gated on workspace:manage like the rest of the setup surface", () => {
+    expect(setupNavItem.url).toBe("/onboarding");
+    expect(setupNavItem.requires).toBe("workspace:manage");
+  });
+
+  it("is hidden from field techs even with all capabilities", () => {
+    // Regression: the sidebar rendered this item outside `canSeeNavItem`, so a
+    // technician saw "Finish setup" and could open the owner setup wizard.
+    expect(canSeeNavItem(setupNavItem, "field", canAll)).toBe(false);
+  });
+
+  it("stays visible to owners/admins, and is hidden from tiers that cannot manage the workspace", () => {
+    expect(canSeeNavItem(setupNavItem, "admin", canAll)).toBe(true);
+    expect(canSeeNavItem(setupNavItem, "manager", canNone)).toBe(false);
+    expect(canSeeNavItem(setupNavItem, "tech", canNone)).toBe(false);
+  });
+});
+
+describe("Light Designer nav item (folded into the Quotes hub)", () => {
+  const designer = workspaceNavItems.find((i) => i.title === "Light Designer");
 
   it("is a command-palette-only deep link into the Quotes designer tab", () => {
     expect(designer).toBeDefined();

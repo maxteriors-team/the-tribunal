@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { WizardContainer } from "@/components/wizard/wizard-container";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import type { WizardStepDef } from "@/hooks/useWizard";
 import {
   createCampaignFromCsv,
@@ -304,6 +305,29 @@ function OnboardingFlow() {
 }
 
 export default function OnboardingPage() {
+  const router = useRouter();
+  const { currentWorkspace, isPending: workspacePending } = useWorkspace();
+  const { tier } = useCapabilities();
+
+  // Field technicians are operational-only and must never act on workspace
+  // setup. This route is not wrapped in the app shell, so the shell's field-tier
+  // guard never runs here and a technician who lands on the wizard (by URL, or
+  // by a stale link) would otherwise be stranded on it.
+  //
+  // The tier fails closed to "field" while the membership resolves, so wait for
+  // the workspace to load before deciding — a real owner/admin must never be
+  // bounced out of setup mid-load.
+  const isFieldTech = !workspacePending && !!currentWorkspace && tier === "field";
+
+  useEffect(() => {
+    if (!isFieldTech) return;
+    router.replace("/jobs");
+  }, [isFieldTech, router]);
+
+  // Hold the wizard back until the role is known so a technician never sees the
+  // owner setup UI, not even for a frame.
+  if (workspacePending || isFieldTech) return null;
+
   return (
     <OnboardingExtrasProvider>
       <OnboardingFlow />
