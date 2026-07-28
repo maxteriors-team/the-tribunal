@@ -53,9 +53,16 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-12 lg:w-auto lg:inline-grid">
+        {/*
+          Tabs size to their own labels and wrap onto extra rows as needed.
+          Do NOT use a fixed `grid-cols-N` here: equal `minmax(0, 1fr)` tracks
+          are narrower than labels like "Notifications" / "Speed to Lead", and
+          because the triggers are `whitespace-nowrap` the text overflows its
+          cell and collides with the neighbouring tab's icon.
+        */}
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           {settingsTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
+            <TabsTrigger key={tab.value} value={tab.value} className="flex-none gap-2">
               <tab.icon className="size-4" />
               <span className="hidden sm:inline">{tab.label}</span>
             </TabsTrigger>
