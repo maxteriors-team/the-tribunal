@@ -1,0 +1,145 @@
+# Recurring Jobs → Service Plans
+
+Rename the tab to **Service Plans** and make plans a real record of a client's
+signup: landscape-lighting clients on a **Care Plan**, and **Christmas light**
+clients who sign on for the season.
+
+## What exists today
+
+- `recurring_job_templates` (`backend/app/models/recurring_job.py`) is a generic
+  maintenance-contract template: contact + site + crew + title, a single
+  `frequency`/`interval` and a `next_run_at` cursor.
+- `RecurringJobService.materialize_due` turns due templates into `Job` rows.
+  Idempotency is enforced by a partial-unique index on
+  `(recurring_template_id, scheduled_start)` — careful, working machinery.
+- **Care Plans are not persisted per client.** They exist only as pricing config
+  (`PricingSettings.care_plan` in `backend/app/schemas/pricing.py`) and as a block
+  inside `Quote.proposal_document` (`ProposalCarePlan.selected` holds the tier the
+  client picked). Nothing records "this client is on Gold."
+- **Christmas is priced but not scheduled.** `ChristmasPricing` covers install,
+  `takedown_rate`, and `storage_price`, but nothing creates the seasonal work.
+- `QuoteService.approve_quote` (`backend/app/services/quotes/quote_service.py:812`)
+  is the single approval funnel — the public client-facing approve at line 1081
+  calls into it. That is the "signed up" moment.
+
+So the feature is really: **a Service Plan becomes the persisted subscription
+record**, created when a client signs.
+
+## Decisions I'm recommending
+
+**1. Rename the product surface only; leave the API path and table alone.**
+Route, nav, page copy, frontend components/types/query-keys all become
+`service-plans`. The backend keeps `recurring_job_templates` and
+`/api/v1/workspaces/{id}/recurring-jobs`.
+
+Why: renaming the API path breaks the deploy-order property `CLAUDE.md` relies on
+(backend ships first; old frontend + new API must stay safe). A path rename makes
+the live frontend 404 in the gap. Zero user-visible benefit for real risk. If you
+want the backend renamed later it's a clean follow-up with a deprecated alias
+router.
+
+**2. Christmas = two plans per client, not one seasonal plan.**
+Install (yearly, ~Nov 15) and Takedown (yearly, ~Jan 8) are separate Service
+Plans, both `plan_type='christmas_lights'`, linked by `source_quote_id`, and
+**grouped as one row in the UI**.
+
+Why: install and takedown are genuinely different dispatchable jobs — different
+crew, different duration, different checklist. Modelling one plan with a second
+takedown cursor means branching `_materialize_one` and complicating the
+idempotency index that currently guarantees exactly-once generation. Two rows
+gets a better operator experience for less risk.
+
+**3. Provision inside the approval transaction.**
+A silently missing Service Plan is lost recurring revenue, so it is data, not a
+side effect — unlike the existing best-effort parts notification. The provisioner
+only reads JSONB and inserts one or two rows.
+
+## Schema
+
+New columns on `recurring_job_templates`:
+
+| Column | Type | Notes |
+|---|---|---|
+| `plan_type` | `String(32)` NOT NULL, server_default `'maintenance'` | `lighting_care_plan` \| `christmas_lights` \| `maintenance` |
+| `care_plan_tier` | `String(64)` NULL | tier key from `ProposalCarePlan.selected` |
+| `source_quote_id` | `UUID` NULL, FK `quotes.id` ON DELETE SET NULL | signup provenance |
+
+Plus an index on `(workspace_id, plan_type)` for the UI filter, and a unique
+index on `(source_quote_id, plan_type, title)` (partial, `source_quote_id IS NOT
+NULL`) so re-approving a quote can never double-provision.
+
+Existing rows backfill to `maintenance` via the server default — no data rewrite.
+
+Season anchors go on `ChristmasConfig` in `backend/app/schemas/pricing.py`
+(`season_install_month`/`_day`, `season_takedown_month`/`_day`), next to the
+`takedown_enabled`/`takedown_rate` settings they belong with.
+
+## Risks
+
+- Migration touches a table joined to contacts — take the prod backup per
+  `CLAUDE.md` step 3 before shipping.
+- `plan_type` is a `String` not a PG enum, matching the deliberate enum-free
+  posture documented in `recurring_job.py`.
+- Existing approved quotes won't have plans; the backfill script covers them and
+  must be idempotent against the new unique index.
+
+## Verification
+
+- `.ezcoder/eyes/http.sh` against the list endpoint with and without
+  `?plan_type=christmas_lights`, plus a quote approve, to confirm provisioning.
+- New tests: provisioner (care plan, christmas pair, no-op, re-approve
+  idempotency) and the approve-path integration.
+- `make ci.codegen` then `make ci.all`.
+
+## Steps
+
+1. Add `plan_type`, `care_plan_tier`, and `source_quote_id` columns plus the
+   `(workspace_id, plan_type)` and partial-unique `(source_quote_id, plan_type,
+   title)` indexes to `RecurringJobTemplate` in
+   `backend/app/models/recurring_job.py`, with a `ServicePlanType` StrEnum.
+2. Generate the Alembic migration (`make migrate.new m="add service plan fields"`),
+   verify the autogenerated diff, and apply it with `make migrate`.
+3. Add `season_install_month`/`season_install_day`/`season_takedown_month`/
+   `season_takedown_day` to `ChristmasConfig` in `backend/app/schemas/pricing.py`
+   with sensible defaults (Nov 15 / Jan 8).
+4. Expose the new fields in `backend/app/schemas/recurring_job.py` across the
+   base, create, update, and response models.
+5. Persist and validate the new fields in
+   `backend/app/services/recurring_jobs/recurring_job_service.py`, and add a
+   `plan_type` filter to `list`.
+6. Add the `plan_type` query parameter to the list endpoint in
+   `backend/app/api/v1/recurring_jobs.py`.
+7. Write `backend/app/services/recurring_jobs/service_plan_provisioner.py` that
+   reads an approved quote's `proposal_document` and creates a
+   `lighting_care_plan` plan when `care_plan.selected` is set and the
+   install/takedown `christmas_lights` pair when a christmas section is present,
+   keyed idempotently on `source_quote_id`.
+8. Call the provisioner from `QuoteService.approve_quote` in
+   `backend/app/services/quotes/quote_service.py` inside the approval
+   transaction.
+9. Add backend tests covering care-plan provisioning, the christmas install +
+   takedown pair, the no-op case, and re-approve idempotency.
+10. Add `scripts/backfill_service_plans.py` to provision plans for already
+    approved quotes, idempotent against the unique index.
+11. Rename the frontend data layer: `frontend/src/types/recurring-job.ts` →
+    `service-plan.ts` (update `types/index.ts`), `frontend/src/lib/api/recurring-jobs.ts`
+    → `service-plans.ts` keeping `resourcePath: "recurring-jobs"`, and the
+    `recurringJobs` key → `servicePlans` in `frontend/src/lib/query-keys.ts` and
+    `query-keys.test.ts`.
+12. Move `frontend/src/app/recurring-jobs/page.tsx` to
+    `frontend/src/app/service-plans/page.tsx` with the new title and copy
+    describing care plans and Christmas light signups.
+13. Move `frontend/src/components/recurring-jobs/*` to
+    `frontend/src/components/service-plans/` as `service-plans-list.tsx` and
+    `service-plan-dialog.tsx`, updating all imports.
+14. Update `frontend/src/components/layout/app-nav.ts`: title `Service Plans`,
+    url `/service-plans`, a fitting icon, and the `service-plans` breadcrumb
+    label.
+15. Add plan-type filter tabs and a plan-type/tier badge column to the list, and
+    group the Christmas install + takedown rows for a contact into one entry.
+16. Add plan type and care-plan tier fields to the dialog, defaulting sensibly
+    per plan type.
+17. Run `make ci.codegen` and commit `backend/openapi.json` plus
+    `frontend/src/lib/api/_generated.ts`.
+18. Verify the list and approve endpoints with `.ezcoder/eyes/http.sh`, then run
+    `make ci.all` to zero.
