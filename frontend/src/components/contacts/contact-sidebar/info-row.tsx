@@ -4,15 +4,18 @@ import { ChevronRight } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface InfoRowProps {
   icon: ReactNode;
   label: string;
   value?: string | null;
   onClick?: () => void;
+  /** Let long values wrap instead of truncating (roomy layouts only). */
+  wrapValue?: boolean;
 }
 
-export function InfoRow({ icon, label, value, onClick }: InfoRowProps) {
+export function InfoRow({ icon, label, value, onClick, wrapValue = false }: InfoRowProps) {
   if (!value) return null;
 
   const content = (
@@ -22,7 +25,17 @@ export function InfoRow({ icon, label, value, onClick }: InfoRowProps) {
       </div>
       <div className="flex-1 min-w-0 text-left">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium truncate">{value}</p>
+        {/* In the narrow rail long values (addresses, emails) truncate with the
+            full value on hover; roomier layouts wrap them in full instead. */}
+        <p
+          className={cn(
+            "text-sm font-medium",
+            wrapValue ? "break-words whitespace-normal" : "truncate",
+          )}
+          title={value}
+        >
+          {value}
+        </p>
       </div>
       {onClick && (
         <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-2" />

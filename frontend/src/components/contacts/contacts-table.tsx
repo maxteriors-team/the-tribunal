@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, History } from "lucide-react";
 import Link from "next/link";
+
 
 import { TagBadge } from "@/components/tags/tag-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -206,6 +208,17 @@ function ContactRow({ contact, isSelectionMode, isSelected, onSelect }: ContactR
       <TableCell className="text-muted-foreground text-right tabular-nums">
         {lastActivity ?? "—"}
       </TableCell>
+      <TableCell className="w-10">
+        <Button variant="ghost" size="icon" className="size-8" asChild>
+          <Link
+            href={`/contacts/${contact.id}/details`}
+            aria-label={`View details and history for ${displayName}`}
+            title="Details & history"
+          >
+            <History className="size-4" />
+          </Link>
+        </Button>
+      </TableCell>
     </TableRow>
   );
 }
@@ -279,6 +292,9 @@ export function ContactsTable({
                 className="ml-auto"
               />
             </TableHead>
+            <TableHead className="w-10">
+              <span className="sr-only">Details</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -308,6 +324,9 @@ export function ContactsTableSkeleton({ rows = 8 }: { rows?: number }) {
             <TableHead>Tags</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Last Activity</TableHead>
+            <TableHead className="w-10">
+              <span className="sr-only">Details</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -327,6 +346,9 @@ export function ContactsTableSkeleton({ rows = 8 }: { rows?: number }) {
               </TableCell>
               <TableCell className="text-right">
                 <Skeleton className="ml-auto h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="size-8 rounded-md" />
               </TableCell>
             </TableRow>
           ))}

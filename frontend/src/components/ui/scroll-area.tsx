@@ -18,9 +18,17 @@ function ScrollArea({
       className={cn("relative", className)}
       {...props}
     >
+      {/*
+       * Radix wraps children in a `display: table` div (for content measuring),
+       * which shrink-to-fits to the content's max-content width. Inside a fixed
+       * rail that makes long unbreakable values (addresses, button rows) widen
+       * the wrapper past the column and get clipped instead of wrapping or
+       * truncating. Forcing the wrapper back to a full-width block keeps every
+       * scroll area bounded by its container.
+       */}
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1 [&>div]:!block [&>div]:!w-full"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
