@@ -72229,7 +72229,7 @@
     },
     "/webhooks/calcom/booking": {
       "post": {
-        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nAll webhooks are signature-verified before processing.",
+        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nEvery delivery passes two gates before a single side effect runs:\nsignature verification, then the durable replay ledger. Both fail closed.",
         "operationId": "calcom_booking_webhook_webhooks_calcom_booking_post",
         "responses": {
           "200": {

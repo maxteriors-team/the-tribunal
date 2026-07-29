@@ -8043,7 +8043,8 @@ export interface paths {
          *     - ``BOOKING_CANCELLED``: Booking cancelled
          *     - ``MEETING_ENDED``: Meeting completed (or marked no-show)
          *
-         *     All webhooks are signature-verified before processing.
+         *     Every delivery passes two gates before a single side effect runs:
+         *     signature verification, then the durable replay ledger. Both fail closed.
          */
         post: operations["calcom_booking_webhook_webhooks_calcom_booking_post"];
         delete?: never;
