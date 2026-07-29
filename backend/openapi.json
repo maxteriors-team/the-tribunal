@@ -8425,6 +8425,13 @@
       "CatalogItemCreate": {
         "description": "Create a catalog item.",
         "properties": {
+          "attach_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attach Targets",
+            "type": "array"
+          },
           "attributes": {
             "anyOf": [
               {
@@ -8467,6 +8474,11 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "is_attachable": {
+            "default": false,
+            "title": "Is Attachable",
+            "type": "boolean"
+          },
           "kind": {
             "default": "service",
             "enum": [
@@ -8481,6 +8493,18 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
           },
           "sku": {
             "anyOf": [
@@ -8515,6 +8539,13 @@
       "CatalogItemResponse": {
         "description": "Catalog item as returned by the API.",
         "properties": {
+          "attach_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attach Targets",
+            "type": "array"
+          },
           "attributes": {
             "anyOf": [
               {
@@ -8567,6 +8598,11 @@
             "title": "Is Active",
             "type": "boolean"
           },
+          "is_attachable": {
+            "default": false,
+            "title": "Is Attachable",
+            "type": "boolean"
+          },
           "kind": {
             "default": "service",
             "enum": [
@@ -8581,6 +8617,18 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
           },
           "sku": {
             "anyOf": [
@@ -8629,6 +8677,20 @@
       "CatalogItemUpdate": {
         "description": "Update a catalog item (all fields optional).",
         "properties": {
+          "attach_targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attach Targets"
+          },
           "attributes": {
             "anyOf": [
               {
@@ -8677,6 +8739,17 @@
             ],
             "title": "Is Active"
           },
+          "is_attachable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Attachable"
+          },
           "kind": {
             "anyOf": [
               {
@@ -8704,6 +8777,18 @@
               }
             ],
             "title": "Name"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
           },
           "sku": {
             "anyOf": [
@@ -19945,12 +20030,17 @@
         "type": "object"
       },
       "LeadSourceType": {
-        "description": "Top-level channel used for lead attribution ROI reporting.",
+        "description": "Top-level channel used for lead attribution ROI reporting.\n\nDeclaration order is the dashboard display order: the four paid/organic\nchannels operators compare week over week first, then the word-of-mouth and\nphysical channels a home-service business actually runs, then the catch-all.\n\nPersisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``\non :attr:`LeadSource.source_type`), **not** a Postgres ``ENUM`` type, so adding\na member here needs no DDL migration. Keep every value under 50 characters.",
         "enum": [
           "facebook_ads",
           "google_ads",
           "organic",
           "phone_radio",
+          "referral_partner",
+          "repeat_customer",
+          "truck_wrap",
+          "yard_sign",
+          "canvass_neighbor",
           "other"
         ],
         "title": "LeadSourceType",
@@ -25634,6 +25724,67 @@
           "updated_at"
         ],
         "title": "OutboundSequenceEnrollmentResponse",
+        "type": "object"
+      },
+      "PaceStage": {
+        "description": "One funnel stage's actual-vs-required counts for the month.\n\n``required`` is backsolved from the revenue goal (see\n:func:`app.services.reporting.revenue_target_service.backsolve_funnel`) and\nis ``None`` whenever an assumption it depends on is missing, so a stage\nnever claims a requirement the owner never expressed.",
+        "properties": {
+          "actual": {
+            "description": "Count recorded in this workspace so far this month",
+            "title": "Actual",
+            "type": "integer"
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "required - actual for the whole month; positive means behind, null when unknown",
+            "title": "Gap"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whole-month requirement implied by the goal; null when unknown",
+            "title": "Required"
+          },
+          "required_to_date": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Requirement pro-rated to days elapsed; null when unknown",
+            "title": "Required To Date"
+          },
+          "stage": {
+            "enum": [
+              "leads",
+              "estimates",
+              "sold"
+            ],
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "actual"
+        ],
+        "title": "PaceStage",
         "type": "object"
       },
       "PaginatedAdAdvertisers": {
@@ -31923,6 +32074,16 @@
             ],
             "title": "Approved At"
           },
+          "attach_count": {
+            "default": 0,
+            "title": "Attach Count",
+            "type": "integer"
+          },
+          "attach_value": {
+            "default": 0.0,
+            "title": "Attach Value",
+            "type": "number"
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -32110,6 +32271,17 @@
             ],
             "title": "Opportunity Id"
           },
+          "primary_service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Service"
+          },
           "proposal_document": {
             "anyOf": [
               {
@@ -32232,8 +32404,20 @@
         "type": "object"
       },
       "QuoteLineItemCreate": {
-        "description": "Create a line item.",
+        "description": "Create a line item, optionally sourced from the price book.\n\n``catalog_item_id`` is a *request-only* hint from the catalog picker: the\nserver looks the item up within the workspace and snapshots its\n``service_category`` onto the line. Nothing links back to the catalog row,\nso the metric survives the item later being re-categorized or deleted, and\nthe category can't be forged by a client since it is never read from the\nrequest body. An id that no longer resolves simply leaves the line\nuncategorized.",
         "properties": {
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
           "description": {
             "anyOf": [
               {
@@ -32318,6 +32502,17 @@
             "format": "uuid",
             "title": "Quote Id",
             "type": "string"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
           },
           "total": {
             "title": "Total",
@@ -32425,6 +32620,16 @@
               }
             ],
             "title": "Approved At"
+          },
+          "attach_count": {
+            "default": 0,
+            "title": "Attach Count",
+            "type": "integer"
+          },
+          "attach_value": {
+            "default": 0.0,
+            "title": "Attach Value",
+            "type": "number"
           },
           "contact_id": {
             "anyOf": [
@@ -32605,6 +32810,17 @@
               }
             ],
             "title": "Opportunity Id"
+          },
+          "primary_service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Service"
           },
           "public_token": {
             "anyOf": [
@@ -34405,6 +34621,151 @@
         "title": "RevenueAttributionStat",
         "type": "object"
       },
+      "RevenuePace": {
+        "description": "Whether a month is on pace to hit its revenue goal.\n\nProjection is deliberately linear (sold-to-date scaled by the share of the\nmonth elapsed): it is the model an owner can check in their head, and any\nseasonality is already expressed by setting a different goal per month.\n\nEvery field that divides is guarded — a month with no elapsed days projects\n``None``, and a month with no stored target reports ``has_target: false``\nwith actuals still populated, so the dashboard can prompt for a goal instead\nof erroring.",
+        "properties": {
+          "as_of": {
+            "description": "Date the pace was computed against",
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency of every money field in this report",
+            "title": "Currency",
+            "type": "string"
+          },
+          "days_elapsed": {
+            "description": "Days of the month counted, including today",
+            "title": "Days Elapsed",
+            "type": "integer"
+          },
+          "days_in_month": {
+            "title": "Days In Month",
+            "type": "integer"
+          },
+          "estimate_capacity_per_month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimates the workspace says it can run in a month",
+            "title": "Estimate Capacity Per Month"
+          },
+          "estimates_over_capacity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required estimates minus stated capacity; positive means the goal cannot be delivered without more capacity. Null when either is unset.",
+            "title": "Estimates Over Capacity"
+          },
+          "gap_to_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "revenue_goal - revenue_sold_to_date; still to sell this month",
+            "title": "Gap To Goal"
+          },
+          "has_target": {
+            "description": "False when no target row exists for this month",
+            "title": "Has Target",
+            "type": "boolean"
+          },
+          "on_pace": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "True when the projection reaches the goal; null when unknowable",
+            "title": "On Pace"
+          },
+          "period_month": {
+            "description": "First day of the month being reported",
+            "format": "date",
+            "title": "Period Month",
+            "type": "string"
+          },
+          "projected_gap_to_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "revenue_goal - projected_month_end; negative means the pace clears the goal",
+            "title": "Projected Gap To Goal"
+          },
+          "projected_month_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Linear pace: sold_to_date / days_elapsed * days_in_month; null before the month starts",
+            "title": "Projected Month End"
+          },
+          "revenue_goal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when no target is set",
+            "title": "Revenue Goal"
+          },
+          "revenue_sold_to_date": {
+            "description": "Closed-won opportunity value with a close date inside the month so far",
+            "title": "Revenue Sold To Date",
+            "type": "number"
+          },
+          "stages": {
+            "description": "Actual vs required for leads, estimates and sold",
+            "items": {
+              "$ref": "#/components/schemas/PaceStage"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "period_month",
+          "as_of",
+          "has_target",
+          "currency",
+          "revenue_sold_to_date",
+          "days_elapsed",
+          "days_in_month",
+          "stages"
+        ],
+        "title": "RevenuePace",
+        "type": "object"
+      },
       "RevenueStats": {
         "description": "Dollar-denominated revenue/ROI ledger for the workspace.\n\nTraces closed-won opportunity revenue back to the AI touch chain (voice\nagent, prompt version, campaign) that booked the appointment behind the\ndeal, alongside an ROI multiple versus estimated AI cost.",
         "properties": {
@@ -34498,6 +34859,290 @@
           "by_prompt_version"
         ],
         "title": "RevenueStats",
+        "type": "object"
+      },
+      "RevenueTargetBulkUpsert": {
+        "description": "Set a whole season (or year) of targets in one call.",
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/RevenueTargetUpsert"
+            },
+            "maxItems": 60,
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "targets"
+        ],
+        "title": "RevenueTargetBulkUpsert",
+        "type": "object"
+      },
+      "RevenueTargetList": {
+        "description": "Targets for a workspace, oldest month first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RevenueTargetResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RevenueTargetList",
+        "type": "object"
+      },
+      "RevenueTargetResponse": {
+        "description": "A stored monthly target as returned by the API.",
+        "properties": {
+          "assumed_sat_rate": {
+            "default": 60.0,
+            "description": "Percent of leads that become a sat (run) estimate; leads needed = estimates / this. An assumption, not a measured metric — an unbooked lead leaves no artifact in the CRM to count.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Assumed Sat Rate",
+            "type": "number"
+          },
+          "backlog_alert_weeks": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Booked-out backlog (weeks) at which to warn the owner",
+            "title": "Backlog Alert Weeks"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "crew_capacity_hours_per_week": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sellable crew hours available per week",
+            "title": "Crew Capacity Hours Per Week"
+          },
+          "estimate_capacity_per_month": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimates the workspace can actually run in a month",
+            "title": "Estimate Capacity Per Month"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "period_month": {
+            "format": "date",
+            "title": "Period Month",
+            "type": "string"
+          },
+          "revenue_goal": {
+            "description": "Revenue the workspace intends to sell this month, in major units",
+            "minimum": 0.0,
+            "title": "Revenue Goal",
+            "type": "number"
+          },
+          "target_avg_job_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean ticket the goal assumes; jobs needed = revenue_goal / this",
+            "title": "Target Avg Job Value"
+          },
+          "target_close_rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percent of sat estimates that close; estimates needed = jobs / this",
+            "title": "Target Close Rate"
+          },
+          "target_leads": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner's own lead target. When set it overrides the backsolved lead requirement; leave null to derive it from the goal.",
+            "title": "Target Leads"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revenue_goal",
+          "id",
+          "workspace_id",
+          "period_month",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RevenueTargetResponse",
+        "type": "object"
+      },
+      "RevenueTargetUpsert": {
+        "description": "Set (or replace) the target for one month.\n\n``period_month`` may be any day inside the month; the service normalizes it\nto the 1st before writing, so ``2026-06-14`` and ``2026-06-01`` address the\nsame row rather than creating two targets for June.",
+        "properties": {
+          "assumed_sat_rate": {
+            "default": 60.0,
+            "description": "Percent of leads that become a sat (run) estimate; leads needed = estimates / this. An assumption, not a measured metric — an unbooked lead leaves no artifact in the CRM to count.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Assumed Sat Rate",
+            "type": "number"
+          },
+          "backlog_alert_weeks": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Booked-out backlog (weeks) at which to warn the owner",
+            "title": "Backlog Alert Weeks"
+          },
+          "crew_capacity_hours_per_week": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sellable crew hours available per week",
+            "title": "Crew Capacity Hours Per Week"
+          },
+          "estimate_capacity_per_month": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimates the workspace can actually run in a month",
+            "title": "Estimate Capacity Per Month"
+          },
+          "period_month": {
+            "description": "Any date inside the target month; normalized to the 1st on write",
+            "format": "date",
+            "title": "Period Month",
+            "type": "string"
+          },
+          "revenue_goal": {
+            "description": "Revenue the workspace intends to sell this month, in major units",
+            "minimum": 0.0,
+            "title": "Revenue Goal",
+            "type": "number"
+          },
+          "target_avg_job_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean ticket the goal assumes; jobs needed = revenue_goal / this",
+            "title": "Target Avg Job Value"
+          },
+          "target_close_rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Percent of sat estimates that close; estimates needed = jobs / this",
+            "title": "Target Close Rate"
+          },
+          "target_leads": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The owner's own lead target. When set it overrides the backsolved lead requirement; leave null to derive it from the goal.",
+            "title": "Target Leads"
+          }
+        },
+        "required": [
+          "revenue_goal",
+          "period_month"
+        ],
+        "title": "RevenueTargetUpsert",
         "type": "object"
       },
       "ReviewCreate": {
@@ -35329,6 +35974,221 @@
           "last_run_at"
         ],
         "title": "RoleplayStats",
+        "type": "object"
+      },
+      "SalesPerformanceBreakdownRow": {
+        "description": "One grouped slice of sales performance.\n\nThe same shape is reused for every breakdown dimension (closer, lead source,\nprimary service) so a client can render them all with one component.",
+        "properties": {
+          "attach_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share (0..1) of approved quotes carrying at least one attached service, or null with no approvals",
+            "title": "Attach Rate"
+          },
+          "avg_job_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean approved quote total, or null with no approvals",
+            "title": "Avg Job Value"
+          },
+          "close_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "approved / (approved + declined + expired) as a 0..1 ratio, or null when nothing in this group was decided",
+            "title": "Close Rate"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable group identifier (user id, lead-source type, or service category); null for the unassigned/unattributed/uncategorized bucket",
+            "title": "Key"
+          },
+          "label": {
+            "description": "Human-readable group name",
+            "title": "Label",
+            "type": "string"
+          },
+          "quotes_approved": {
+            "description": "Quotes in this group the customer approved",
+            "title": "Quotes Approved",
+            "type": "integer"
+          },
+          "quotes_issued": {
+            "description": "Quotes in this group that left draft",
+            "title": "Quotes Issued",
+            "type": "integer"
+          },
+          "revenue_approved": {
+            "description": "Summed total of this group's approved quotes",
+            "title": "Revenue Approved",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "quotes_issued",
+          "quotes_approved",
+          "revenue_approved"
+        ],
+        "title": "SalesPerformanceBreakdownRow",
+        "type": "object"
+      },
+      "SalesPerformanceReport": {
+        "description": "Sales performance over a quote cohort.\n\nQuotes are cohorted by creation date inside the inclusive window, so a quote\nand the decision it later earned are reported together. Drafts never count\n(they never reached a customer) and still-``sent`` quotes are undecided, so\nthey are excluded from the close-rate denominator rather than counted as\nlosses. Every rate is null instead of zero when its denominator is empty.",
+        "properties": {
+          "attach_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share (0..1) of approved quotes with at least one attached service beyond the primary one, or null with no approvals",
+            "title": "Attach Rate"
+          },
+          "avg_attach_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean attached-service revenue across approved quotes that actually attached something, or null when none did",
+            "title": "Avg Attach Value"
+          },
+          "avg_job_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean approved quote total, or null with no approvals",
+            "title": "Avg Job Value"
+          },
+          "by_closer": {
+            "description": "Performance grouped by the user who created the quote",
+            "items": {
+              "$ref": "#/components/schemas/SalesPerformanceBreakdownRow"
+            },
+            "title": "By Closer",
+            "type": "array"
+          },
+          "by_lead_source": {
+            "description": "Performance grouped by the acquisition channel attributed to the quote's opportunity",
+            "items": {
+              "$ref": "#/components/schemas/SalesPerformanceBreakdownRow"
+            },
+            "title": "By Lead Source",
+            "type": "array"
+          },
+          "by_primary_service": {
+            "description": "Performance grouped by the quote's dominant service line",
+            "items": {
+              "$ref": "#/components/schemas/SalesPerformanceBreakdownRow"
+            },
+            "title": "By Primary Service",
+            "type": "array"
+          },
+          "close_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "approved / (approved + declined + expired) as a 0..1 ratio; null when no cohort quote has been decided yet",
+            "title": "Close Rate"
+          },
+          "currency": {
+            "description": "Currency of every money field in this report",
+            "title": "Currency",
+            "type": "string"
+          },
+          "date_from": {
+            "description": "Inclusive start of the cohort window",
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "description": "Inclusive end of the cohort window",
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "median_job_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Median approved quote total (outlier-resistant companion to avg_job_value), or null with no approvals",
+            "title": "Median Job Value"
+          },
+          "quotes_approved": {
+            "description": "Cohort quotes the customer approved",
+            "title": "Quotes Approved",
+            "type": "integer"
+          },
+          "quotes_issued": {
+            "description": "Cohort quotes that left draft",
+            "title": "Quotes Issued",
+            "type": "integer"
+          },
+          "revenue_approved": {
+            "description": "Summed total of the approved quotes",
+            "title": "Revenue Approved",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "currency",
+          "quotes_issued",
+          "quotes_approved",
+          "revenue_approved",
+          "by_closer",
+          "by_lead_source",
+          "by_primary_service"
+        ],
+        "title": "SalesPerformanceReport",
         "type": "object"
       },
       "SavingsConfig": {
@@ -67849,6 +68709,459 @@
           }
         ],
         "summary": "Job Pnl",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/reports/sales-performance": {
+      "get": {
+        "description": "Sales performance: job value, attach rate and close rate over a window.",
+        "operationId": "sales_performance_api_v1_workspaces__workspace_id__reports_sales_performance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Quotes created on or after this date (defaults to the 1st of this month)",
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Quotes created on or after this date (defaults to the 1st of this month)",
+              "title": "Date From"
+            }
+          },
+          {
+            "description": "Quotes created on or before this date (defaults to this month's last day)",
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Quotes created on or before this date (defaults to this month's last day)",
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesPerformanceReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Sales Performance",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/revenue-targets": {
+      "get": {
+        "description": "List a workspace's monthly revenue targets, oldest month first.",
+        "operationId": "list_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrow to one year",
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2100,
+                  "minimum": 2000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Narrow to one year",
+              "title": "Year"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueTargetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Revenue Targets",
+        "tags": [
+          "Reporting"
+        ]
+      },
+      "put": {
+        "description": "Set (or replace) one month's revenue target.",
+        "operationId": "upsert_revenue_target_api_v1_workspaces__workspace_id__revenue_targets_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevenueTargetUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueTargetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upsert Revenue Target",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/bulk": {
+      "put": {
+        "description": "Set a season's worth of targets in one atomic statement.",
+        "operationId": "bulk_upsert_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_bulk_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevenueTargetBulkUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueTargetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Bulk Upsert Revenue Targets",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/pace": {
+      "get": {
+        "description": "Report whether a month is on pace to hit its revenue goal.\n\nMonths with no stored target still report their actuals, flagged with\n``has_target: false``.",
+        "operationId": "get_revenue_pace_api_v1_workspaces__workspace_id__revenue_targets_pace_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Any date inside the month to report (defaults to this month)",
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Any date inside the month to report (defaults to this month)",
+              "title": "Month"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenuePace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Revenue Pace",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/{period_month}": {
+      "delete": {
+        "description": "Clear one month's revenue target.",
+        "operationId": "delete_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Any date inside the target month; normalized to the 1st",
+            "in": "path",
+            "name": "period_month",
+            "required": true,
+            "schema": {
+              "description": "Any date inside the target month; normalized to the 1st",
+              "format": "date",
+              "title": "Period Month",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Revenue Target",
+        "tags": [
+          "Reporting"
+        ]
+      },
+      "get": {
+        "description": "Fetch one month's revenue target.",
+        "operationId": "get_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Any date inside the target month; normalized to the 1st",
+            "in": "path",
+            "name": "period_month",
+            "required": true,
+            "schema": {
+              "description": "Any date inside the target month; normalized to the 1st",
+              "format": "date",
+              "title": "Period Month",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueTargetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Revenue Target",
         "tags": [
           "Reporting"
         ]

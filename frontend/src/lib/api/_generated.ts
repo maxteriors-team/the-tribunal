@@ -6910,6 +6910,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/reports/sales-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales Performance
+         * @description Sales performance: job value, attach rate and close rate over a window.
+         */
+        get: operations["sales_performance_api_v1_workspaces__workspace_id__reports_sales_performance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/revenue-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Revenue Targets
+         * @description List a workspace's monthly revenue targets, oldest month first.
+         */
+        get: operations["list_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_get"];
+        /**
+         * Upsert Revenue Target
+         * @description Set (or replace) one month's revenue target.
+         */
+        put: operations["upsert_revenue_target_api_v1_workspaces__workspace_id__revenue_targets_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bulk Upsert Revenue Targets
+         * @description Set a season's worth of targets in one atomic statement.
+         */
+        put: operations["bulk_upsert_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_bulk_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/pace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Revenue Pace
+         * @description Report whether a month is on pace to hit its revenue goal.
+         *
+         *     Months with no stored target still report their actuals, flagged with
+         *     ``has_target: false``.
+         */
+        get: operations["get_revenue_pace_api_v1_workspaces__workspace_id__revenue_targets_pace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/revenue-targets/{period_month}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Revenue Target
+         * @description Fetch one month's revenue target.
+         */
+        get: operations["get_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Revenue Target
+         * @description Clear one month's revenue target.
+         */
+        delete: operations["delete_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/reviews": {
         parameters: {
             query?: never;
@@ -11555,6 +11666,8 @@ export interface components {
          * @description Create a catalog item.
          */
         CatalogItemCreate: {
+            /** Attach Targets */
+            attach_targets?: string[];
             /** Attributes */
             attributes?: {
                 [key: string]: unknown;
@@ -11569,6 +11682,11 @@ export interface components {
              */
             is_active: boolean;
             /**
+             * Is Attachable
+             * @default false
+             */
+            is_attachable: boolean;
+            /**
              * Kind
              * @default service
              * @enum {string}
@@ -11576,6 +11694,8 @@ export interface components {
             kind: "service" | "product";
             /** Name */
             name: string;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /**
@@ -11594,6 +11714,8 @@ export interface components {
          * @description Catalog item as returned by the API.
          */
         CatalogItemResponse: {
+            /** Attach Targets */
+            attach_targets?: string[];
             /** Attributes */
             attributes?: {
                 [key: string]: unknown;
@@ -11618,6 +11740,11 @@ export interface components {
              */
             is_active: boolean;
             /**
+             * Is Attachable
+             * @default false
+             */
+            is_attachable: boolean;
+            /**
              * Kind
              * @default service
              * @enum {string}
@@ -11625,6 +11752,8 @@ export interface components {
             kind: "service" | "product";
             /** Name */
             name: string;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /**
@@ -11653,6 +11782,8 @@ export interface components {
          * @description Update a catalog item (all fields optional).
          */
         CatalogItemUpdate: {
+            /** Attach Targets */
+            attach_targets?: string[] | null;
             /** Attributes */
             attributes?: {
                 [key: string]: unknown;
@@ -11663,10 +11794,14 @@ export interface components {
             description?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Is Attachable */
+            is_attachable?: boolean | null;
             /** Kind */
             kind?: ("service" | "product") | null;
             /** Name */
             name?: string | null;
+            /** Service Category */
+            service_category?: string | null;
             /** Sku */
             sku?: string | null;
             /** Taxable */
@@ -16080,9 +16215,17 @@ export interface components {
         /**
          * LeadSourceType
          * @description Top-level channel used for lead attribution ROI reporting.
+         *
+         *     Declaration order is the dashboard display order: the four paid/organic
+         *     channels operators compare week over week first, then the word-of-mouth and
+         *     physical channels a home-service business actually runs, then the catch-all.
+         *
+         *     Persisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``
+         *     on :attr:`LeadSource.source_type`), **not** a Postgres ``ENUM`` type, so adding
+         *     a member here needs no DDL migration. Keep every value under 50 characters.
          * @enum {string}
          */
-        LeadSourceType: "facebook_ads" | "google_ads" | "organic" | "phone_radio" | "other";
+        LeadSourceType: "facebook_ads" | "google_ads" | "organic" | "phone_radio" | "referral_partner" | "repeat_customer" | "truck_wrap" | "yard_sign" | "canvass_neighbor" | "other";
         /**
          * LeadSourceUpdate
          * @description Schema for updating a lead source.
@@ -18000,6 +18143,42 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * PaceStage
+         * @description One funnel stage's actual-vs-required counts for the month.
+         *
+         *     ``required`` is backsolved from the revenue goal (see
+         *     :func:`app.services.reporting.revenue_target_service.backsolve_funnel`) and
+         *     is ``None`` whenever an assumption it depends on is missing, so a stage
+         *     never claims a requirement the owner never expressed.
+         */
+        PaceStage: {
+            /**
+             * Actual
+             * @description Count recorded in this workspace so far this month
+             */
+            actual: number;
+            /**
+             * Gap
+             * @description required - actual for the whole month; positive means behind, null when unknown
+             */
+            gap?: number | null;
+            /**
+             * Required
+             * @description Whole-month requirement implied by the goal; null when unknown
+             */
+            required?: number | null;
+            /**
+             * Required To Date
+             * @description Requirement pro-rated to days elapsed; null when unknown
+             */
+            required_to_date?: number | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "leads" | "estimates" | "sold";
         };
         /**
          * PaginatedAdAdvertisers
@@ -20424,6 +20603,16 @@ export interface components {
         QuoteDetailResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /**
+             * Attach Count
+             * @default 0
+             */
+            attach_count: number;
+            /**
+             * Attach Value
+             * @default 0
+             */
+            attach_value: number;
             /** Contact Id */
             contact_id?: number | null;
             /** Converted Invoice Id */
@@ -20476,6 +20665,8 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /** Primary Service */
+            primary_service?: string | null;
             /** Proposal Document */
             proposal_document?: {
                 [key: string]: unknown;
@@ -20514,9 +20705,19 @@ export interface components {
         };
         /**
          * QuoteLineItemCreate
-         * @description Create a line item.
+         * @description Create a line item, optionally sourced from the price book.
+         *
+         *     ``catalog_item_id`` is a *request-only* hint from the catalog picker: the
+         *     server looks the item up within the workspace and snapshots its
+         *     ``service_category`` onto the line. Nothing links back to the catalog row,
+         *     so the metric survives the item later being re-categorized or deleted, and
+         *     the category can't be forged by a client since it is never read from the
+         *     request body. An id that no longer resolves simply leaves the line
+         *     uncategorized.
          */
         QuoteLineItemCreate: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
             /** Description */
             description?: string | null;
             /**
@@ -20568,6 +20769,8 @@ export interface components {
              * Format: uuid
              */
             quote_id: string;
+            /** Service Category */
+            service_category?: string | null;
             /** Total */
             total: number;
             /** Unit Price */
@@ -20601,6 +20804,16 @@ export interface components {
         QuoteResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /**
+             * Attach Count
+             * @default 0
+             */
+            attach_count: number;
+            /**
+             * Attach Value
+             * @default 0
+             */
+            attach_value: number;
             /** Contact Id */
             contact_id?: number | null;
             /** Converted Invoice Id */
@@ -20651,6 +20864,8 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /** Primary Service */
+            primary_service?: string | null;
             /** Public Token */
             public_token?: string | null;
             /** Sent At */
@@ -21302,6 +21517,95 @@ export interface components {
             won_value: number;
         };
         /**
+         * RevenuePace
+         * @description Whether a month is on pace to hit its revenue goal.
+         *
+         *     Projection is deliberately linear (sold-to-date scaled by the share of the
+         *     month elapsed): it is the model an owner can check in their head, and any
+         *     seasonality is already expressed by setting a different goal per month.
+         *
+         *     Every field that divides is guarded — a month with no elapsed days projects
+         *     ``None``, and a month with no stored target reports ``has_target: false``
+         *     with actuals still populated, so the dashboard can prompt for a goal instead
+         *     of erroring.
+         */
+        RevenuePace: {
+            /**
+             * As Of
+             * Format: date
+             * @description Date the pace was computed against
+             */
+            as_of: string;
+            /**
+             * Currency
+             * @description Currency of every money field in this report
+             */
+            currency: string;
+            /**
+             * Days Elapsed
+             * @description Days of the month counted, including today
+             */
+            days_elapsed: number;
+            /** Days In Month */
+            days_in_month: number;
+            /**
+             * Estimate Capacity Per Month
+             * @description Estimates the workspace says it can run in a month
+             */
+            estimate_capacity_per_month?: number | null;
+            /**
+             * Estimates Over Capacity
+             * @description Required estimates minus stated capacity; positive means the goal cannot be delivered without more capacity. Null when either is unset.
+             */
+            estimates_over_capacity?: number | null;
+            /**
+             * Gap To Goal
+             * @description revenue_goal - revenue_sold_to_date; still to sell this month
+             */
+            gap_to_goal?: number | null;
+            /**
+             * Has Target
+             * @description False when no target row exists for this month
+             */
+            has_target: boolean;
+            /**
+             * On Pace
+             * @description True when the projection reaches the goal; null when unknowable
+             */
+            on_pace?: boolean | null;
+            /**
+             * Period Month
+             * Format: date
+             * @description First day of the month being reported
+             */
+            period_month: string;
+            /**
+             * Projected Gap To Goal
+             * @description revenue_goal - projected_month_end; negative means the pace clears the goal
+             */
+            projected_gap_to_goal?: number | null;
+            /**
+             * Projected Month End
+             * @description Linear pace: sold_to_date / days_elapsed * days_in_month; null before the month starts
+             */
+            projected_month_end?: number | null;
+            /**
+             * Revenue Goal
+             * @description Null when no target is set
+             */
+            revenue_goal?: number | null;
+            /**
+             * Revenue Sold To Date
+             * @description Closed-won opportunity value with a close date inside the month so far
+             */
+            revenue_sold_to_date: number;
+            /**
+             * Stages
+             * @description Actual vs required for leads, estimates and sold
+             */
+            stages: components["schemas"]["PaceStage"][];
+        };
+        /**
          * RevenueStats
          * @description Dollar-denominated revenue/ROI ledger for the workspace.
          *
@@ -21338,6 +21642,153 @@ export interface components {
             won_value: number;
             /** Won Value This Month */
             won_value_this_month: number;
+        };
+        /**
+         * RevenueTargetBulkUpsert
+         * @description Set a whole season (or year) of targets in one call.
+         */
+        RevenueTargetBulkUpsert: {
+            /** Targets */
+            targets: components["schemas"]["RevenueTargetUpsert"][];
+        };
+        /**
+         * RevenueTargetList
+         * @description Targets for a workspace, oldest month first.
+         */
+        RevenueTargetList: {
+            /** Items */
+            items: components["schemas"]["RevenueTargetResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * RevenueTargetResponse
+         * @description A stored monthly target as returned by the API.
+         */
+        RevenueTargetResponse: {
+            /**
+             * Assumed Sat Rate
+             * @description Percent of leads that become a sat (run) estimate; leads needed = estimates / this. An assumption, not a measured metric — an unbooked lead leaves no artifact in the CRM to count.
+             * @default 60
+             */
+            assumed_sat_rate: number;
+            /**
+             * Backlog Alert Weeks
+             * @description Booked-out backlog (weeks) at which to warn the owner
+             */
+            backlog_alert_weeks?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Crew Capacity Hours Per Week
+             * @description Sellable crew hours available per week
+             */
+            crew_capacity_hours_per_week?: number | null;
+            /**
+             * Estimate Capacity Per Month
+             * @description Estimates the workspace can actually run in a month
+             */
+            estimate_capacity_per_month?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Period Month
+             * Format: date
+             */
+            period_month: string;
+            /**
+             * Revenue Goal
+             * @description Revenue the workspace intends to sell this month, in major units
+             */
+            revenue_goal: number;
+            /**
+             * Target Avg Job Value
+             * @description Mean ticket the goal assumes; jobs needed = revenue_goal / this
+             */
+            target_avg_job_value?: number | null;
+            /**
+             * Target Close Rate
+             * @description Percent of sat estimates that close; estimates needed = jobs / this
+             */
+            target_close_rate?: number | null;
+            /**
+             * Target Leads
+             * @description The owner's own lead target. When set it overrides the backsolved lead requirement; leave null to derive it from the goal.
+             */
+            target_leads?: number | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * RevenueTargetUpsert
+         * @description Set (or replace) the target for one month.
+         *
+         *     ``period_month`` may be any day inside the month; the service normalizes it
+         *     to the 1st before writing, so ``2026-06-14`` and ``2026-06-01`` address the
+         *     same row rather than creating two targets for June.
+         */
+        RevenueTargetUpsert: {
+            /**
+             * Assumed Sat Rate
+             * @description Percent of leads that become a sat (run) estimate; leads needed = estimates / this. An assumption, not a measured metric — an unbooked lead leaves no artifact in the CRM to count.
+             * @default 60
+             */
+            assumed_sat_rate: number;
+            /**
+             * Backlog Alert Weeks
+             * @description Booked-out backlog (weeks) at which to warn the owner
+             */
+            backlog_alert_weeks?: number | null;
+            /**
+             * Crew Capacity Hours Per Week
+             * @description Sellable crew hours available per week
+             */
+            crew_capacity_hours_per_week?: number | null;
+            /**
+             * Estimate Capacity Per Month
+             * @description Estimates the workspace can actually run in a month
+             */
+            estimate_capacity_per_month?: number | null;
+            /**
+             * Period Month
+             * Format: date
+             * @description Any date inside the target month; normalized to the 1st on write
+             */
+            period_month: string;
+            /**
+             * Revenue Goal
+             * @description Revenue the workspace intends to sell this month, in major units
+             */
+            revenue_goal: number;
+            /**
+             * Target Avg Job Value
+             * @description Mean ticket the goal assumes; jobs needed = revenue_goal / this
+             */
+            target_avg_job_value?: number | null;
+            /**
+             * Target Close Rate
+             * @description Percent of sat estimates that close; estimates needed = jobs / this
+             */
+            target_close_rate?: number | null;
+            /**
+             * Target Leads
+             * @description The owner's own lead target. When set it overrides the backsolved lead requirement; leave null to derive it from the goal.
+             */
+            target_leads?: number | null;
         };
         /**
          * ReviewCreate
@@ -21630,6 +22081,139 @@ export interface components {
             runs_this_week: number;
             /** Total Runs */
             total_runs: number;
+        };
+        /**
+         * SalesPerformanceBreakdownRow
+         * @description One grouped slice of sales performance.
+         *
+         *     The same shape is reused for every breakdown dimension (closer, lead source,
+         *     primary service) so a client can render them all with one component.
+         */
+        SalesPerformanceBreakdownRow: {
+            /**
+             * Attach Rate
+             * @description Share (0..1) of approved quotes carrying at least one attached service, or null with no approvals
+             */
+            attach_rate?: number | null;
+            /**
+             * Avg Job Value
+             * @description Mean approved quote total, or null with no approvals
+             */
+            avg_job_value?: number | null;
+            /**
+             * Close Rate
+             * @description approved / (approved + declined + expired) as a 0..1 ratio, or null when nothing in this group was decided
+             */
+            close_rate?: number | null;
+            /**
+             * Key
+             * @description Stable group identifier (user id, lead-source type, or service category); null for the unassigned/unattributed/uncategorized bucket
+             */
+            key?: string | null;
+            /**
+             * Label
+             * @description Human-readable group name
+             */
+            label: string;
+            /**
+             * Quotes Approved
+             * @description Quotes in this group the customer approved
+             */
+            quotes_approved: number;
+            /**
+             * Quotes Issued
+             * @description Quotes in this group that left draft
+             */
+            quotes_issued: number;
+            /**
+             * Revenue Approved
+             * @description Summed total of this group's approved quotes
+             */
+            revenue_approved: number;
+        };
+        /**
+         * SalesPerformanceReport
+         * @description Sales performance over a quote cohort.
+         *
+         *     Quotes are cohorted by creation date inside the inclusive window, so a quote
+         *     and the decision it later earned are reported together. Drafts never count
+         *     (they never reached a customer) and still-``sent`` quotes are undecided, so
+         *     they are excluded from the close-rate denominator rather than counted as
+         *     losses. Every rate is null instead of zero when its denominator is empty.
+         */
+        SalesPerformanceReport: {
+            /**
+             * Attach Rate
+             * @description Share (0..1) of approved quotes with at least one attached service beyond the primary one, or null with no approvals
+             */
+            attach_rate?: number | null;
+            /**
+             * Avg Attach Value
+             * @description Mean attached-service revenue across approved quotes that actually attached something, or null when none did
+             */
+            avg_attach_value?: number | null;
+            /**
+             * Avg Job Value
+             * @description Mean approved quote total, or null with no approvals
+             */
+            avg_job_value?: number | null;
+            /**
+             * By Closer
+             * @description Performance grouped by the user who created the quote
+             */
+            by_closer: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            /**
+             * By Lead Source
+             * @description Performance grouped by the acquisition channel attributed to the quote's opportunity
+             */
+            by_lead_source: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            /**
+             * By Primary Service
+             * @description Performance grouped by the quote's dominant service line
+             */
+            by_primary_service: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            /**
+             * Close Rate
+             * @description approved / (approved + declined + expired) as a 0..1 ratio; null when no cohort quote has been decided yet
+             */
+            close_rate?: number | null;
+            /**
+             * Currency
+             * @description Currency of every money field in this report
+             */
+            currency: string;
+            /**
+             * Date From
+             * Format: date
+             * @description Inclusive start of the cohort window
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             * @description Inclusive end of the cohort window
+             */
+            date_to: string;
+            /**
+             * Median Job Value
+             * @description Median approved quote total (outlier-resistant companion to avg_job_value), or null with no approvals
+             */
+            median_job_value?: number | null;
+            /**
+             * Quotes Approved
+             * @description Cohort quotes the customer approved
+             */
+            quotes_approved: number;
+            /**
+             * Quotes Issued
+             * @description Cohort quotes that left draft
+             */
+            quotes_issued: number;
+            /**
+             * Revenue Approved
+             * @description Summed total of the approved quotes
+             */
+            revenue_approved: number;
         };
         /**
          * SavingsConfig
@@ -37999,6 +38583,244 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobPnLSummary"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sales_performance_api_v1_workspaces__workspace_id__reports_sales_performance_get: {
+        parameters: {
+            query?: {
+                /** @description Quotes created on or after this date (defaults to the 1st of this month) */
+                date_from?: string | null;
+                /** @description Quotes created on or before this date (defaults to this month's last day) */
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesPerformanceReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_get: {
+        parameters: {
+            query?: {
+                /** @description Narrow to one year */
+                year?: number | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevenueTargetList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_revenue_target_api_v1_workspaces__workspace_id__revenue_targets_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevenueTargetUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevenueTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_upsert_revenue_targets_api_v1_workspaces__workspace_id__revenue_targets_bulk_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevenueTargetBulkUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevenueTargetList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revenue_pace_api_v1_workspaces__workspace_id__revenue_targets_pace_get: {
+        parameters: {
+            query?: {
+                /** @description Any date inside the month to report (defaults to this month) */
+                month?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevenuePace"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                /** @description Any date inside the target month; normalized to the 1st */
+                period_month: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevenueTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_revenue_target_api_v1_workspaces__workspace_id__revenue_targets__period_month__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                /** @description Any date inside the target month; normalized to the 1st */
+                period_month: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
