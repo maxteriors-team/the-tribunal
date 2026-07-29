@@ -50,8 +50,6 @@ export function ClientProposalView({
   const { branding } = data;
   const brandName = branding.business_name;
 
-  const financing = doc.financing;
-  const [term, setTerm] = useState<number>(financing?.default_term ?? 24);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -114,26 +112,11 @@ export function ClientProposalView({
 
   const hasTiers = doc.tiers.some((t) => t.pricing.base > 0);
 
-  // Lowest-priced package with real money drives the tier "as low as" figure.
-  const lowestTier = useMemo(() => {
-    const priced = doc.tiers.filter((t) => t.pricing.base > 0);
-    if (!priced.length) return null;
-    return priced.reduce((min, t) =>
-      t.pricing.financed_total < min.pricing.financed_total ? t : min,
-    );
-  }, [doc]);
-  const monthlyAt = (termMonths: number): number =>
-    lowestTier?.pricing.monthly_by_term?.[String(termMonths)] ??
-    lowestTier?.pricing.monthly_payment ??
-    0;
-  // Financing headline figure: tier-based when the quote has packages, else the
-  // whole-project monthly for a category-only quote (permanent/christmas/bistro).
-  const lowMonthly = hasTiers ? monthlyAt(term) : doc.grand_monthly_payment;
-  const terms = financing?.terms ?? [];
-  const showTermToggle = hasTiers && lowMonthly > 0 && terms.length > 1;
-
-  // The client proposal shows the financed (all-inclusive) price only — cash /
-  // check figures are internal and never surface here.
+  // The client proposal shows one number per package: the all-inclusive price.
+  // Cash/check figures are internal, and financing is not offered — no monthly
+  // estimates, term pickers, or lender copy reach the client. The snapshot may
+  // still carry monthly figures from the pricing model; they are deliberately
+  // not rendered.
   const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc.care_plan;
@@ -319,12 +302,8 @@ export function ClientProposalView({
                       <div className="pkg-price">{lead}</div>
                       <div className="pkg-price-label">{priceLabel}</div>
                       {dueToday && dueToday > 0 ? (
-                        <div className="pkg-monthly">
+                        <div className="pkg-subprice">
                           {`${fmt(dueToday)} due today to start`}
-                        </div>
-                      ) : hasValue && tier.pricing.monthly_payment > 0 ? (
-                        <div className="pkg-monthly">
-                          Financing options shown below
                         </div>
                       ) : null}
                     </div>
@@ -522,12 +501,6 @@ export function ClientProposalView({
                     <span>Total</span>
                     <strong>{fmt(doc.grand_financed_total)}</strong>
                   </div>
-                  {doc.grand_monthly_payment > 0 ? (
-                    <div className="grand-row muted">
-                      <span>As low as</span>
-                      <strong>{fmt(doc.grand_monthly_payment)}/mo</strong>
-                    </div>
-                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -654,67 +627,6 @@ export function ClientProposalView({
             <strong>The result is the artwork.</strong>
           </div>
         </div>
-
-        {financing?.enabled ? (
-          <div className="fin-section">
-            <div className="fin-eyebrow">Payment Options</div>
-            <div className="fin-headline">
-              {financing.headline ??
-                "Move forward now — 0% APR financing available."}
-            </div>
-            {lowMonthly > 0 ? (
-              <>
-                <div className="fin-figure">
-                  as low as <strong>{fmt(lowMonthly)}</strong>
-                  <span className="fin-figure-mo">/month</span>
-                </div>
-                {showTermToggle ? (
-                  <div className="fin-figure-sub">
-                    over {term}{" "}months &middot; 0% APR &middot; no interest,
-                    ever
-                  </div>
-                ) : (
-                  <div className="fin-figure-sub">
-                    0% APR &middot; no interest, ever
-                  </div>
-                )}
-              </>
-            ) : null}
-            {showTermToggle ? (
-              <div className="fin-terms">
-                <div className="fin-terms-label">
-                  Choose your term — every plan is 0% APR
-                </div>
-                <div className="fin-term-toggle">
-                  {terms.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`fin-term-btn${t === term ? " active" : ""}`}
-                      onClick={() => setTerm(t)}
-                    >
-                      <span className="fin-term-term">{t}{" "}Months</span>
-                      <span className="fin-term-mo">{fmt(monthlyAt(t))}/mo</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="fin-body">
-              {`If monthly payments fit better, financing is available on the full all-inclusive project total through ${financing.provider}.`}
-            </div>
-            <div className="fin-points">
-              {financing.points.map((point, i) => (
-                <div className="fin-point" key={i}>
-                  &#10003;&nbsp; {point}
-                </div>
-              ))}
-            </div>
-            {financing.disclaimer ? (
-              <div className="fin-disclaimer">{financing.disclaimer}</div>
-            ) : null}
-          </div>
-        ) : null}
 
         {data.notes ? (
           <div className="pp-terms">

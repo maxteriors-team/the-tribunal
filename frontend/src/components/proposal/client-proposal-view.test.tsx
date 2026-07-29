@@ -216,6 +216,56 @@ describe("client package selection", () => {
     expect(screen.getByText("$4,700.00")).toBeInTheDocument();
   });
 
+  it("never offers financing, even when the snapshot carries it", () => {
+    // The pricing model still computes monthly figures and a workspace may still
+    // have financing enabled in config (the fee buffer lives there and protects
+    // margin). None of it is a client-facing offer: no monthly estimate, term
+    // picker, APR claim, or lender name may reach the proposal page.
+    const financed = {
+      ...DOCUMENT,
+      grand_monthly_payment: 699,
+      selected_monthly_payment: 699,
+      financing: {
+        enabled: true,
+        provider: "Wisetack",
+        terms: [12, 24],
+        default_term: 24,
+        max_amount: 25000,
+        headline: "0% APR financing available.",
+        body: "Pay monthly instead.",
+        points: ["No interest, ever"],
+        disclaimer: "Subject to credit approval.",
+      },
+      tiers: DOCUMENT.tiers.map((t) => ({
+        ...t,
+        pricing: {
+          ...t.pricing,
+          monthly_payment: 699,
+          monthly_by_term: { "12": 1398, "24": 699 },
+        },
+      })),
+    };
+    renderView({
+      proposal_document: financed as unknown as Record<string, unknown>,
+    });
+
+    for (const forbidden of [
+      /financing/i,
+      /\bAPR\b/,
+      /Wisetack/i,
+      /per month|\/month|\/mo\b/i,
+      /as low as/i,
+      /no interest/i,
+      /credit approval/i,
+      /\bmonths\b/i,
+    ]) {
+      expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("$699")).not.toBeInTheDocument();
+    // The package price itself is untouched by removing the offer.
+    expect(card(/The Premier/)).toHaveTextContent("$16,782");
+  });
+
   it("stops offering a choice once the proposal is decided", () => {
     renderView({ status: "approved", is_decided: true });
 
