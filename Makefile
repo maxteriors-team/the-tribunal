@@ -167,10 +167,14 @@ ci.codegen: codegen/check ## Alias for codegen/check.
 
 .PHONY: ci.migrations
 ci.migrations: ci.backend.deps ## Run migration CI parity against the configured backend database.
-	cd $(BACKEND_DIR) && uv run alembic upgrade head
-	cd $(BACKEND_DIR) && uv run alembic check
-	cd $(BACKEND_DIR) && uv run alembic downgrade -1
-	cd $(BACKEND_DIR) && uv run alembic upgrade head
+	# alembic/env.py imports app.core.config, and migrations that touch encrypted
+	# columns import app.core.encryption -- both fail closed without these. Locally
+	# backend/.env supplies them; CI has no .env, so set the same throwaway values
+	# the pytest target uses. Neither key protects real data here.
+	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic upgrade head
+	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic check
+	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic downgrade -1
+	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic upgrade head
 
 .PHONY: ci.all
 ci.all: codegen/check ci.backend ci.frontend ci.migrations ## Run all CI parity targets.
