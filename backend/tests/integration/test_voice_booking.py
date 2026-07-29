@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Test script for Grok voice agent booking functionality.
+"""Voice agent booking tests.
 
-This script tests the voice agent's tool calling and date handling
-WITHOUT making actual phone calls. It simulates the tool callback flow
-that happens during real voice conversations.
+Exercises the voice agent's tool calling and date handling WITHOUT making
+actual phone calls: the booking tests drive the very tool callback that a live
+call hands to the model, so a refactor of the dispatch path breaks them.
+
+Requires a local Postgres (``make dev.db`` + ``make migrate``). Availability and
+booking are answered from the workspace's business hours minus its CRM
+appointments (``BookingService``) — there is no external calendar in this path.
 
 Usage:
     cd backend
@@ -14,24 +18,45 @@ Usage:
 
 Tests:
     1. Date format parsing (what Grok sends vs what we expect)
-    2. Tool execution flow (check_availability, book_appointment)
-    3. Cal.com integration (actual API calls)
-    4. Date context injection (what the agent sees)
+    2. Time format parsing
+    3. Date context injection (what the agent sees)
+    4. Voice tool dispatch: check_availability / book_appointment through
+       ``create_tool_callback``, plus the HITL approval gate they pass through
+    5. Grok session configuration
+    6. Cal.com API (legacy direct client)
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
 import sys
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import delete, select
 
-# Add backend to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend/ — NOT backend/tests/ — to the path so ``import app...`` works when
+# this file runs as a standalone script. Pointing one level too shallow puts
+# tests/ on sys.path, where tests/websockets/ shadows the real ``websockets``
+# dependency and breaks every module importing it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal, engine
+from app.models.agent import Agent
+from app.models.human_profile import HumanProfile
+from app.models.pending_action import PendingAction
+from app.models.user import User
+from app.models.workspace import Workspace
+from app.services.ai.tool_executor import create_tool_callback
+from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.calendar.calcom import CalComService
 
 pytestmark = pytest.mark.integration
@@ -227,144 +252,261 @@ def test_date_context() -> None:
 
 
 # ============================================================
-# Test 4: Simulated Tool Calls (What Grok Actually Sends)
+# Test 4: Voice Tool Dispatch (the live tool-callback path)
 # ============================================================
 
-@pytest.mark.xfail(
-    reason=(
-        "STALE: imports _execute_book_appointment / _execute_check_availability "
-        "from app.websockets.voice_bridge, but they were refactored out "
-        "(_execute_book_appointment is now a method on "
-        "app.services.approval.approval_gate_service). Rewrite against the current "
-        "voice-tool flow, then remove this marker. xfail -> XPASS signals it's fixed."
-    ),
-    raises=ImportError,
-    strict=False,
-)
-async def test_simulated_tool_calls() -> dict[str, Any]:  # noqa: PLR0915
-    """Simulate tool calls as Grok would make them.
+TEST_TIMEZONE = "America/New_York"
 
-    This replicates the exact flow in voice_bridge.py:_execute_voice_tool()
+# Open every weekday AND weekend 9-5 so availability is deterministic no matter
+# which day the suite runs on: any future date has slots.
+_BUSINESS_HOURS: dict[str, Any] = {
+    "is_24_7": False,
+    "schedule": {
+        day: {"enabled": True, "open": "09:00", "close": "17:00"}
+        for day in (
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        )
+    },
+}
+
+
+class _CallLog:
+    """structlog-shaped logger the tool callback writes call events to."""
+
+    def info(self, msg: str, **kwargs: Any) -> None:
+        pass
+
+    def warning(self, msg: str, **kwargs: Any) -> None:
+        log_warn(f"{msg}: {kwargs}")
+
+    def exception(self, msg: str, **kwargs: Any) -> None:
+        log_fail(f"{msg}: {kwargs}")
+
+
+def _tomorrow() -> str:
+    """Tomorrow in the agent's timezone, in the YYYY-MM-DD format tools expect."""
+    return (datetime.now(ZoneInfo(TEST_TIMEZONE)) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+@asynccontextmanager
+async def _booking_agent() -> AsyncIterator[tuple[uuid.UUID, Agent]]:
+    """Seed a workspace + booking agent, yield them, then delete the workspace.
+
+    The engine pool is disposed around the body because pytest-asyncio gives
+    each test a fresh event loop, and a pooled asyncpg connection bound to a
+    closed loop surfaces later as ``Event loop is closed``.
     """
-    log_section("TEST 4: Simulated Tool Calls")
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        workspace = Workspace(
+            id=uuid.uuid4(),
+            name="Voice Booking Test Co",
+            slug=f"voice-booking-{uuid.uuid4().hex[:8]}",
+            settings={"business_hours": _BUSINESS_HOURS},
+        )
+        db.add(workspace)
+        await db.flush()
+        agent = Agent(
+            workspace_id=workspace.id,
+            name="Jess",
+            system_prompt="You are Jess, a friendly appointment booking assistant.",
+            enabled_tools=["check_availability", "book_appointment"],
+        )
+        db.add(agent)
+        await db.commit()
+        await db.refresh(agent)
+        workspace_id = workspace.id
 
-    from app.websockets.voice_bridge import (
-        _execute_book_appointment,
-        _execute_check_availability,
-    )
+    try:
+        yield workspace_id, agent
+    finally:
+        # Workspace FKs cascade to the agent, human profile, and pending
+        # actions, so this leaves no test residue.
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+            await db.commit()
+        await engine.dispose()
 
-    # Create a mock agent with Cal.com config
-    class MockAgent:
-        def __init__(self):
-            self.calcom_event_type_id = int(os.getenv("TEST_CALCOM_EVENT_TYPE_ID", "0"))
-            self.name = "Test Agent"
 
-    agent = MockAgent()
+def _voice_tool_callback(agent: Agent, workspace_id: uuid.UUID) -> Any:
+    """Build the tool callback exactly as ``voice_bridge`` does for a live call.
 
-    if not agent.calcom_event_type_id:
-        log_warn("TEST_CALCOM_EVENT_TYPE_ID not set - skipping Cal.com API tests")
-        log_info("Set TEST_CALCOM_EVENT_TYPE_ID in your .env to test actual Cal.com integration")
-        return {"skipped": True}
+    See ``_setup_voice_session`` in ``app/websockets/voice_bridge.py``: it calls
+    ``create_tool_callback(...)`` and hands the result to the voice session,
+    which invokes it as ``callback(call_id, function_name, arguments)`` for
+    every tool call the model emits.
 
-    if not settings.calcom_api_key:
-        log_warn("CALCOM_API_KEY not set - skipping Cal.com API tests")
-        return {"skipped": True}
-
-    timezone = "America/New_York"
-    tz = ZoneInfo(timezone)
-    tomorrow = datetime.now(tz) + timedelta(days=1)
-
-    # Create a simple logger mock
-    class MockLogger:
-        def info(self, msg: str, **kwargs: Any) -> None:
-            pass
-        def warning(self, msg: str, **kwargs: Any) -> None:
-            log_warn(f"{msg}: {kwargs}")
-        def exception(self, msg: str, **kwargs: Any) -> None:
-            log_fail(f"{msg}: {kwargs}")
-
-    log = MockLogger()
-    results: dict[str, Any] = {}
-
-    # Test 4a: check_availability with correct format
-    log_info("4a. Testing check_availability with YYYY-MM-DD format...")
-    date_str = tomorrow.strftime("%Y-%m-%d")
-    result = await _execute_check_availability(
+    ``call_control_id`` is None here — there is no Telnyx leg — so the callback
+    exercises the tool contract the model sees without the call-scoped
+    Appointment/Message persistence that a real leg triggers.
+    """
+    return create_tool_callback(
         agent=agent,
-        start_date_str=date_str,
-        end_date_str=None,
-        timezone=timezone,
-        log=log,
+        contact_info={
+            "name": "Test User",
+            "phone": "+15551234567",
+            "email": "test@example.com",
+        },
+        timezone=TEST_TIMEZONE,
+        call_control_id=None,
+        log=_CallLog(),
+        workspace_id=workspace_id,
     )
 
-    if result.get("success"):
-        log_pass(f"check_availability succeeded for {date_str}")
-        slots = result.get("slots", [])
-        log_info(f"  Found {len(slots)} available slots")
-        if slots:
-            for slot in slots[:3]:
-                log_info(f"    - {slot.get('date')} at {slot.get('time')}")
-        results["check_availability_correct"] = True
-    else:
-        log_fail(f"check_availability failed: {result.get('error')}")
-        results["check_availability_correct"] = False
 
-    # Test 4b: check_availability with wrong format (simulating Grok mistake)
-    log_info("\n4b. Testing check_availability with 'tomorrow' (wrong format)...")
-    result = await _execute_check_availability(
-        agent=agent,
-        start_date_str="tomorrow",
-        end_date_str=None,
-        timezone=timezone,
-        log=log,
-    )
+async def test_simulated_tool_calls() -> None:
+    """Simulate the tool calls Grok makes, through the real dispatch path.
 
-    if not result.get("success"):
-        log_pass("Correctly rejected 'tomorrow' format (expected)")
-        results["check_availability_wrong_rejected"] = True
-    else:
-        log_fail("Unexpectedly accepted 'tomorrow' - this shouldn't happen!")
-        results["check_availability_wrong_rejected"] = False
+    Drives ``create_tool_callback`` -> approval gate -> ``VoiceToolExecutor``
+    -> ``BookingService``, which is what runs on a live call today.
+    """
+    log_section("TEST 4: Voice Tool Dispatch")
 
-    # Test 4c: book_appointment with correct format
-    log_info("\n4c. Testing book_appointment with correct format...")
-    log_info("  (Using test email - won't create real booking)")
+    async with _booking_agent() as (workspace_id, agent):
+        callback = _voice_tool_callback(agent, workspace_id)
+        date_str = _tomorrow()
 
-    # Use a test email that won't actually work but tests the flow
-    contact_info = {
-        "name": "Test User",
-        "phone": "+15551234567",
-        "email": "test@example.com",
-    }
+        # 4a. check_availability in the documented YYYY-MM-DD format.
+        log_info("4a. Testing check_availability with YYYY-MM-DD format...")
+        availability = await callback("call-test-1", "check_availability", {"start_date": date_str})
 
-    result = await _execute_book_appointment(
-        agent=agent,
-        contact_info=contact_info,
-        date_str=date_str,
-        time_str="14:00",
-        email="test-voice-booking@example.com",
-        duration_minutes=30,
-        notes="Test booking from voice agent test script",
-        timezone=timezone,
-        log=log,
-    )
+        assert availability["success"] is True, availability
+        assert availability["available"] is True, availability
+        slots = availability["slots"]
+        assert slots, "expected open slots inside 9-5 business hours"
+        assert all(slot["date"] == date_str for slot in slots), slots
+        # Voice slots carry a speakable 12-hour time; the day opens at 9.
+        assert slots[0]["time"] == "09:00", slots[0]
+        assert slots[0]["display_time"] == "9:00 AM", slots[0]
+        # Anti-hallucination guardrail the model is handed with the slots.
+        assert "Do NOT make up" in availability["message"], availability
+        log_pass(f"check_availability returned {len(slots)} slots for {date_str}")
 
-    # This might fail due to Cal.com validation, but the date parsing should work
-    if result.get("success"):
-        log_pass("book_appointment succeeded!")
-        log_info(f"  Booking ID: {result.get('booking_id')}")
-        results["book_appointment_correct"] = True
-    else:
-        error = result.get("error", "")
-        if "Failed to parse" in error or "strptime" in error:
-            log_fail(f"Date parsing failed: {error}")
-            results["book_appointment_correct"] = False
-        else:
-            log_warn(f"Booking failed (possibly Cal.com validation): {error}")
-            log_info("  Date parsing worked, Cal.com may have rejected the booking")
-            results["book_appointment_correct"] = "partial"
+        # 4b. The format Grok gets wrong is rejected, never silently mis-booked.
+        log_info("4b. Testing check_availability with 'tomorrow' (wrong format)...")
+        bad_format = await callback("call-test-1", "check_availability", {"start_date": "tomorrow"})
 
-    return results
+        assert bad_format["success"] is False, bad_format
+        assert "Invalid date format" in bad_format["error"], bad_format
+        log_pass("check_availability rejected natural-language 'tomorrow'")
+
+        # 4c. book_appointment against a slot the tool just offered.
+        log_info("4c. Testing book_appointment with a slot from check_availability...")
+        booked = await callback(
+            "call-test-1",
+            "book_appointment",
+            {
+                "date": date_str,
+                "time": slots[0]["time"],
+                "email": "test-voice-booking@example.com",
+                "duration_minutes": 30,
+                "notes": "Test booking from the voice tool integration test",
+            },
+        )
+
+        assert booked["success"] is True, booked
+        assert slots[0]["display_time"] in booked["message"], booked
+        assert "test-voice-booking@example.com" in booked["message"], booked
+        log_pass(f"book_appointment confirmed {date_str} at {slots[0]['display_time']}")
+
+        # 4d. Missing email is refused with a repairable instruction to the model.
+        log_info("4d. Testing book_appointment without an email...")
+        no_email = await callback(
+            "call-test-1",
+            "book_appointment",
+            {"date": date_str, "time": slots[0]["time"]},
+        )
+
+        assert no_email["success"] is False, no_email
+        assert "Email address is required" in no_email["error"], no_email
+        log_pass("book_appointment asked for the missing email instead of failing")
+
+        # 4e. A hallucinated tool name falls through the dispatch table safely.
+        unknown = await callback("call-test-1", "reschedule_everything", {})
+
+        assert unknown["success"] is False, unknown
+        assert "Unknown function" in unknown["error"], unknown
+        log_pass("unknown tool name rejected without raising")
+
+
+async def test_booking_tool_call_waits_for_operator_approval() -> None:
+    """A gated booking is queued for the operator, then executes on approval.
+
+    Every state-changing voice tool goes through ``approval_gate_service``.
+    Under an "ask" policy the model is told the action is pending, and
+    approving the queued action later runs it through the booking executor that
+    ``ApprovalGateService._execute_book_appointment`` delegates to.
+    """
+    log_section("TEST 4b: Voice Booking Approval Gate")
+
+    async with _booking_agent() as (workspace_id, agent):
+        async with AsyncSessionLocal() as db:
+            db.add(
+                HumanProfile(
+                    workspace_id=workspace_id,
+                    agent_id=agent.id,
+                    display_name="Test Operator",
+                    action_policies={"book_appointment": "ask"},
+                    default_policy="auto",
+                )
+            )
+            operator = User(
+                email=f"operator-{uuid.uuid4().hex[:8]}@example.com",
+                hashed_password="$argon2id$v=19$m=65536,t=3,p=4$placeholderfortests",
+                full_name="Test Operator",
+            )
+            db.add(operator)
+            await db.commit()
+            operator_id = operator.id
+
+        callback = _voice_tool_callback(agent, workspace_id)
+        date_str = _tomorrow()
+
+        try:
+            gated = await callback(
+                "call-test-2",
+                "book_appointment",
+                {
+                    "date": date_str,
+                    "time": "09:00",
+                    "email": "test-voice-booking@example.com",
+                    "duration_minutes": 30,
+                },
+            )
+
+            # The model is told to stall, not that the booking succeeded.
+            assert gated["success"] is False, gated
+            assert gated["pending_approval"] is True, gated
+            log_pass("book_appointment queued for operator approval")
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(PendingAction).where(PendingAction.workspace_id == workspace_id)
+                )
+                action = result.scalar_one()
+
+                assert action.action_type == "book_appointment", action
+                assert action.status == "pending", action
+                assert action.action_payload["date"] == date_str, action.action_payload
+                assert action.context["source"] == "voice_call", action.context
+
+                # Operator approves in the dashboard, then the gate executes it.
+                await approval_gate_service.approve_action(db, action.id, operator_id)
+                execution = await approval_gate_service.execute_approved_action(db, action)
+
+                assert execution["status"] == "booked", execution
+                assert action.status == "executed", action
+            log_pass("approved action executed through the booking executor")
+        finally:
+            async with AsyncSessionLocal() as db:
+                await db.execute(delete(User).where(User.id == operator_id))
+                await db.commit()
 
 
 # ============================================================
@@ -512,12 +654,9 @@ async def main() -> None:
     # Test 3: Date context
     test_date_context()
 
-    # Test 4: Simulated tool calls
-    tool_results = await test_simulated_tool_calls()
-    if tool_results.get("skipped"):
-        log_info("Tool call tests skipped (missing config)")
-    elif not all(v for v in tool_results.values() if isinstance(v, bool)):
-        all_passed = False
+    # Test 4: Voice tool dispatch (asserts; raises on failure)
+    await test_simulated_tool_calls()
+    await test_booking_tool_call_waits_for_operator_approval()
 
     # Test 5: Grok session config
     await test_grok_session_config()
@@ -537,15 +676,16 @@ async def main() -> None:
     print("KEY FINDINGS:")
     print("="*60)
     print("""
-1. Voice agent expects YYYY-MM-DD format from Grok
-2. If Grok outputs 'tomorrow' or 'next Monday', booking WILL FAIL
+1. Voice tools expect YYYY-MM-DD dates and HH:MM 24-hour times from the model
+2. If Grok outputs 'tomorrow' or 'next Monday', the tool rejects it (no booking)
 3. The date context IS being injected, but Grok may ignore it
-4. Your text agents work because they use booking URLs, not tool calls
+4. Availability/booking are local: workspace business hours minus CRM
+   appointments. No external calendar is called on this path.
+5. Every state-changing tool call passes the HITL approval gate first
 
 RECOMMENDED FIXES:
-1. Add a date parser that handles natural language in voice_bridge.py
+1. Add a date parser that handles natural language before the tool call
 2. Or: Update tool descriptions to be VERY explicit about format
-3. Or: Switch to LiveKit's official Grok plugin with better tooling
 """)
 
 
