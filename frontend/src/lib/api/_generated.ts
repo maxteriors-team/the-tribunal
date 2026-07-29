@@ -6803,7 +6803,7 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description List recurring job templates, soonest next-occurrence first.
+         * @description List service plans, soonest next-occurrence first.
          */
         get: operations["list_templates_api_v1_workspaces__workspace_id__recurring_jobs_get"];
         put?: never;
@@ -11796,6 +11796,26 @@ export interface components {
              * @default 6
              */
             roofline_per_ft: number;
+            /**
+             * Season Install Day
+             * @default 15
+             */
+            season_install_day: number;
+            /**
+             * Season Install Month
+             * @default 11
+             */
+            season_install_month: number;
+            /**
+             * Season Takedown Day
+             * @default 8
+             */
+            season_takedown_day: number;
+            /**
+             * Season Takedown Month
+             * @default 1
+             */
+            season_takedown_month: number;
             /**
              * Storage Price
              * @default 0
@@ -20794,6 +20814,11 @@ export interface components {
          */
         RecurringJobTemplateCreate: {
             /**
+             * Care Plan Tier
+             * @description Care Plan tier the client selected
+             */
+            care_plan_tier?: string | null;
+            /**
              * Contact Id
              * @description Customer this contract serves
              */
@@ -20841,6 +20866,11 @@ export interface components {
              */
             next_run_at: string;
             /**
+             * @description Which recurring service this plan covers
+             * @default maintenance
+             */
+            plan_type: components["schemas"]["ServicePlanType"];
+            /**
              * Service Location Id
              * @description Job site
              */
@@ -20863,6 +20893,8 @@ export interface components {
          * @description A recurring job template with its scheduling cursor.
          */
         RecurringJobTemplateResponse: {
+            /** Care Plan Tier */
+            care_plan_tier: string | null;
             /** Contact Id */
             contact_id: number;
             /**
@@ -20897,8 +20929,11 @@ export interface components {
              * Format: date-time
              */
             next_run_at: string;
+            plan_type: components["schemas"]["ServicePlanType"];
             /** Service Location Id */
             service_location_id: string | null;
+            /** Source Quote Id */
+            source_quote_id: string | null;
             /** Title */
             title: string;
             /**
@@ -20917,6 +20952,8 @@ export interface components {
          * @description Partial update for a recurring job template.
          */
         RecurringJobTemplateUpdate: {
+            /** Care Plan Tier */
+            care_plan_tier?: string | null;
             /** Crew Id */
             crew_id?: string | null;
             /** Default Technician Ids */
@@ -20934,6 +20971,7 @@ export interface components {
             is_active?: boolean | null;
             /** Next Run At */
             next_run_at?: string | null;
+            plan_type?: components["schemas"]["ServicePlanType"] | null;
             /** Service Location Id */
             service_location_id?: string | null;
             /** Title */
@@ -21889,6 +21927,18 @@ export interface components {
             /** State */
             state?: string | null;
         };
+        /**
+         * ServicePlanType
+         * @description Which recurring service a client signed up for.
+         *
+         *     ``LIGHTING_CARE_PLAN`` is the landscape-lighting maintenance subscription
+         *     (the tier the client selected lives in ``care_plan_tier``).
+         *     ``CHRISTMAS_LIGHTS`` covers the seasonal holiday signup, which is stored as
+         *     an install plan plus a takedown plan. ``MAINTENANCE`` is the generic
+         *     hand-built contract every pre-existing row backfills to.
+         * @enum {string}
+         */
+        ServicePlanType: "lighting_care_plan" | "christmas_lights" | "maintenance";
         /**
          * SizeRate
          * @description A size/variant option (e.g. a tree size) with its own net install price.
@@ -37648,6 +37698,7 @@ export interface operations {
         parameters: {
             query?: {
                 is_active?: boolean | null;
+                plan_type?: components["schemas"]["ServicePlanType"] | null;
             };
             header?: never;
             path: {

@@ -110,7 +110,7 @@ const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
 const invoices = createResourceQueryKeys("invoices");
 const jobs = createResourceQueryKeys("jobs");
-const recurringJobs = createResourceQueryKeys("recurring-jobs");
+const servicePlans = createResourceQueryKeys("service-plans");
 const quotes = createResourceQueryKeys("quotes");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
@@ -333,8 +333,8 @@ export const queryKeys = {
     profitability: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "profitability"] as const,
   },
-  recurringJobs: {
-    ...recurringJobs,
+  servicePlans: {
+    ...servicePlans,
   },
   reports: {
     arAging: (workspaceId: string, asOf?: string) =>

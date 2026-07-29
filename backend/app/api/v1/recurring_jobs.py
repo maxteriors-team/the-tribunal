@@ -1,9 +1,13 @@
-"""Recurring job template endpoints (maintenance contracts).
+"""Service plan endpoints (recurring job templates).
 
-A template repeats a job on a schedule; a background worker materializes the next
+A plan repeats a job on a schedule; a background worker materializes the next
 concrete job as its due date approaches (see
 :mod:`app.workers.recurring_job_worker`). Operators can also force-generate the
 next job on demand via ``POST /{id}/run``.
+
+The path stays ``recurring-jobs`` while the product surface is called Service
+Plans: renaming it would 404 the live frontend during the window where the new
+backend is deployed but the old frontend is still being served.
 
 Reads are available to any workspace member; writes are gated to dispatchers and
 up, mirroring :mod:`app.api.v1.jobs`. Writes run on the transactional session so
@@ -21,6 +25,7 @@ from app.api.deps import (
     WorkspaceAccess,
     WorkspaceDispatcher,
 )
+from app.models.recurring_job import ServicePlanType
 from app.schemas.recurring_job import (
     RecurringJobRunResponse,
     RecurringJobTemplateCreate,
@@ -38,10 +43,13 @@ async def list_templates(
     workspace: WorkspaceAccess,
     db: DB,
     is_active: bool | None = None,
+    plan_type: ServicePlanType | None = None,
 ) -> RecurringJobTemplateListResponse:
-    """List recurring job templates, soonest next-occurrence first."""
+    """List service plans, soonest next-occurrence first."""
     service = RecurringJobService(db)
-    return RecurringJobTemplateListResponse(**await service.list(workspace.id, is_active=is_active))
+    return RecurringJobTemplateListResponse(
+        **await service.list(workspace.id, is_active=is_active, plan_type=plan_type)
+    )
 
 
 @router.post("", response_model=RecurringJobTemplateResponse, status_code=201)

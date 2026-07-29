@@ -218,13 +218,24 @@ describe("queryKeys factory composition", () => {
   });
 
   it("nests the full-roster key under the workspace `all` key so contact mutations refresh it", () => {
-    // `contacts.allRecords` backs the recurring-jobs customer-name lookup, which
+    // `contacts.allRecords` backs the service-plans customer-name lookup, which
     // pages the whole roster. Keeping it under `contacts.all` means any contact
     // create/update/delete invalidate cascades to it.
     const all = queryKeys.contacts.all("ws_1");
     const allRecords = queryKeys.contacts.allRecords("ws_1");
     expect(allRecords).toEqual([...all, "all-records"]);
     expect(allRecords.slice(0, all.length)).toEqual([...all]);
+  });
+
+  it("scopes service plans under their own key so plan mutations stay isolated", () => {
+    expect(queryKeys.servicePlans.root()).toEqual(["service-plans"]);
+    expect(queryKeys.servicePlans.all("ws_1")).toEqual(["service-plans", "ws_1"]);
+    // The plan-type tabs list under a filtered key, still nested under `all`.
+    const all = queryKeys.servicePlans.all("ws_1");
+    const filtered = queryKeys.servicePlans.list("ws_1", {
+      plan_type: "christmas_lights",
+    });
+    expect(filtered.slice(0, all.length)).toEqual([...all]);
   });
 
   it("derives contact filtered lists from `all` so cache invalidation cascades", () => {
