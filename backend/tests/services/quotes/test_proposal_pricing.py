@@ -124,6 +124,28 @@ def test_gross_up_price_identity_when_no_buffer():
     assert pp.gross_up_price(500, cfg) == Decimal("500")
 
 
+def test_disabling_financing_also_removes_the_price_buffer():
+    """``financing.enabled`` gates the fee buffer, not just the financing offer.
+
+    This is a trap worth stating out loud: we do **not** offer financing to
+    clients any more, but that was removed in the proposal UI, deliberately, and
+    the buffer was kept. Flipping this flag off to "turn financing off" instead
+    would silently cut every sticker price by the buffer — giving away the margin
+    the buffer exists to protect.
+
+    If the buffer should ever apply independently of the financing offer, that is
+    a pricing decision: decouple it on purpose and update this test.
+    """
+    on = _landscape_config()
+    off = _landscape_config(financing=FinancingConfig(enabled=False, fee_buffer=0.11))
+
+    assert pp.price_buffer(on) == Decimal("0.11")
+    assert pp.price_buffer(off) == Decimal("0")
+    # Same net cost, ~11% less revenue — the whole point of the warning.
+    assert pp.gross_up_price(2266, on) == Decimal("2546")
+    assert pp.gross_up_price(2266, off) == Decimal("2266")
+
+
 # --------------------------------------------------------------------------- #
 # Cash / commission
 # --------------------------------------------------------------------------- #
