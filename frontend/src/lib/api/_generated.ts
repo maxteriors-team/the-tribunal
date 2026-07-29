@@ -736,6 +736,10 @@ export interface paths {
         /**
          * Approve Public Proposal
          * @description Client approves their proposal (idempotent; expired/declined rejected).
+         *
+         *     An optional ``selected_tier`` names the package they chose; the server
+         *     re-derives that package's lines, totals, and deposit from the saved snapshot
+         *     before approving. Omitting the body accepts the package already on the quote.
          */
         post: operations["approve_public_proposal_api_v1_p_quotes__token__approve_post"];
         delete?: never;
@@ -19907,6 +19911,8 @@ export interface components {
             notes?: string | null;
             /** Number */
             number: string;
+            /** Packages */
+            packages?: components["schemas"]["PublicProposalPackage"][];
             /** Proposal Document */
             proposal_document?: {
                 [key: string]: unknown;
@@ -19947,6 +19953,18 @@ export interface components {
             status: string;
             /** Token */
             token: string;
+        };
+        /**
+         * PublicProposalApprove
+         * @description The client's acceptance, optionally naming the package they picked.
+         *
+         *     Only the package *key* crosses the wire: the server re-derives the lines and
+         *     totals from the saved snapshot, so a client can never talk their own price
+         *     down. Omitting it accepts the package the quote already sits on.
+         */
+        PublicProposalApprove: {
+            /** Selected Tier */
+            selected_tier?: string | null;
         };
         /**
          * PublicProposalBranding
@@ -20025,6 +20043,31 @@ export interface components {
             total: number;
             /** Unit Price */
             unit_price: number;
+        };
+        /**
+         * PublicProposalPackage
+         * @description One package the client can choose and buy, priced by the server.
+         *
+         *     Every figure here is derived server-side from the saved proposal snapshot so
+         *     the page can show "this is the total, this is due today" per package without
+         *     the browser doing money math. The client only ever sends ``key`` back.
+         */
+        PublicProposalPackage: {
+            /** Deposit Amount */
+            deposit_amount?: number | null;
+            /**
+             * Is Selected
+             * @default false
+             */
+            is_selected: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Name */
+            name?: string | null;
+            /** Total */
+            total: number;
         };
         /**
          * PublicRatingResult
@@ -24955,7 +24998,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublicProposalApprove"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

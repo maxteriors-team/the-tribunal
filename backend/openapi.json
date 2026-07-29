@@ -30736,6 +30736,13 @@
             "title": "Number",
             "type": "string"
           },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PublicProposalPackage"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
           "proposal_document": {
             "anyOf": [
               {
@@ -30843,6 +30850,25 @@
           "message"
         ],
         "title": "PublicProposalActionResult",
+        "type": "object"
+      },
+      "PublicProposalApprove": {
+        "description": "The client's acceptance, optionally naming the package they picked.\n\nOnly the package *key* crosses the wire: the server re-derives the lines and\ntotals from the saved snapshot, so a client can never talk their own price\ndown. Omitting it accepts the package the quote already sits on.",
+        "properties": {
+          "selected_tier": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Tier"
+          }
+        },
+        "title": "PublicProposalApprove",
         "type": "object"
       },
       "PublicProposalBranding": {
@@ -31040,6 +31066,57 @@
           "total"
         ],
         "title": "PublicProposalLineItem",
+        "type": "object"
+      },
+      "PublicProposalPackage": {
+        "description": "One package the client can choose and buy, priced by the server.\n\nEvery figure here is derived server-side from the saved proposal snapshot so\nthe page can show \"this is the total, this is due today\" per package without\nthe browser doing money math. The client only ever sends ``key`` back.",
+        "properties": {
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "is_selected": {
+            "default": false,
+            "title": "Is Selected",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "total"
+        ],
+        "title": "PublicProposalPackage",
         "type": "object"
       },
       "PublicRatingResult": {
@@ -42529,7 +42606,7 @@
     },
     "/api/v1/p/quotes/{token}/approve": {
       "post": {
-        "description": "Client approves their proposal (idempotent; expired/declined rejected).",
+        "description": "Client approves their proposal (idempotent; expired/declined rejected).\n\nAn optional ``selected_tier`` names the package they chose; the server\nre-derives that package's lines, totals, and deposit from the saved snapshot\nbefore approving. Omitting the body accepts the package already on the quote.",
         "operationId": "approve_public_proposal_api_v1_p_quotes__token__approve_post",
         "parameters": [
           {
@@ -42542,6 +42619,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublicProposalApprove"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

@@ -44,6 +44,25 @@ vi.mock("next/navigation", () => ({
   notFound: vi.fn(),
 }));
 
+// Mock next/font — the loaders are build-time transforms and are undefined at
+// runtime outside a Next build, so any component that ships its own fonts (the
+// client proposal page, the sales wizard) fails to even import. Returns the
+// same className/variable shape the real loaders do.
+const mockFont = () => ({
+  className: "mock-font",
+  variable: "mock-font-variable",
+  style: { fontFamily: "mock-font" },
+});
+// Vitest validates named exports against the mock, so each loader the app uses
+// is listed here; add a font here when a component starts importing one.
+vi.mock("next/font/google", () => ({
+  Cormorant_Garamond: mockFont,
+  Inter: mockFont,
+  Manrope: mockFont,
+  Montserrat: mockFont,
+}));
+vi.mock("next/font/local", () => ({ default: mockFont }));
+
 // jsdom doesn't implement matchMedia — many UI libs probe it on mount.
 Object.defineProperty(window, "matchMedia", {
   writable: true,

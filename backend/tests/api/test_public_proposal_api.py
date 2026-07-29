@@ -92,7 +92,13 @@ async def test_sent_proposal_returns_safe_payload(monkeypatch: pytest.MonkeyPatc
 
 
 async def test_approve_returns_action_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _approve(self: object, token: str) -> PublicProposalActionResult:
+    seen: dict[str, str | None] = {}
+
+    async def _approve(
+        self: object, token: str, *, selected_tier: str | None = None
+    ) -> PublicProposalActionResult:
+        seen["token"] = token
+        seen["selected_tier"] = selected_tier
         return PublicProposalActionResult(token=token, status="approved", message="Thank you!")
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
@@ -101,3 +107,35 @@ async def test_approve_returns_action_result(monkeypatch: pytest.MonkeyPatch) ->
 
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
+    # A bodyless approve still works (accepts the package already on the quote).
+    assert seen == {"token": "tok", "selected_tier": None}
+
+
+async def test_approve_forwards_the_clients_package_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The package key the client picked must reach the service — it's what
+    re-derives the totals and the deposit they're about to be charged."""
+    seen: dict[str, str | None] = {}
+
+    async def _approve(
+        self: object, token: str, *, selected_tier: str | None = None
+    ) -> PublicProposalActionResult:
+        seen["selected_tier"] = selected_tier
+        return PublicProposalActionResult(
+            token=token,
+            status="approved",
+            message="Thank you!",
+            deposit_required=True,
+            deposit_amount=1055.0,
+        )
+
+    monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
+    async with await _client() as ac:
+        resp = await ac.post(
+            "/api/v1/p/quotes/tok/approve", json={"selected_tier": "good"}
+        )
+
+    assert resp.status_code == 200
+    assert seen["selected_tier"] == "good"
+    assert resp.json()["deposit_amount"] == 1055.0

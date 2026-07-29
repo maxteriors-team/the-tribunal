@@ -31,6 +31,7 @@ from app.schemas.estimate import (
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
+    PublicProposalApprove,
     PublicProposalDecline,
     PublicProposalDepositCheckout,
     PublicProposalDepositStatus,
@@ -403,9 +404,19 @@ async def get_public_proposal(token: str, db: DB) -> PublicProposal:
 
 
 @public_router.post("/{token}/approve", response_model=PublicProposalActionResult)
-async def approve_public_proposal(token: str, db: DB) -> PublicProposalActionResult:
-    """Client approves their proposal (idempotent; expired/declined rejected)."""
-    return await QuoteService(db).approve_public(token)
+async def approve_public_proposal(
+    token: str,
+    db: DB,
+    payload: PublicProposalApprove | None = None,
+) -> PublicProposalActionResult:
+    """Client approves their proposal (idempotent; expired/declined rejected).
+
+    An optional ``selected_tier`` names the package they chose; the server
+    re-derives that package's lines, totals, and deposit from the saved snapshot
+    before approving. Omitting the body accepts the package already on the quote.
+    """
+    selected_tier = payload.selected_tier if payload else None
+    return await QuoteService(db).approve_public(token, selected_tier=selected_tier)
 
 
 @public_router.post("/{token}/decline", response_model=PublicProposalActionResult)

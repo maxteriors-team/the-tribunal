@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.schemas.pricing import (
+    BistroPricing,
     ChristmasPackage,
     ChristmasPricing,
     PermanentPricing,
@@ -309,12 +310,89 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         disclaimer=config.financing.disclaimer,
     )
 
-    selected_view = next((v for v in tier_views if v.key == selected), None)
-    selected_financed = selected_view.pricing.financed_total if selected_view else 0.0
-    selected_cash = selected_view.pricing.cash_total if selected_view else 0.0
-    selected_monthly = selected_view.pricing.monthly_payment if selected_view else 0.0
+    selection = select_tier(
+        tier_views=tier_views,
+        selected=selected,
+        charges=charges,
+        bistro=bistro,
+        category_sections=category_sections,
+        config=config,
+        catalog=catalog,
+    )
 
-    # Canonical line items (selected tier fixtures with qty>0 + charges + bistro).
+    document = ProposalDocument(
+        version=1,
+        client=payload.client,
+        tier_order=[v.key for v in tier_views],
+        tiers=tier_views,
+        selected_tier=selected,
+        headline_tier=headline,
+        additional_charges=charges,
+        care_plan=care_plan,
+        bistro=bistro,
+        financing=financing,
+        night_preview=payload.night_preview,
+        mockups=payload.mockups,
+        categories=categories,
+        category_sections=category_sections,
+        service=service_for_categories(categories),
+        selected_financed_total=selection.selected_financed,
+        selected_cash_total=selection.selected_cash,
+        selected_monthly_payment=selection.selected_monthly,
+        grand_financed_total=selection.grand_financed,
+        grand_cash_total=selection.grand_cash,
+        grand_monthly_payment=selection.grand_monthly,
+        fulfillment=selection.fulfillment,
+        notes=payload.notes,
+        terms=payload.terms,
+    )
+    return document, selection.line_items
+
+
+# --------------------------------------------------------------------------- #
+# Package selection (shared by the builder and the client's own pick)
+# --------------------------------------------------------------------------- #
+@dataclass(slots=True)
+class TierSelection:
+    """Everything that follows from *which package* a quote is sold at.
+
+    Produced by :func:`select_tier` and consumed both when the rep builds the
+    quote and when the client picks a different package on the public page, so
+    the money a client is charged is derived exactly one way.
+    """
+
+    line_items: list[QuoteLineItemCreate]
+    fulfillment: list[FulfillmentPart]
+    selected_financed: float
+    selected_cash: float
+    selected_monthly: float
+    grand_financed: float
+    grand_cash: float
+    grand_monthly: float
+
+
+def select_tier(
+    *,
+    tier_views: list[ProposalTierView],
+    selected: str | None,
+    charges: list[ProposalCharge],
+    bistro: BistroPricing | None,
+    category_sections: list[ProposalCategorySection],
+    config: PricingSettings,
+    catalog: dict[str, CatalogEntry] | None = None,
+) -> TierSelection:
+    """Derive the canonical line items + totals for one selected package.
+
+    The tier contributes its own fixture lines; charges, bistro, and the
+    per-category sections are tier-independent and ride along with every
+    package. Grand totals are summed from the emitted line items so a document's
+    display figures can never drift from the server-recomputed quote total.
+
+    ``catalog`` is only needed for the staff fulfillment sheet; pass ``None``
+    when pricing a package for display and the sheet comes back empty.
+    """
+    selected_view = next((v for v in tier_views if v.key == selected), None)
+
     line_items: list[QuoteLineItemCreate] = []
     fulfillment: dict[str, FulfillmentPart] = {}
     if selected_view is not None:
@@ -329,7 +407,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                     discount=0,
                 )
             )
-            entry = catalog.get(line.item_id)
+            entry = (catalog or {}).get(line.item_id)
             for comp in entry.components if entry else []:
                 sku = str(comp.get("sku") or "").strip()
                 if not sku:
@@ -371,8 +449,6 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
         )
 
-    # Grand totals are derived from the emitted line items so the document's
-    # display figures can never drift from the server-recomputed quote total.
     grand_financed = sum(
         (_d(li.unit_price) * _d(li.quantity) - _d(li.discount) for li in line_items),
         Decimal("0"),
@@ -382,30 +458,66 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         pp.monthly_payment(grand_financed, config) if grand_financed > 0 else Decimal("0")
     )
 
-    document = ProposalDocument(
-        version=1,
-        client=payload.client,
-        tier_order=[v.key for v in tier_views],
-        tiers=tier_views,
-        selected_tier=selected,
-        headline_tier=headline,
-        additional_charges=charges,
-        care_plan=care_plan,
-        bistro=bistro,
-        financing=financing,
-        night_preview=payload.night_preview,
-        mockups=payload.mockups,
-        categories=categories,
-        category_sections=category_sections,
-        service=service_for_categories(categories),
-        selected_financed_total=selected_financed,
-        selected_cash_total=selected_cash,
-        selected_monthly_payment=selected_monthly,
-        grand_financed_total=float(grand_financed),
-        grand_cash_total=float(grand_cash),
-        grand_monthly_payment=float(grand_monthly),
+    return TierSelection(
+        line_items=line_items,
         fulfillment=list(fulfillment.values()),
-        notes=payload.notes,
-        terms=payload.terms,
+        selected_financed=selected_view.pricing.financed_total if selected_view else 0.0,
+        selected_cash=selected_view.pricing.cash_total if selected_view else 0.0,
+        selected_monthly=selected_view.pricing.monthly_payment if selected_view else 0.0,
+        grand_financed=float(grand_financed),
+        grand_cash=float(grand_cash),
+        grand_monthly=float(grand_monthly),
     )
-    return document, line_items
+
+
+def sellable_tier_keys(document: ProposalDocument) -> list[str]:
+    """Package keys a client may actually buy, in the document's own order.
+
+    A tier with no priced fixtures is a "Custom Quote" placeholder on the client
+    page — it has no total, so it can never be selected or charged for.
+    """
+    priced = {v.key for v in document.tiers if v.pricing.base > 0}
+    order = [k for k in document.tier_order if k in priced]
+    return order or [v.key for v in document.tiers if v.key in priced]
+
+
+def reselect_tier(
+    document: ProposalDocument,
+    tier_key: str,
+    *,
+    config: PricingSettings,
+    catalog: dict[str, CatalogEntry] | None = None,
+) -> tuple[ProposalDocument, list[QuoteLineItemCreate]]:
+    """Re-point a saved snapshot at a different package, re-deriving its money.
+
+    This is how a client's own package choice becomes the quote they're charged
+    for: only the tier key crosses the wire, and every figure is recomputed here
+    from the stored snapshot through the same :func:`select_tier` path the rep's
+    build used. Raises :class:`ValueError` for a tier that isn't sellable.
+    """
+    if tier_key not in sellable_tier_keys(document):
+        raise ValueError(f"Unknown package: {tier_key}")
+
+    selection = select_tier(
+        tier_views=document.tiers,
+        selected=tier_key,
+        charges=document.additional_charges,
+        bistro=document.bistro,
+        category_sections=document.category_sections,
+        config=config,
+        catalog=catalog,
+    )
+    updated = document.model_copy(
+        update={
+            "selected_tier": tier_key,
+            "selected_financed_total": selection.selected_financed,
+            "selected_cash_total": selection.selected_cash,
+            "selected_monthly_payment": selection.selected_monthly,
+            "grand_financed_total": selection.grand_financed,
+            "grand_cash_total": selection.grand_cash,
+            "grand_monthly_payment": selection.grand_monthly,
+            "fulfillment": selection.fulfillment,
+        },
+        deep=True,
+    )
+    return updated, selection.line_items

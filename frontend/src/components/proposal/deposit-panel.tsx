@@ -8,6 +8,11 @@
  * and a "Pay deposit" button that opens a Stripe Checkout Session and redirects
  * to Stripe's hosted page. Once paid it shows a confirmation instead. Renders
  * nothing when no deposit was requested.
+ *
+ * On a proposal where the client is still choosing a package, the caller passes
+ * `amountDue` + `onPayInstead` so the panel quotes *their* pick and routes the
+ * payment through acceptance — a direct checkout there would charge for the
+ * package the rep proposed, not the one they chose.
  */
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
@@ -16,7 +21,23 @@ import { publicProposalsApi } from "@/lib/api/public-proposals";
 import { formatCurrency } from "@/lib/utils/number";
 import type { PublicProposal } from "@/types/proposal";
 
-export function DepositPanel({ data }: { data: PublicProposal }) {
+interface DepositPanelProps {
+  data: PublicProposal;
+  /** Overrides the quote's deposit while a package is still being chosen. */
+  amountDue?: number | null;
+  /** Replaces direct checkout (used to accept-then-pay the chosen package). */
+  onPayInstead?: () => void;
+  payLabel?: string;
+  busy?: boolean;
+}
+
+export function DepositPanel({
+  data,
+  amountDue,
+  onPayInstead,
+  payLabel,
+  busy = false,
+}: DepositPanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   const checkout = useMutation({
@@ -30,13 +51,17 @@ export function DepositPanel({ data }: { data: PublicProposal }) {
     },
   });
 
-  // No deposit requested → render nothing.
-  if (!data.deposit_amount || data.deposit_amount <= 0) return null;
+  // `amountDue` is only supplied while the client is choosing; undefined means
+  // "use the quote's own deposit", null/0 means this package owes nothing.
+  const due = amountDue === undefined ? (data.deposit_amount ?? 0) : (amountDue ?? 0);
 
-  const amountLabel = formatCurrency(data.deposit_amount, data.currency);
+  // No deposit requested → render nothing.
+  if (!due || due <= 0) return null;
+
+  const amountLabel = formatCurrency(due, data.currency);
   const pctLabel =
     data.deposit_percentage != null
-      ? `${Number(data.deposit_percentage)}% of ${formatCurrency(data.total, data.currency)}`
+      ? `${Number(data.deposit_percentage)}% of your package total`
       : null;
 
   if (data.deposit_paid) {
@@ -65,13 +90,19 @@ export function DepositPanel({ data }: { data: PublicProposal }) {
       <button
         type="button"
         className="dep-pay-btn"
-        disabled={checkout.isPending}
+        disabled={checkout.isPending || busy}
         onClick={() => {
           setError(null);
+          if (onPayInstead) {
+            onPayInstead();
+            return;
+          }
           checkout.mutate();
         }}
       >
-        {checkout.isPending ? "Redirecting…" : "Pay Deposit"}
+        {checkout.isPending || busy
+          ? "Redirecting…"
+          : (payLabel ?? "Pay Deposit")}
       </button>
       {error ? <div className="dep-error">{error}</div> : null}
     </div>

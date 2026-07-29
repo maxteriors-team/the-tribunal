@@ -61,6 +61,7 @@ from app.schemas.proposal import (
     PublicProposalActionResult,
     PublicProposalBranding,
     PublicProposalLineItem,
+    PublicProposalPackage,
 )
 from app.schemas.proposal_wizard import (
     ProposalDocument,
@@ -88,7 +89,13 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import notify_workspace_event
 from app.services.quotes.pricing_config import get_pricing_config
-from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
+from app.services.quotes.proposal_builder import (
+    CatalogEntry,
+    build_proposal_document,
+    reselect_tier,
+    select_tier,
+    sellable_tier_keys,
+)
 from app.services.quotes.proposal_pricing import (
     price_christmas,
     price_christmas_package,
@@ -1030,6 +1037,7 @@ class QuoteService:
         deposit_paid = quote.deposit_paid_at is not None
 
         return PublicProposal(
+            packages=self._public_packages(quote),
             token=token,
             number=quote.number,
             title=quote.title,
@@ -1078,13 +1086,125 @@ class QuoteService:
             ),
         )
 
-    async def approve_public(self, token: str) -> PublicProposalActionResult:
+    def _public_packages(self, quote: Quote) -> list[PublicProposalPackage]:
+        """Price every package this proposal offers the client to choose from.
+
+        Each package's all-in total is derived through the same
+        :func:`select_tier` path that builds the quote's own line items, and the
+        deposit through the same calculator Stripe is charged from — so the
+        number on the card is the number the client pays.
+
+        Returns an empty list when there is nothing to choose (a plain quote, or
+        a proposal with a single priced package).
+        """
+        raw = quote.proposal_document
+        if not raw:
+            return []
+        try:
+            document = ProposalDocument.model_validate(raw)
+        except Exception:  # noqa: BLE001 - a malformed snapshot must not 500 the page
+            self.log.warning("proposal_document_unreadable", quote_id=str(quote.id))
+            return []
+        keys = sellable_tier_keys(document)
+        if len(keys) < 2:
+            return []
+
+        from app.services.payments.quote_deposit_service import deposit_for_total
+
+        config = get_pricing_config(quote.workspace) if quote.workspace else None
+        if config is None:
+            return []
+        by_key = {v.key: v for v in document.tiers}
+        packages: list[PublicProposalPackage] = []
+        for key in keys:
+            view = by_key[key]
+            selection = select_tier(
+                tier_views=document.tiers,
+                selected=key,
+                charges=document.additional_charges,
+                bistro=document.bistro,
+                category_sections=document.category_sections,
+                config=config,
+            )
+            packages.append(
+                PublicProposalPackage(
+                    key=key,
+                    label=view.label,
+                    name=view.name,
+                    total=selection.grand_financed,
+                    deposit_amount=deposit_for_total(quote, selection.grand_financed),
+                    is_selected=key == document.selected_tier,
+                )
+            )
+        return packages
+
+    async def _apply_client_package(self, quote: Quote, tier_key: str) -> None:
+        """Re-point a quote at the package the client chose, before approval.
+
+        The client sends a package *key*; every line and every figure is
+        re-derived server-side from the saved snapshot, so what they accept and
+        what they're charged (deposit included) is the package they picked. A key
+        that isn't a sellable package on this proposal is rejected.
+        """
+        raw = quote.proposal_document
+        if not raw:
+            raise ValidationError("This proposal has no packages to choose from.")
+        try:
+            document = ProposalDocument.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001 - surfaced as a 422, never a 500
+            raise ValidationError("This proposal can no longer be changed.") from exc
+        if tier_key == document.selected_tier:
+            return
+        config = get_pricing_config(quote.workspace) if quote.workspace else None
+        if config is None:
+            raise ValidationError("This proposal can no longer be changed.")
+        catalog = await self._resolve_wizard_catalog(quote.workspace_id)
+        try:
+            updated, line_items = reselect_tier(document, tier_key, config=config, catalog=catalog)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+        quote.line_items.clear()
+        for item in line_items:
+            quote.line_items.append(
+                QuoteLineItem(
+                    name=item.name,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    discount=item.discount,
+                    total=self._line_total(item.quantity, item.unit_price, item.discount),
+                )
+            )
+        quote.proposal_document = updated.model_dump(mode="json")
+        self._recompute_totals(quote)
+        await self.db.commit()
+        await self.db.refresh(quote, ["line_items"])
+        self.log.info(
+            "quote_package_selected_by_client",
+            quote_id=str(quote.id),
+            workspace_id=str(quote.workspace_id),
+            selected_tier=tier_key,
+            total=float(quote.total or 0),
+        )
+
+    async def approve_public(
+        self, token: str, *, selected_tier: str | None = None
+    ) -> PublicProposalActionResult:
         """Client approves their proposal via the public token (idempotent).
+
+        When the client picked a package, the quote is re-pointed at it *before*
+        approval so the approved quote, its line items, and the deposit Stripe
+        charges all describe the package they actually chose.
 
         Reuses the operator approve path so the same lifecycle guards and
         automation event fire; an expired/declined proposal is rejected there.
         """
         quote = await self._load_by_token(token)
+        # Re-pointing an already-decided quote would rewrite a signed agreement,
+        # so the lifecycle guard runs first and a late package switch is ignored.
+        if selected_tier and quote.status in {"draft", "sent"}:
+            await self._apply_client_package(quote, selected_tier)
         result = await self.approve_quote(quote.workspace_id, quote.id)
         # Surface any unpaid deposit so the client page can hand off to checkout.
         from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount

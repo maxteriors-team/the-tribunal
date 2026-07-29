@@ -43,7 +43,10 @@ export default function PublicProposalPage({
   }, [token]);
 
   const approveMutation = useMutation({
-    mutationFn: () => publicProposalsApi.approve(token),
+    // The client's package choice travels as a key; the server re-derives the
+    // lines, totals, and deposit for it before approving.
+    mutationFn: (selectedTier: string | null) =>
+      publicProposalsApi.approve(token, selectedTier),
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
@@ -142,7 +145,7 @@ export default function PublicProposalPage({
         justDeclined={justDeclined}
         busy={busy}
         actionError={actionError}
-        onApprove={() => approveMutation.mutate()}
+        onApprove={(selectedTier) => approveMutation.mutate(selectedTier)}
         onDecline={(reason) => declineMutation.mutate(reason)}
       />
     );
@@ -155,7 +158,7 @@ export default function PublicProposalPage({
       justDeclined={justDeclined}
       busy={busy}
       actionError={actionError}
-      onApprove={() => approveMutation.mutate()}
+      onApprove={() => approveMutation.mutate(null)}
       onDecline={(reason) => declineMutation.mutate(reason)}
     />
   );
