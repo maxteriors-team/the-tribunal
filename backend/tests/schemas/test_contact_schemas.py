@@ -83,9 +83,7 @@ class TestContactCreate:
     def test_phone_too_long_raises(self) -> None:
         """phone_number over 20 chars raises ValidationError."""
         with pytest.raises(ValidationError):
-            ContactCreate.model_validate(
-                {"first_name": "Alice", "phone_number": "1" * 21}
-            )
+            ContactCreate.model_validate({"first_name": "Alice", "phone_number": "1" * 21})
 
     def test_invalid_email_raises(self) -> None:
         """Invalid email format raises ValidationError."""
@@ -262,9 +260,7 @@ class TestQualificationSignals:
 
     def test_signal_detail_set(self) -> None:
         """QualificationSignalDetail accepts values."""
-        detail = QualificationSignalDetail(
-            detected=True, value="100k budget", confidence=0.85
-        )
+        detail = QualificationSignalDetail(detected=True, value="100k budget", confidence=0.85)
         assert detail.detected is True
         assert detail.confidence == 0.85
 
@@ -281,9 +277,7 @@ class TestBulkSchemas:
     def test_bulk_status_invalid_status_raises(self) -> None:
         """Invalid status value raises ValidationError."""
         with pytest.raises(ValidationError):
-            BulkStatusUpdateRequest.model_validate(
-                {"ids": [1], "status": "invalid_status"}
-            )
+            BulkStatusUpdateRequest.model_validate({"ids": [1], "status": "invalid_status"})
 
     def test_bulk_status_update_response(self) -> None:
         """BulkStatusUpdateResponse parses correctly."""

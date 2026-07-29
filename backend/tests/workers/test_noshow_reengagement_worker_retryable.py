@@ -19,9 +19,7 @@ def test_class_inherits_retryable_and_base() -> None:
 
 
 def test_retry_configuration() -> None:
-    assert (
-        NoshowReengagementWorker.COMPONENT_NAME == "noshow_reengagement_worker"
-    )
+    assert NoshowReengagementWorker.COMPONENT_NAME == "noshow_reengagement_worker"
     assert NoshowReengagementWorker.max_retries == 3
     assert NoshowReengagementWorker.backoff_base_seconds == 2.0
 

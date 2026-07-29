@@ -15,9 +15,11 @@ import { DEFAULT_DUSK } from "@/lib/estimator/render";
 import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
 import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
+import { getApiErrorDetails } from "@/lib/utils/errors";
 import { formatPhoneNumber } from "@/lib/utils/phone";
-import type { Contact } from "@/types";
+import type { CatalogItem, Contact } from "@/types";
 import type {
+  AttachWarning,
   CatalogItemResponse,
   PricingSettings,
   ProposalLine,
@@ -91,9 +93,57 @@ export function serviceForCategories(
 }
 
 // ─── Draft state shapes (inputs stay strings so typing feels native) ────────
+/**
+ * A recorded skip of the attach prompt, carried on the save payload.
+ *
+ * Held in builder state rather than passed to `save()` so it survives the rep
+ * skipping the prompt and then continuing to edit: the dismissal is part of the
+ * quote being built, not a property of one button press.
+ */
+interface AttachDismissalDraft {
+  reason: string | null;
+  /** Identity of the prompt this answered, so it cannot answer a later one. */
+  promptKey: string;
+}
+
+/** Identity of a prompt: the job it fired on and what it asked for. */
+function attachPromptKey(warning: AttachWarning | null): string | null {
+  if (!warning) return null;
+  return `${warning.primary_service}:${warning.suggested_categories.join(",")}`;
+}
+
+/**
+ * Narrow an unknown server `details` payload to an attach warning.
+ *
+ * A rejected save is the one path where the warning arrives as untyped error
+ * data, so it is checked structurally before the UI renders an action from it.
+ */
+function asAttachWarning(value: unknown): AttachWarning | null {
+  if (typeof value !== "object" || value === null) return null;
+  const candidate = value as Partial<AttachWarning>;
+  const validMode =
+    candidate.mode === "advisory" || candidate.mode === "blocking";
+  if (
+    typeof candidate.primary_service !== "string" ||
+    typeof candidate.message !== "string" ||
+    !Array.isArray(candidate.suggested_categories) ||
+    !validMode
+  ) {
+    return null;
+  }
+  return candidate as AttachWarning;
+}
+
 export interface ChargeDraft {
   description: string;
   amount: string; // net the rep keeps; server grosses it up
+  /**
+   * Price-book item this charge came from, when it was picked rather than
+   * typed. It rides to the server so the saved quote line snapshots that item's
+   * `service_category` — which is what makes an attach added from the prompt
+   * actually count as an attach instead of an uncategorized custom charge.
+   */
+  catalogItemId?: string | null;
 }
 
 export interface BistroDraft {
@@ -260,6 +310,8 @@ export interface UseSalesWizardReturn {
   charges: ChargeDraft[];
   setCharge: (index: number, patch: Partial<ChargeDraft>) => void;
   addCharge: () => void;
+  /** Append a price-book item as a charge, keeping its category provenance. */
+  addCatalogCharge: (item: CatalogItem) => void;
   removeCharge: (index: number) => void;
   activeTier: string;
   setActiveTier: (key: string) => void;
@@ -300,6 +352,15 @@ export interface UseSalesWizardReturn {
   save: () => Promise<QuoteDetail>;
   isSaving: boolean;
   savedQuote: QuoteDetail | null;
+  /**
+   * The live cross-sell prompt for the current selection, or null when there is
+   * nothing to ask. Comes from the server preview (so it tracks every edit) and
+   * is re-asserted from a blocking save rejection. Null once the rep adds the
+   * service or dismisses the prompt.
+   */
+  attachWarning: AttachWarning | null;
+  /** Skip the prompt, recording the reason on the quote when it is saved. */
+  dismissAttach: (reason: string | null) => void;
   // Deliver flow (server emails/texts the client link)
   deliver: (channel: "email" | "sms") => Promise<{ to: string }>;
   isDelivering: boolean;
@@ -450,6 +511,22 @@ export function useSalesWizard(
   const addCharge = useCallback(() => {
     setCharges((prev) => [...prev, { description: "", amount: "" }]);
   }, []);
+  const addCatalogCharge = useCallback((item: CatalogItem) => {
+    setCharges((prev) => {
+      const charge: ChargeDraft = {
+        description: item.name,
+        amount: String(item.unit_price ?? 0),
+        catalogItemId: item.id,
+      };
+      // Reuse the trailing blank row the editor always leaves behind rather
+      // than pushing the attach below an empty one.
+      const blank = prev.findIndex(
+        (c) => c.description.trim() === "" && c.amount.trim() === "",
+      );
+      if (blank === -1) return [...prev, charge];
+      return prev.map((c, i) => (i === blank ? charge : c));
+    });
+  }, []);
   const removeCharge = useCallback((index: number) => {
     setCharges((prev) => {
       const next = prev.filter((_, i) => i !== index);
@@ -559,6 +636,7 @@ export function useSalesWizard(
       .map((c) => ({
         description: c.description.trim() || null,
         net_amount: Number.parseFloat(c.amount) || 0,
+        catalog_item_id: c.catalogItemId ?? null,
       }))
       .filter((c) => c.net_amount > 0);
     const feet = Number.parseFloat(bistro.feet) || 0;
@@ -682,21 +760,76 @@ export function useSalesWizard(
     [pricing],
   );
 
+  // ── Attach prompt (the cross-sell reminder) ──
+  //
+  // The live preview reports whether this selection is missing its add-on, so
+  // the prompt tracks every edit and the rep can act before a quote exists.
+  // `blockedWarning` re-asserts it from a rejected save, which covers a stale
+  // or in-flight preview. A dismissal suppresses the prompt locally and rides
+  // on the save payload so the skip is recorded against the quote it belongs to.
+  const [attachDismissal, setAttachDismissal] =
+    useState<AttachDismissalDraft | null>(null);
+  const [blockedWarning, setBlockedWarning] = useState<AttachWarning | null>(null);
+
+  const previewWarning = document?.attach_warning ?? null;
+  const liveWarning = previewWarning ?? blockedWarning;
+  const attachWarning = attachDismissal === null ? liveWarning : null;
+
+  // A skip must never outlive the prompt it answered. Retire the dismissal when
+  // the rep adds the service (no warning left) *or* when a different rule starts
+  // firing, because "customer declined the gutters" is not an answer about the
+  // trim, and recording it as one would poison the report this exists to feed.
+  if (attachDismissal !== null && attachPromptKey(liveWarning) !== attachDismissal.promptKey) {
+    setAttachDismissal(null);
+  }
+  if (blockedWarning !== null && previewWarning === null) {
+    setBlockedWarning(null);
+  }
+
+  const dismissAttach = useCallback(
+    (reason: string | null) => {
+      const promptKey = attachPromptKey(liveWarning);
+      // Nothing to skip: the prompt cleared underneath the click.
+      if (promptKey === null) return;
+      setAttachDismissal({ reason, promptKey });
+    },
+    [liveWarning],
+  );
+
   // ── Save flow (draft quote + snapshot, then mark sent for the share token) ──
   const [isSaving, setIsSaving] = useState(false);
   const [savedQuote, setSavedQuote] = useState<QuoteDetail | null>(null);
-
-  const save = useCallback(async (): Promise<QuoteDetail> => {
-    setIsSaving(true);
-    try {
-      const quote = await salesWizardApi.save(workspaceId, payload);
-      const sent = await salesWizardApi.send(workspaceId, String(quote.id));
-      setSavedQuote(sent);
-      return sent;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [workspaceId, payload]);
+  const save = useCallback(
+    async (): Promise<QuoteDetail> => {
+      setIsSaving(true);
+      try {
+        const quote = await salesWizardApi.save(workspaceId, {
+          ...payload,
+          // Only sent once the rep explicitly skips the prompt, and only the
+          // reason crosses the wire — the server resolves which categories were
+          // skipped from the rule that actually fired, so a stale dismissal can
+          // never invent a "they declined" event on a quote that has the attach.
+          attach_dismissal: attachDismissal
+            ? { reason: attachDismissal.reason }
+            : null,
+        });
+        const sent = await salesWizardApi.send(workspaceId, String(quote.id));
+        setSavedQuote(sent);
+        return sent;
+      } catch (error) {
+        // A blocking rule rejects the save carrying the same warning shape the
+        // preview returns, so the builder offers the identical Add / Skip
+        // affordances instead of a dead-end error toast. This also covers the
+        // case where the preview is mid-flight or stale.
+        const warning = asAttachWarning(getApiErrorDetails(error));
+        if (warning) setBlockedWarning(warning);
+        throw error;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [workspaceId, payload, attachDismissal],
+  );
 
   // ── Deliver flow (server emails/texts the client link) ──
   const [isDelivering, setIsDelivering] = useState(false);
@@ -736,6 +869,7 @@ export function useSalesWizard(
     charges,
     setCharge,
     addCharge,
+    addCatalogCharge,
     removeCharge,
     categories,
     hasCategory,
@@ -774,6 +908,8 @@ export function useSalesWizard(
     save,
     isSaving,
     savedQuote,
+    attachWarning,
+    dismissAttach,
     deliver,
     isDelivering,
   };

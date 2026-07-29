@@ -19,6 +19,23 @@ export function formatCurrency(value: number, currency: string = "USD"): string 
 }
 
 /**
+ * Whole-dollar currency, e.g. 100000 -> "$100,000". For planning figures
+ * (revenue goals, month-end projections) where cents are noise rather than
+ * precision — use `formatCurrency` for anything invoiced or paid.
+ */
+export function formatWholeCurrency(
+  value: number,
+  currency: string = "USD",
+): string {
+  if (!Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat(DEFAULT_LOCALE, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/**
  * Percent of a 0..1 fraction, e.g. 0.1234 -> "12.34%". Pass already-multiplied
  * values divided by 100 if your source is whole-number percents.
  */

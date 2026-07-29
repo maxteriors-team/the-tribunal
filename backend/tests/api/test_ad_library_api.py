@@ -101,18 +101,14 @@ def _make_app(*, with_auth: bool) -> FastAPI:
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     app = _make_app(with_auth=True)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
 
 
 @pytest.fixture
 async def noauth_client() -> AsyncIterator[AsyncClient]:
     app = _make_app(with_auth=False)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://testserver"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
 
 
@@ -136,9 +132,7 @@ class TestAdLibraryAuth:
 class TestAdLibraryValidation:
     async def test_search_requires_target(self, client: AsyncClient) -> None:
         # No search_terms / page_id / page_name -> 422 from the model validator.
-        resp = await client.post(
-            f"{PREFIX}/search", json={"platform": "meta", "country": "US"}
-        )
+        resp = await client.post(f"{PREFIX}/search", json={"platform": "meta", "country": "US"})
         assert resp.status_code == 422
 
 
@@ -190,13 +184,14 @@ class TestAdLibraryHappyPath:
 
         db = AsyncMock()
         service = AdLibraryService(db)
-        request = AdLibrarySearchRequest(
-            platform="meta", country="US", search_terms="roofing"
-        )
-        with patch(
-            "app.services.ad_intelligence.ad_library_service.build_provider",
-            new=AsyncMock(side_effect=LeadDiscoveryAuthError("no creds")),
-        ), pytest.raises(AdLibraryProviderUnavailableError) as excinfo:
+        request = AdLibrarySearchRequest(platform="meta", country="US", search_terms="roofing")
+        with (
+            patch(
+                "app.services.ad_intelligence.ad_library_service.build_provider",
+                new=AsyncMock(side_effect=LeadDiscoveryAuthError("no creds")),
+            ),
+            pytest.raises(AdLibraryProviderUnavailableError) as excinfo,
+        ):
             await service.create_search_job(WS_ID, request, requested_by_id=1)
         assert excinfo.value.details == {"provider": "meta"}
         # No job was persisted when the provider is unavailable.

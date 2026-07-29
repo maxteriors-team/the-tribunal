@@ -79,9 +79,7 @@ async def client() -> AsyncIterator[AsyncClient]:
 class TestGeneratedRequestID:
     """When the client doesn't send X-Request-ID, the middleware mints one."""
 
-    async def test_response_includes_request_id_header(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_response_includes_request_id_header(self, client: AsyncClient) -> None:
         response = await client.get("/livez")
         assert response.status_code == 200
         assert REQUEST_ID_HEADER in {k.lower() for k in response.headers}
@@ -102,9 +100,7 @@ class TestInboundRequestIDRoundTrip:
 
     async def test_well_formed_id_round_trips(self, client: AsyncClient) -> None:
         supplied = "trace-abc-123_456.789"
-        response = await client.get(
-            "/livez", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/livez", headers={"X-Request-ID": supplied})
         assert response.status_code == 200
         assert response.headers["x-request-id"] == supplied
 
@@ -112,27 +108,19 @@ class TestInboundRequestIDRoundTrip:
         # A caller-generated ULID is the common case for service-to-service
         # traffic that's already been tagged at the edge.
         supplied = generate_ulid()
-        response = await client.get(
-            "/livez", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/livez", headers={"X-Request-ID": supplied})
         assert response.headers["x-request-id"] == supplied
 
     async def test_state_and_header_agree(self, client: AsyncClient) -> None:
         supplied = generate_ulid()
-        response = await client.get(
-            "/echo-request-id", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/echo-request-id", headers={"X-Request-ID": supplied})
         body = response.json()
         assert response.headers["x-request-id"] == supplied
         assert body["state_request_id"] == supplied
 
-    async def test_contextvar_bound_during_request(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_contextvar_bound_during_request(self, client: AsyncClient) -> None:
         supplied = generate_ulid()
-        response = await client.get(
-            "/echo-request-id", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/echo-request-id", headers={"X-Request-ID": supplied})
         body = response.json()
         # The middleware must bind ``request_id`` into structlog's contextvars
         # so log lines emitted inside the handler are correlated automatically.
@@ -145,20 +133,14 @@ class TestMalformedInboundIDsAreReplaced:
     async def test_overlong_id_is_replaced(self, client: AsyncClient) -> None:
         # 200 chars is well past our 128-char cap.
         supplied = "a" * 200
-        response = await client.get(
-            "/livez", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/livez", headers={"X-Request-ID": supplied})
         returned = response.headers["x-request-id"]
         assert returned != supplied
         assert _ULID_RE.match(returned)
 
-    async def test_id_with_disallowed_chars_is_replaced(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_id_with_disallowed_chars_is_replaced(self, client: AsyncClient) -> None:
         supplied = "has spaces and <html>"
-        response = await client.get(
-            "/livez", headers={"X-Request-ID": supplied}
-        )
+        response = await client.get("/livez", headers={"X-Request-ID": supplied})
         returned = response.headers["x-request-id"]
         assert returned != supplied
         assert _ULID_RE.match(returned)
@@ -172,9 +154,7 @@ class TestMalformedInboundIDsAreReplaced:
 class TestContextvarsLeakageGuard:
     """The middleware must not leak request_id into the next request."""
 
-    async def test_contextvars_cleared_after_request(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_contextvars_cleared_after_request(self, client: AsyncClient) -> None:
         await client.get("/livez", headers={"X-Request-ID": generate_ulid()})
         # After the response returns and the middleware's ``finally`` runs,
         # the test task should observe no lingering request_id.

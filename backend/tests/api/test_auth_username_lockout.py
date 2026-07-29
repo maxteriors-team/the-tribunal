@@ -184,9 +184,7 @@ class TestRecordLoginFailure:
 class TestLoginEndpointLockout:
     """End-to-end: ``POST /login`` honours the lockout."""
 
-    async def test_login_locked_out_returns_generic_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_locked_out_returns_generic_401(self, client: AsyncClient) -> None:
         """Once the account is locked out, login returns a generic 401."""
         db = _FakeSession(lockout_count=_USERNAME_LOCKOUT_LIMIT)
 
@@ -250,9 +248,7 @@ class TestLoginEndpointLockout:
         assert len(failure_rows) == 1
         assert failure_rows[0].username_hash == _hash_username("victim@example.com")
 
-    async def test_login_lockout_is_case_insensitive(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_lockout_is_case_insensitive(self, client: AsyncClient) -> None:
         """A locked-out account stays locked under case variations of the email."""
         db = _FakeSession(lockout_count=_USERNAME_LOCKOUT_LIMIT)
 

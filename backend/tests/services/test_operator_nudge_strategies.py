@@ -70,9 +70,7 @@ def _ad_contact(workspace_id: uuid.UUID, n: int) -> Contact:
 
 
 async def _workspace_nudges(db, workspace_id: uuid.UUID) -> list[HumanNudge]:
-    result = await db.execute(
-        select(HumanNudge).where(HumanNudge.workspace_id == workspace_id)
-    )
+    result = await db.execute(select(HumanNudge).where(HumanNudge.workspace_id == workspace_id))
     return list(result.scalars().all())
 
 
@@ -95,9 +93,7 @@ class TestOutboundBatchReady:
             assert nudge.contact_id is None
             assert nudge.nudge_type == "outbound_batch_ready"
             assert str(MIN_BATCH_SIZE) in nudge.title
-            assert nudge.dedup_key == (
-                f"{ws.id}:outbound_batch_ready:{context.today.isoformat()}"
-            )
+            assert nudge.dedup_key == (f"{ws.id}:outbound_batch_ready:{context.today.isoformat()}")
 
             # Same day → deduped.
             assert await strategy.generate(db, context) == 0

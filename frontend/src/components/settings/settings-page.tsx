@@ -1,8 +1,9 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign } from "lucide-react";
+import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, FileClock, DollarSign, Target, Layers } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
+import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
@@ -12,9 +13,11 @@ import { PermanentPricingSettingsCard } from "@/components/settings/permanent-pr
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
 import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab";
 import { ReviewSettingsTab } from "@/components/settings/review-settings-tab";
+import { SalesTargetsSettingsTab } from "@/components/settings/sales-targets-settings-tab";
 import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
 import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-settings-tab";
 import { TeamSettingsTab } from "@/components/settings/team-settings-tab";
+import { UnsoldQuotesSettingsTab } from "@/components/settings/unsold-quotes-settings-tab";
 import { TagManagement } from "@/components/tags/tag-management";
 import { QueryErrorBoundary } from "@/components/ui/query-error-boundary";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +30,9 @@ const settingsTabs = [
   { value: "reviews", label: "Reviews", icon: Star },
   { value: "proposals", label: "Proposals", icon: FileText },
   { value: "pricing", label: "Pricing", icon: DollarSign },
+  { value: "attach-rules", label: "Attach Rules", icon: Layers },
+  { value: "unsold-quotes", label: "Unsold Quotes", icon: FileClock },
+  { value: "sales-targets", label: "Sales Targets", icon: Target },
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
@@ -111,6 +117,24 @@ export function SettingsPage() {
               <PermanentPricingSettingsCard />
               <SeasonalPricingSettingsTab />
             </div>
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="attach-rules">
+          <QueryErrorBoundary message="Failed to load attach rules. Please try again.">
+            <AttachRulesSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="unsold-quotes">
+          <QueryErrorBoundary message="Failed to load unsold quote settings. Please try again.">
+            <UnsoldQuotesSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="sales-targets">
+          <QueryErrorBoundary message="Failed to load sales targets. Please try again.">
+            <SalesTargetsSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

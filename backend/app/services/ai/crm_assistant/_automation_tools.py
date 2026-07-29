@@ -8,12 +8,19 @@ from typing import Any
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.automation import Automation
 from app.schemas.automation import AutomationCreate
+from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import (
     CRMToolContext,
     ToolArguments,
     ToolHandler,
     parse_uuid,
     without_confirmation,
+)
+from app.services.ai.crm_assistant._tool_errors import (
+    invalid_argument,
+    invalid_id,
+    not_found,
+    validation_failed,
 )
 
 
@@ -57,31 +64,32 @@ class AutomationAssistantTools:
 
     async def list_automations(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
-        stmt = (
-            select_workspace_owned(Automation, self.context.workspace_id)
-            .order_by(Automation.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select_workspace_owned(Automation, self.context.workspace_id)
         if args.get("active_only"):
             stmt = stmt.where(Automation.is_active.is_(True))
 
-        result = await self.context.db.execute(stmt)
+        total = await count_matching(self.context.db, Automation, stmt)
+        result = await self.context.db.execute(
+            stmt.order_by(Automation.created_at.desc()).limit(limit)
+        )
         automations = result.scalars().all()
 
-        return {
-            "success": True,
-            "data": [self.serialize_automation(a) for a in automations],
-            "count": len(automations),
-        }
+        return listing(
+            [self.serialize_automation(a) for a in automations],
+            total=total,
+        )
 
     async def create_automation(self, args: ToolArguments) -> dict[str, object]:
         try:
             automation_in = AutomationCreate(**without_confirmation(args))
         except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+            return validation_failed("Automation", str(exc))
 
         if not automation_in.actions:
-            return {"success": False, "error": "Automation needs at least one action"}
+            return invalid_argument(
+                "An automation needs at least one action.",
+                "Add an entry to `actions` describing what should happen.",
+            )
 
         automation = Automation(
             workspace_id=self.context.workspace_id,
@@ -101,11 +109,11 @@ class AutomationAssistantTools:
     async def _set_active(self, args: ToolArguments, *, is_active: bool) -> dict[str, object]:
         automation_id = parse_uuid(args.get("automation_id"))
         if automation_id is None:
-            return {"success": False, "error": "Invalid automation_id"}
+            return invalid_id("automation_id", "Call list_automations to get a valid id.")
 
         automation = await self.get_automation_for_workspace(automation_id)
         if automation is None:
-            return {"success": False, "error": "Automation not found"}
+            return not_found("Automation", "Call list_automations to get a valid id.")
 
         automation.is_active = is_active
         await self.context.db.flush()

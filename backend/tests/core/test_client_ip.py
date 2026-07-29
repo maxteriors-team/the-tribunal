@@ -22,8 +22,7 @@ TRUSTED: list[str] = ["127.0.0.1", "::1"]
 def _make_request(client: tuple[str, int] | None, headers: dict[str, str]) -> Request:
     """Build a minimal ASGI ``Request`` with the given peer and headers."""
     encoded = [
-        (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in headers.items()
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()
     ]
     scope: dict[str, object] = {
         "type": "http",
@@ -65,24 +64,16 @@ class TestSpoofedForwardedFor:
     def test_attacker_cannot_pin_a_constant_ip_across_requests(self) -> None:
         """Two requests forging the same leftmost IP must land on different
         buckets, otherwise a shared rate-limit key can be poisoned at will."""
-        first = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "9.9.9.9, 198.51.100.1"}
-        )
-        second = _make_request(
-            ("127.0.0.1", 51001), {"x-forwarded-for": "9.9.9.9, 198.51.100.2"}
-        )
+        first = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "9.9.9.9, 198.51.100.1"})
+        second = _make_request(("127.0.0.1", 51001), {"x-forwarded-for": "9.9.9.9, 198.51.100.2"})
         assert get_client_ip(first, TRUSTED) != get_client_ip(second, TRUSTED)
 
     def test_all_hops_trusted_falls_back_to_direct_peer(self) -> None:
-        request = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "127.0.0.1, ::1"}
-        )
+        request = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "127.0.0.1, ::1"})
         assert get_client_ip(request, TRUSTED) == "127.0.0.1"
 
     def test_ipv6_client_behind_trusted_proxy(self) -> None:
-        request = _make_request(
-            ("::1", 51000), {"x-forwarded-for": "1.2.3.4, 2001:db8::1234"}
-        )
+        request = _make_request(("::1", 51000), {"x-forwarded-for": "1.2.3.4, 2001:db8::1234"})
         assert get_client_ip(request, TRUSTED) == "2001:db8::1234"
 
 
@@ -90,15 +81,11 @@ class TestUntrustedDirectPeer:
     """When the peer is not a trusted proxy the header is pure attacker input."""
 
     def test_direct_peer_returned_and_header_ignored(self) -> None:
-        request = _make_request(
-            ("198.51.100.23", 44444), {"x-forwarded-for": "1.2.3.4, 127.0.0.1"}
-        )
+        request = _make_request(("198.51.100.23", 44444), {"x-forwarded-for": "1.2.3.4, 127.0.0.1"})
         assert get_client_ip(request, TRUSTED) == "198.51.100.23"
 
     def test_header_ignored_even_when_it_names_a_trusted_proxy(self) -> None:
-        request = _make_request(
-            ("198.51.100.23", 44444), {"x-forwarded-for": "127.0.0.1"}
-        )
+        request = _make_request(("198.51.100.23", 44444), {"x-forwarded-for": "127.0.0.1"})
         assert get_client_ip(request, TRUSTED) == "198.51.100.23"
 
     def test_empty_trusted_proxy_list_disables_the_header(self) -> None:
@@ -128,9 +115,7 @@ class TestMalformedAndMissingHeaders:
     def test_malformed_rightmost_hop_does_not_promote_leftmost_entry(self) -> None:
         """Garbage where the real client should be must not make us reach
         further left into attacker-controlled territory."""
-        request = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, not-an-ip"}
-        )
+        request = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, not-an-ip"})
         assert get_client_ip(request, TRUSTED) == "127.0.0.1"
 
     def test_injection_payload_is_rejected(self) -> None:
@@ -141,15 +126,11 @@ class TestMalformedAndMissingHeaders:
         assert get_client_ip(request, TRUSTED) == "127.0.0.1"
 
     def test_host_port_form_is_not_accepted_as_an_address(self) -> None:
-        request = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "203.0.113.7:8080"}
-        )
+        request = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "203.0.113.7:8080"})
         assert get_client_ip(request, TRUSTED) == "127.0.0.1"
 
     def test_trailing_separator_is_tolerated(self) -> None:
-        request = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, 203.0.113.7, "}
-        )
+        request = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, 203.0.113.7, "})
         assert get_client_ip(request, TRUSTED) == "203.0.113.7"
 
     def test_missing_client_returns_unknown(self) -> None:
@@ -157,7 +138,5 @@ class TestMalformedAndMissingHeaders:
         assert get_client_ip(request, TRUSTED) == "unknown"
 
     def test_invalid_entries_in_trusted_proxy_config_are_skipped(self) -> None:
-        request = _make_request(
-            ("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, 203.0.113.7"}
-        )
+        request = _make_request(("127.0.0.1", 51000), {"x-forwarded-for": "1.2.3.4, 203.0.113.7"})
         assert get_client_ip(request, ["not-an-ip", "127.0.0.1"]) == "203.0.113.7"

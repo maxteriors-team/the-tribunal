@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     openai_realtime_model: str = "gpt-realtime-2"
     # Image model for the estimator's photorealistic night render (Phase 2).
     openai_estimate_render_model: str = "gpt-image-2"
+    # CRM operator assistant. The tool loop drives ~30 tools and chains actions,
+    # which is not a lightweight task, so it runs on the balanced tier (Terra)
+    # rather than the cheapest one. Summarisation is one mechanical rewrite with
+    # no tools, so it stays on the cheapest tier (Luna).
+    # Env-overridable on purpose: model IDs move faster than our releases do,
+    # and these defaults could not be checked against a live /v1/models call.
+    openai_assistant_model: str = "gpt-5.6-terra"
+    openai_assistant_summary_model: str = "gpt-5.6-luna"
     openai_realtime_client_secret_ttl_seconds: int = 600
     openai_realtime_idle_timeout_ms: int | None = 6000
     openai_codex_voice_enabled: bool = False

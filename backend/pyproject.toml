@@ -200,10 +200,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not eval'"
 markers = [
     "integration: integration tests that hit real external services (skipped by default; run with -m integration)",
     "smoke: live-deployment smoke tests; skipped unless SMOKE_BASE_URL is set (run with -m smoke)",
+    "eval: model-in-the-loop accuracy evals; cost money and are non-deterministic (run with -m eval)",
 ]
 
 [tool.coverage.run]

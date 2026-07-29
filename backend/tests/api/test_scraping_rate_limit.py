@@ -83,9 +83,7 @@ class TestScrapingSearchRateLimit:
     FastAPI's ``dependency_overrides``.
     """
 
-    async def test_returns_429_with_retry_after_when_limit_hit(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_returns_429_with_retry_after_when_limit_hit(self, client: AsyncClient) -> None:
         async def block(_: uuid.UUID) -> None:
             raise _raise_429(seconds=42)
 
@@ -113,9 +111,7 @@ class TestScrapingSearchRateLimit:
         assert resp.headers.get("Retry-After") == "42"
         assert "limit" in resp.json()["detail"].lower()
 
-    async def test_does_not_call_google_places_when_limited(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_does_not_call_google_places_when_limited(self, client: AsyncClient) -> None:
         """Cost-control: a 429 must short-circuit the paid upstream call."""
 
         async def block(_: uuid.UUID) -> None:
@@ -157,9 +153,7 @@ class TestScrapingSearchRateLimit:
 class TestFindLeadsAISearchRateLimit:
     """``POST /find-leads-ai/...search`` shares the same per-workspace cap."""
 
-    async def test_returns_429_with_retry_after_when_limit_hit(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_returns_429_with_retry_after_when_limit_hit(self, client: AsyncClient) -> None:
         async def block(_: uuid.UUID) -> None:
             raise _raise_429(seconds=900)
 
@@ -177,9 +171,7 @@ class TestFindLeadsAISearchRateLimit:
         assert resp.status_code == 429
         assert resp.headers.get("Retry-After") == "900"
 
-    async def test_does_not_call_google_places_when_limited(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_does_not_call_google_places_when_limited(self, client: AsyncClient) -> None:
         async def block(_: uuid.UUID) -> None:
             raise _raise_429()
 
@@ -215,9 +207,7 @@ class TestProviderNotConfigured:
     "search failed" toast (distinct from an empty / no-results response).
     """
 
-    async def test_search_returns_provider_not_configured_code(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_search_returns_provider_not_configured_code(self, client: AsyncClient) -> None:
         from app.services.scraping.google_places import GooglePlacesNotConfiguredError
 
         async def allow(_: uuid.UUID) -> None:
@@ -264,9 +254,7 @@ class TestProviderNotConfigured:
 class TestUnderLimitPassesThrough:
     """When the limiter is satisfied, the route proceeds to Google Places."""
 
-    async def test_scraping_search_proceeds_when_under_limit(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_scraping_search_proceeds_when_under_limit(self, client: AsyncClient) -> None:
         async def allow(_: uuid.UUID) -> None:
             return None
 

@@ -20,6 +20,7 @@ class TestVoiceAgentProtocol:
 
     def test_protocol_is_runtime_checkable(self) -> None:
         """Test that the protocol can be used with isinstance()."""
+
         # A simple class that implements all required methods
         class FakeAgent:
             async def connect(self) -> bool:
@@ -78,9 +79,7 @@ class TestToolCallableProtocol:
             def set_tool_callback(self, callback: Any) -> None:
                 pass
 
-            async def submit_tool_result(
-                self, call_id: str, result: dict[str, Any]
-            ) -> None:
+            async def submit_tool_result(self, call_id: str, result: dict[str, Any]) -> None:
                 pass
 
         agent = FakeToolAgent()
@@ -142,9 +141,7 @@ class TestProtocolHelpers:
             def set_tool_callback(self, callback: Any) -> None:
                 pass
 
-            async def submit_tool_result(
-                self, call_id: str, result: dict[str, Any]
-            ) -> None:
+            async def submit_tool_result(self, call_id: str, result: dict[str, Any]) -> None:
                 pass
 
         agent = ToolAgent()

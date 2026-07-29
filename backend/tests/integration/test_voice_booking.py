@@ -89,14 +89,15 @@ def log_warn(msg: str) -> None:
 
 
 def log_section(msg: str) -> None:
-    print(f"\n{Colors.BOLD}{'='*60}{Colors.END}")
+    print(f"\n{Colors.BOLD}{'=' * 60}{Colors.END}")
     print(f"{Colors.BOLD}{msg}{Colors.END}")
-    print(f"{Colors.BOLD}{'='*60}{Colors.END}\n")
+    print(f"{Colors.BOLD}{'=' * 60}{Colors.END}\n")
 
 
 # ============================================================
 # Test 1: Date Format Parsing
 # ============================================================
+
 
 def test_date_parsing() -> dict[str, bool]:
     """Test various date formats that Grok might output.
@@ -120,7 +121,6 @@ def test_date_parsing() -> dict[str, bool]:
         # Expected format (should pass)
         (tomorrow.strftime("%Y-%m-%d"), True, "YYYY-MM-DD (expected format)"),
         ("2026-01-27", True, "YYYY-MM-DD explicit"),
-
         # Common Grok outputs (likely to fail)
         ("tomorrow", False, "Natural language: tomorrow"),
         ("next Monday", False, "Natural language: next Monday"),
@@ -130,7 +130,6 @@ def test_date_parsing() -> dict[str, bool]:
         ("Jan 27", False, "Short month format"),
         ("Monday", False, "Day name only"),
         ("next week", False, "Relative: next week"),
-
         # Edge cases
         ("2026-1-27", False, "Missing leading zeros"),
         ("2026/01/27", False, "Wrong separator"),
@@ -164,6 +163,7 @@ def test_date_parsing() -> dict[str, bool]:
 # Test 2: Time Format Parsing
 # ============================================================
 
+
 def test_time_parsing() -> dict[str, bool]:
     """Test various time formats that Grok might output."""
     log_section("TEST 2: Time Format Parsing")
@@ -173,7 +173,6 @@ def test_time_parsing() -> dict[str, bool]:
         # Expected format (should pass)
         ("14:00", True, "HH:MM 24-hour (expected)"),
         ("09:30", True, "HH:MM with leading zero"),
-
         # Common Grok outputs (likely to fail)
         ("2:00 PM", False, "12-hour with AM/PM"),
         ("2pm", False, "Short 12-hour format"),
@@ -211,6 +210,7 @@ def test_time_parsing() -> dict[str, bool]:
 # ============================================================
 # Test 3: Date Context Generation
 # ============================================================
+
 
 def test_date_context() -> None:
     """Test the date context that gets injected into Grok's prompt."""
@@ -513,6 +513,7 @@ async def test_booking_tool_call_waits_for_operator_approval() -> None:
 # Test 5: Full Grok Session Simulation
 # ============================================================
 
+
 async def test_grok_session_config() -> None:
     """Test the Grok session configuration and date context injection."""
     log_section("TEST 5: Grok Session Configuration")
@@ -575,6 +576,7 @@ async def test_grok_session_config() -> None:
 # Test 6: Cal.com API Direct Test
 # ============================================================
 
+
 async def test_calcom_api() -> None:
     """Test Cal.com API directly (not through voice agent)."""
     log_section("TEST 6: Cal.com API Direct Test")
@@ -630,11 +632,12 @@ async def test_calcom_api() -> None:
 # Main
 # ============================================================
 
+
 async def main() -> None:
     """Run all voice booking tests."""
-    print(f"\n{Colors.BOLD}{'='*60}{Colors.END}")
+    print(f"\n{Colors.BOLD}{'=' * 60}{Colors.END}")
     print(f"{Colors.BOLD}GROK VOICE AGENT BOOKING TEST SUITE{Colors.END}")
-    print(f"{Colors.BOLD}{'='*60}{Colors.END}")
+    print(f"{Colors.BOLD}{'=' * 60}{Colors.END}")
     print(f"\nRunning at: {datetime.now()}")
     print(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
 
@@ -672,9 +675,9 @@ async def main() -> None:
     else:
         log_fail("Some tests failed - review output above")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("KEY FINDINGS:")
-    print("="*60)
+    print("=" * 60)
     print("""
 1. Voice tools expect YYYY-MM-DD dates and HH:MM 24-hour times from the model
 2. If Grok outputs 'tomorrow' or 'next Monday', the tool rejects it (no booking)

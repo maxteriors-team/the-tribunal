@@ -96,9 +96,7 @@ class _Counter:
 class TestChangePasswordRateLimit:
     """``POST /auth/change-password`` — 5 per user per hour."""
 
-    async def test_returns_429_after_limit(
-        self, client: AsyncClient, fake_user: _FakeUser
-    ) -> None:
+    async def test_returns_429_after_limit(self, client: AsyncClient, fake_user: _FakeUser) -> None:
         """6th attempt within the window returns 429 with the expected detail."""
         counter = _Counter()
 
@@ -135,18 +133,13 @@ class TestChangePasswordRateLimit:
             )
 
         assert resp.status_code == 429
-        assert (
-            resp.json()["detail"]
-            == "Too many password change attempts. Please try again later."
-        )
+        assert resp.json()["detail"] == "Too many password change attempts. Please try again later."
         # All recorded attempts were tagged with the authenticated user's id.
         assert counter.counts[("change_password", fake_user.id)] == (
             auth_limiter.CHANGE_PASSWORD_LIMIT
         )
 
-    async def test_keys_by_user_id_not_ip(
-        self, client: AsyncClient, fake_user: _FakeUser
-    ) -> None:
+    async def test_keys_by_user_id_not_ip(self, client: AsyncClient, fake_user: _FakeUser) -> None:
         """The limiter is invoked with the current user's id, not an IP string."""
         spy = AsyncMock()
 
@@ -166,9 +159,7 @@ class TestChangePasswordRateLimit:
 class TestWsTicketRateLimit:
     """``POST /auth/ws-ticket`` — 30 per user per minute."""
 
-    async def test_returns_429_after_limit(
-        self, client: AsyncClient, fake_user: _FakeUser
-    ) -> None:
+    async def test_returns_429_after_limit(self, client: AsyncClient, fake_user: _FakeUser) -> None:
         """31st ticket request within the window returns 429."""
         counter = _Counter()
 
@@ -176,25 +167,17 @@ class TestWsTicketRateLimit:
             for i in range(auth_limiter.WS_TICKET_LIMIT):
                 resp = await client.post("/api/v1/auth/ws-ticket")
                 assert resp.status_code == 200, (
-                    f"request {i + 1} should succeed, "
-                    f"got {resp.status_code}: {resp.text}"
+                    f"request {i + 1} should succeed, got {resp.status_code}: {resp.text}"
                 )
                 assert "ticket" in resp.json()
 
             resp = await client.post("/api/v1/auth/ws-ticket")
 
         assert resp.status_code == 429
-        assert (
-            resp.json()["detail"]
-            == "Too many WebSocket ticket requests. Please slow down."
-        )
-        assert counter.counts[("ws_ticket", fake_user.id)] == (
-            auth_limiter.WS_TICKET_LIMIT
-        )
+        assert resp.json()["detail"] == "Too many WebSocket ticket requests. Please slow down."
+        assert counter.counts[("ws_ticket", fake_user.id)] == (auth_limiter.WS_TICKET_LIMIT)
 
-    async def test_keys_by_user_id_not_ip(
-        self, client: AsyncClient, fake_user: _FakeUser
-    ) -> None:
+    async def test_keys_by_user_id_not_ip(self, client: AsyncClient, fake_user: _FakeUser) -> None:
         spy = AsyncMock()
 
         with patch("app.api.v1.auth.enforce_ws_ticket_rate_limit", new=spy):

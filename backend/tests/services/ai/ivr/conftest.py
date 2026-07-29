@@ -154,8 +154,10 @@ def mock_agent_no_ivr() -> MockAgent:
 @pytest.fixture
 def mock_llm_client() -> MockLLMClient:
     """Create a mock LLM client with default responses."""
-    return MockLLMClient(responses=[
-        "I'll press 1. <dtmf>1</dtmf>",
-        "Let me try 2. <dtmf>2</dtmf>",
-        "Pressing 0 for operator. <dtmf>0</dtmf>",
-    ])
+    return MockLLMClient(
+        responses=[
+            "I'll press 1. <dtmf>1</dtmf>",
+            "Let me try 2. <dtmf>2</dtmf>",
+            "Pressing 0 for operator. <dtmf>0</dtmf>",
+        ]
+    )

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { ServiceValueProps } from "@/components/estimator/service-value-props";
 
+import { AttachPrompt, useAttachPromptActions } from "./attach-prompt";
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
 
 interface PresentationScreenProps {
@@ -70,6 +71,8 @@ export function PresentationScreen({
     ? `${window.location.origin}/p/quotes/${wizard.savedQuote.public_token}`
     : null;
 
+  const attach = useAttachPromptActions(wizard);
+
   const handleSave = async () => {
     if (shareLink) {
       try {
@@ -95,8 +98,10 @@ export function PresentationScreen({
       } else {
         toast.success("Proposal saved");
       }
-    } catch {
-      toast.error("Could not save the proposal. Please try again.");
+    } catch (err) {
+      // A blocking attach rule reports itself through the prompt below, so the
+      // toast must carry the server's reason rather than a generic retry.
+      toast.error(attach.saveErrorMessage(err));
     }
   };
 
@@ -487,6 +492,15 @@ export function PresentationScreen({
             just the medium. <strong>The result is the artwork.</strong>
           </div>
         </div>
+
+        {wizard.attachWarning && !shareLink && (
+          <AttachPrompt
+            warning={wizard.attachWarning}
+            busy={wizard.isSaving}
+            onAdd={attach.add}
+            onDismiss={attach.dismiss}
+          />
+        )}
 
         <div className="cta-section">
           <div className="cta-eyebrow">Ready to Move Forward</div>
