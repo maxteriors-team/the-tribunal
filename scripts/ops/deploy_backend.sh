@@ -80,6 +80,38 @@ if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- backend)" ]; then
     yellow "   /version will report the -dirty suffix so nobody trusts it as a clean build."
 fi
 
+# ── Refuse to ship a silent rollback ─────────────────────────────────────────
+# `railway up` uploads the backend/ *folder*, not a git ref: whatever sits on
+# disk becomes production. So deploying from a checkout that is missing commits
+# already merged to the remote does not merely skip them — it **reverts them in
+# production**, with no diff, no migration, and nothing in the deploy output to
+# hint at it. Not hypothetical: a deploy from a pre-merge HEAD rolled an
+# outbound-SMS cost fix out of prod for ~18 minutes before a SHA check caught it.
+#
+# Only backend/ is uploaded, so only backend-touching commits can regress.
+# Deliberately shipping older code is legitimate — that is what the override is
+# for; it just has to be a decision rather than an accident.
+REMOTE_REF="${DEPLOY_BASE_REF:-origin/main}"
+if [ "${DEPLOY_ALLOW_BEHIND:-0}" = "1" ]; then
+    yellow "⚠  DEPLOY_ALLOW_BEHIND=1 — skipping the behind-${REMOTE_REF} check."
+elif ! git -C "$REPO_ROOT" fetch --quiet origin 2>/dev/null; then
+    # Offline is no reason to block a deploy, but it is a reason to say so out
+    # loud: a check that passes and a check that never ran look identical.
+    yellow "⚠  could not reach origin — behind-${REMOTE_REF} check did NOT run."
+    yellow "   Confirm this checkout isn't missing merged backend work before trusting this deploy."
+elif git -C "$REPO_ROOT" rev-parse --verify --quiet "$REMOTE_REF" >/dev/null; then
+    MISSING_COMMITS="$(git -C "$REPO_ROOT" log --oneline "HEAD..${REMOTE_REF}" -- backend)"
+    if [ -n "$MISSING_COMMITS" ]; then
+        red "✗ refusing to deploy: ${REMOTE_REF} has backend commits this checkout is missing."
+        red "  Deploying now would REVERT them in production:"
+        printf '%s\n' "$MISSING_COMMITS" | sed 's/^/    /' >&2
+        red ""
+        red "  Fix:      git pull --ff-only     (or: git fetch && git reset --hard ${REMOTE_REF})"
+        red "  Rollback? DEPLOY_ALLOW_BEHIND=1 make deploy.backend"
+        exit 1
+    fi
+fi
+
 BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 cat >"$STAMP_PATH" <<JSON
