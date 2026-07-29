@@ -240,10 +240,33 @@ async def _revoke(ctx: ExecutionContext, db: AsyncSession, phone: PhoneNumber) -
 
 
 def _print_token(phone_number: str, token: str) -> None:
-    """Show the plaintext once, to stdout, clearly marked as unrecoverable."""
+    """Show the plaintext once, to stdout, clearly marked as unrecoverable.
+
+    Displaying the secret is the entire point of the command — only its digest
+    is persisted, so this is the single moment it can be captured. It goes to
+    stdout and never to the logger, so it stays out of log files and log
+    shipping.
+
+    The residual risk is redirection: `... > token.txt` or a CI transcript
+    silently lands the credential in a file with default permissions. We cannot
+    refuse to print (that breaks the command), so warn loudly when stdout is not
+    a terminal and let the operator decide.
+    """
+    if not sys.stdout.isatty():
+        print(
+            "  WARNING: stdout is not a terminal. This token is about to be "
+            "written\n           to that destination in clear text — delete it "
+            "when you are done.",
+            file=sys.stderr,
+        )
+
     print()
     print(f"  Mac relay token for {phone_number}")
-    print(f"    {token}")
+    # CodeQL flags the next line as clear-text logging of a secret. It is a
+    # deliberate one-time display to the operator, the same shape as `gh auth
+    # token` or a cloud console showing a freshly minted key: there is no other
+    # channel to hand over a credential that is stored only as a digest.
+    print(f"    {token}")  # codeql[py/clear-text-logging-sensitive-data]
     print()
     print("  Shown once — only its SHA-256 digest is stored. Copy it into the")
     print("  relay host's config now; recovering it later is impossible.")
