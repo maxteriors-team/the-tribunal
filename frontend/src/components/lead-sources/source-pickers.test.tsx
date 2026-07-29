@@ -6,12 +6,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   CampaignPicker,
   LeadSourcePicker,
+  SOURCE_TYPE_OPTIONS,
   SourceTypePicker,
   sourceTypeLabel,
 } from "@/components/lead-sources/source-pickers";
 import type {
   LeadSource,
   LeadSourceCampaign,
+  LeadSourceType,
 } from "@/lib/api/lead-sources";
 
 const { listMock, listCampaignsMock } = vi.hoisted(() => ({
@@ -82,6 +84,37 @@ describe("sourceTypeLabel", () => {
     expect(sourceTypeLabel("organic")).toBe("Organic");
     expect(sourceTypeLabel("phone_radio")).toBe("Phone / Radio");
     expect(sourceTypeLabel("other")).toBe("Other");
+  });
+
+  it("labels the word-of-mouth and physical channels", () => {
+    expect(sourceTypeLabel("referral_partner")).toBe("Referral Partner");
+    expect(sourceTypeLabel("repeat_customer")).toBe("Repeat Customer");
+    expect(sourceTypeLabel("truck_wrap")).toBe("Truck Wrap");
+    expect(sourceTypeLabel("yard_sign")).toBe("Yard Sign");
+    expect(sourceTypeLabel("canvass_neighbor")).toBe("Jobsite Canvass");
+  });
+
+  it("falls back to the raw code for an unmapped channel", () => {
+    // A channel the backend adds before this map catches up must render as
+    // something, not `undefined`, in the ROI table and settings badges.
+    expect(sourceTypeLabel("door_hanger" as LeadSourceType)).toBe("door_hanger");
+  });
+});
+
+describe("SOURCE_TYPE_OPTIONS", () => {
+  it("offers every channel, with the catch-all last", () => {
+    expect(SOURCE_TYPE_OPTIONS.map((o) => o.value)).toEqual([
+      "facebook_ads",
+      "google_ads",
+      "organic",
+      "phone_radio",
+      "referral_partner",
+      "repeat_customer",
+      "truck_wrap",
+      "yard_sign",
+      "canvass_neighbor",
+      "other",
+    ]);
   });
 });
 
