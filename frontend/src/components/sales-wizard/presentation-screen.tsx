@@ -2,14 +2,17 @@
 
 /**
  * Screen 2 — the client-facing presentation, rendered entirely from the
- * server-computed ProposalDocument (financed all-inclusive package cards,
- * financing with a 0% APR term picker, Care Plan + bistro upsells, the lit
- * design preview). Cash/check figures stay internal to the builder.
+ * server-computed ProposalDocument (all-inclusive package cards, Care Plan +
+ * bistro upsells, the lit design preview).
+ *
+ * Cash/check figures stay internal to the builder, and financing is not offered
+ * — no monthly estimates, term pickers, or lender copy reach the client. Prices
+ * still carry the pricing model's fee buffer; that is margin protection, not a
+ * financing offer, and it is never described to the client.
  *
  * Each service in the design argues for itself here: a quote covering landscape
  * and Christmas shows both value-prop blocks, not one blended list.
  */
-import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ServiceValueProps } from "@/components/estimator/service-value-props";
@@ -28,8 +31,6 @@ export function PresentationScreen({
   onBack,
 }: PresentationScreenProps) {
   const doc = wizard.document;
-  const financing = doc?.financing ?? null;
-  const [term, setTerm] = useState<number>(financing?.default_term ?? 24);
 
   const client = doc?.client ?? null;
   const first = client?.first_name?.trim() || "";
@@ -41,22 +42,7 @@ export function PresentationScreen({
       ? `The ${fullName} Residence`
       : "Your Residence";
 
-  // Lowest-priced package with real money drives the "as low as" figure.
-  const lowestTier = useMemo(() => {
-    const priced = (doc?.tiers ?? []).filter((t) => t.pricing.base > 0);
-    if (!priced.length) return null;
-    return priced.reduce((min, t) =>
-      t.pricing.financed_total < min.pricing.financed_total ? t : min,
-    );
-  }, [doc]);
-
-  const monthlyAt = (termMonths: number): number =>
-    lowestTier?.pricing.monthly_by_term?.[String(termMonths)] ?? 0;
-  const lowMonthly = monthlyAt(term);
-  const terms = financing?.terms ?? [];
-
-  // Presentation mirrors the client proposal: financed (all-inclusive) price
-  // only — cash/check figures stay internal to the builder.
+  // Presentation mirrors the client proposal: the all-inclusive price only.
   const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc?.care_plan ?? null;
@@ -223,14 +209,17 @@ export function PresentationScreen({
           </div>
         ) : null}
 
-        <div className="pkg-grid">
+        <div
+          className="pkg-grid"
+          // Columns follow the package count — no dead column beside the cards.
+          style={{ "--pkg-count": doc.tiers.length } as React.CSSProperties}
+        >
           {doc.tiers.map((tier) => {
             const cfg = wizard.tierConfig(tier.key);
             const hasValue = tier.pricing.base > 0;
             const lead = hasValue
               ? fmt(tier.pricing.financed_total)
               : "Custom Quote";
-            const monthly = tier.pricing.monthly_payment;
             return (
               <div className={`pkg-card ${tier.key}`} key={tier.key}>
                 {tier.popular ? (
@@ -247,11 +236,6 @@ export function PresentationScreen({
                   <div className="pkg-price-wrap">
                     <div className="pkg-price">{lead}</div>
                     <div className="pkg-price-label">{priceLabel}</div>
-                    {hasValue && monthly > 0 ? (
-                      <div className="pkg-monthly">
-                        Financing options shown below
-                      </div>
-                    ) : null}
                   </div>
                   {cfg?.warranty ? (
                     <div className="pkg-warranty">
@@ -503,63 +487,6 @@ export function PresentationScreen({
             just the medium. <strong>The result is the artwork.</strong>
           </div>
         </div>
-
-        {financing?.enabled ? (
-          <div className="fin-section">
-            <div className="fin-eyebrow">Payment Options</div>
-            <div className="fin-headline">
-              {financing.headline ??
-                "Own the night now — 0% APR financing available."}
-            </div>
-            {lowMonthly > 0 ? (
-              <>
-                <div className="fin-figure">
-                  as low as <strong>{fmt(lowMonthly)}</strong>
-                  <span className="fin-figure-mo">/month</span>
-                </div>
-                <div className="fin-figure-sub">
-                  over {term}{" "}months &middot; 0% APR &middot; no interest, ever
-                </div>
-              </>
-            ) : null}
-            {lowMonthly > 0 && terms.length > 1 ? (
-              <div className="fin-terms">
-                <div className="fin-terms-label">
-                  Choose your term — every plan is 0% APR
-                </div>
-                <div className="fin-term-toggle">
-                  {terms.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`fin-term-btn${t === term ? " active" : ""}`}
-                      onClick={() => setTerm(t)}
-                    >
-                      <span className="fin-term-term">{t}{" "}Months</span>
-                      <span className="fin-term-mo">
-                        {fmt(monthlyAt(t))}/mo
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <div className="fin-body">
-              If monthly payments fit better, financing is available on the full
-              all-inclusive project total through {financing.provider}.
-            </div>
-            <div className="fin-points">
-              {(financing.points ?? []).map((point, i) => (
-                <div className="fin-point" key={i}>
-                  &#10003;&nbsp; {point}
-                </div>
-              ))}
-            </div>
-            {financing.disclaimer ? (
-              <div className="fin-disclaimer">{financing.disclaimer}</div>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className="cta-section">
           <div className="cta-eyebrow">Ready to Move Forward</div>

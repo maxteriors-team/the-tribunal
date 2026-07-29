@@ -634,39 +634,30 @@ export function CalculatorScreen({
 
             <div className="rep-notes">
               <div className="rep-notes-title">
-                &#9888; Rep Notes — Financing Fees (internal only)
+                &#9888; Rep Notes — Pricing (internal only)
               </div>
               <ul className="rep-notes-list">
                 <li>
-                  <strong>
-                    All prices already include the financing fee buffer.
-                  </strong>{" "}
-                  It&rsquo;s grossed into every price and add-on automatically,
-                  so a financed job&rsquo;s net survives the dealer fee — for
-                  add-ons, enter the amount <em>we keep</em> and the tool does
-                  the rest.
+                  <strong>We do not offer financing.</strong>{" "}Don&rsquo;t
+                  quote monthly payments, terms, or a lender. The proposal shows
+                  one number per package plus any deposit — nothing else.
                 </li>
                 <li>
-                  <strong>Financed customers pay 0% APR.</strong>{" "}The monthly
-                  is just the total &divide; the chosen term — no interest. We
-                  absorb the fee, not them.
+                  <strong>Prices still carry the pricing buffer.</strong>{" "}
+                  It&rsquo;s grossed into every price and add-on automatically —
+                  for add-ons, enter the amount <em>we keep</em> and the tool
+                  does the rest. That buffer is margin protection, never
+                  something to describe to the client.
                 </li>
                 <li>
                   <strong>Cash/check keeps a private payment reserve.</strong>{" "}
-                  The tool backs out the financing buffer while leaving that
-                  reserve in the client-facing cash/check price. Keep the fee
-                  math internal.
+                  The tool backs the buffer out while leaving that reserve in the
+                  cash/check figure. Keep the fee math internal.
                 </li>
                 <li>
-                  <strong>Saving creates the quote at the financed total</strong>{" "}
-                  — the client link leads with the cash/check price, and both
-                  figures stay on the saved snapshot. Don&rsquo;t stack another
-                  discount on top; that gives the margin away twice.
-                </li>
-                <li>
-                  <strong>Financing cap applies.</strong>{" "}Above the cap, no
-                  monthly figure is shown — split the financed portion and take
-                  the rest as deposit.
+                  <strong>Saving creates the quote at the all-in total</strong>{" "}
+                  — both figures stay on the saved snapshot. Don&rsquo;t stack
+                  another discount on top; that gives the margin away twice.
                 </li>
               </ul>
             </div>
