@@ -1,9 +1,15 @@
-"""Schemas for recurring job templates (maintenance contracts).
+"""Schemas for service plans (recurring job templates).
 
-A template repeats a job on a schedule. ``next_run_at`` is the cursor for the
-next occurrence to generate: on create it is the first occurrence's start time;
-the recurring-job worker advances it by ``interval`` × ``frequency`` after each
+A plan repeats a job on a schedule. ``next_run_at`` is the cursor for the next
+occurrence to generate: on create it is the first occurrence's start time; the
+recurring-job worker advances it by ``interval`` × ``frequency`` after each
 materialization. Status/lifecycle fields are maintained server-side.
+
+``plan_type`` records which subscription the client bought — a landscape-lighting
+Care Plan (with its ``care_plan_tier``), a seasonal Christmas signup, or a
+hand-built maintenance contract. ``source_quote_id`` is signup provenance,
+written only by the provisioner, so it is response-only: an operator creating a
+plan by hand can never forge a link to someone else's quote.
 """
 
 import uuid
@@ -11,7 +17,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.recurring_job import RecurrenceFrequency
+from app.models.recurring_job import RecurrenceFrequency, ServicePlanType
 
 
 class RecurringJobTemplateBase(BaseModel):
@@ -19,6 +25,12 @@ class RecurringJobTemplateBase(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=5000)
+    plan_type: ServicePlanType = Field(
+        ServicePlanType.MAINTENANCE, description="Which recurring service this plan covers"
+    )
+    care_plan_tier: str | None = Field(
+        None, max_length=64, description="Care Plan tier the client selected"
+    )
     frequency: RecurrenceFrequency
     interval: int = Field(1, ge=1, le=52, description="Repeat every N periods")
     duration_minutes: int = Field(
@@ -47,6 +59,8 @@ class RecurringJobTemplateUpdate(BaseModel):
 
     title: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = Field(None, max_length=5000)
+    plan_type: ServicePlanType | None = None
+    care_plan_tier: str | None = Field(None, max_length=64)
     frequency: RecurrenceFrequency | None = None
     interval: int | None = Field(None, ge=1, le=52)
     duration_minutes: int | None = Field(None, ge=1, le=10080)
@@ -68,6 +82,9 @@ class RecurringJobTemplateResponse(BaseModel):
     crew_id: uuid.UUID | None
     title: str
     description: str | None
+    plan_type: ServicePlanType
+    care_plan_tier: str | None
+    source_quote_id: uuid.UUID | None
     frequency: RecurrenceFrequency
     interval: int
     duration_minutes: int

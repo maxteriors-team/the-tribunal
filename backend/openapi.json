@@ -8952,6 +8952,34 @@
             "title": "Roofline Per Ft",
             "type": "number"
           },
+          "season_install_day": {
+            "default": 15,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Season Install Day",
+            "type": "integer"
+          },
+          "season_install_month": {
+            "default": 11,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Season Install Month",
+            "type": "integer"
+          },
+          "season_takedown_day": {
+            "default": 8,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Season Takedown Day",
+            "type": "integer"
+          },
+          "season_takedown_month": {
+            "default": 1,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Season Takedown Month",
+            "type": "integer"
+          },
           "storage_price": {
             "default": 0,
             "minimum": 0.0,
@@ -33117,6 +33145,19 @@
       "RecurringJobTemplateCreate": {
         "description": "Create a recurring job template.",
         "properties": {
+          "care_plan_tier": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Care Plan tier the client selected",
+            "title": "Care Plan Tier"
+          },
           "contact_id": {
             "description": "Customer this contract serves",
             "title": "Contact Id",
@@ -33194,6 +33235,11 @@
             "title": "Next Run At",
             "type": "string"
           },
+          "plan_type": {
+            "$ref": "#/components/schemas/ServicePlanType",
+            "default": "maintenance",
+            "description": "Which recurring service this plan covers"
+          },
           "service_location_id": {
             "anyOf": [
               {
@@ -33248,6 +33294,17 @@
       "RecurringJobTemplateResponse": {
         "description": "A recurring job template with its scheduling cursor.",
         "properties": {
+          "care_plan_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Care Plan Tier"
+          },
           "contact_id": {
             "title": "Contact Id",
             "type": "integer"
@@ -33329,6 +33386,9 @@
             "title": "Next Run At",
             "type": "string"
           },
+          "plan_type": {
+            "$ref": "#/components/schemas/ServicePlanType"
+          },
           "service_location_id": {
             "anyOf": [
               {
@@ -33340,6 +33400,18 @@
               }
             ],
             "title": "Service Location Id"
+          },
+          "source_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote Id"
           },
           "title": {
             "title": "Title",
@@ -33364,6 +33436,9 @@
           "crew_id",
           "title",
           "description",
+          "plan_type",
+          "care_plan_tier",
+          "source_quote_id",
           "frequency",
           "interval",
           "duration_minutes",
@@ -33381,6 +33456,18 @@
       "RecurringJobTemplateUpdate": {
         "description": "Partial update for a recurring job template.",
         "properties": {
+          "care_plan_tier": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Care Plan Tier"
+          },
           "crew_id": {
             "anyOf": [
               {
@@ -33491,6 +33578,16 @@
               }
             ],
             "title": "Next Run At"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServicePlanType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "service_location_id": {
             "anyOf": [
@@ -36039,6 +36136,16 @@
         },
         "title": "ServiceLocationUpdate",
         "type": "object"
+      },
+      "ServicePlanType": {
+        "description": "Which recurring service a client signed up for.\n\n``LIGHTING_CARE_PLAN`` is the landscape-lighting maintenance subscription\n(the tier the client selected lives in ``care_plan_tier``).\n``CHRISTMAS_LIGHTS`` covers the seasonal holiday signup, which is stored as\nan install plan plus a takedown plan. ``MAINTENANCE`` is the generic\nhand-built contract every pre-existing row backfills to.",
+        "enum": [
+          "lighting_care_plan",
+          "christmas_lights",
+          "maintenance"
+        ],
+        "title": "ServicePlanType",
+        "type": "string"
       },
       "SizeRate": {
         "description": "A size/variant option (e.g. a tree size) with its own net install price.",
@@ -67127,7 +67234,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/recurring-jobs": {
       "get": {
-        "description": "List recurring job templates, soonest next-occurrence first.",
+        "description": "List service plans, soonest next-occurrence first.",
         "operationId": "list_templates_api_v1_workspaces__workspace_id__recurring_jobs_get",
         "parameters": [
           {
@@ -67154,6 +67261,22 @@
                 }
               ],
               "title": "Is Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "plan_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ServicePlanType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan Type"
             }
           }
         ],
@@ -72106,7 +72229,7 @@
     },
     "/webhooks/calcom/booking": {
       "post": {
-        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nAll webhooks are signature-verified before processing.",
+        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nEvery delivery passes two gates before a single side effect runs:\nsignature verification, then the durable replay ledger. Both fail closed.",
         "operationId": "calcom_booking_webhook_webhooks_calcom_booking_post",
         "responses": {
           "200": {

@@ -1,10 +1,11 @@
-"""Workspace-scoped CRUD + schedule materialization for recurring job templates.
+"""Workspace-scoped CRUD + schedule materialization for service plans.
 
 Two responsibilities:
 
 1. **CRUD** (workspace-scoped, tenant-safe like :class:`app.services.jobs.JobService`):
-   create/list/get/update/delete templates, validating that the contact, site,
-   crew, and default technicians all belong to the caller's workspace.
+   create/list/get/update/delete plans, validating that the contact, site,
+   crew, and default technicians all belong to the caller's workspace, and that
+   a Care Plan tier is only attached to a ``lighting_care_plan`` plan.
 2. **Materialization**: turn a template's next occurrence into a concrete
    :class:`Job`. :meth:`materialize_due` is the global worker entrypoint (it
    scans every workspace's due templates); :meth:`run_template` lets an operator
@@ -41,8 +42,13 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
-from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
+from app.models.recurring_job import (
+    RecurrenceFrequency,
+    RecurringJobTemplate,
+    ServicePlanType,
+)
 from app.schemas.recurring_job import RecurringJobTemplateResponse
+from app.services.exceptions import ValidationError
 
 logger = structlog.get_logger()
 
@@ -113,6 +119,19 @@ class RecurringJobService:
                     detail="Technician not found",
                 )
 
+    @staticmethod
+    def _assert_plan_shape(plan_type: str, care_plan_tier: str | None) -> None:
+        """A Care Plan tier only means something on a ``lighting_care_plan`` plan.
+
+        Rejecting the mismatch keeps the tier badge in the Service Plans list
+        honest — a Christmas or maintenance plan can never display a Gold tier it
+        does not actually sell.
+        """
+        if care_plan_tier and plan_type != ServicePlanType.LIGHTING_CARE_PLAN:
+            raise ValidationError(
+                "care_plan_tier is only valid on a lighting_care_plan service plan"
+            )
+
     # ------------------------------------------------------------------ #
     # Queries
     # ------------------------------------------------------------------ #
@@ -130,11 +149,17 @@ class RecurringJobService:
         )
 
     async def list(
-        self, workspace_id: uuid.UUID, *, is_active: bool | None = None
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        is_active: bool | None = None,
+        plan_type: ServicePlanType | None = None,
     ) -> dict[str, Any]:
         criteria: list[Any] = []
         if is_active is not None:
             criteria.append(RecurringJobTemplate.is_active.is_(is_active))
+        if plan_type is not None:
+            criteria.append(RecurringJobTemplate.plan_type == str(plan_type))
         query = select_workspace_owned(RecurringJobTemplate, workspace_id, *criteria).order_by(
             RecurringJobTemplate.next_run_at.asc()
         )
@@ -154,10 +179,13 @@ class RecurringJobService:
     ) -> RecurringJobTemplateResponse:
         await self._assert_contact(data["contact_id"], workspace_id)
         await self._validate_refs(workspace_id, data)
+        plan_type = str(data.pop("plan_type", None) or ServicePlanType.MAINTENANCE)
+        self._assert_plan_shape(plan_type, data.get("care_plan_tier"))
 
         template = RecurringJobTemplate(
             workspace_id=workspace_id,
             frequency=str(data.pop("frequency")),
+            plan_type=plan_type,
             created_by_id=created_by_id,
             **data,
         )
@@ -174,6 +202,16 @@ class RecurringJobService:
         await self._validate_refs(workspace_id, data)
         if "frequency" in data and data["frequency"] is not None:
             data["frequency"] = str(data["frequency"])
+        if data.get("plan_type") is not None:
+            data["plan_type"] = str(data["plan_type"])
+        else:
+            data.pop("plan_type", None)
+        # Validate against the *merged* state: clearing the tier while switching
+        # plan type in one PATCH is legal, setting only one half of it is not.
+        self._assert_plan_shape(
+            data.get("plan_type", template.plan_type),
+            data.get("care_plan_tier", template.care_plan_tier),
+        )
         for key, value in data.items():
             setattr(template, key, value)
         await self.db.flush()

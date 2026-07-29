@@ -38,10 +38,14 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { contactsApi } from "@/lib/api/contacts";
-import { recurringJobsApi } from "@/lib/api/recurring-jobs";
+import { servicePlansApi } from "@/lib/api/service-plans";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type { RecurrenceFrequency, RecurringJobTemplate } from "@/types";
+import type {
+  RecurrenceFrequency,
+  ServicePlan,
+  ServicePlanType,
+} from "@/types";
 
 const FREQUENCIES: { value: RecurrenceFrequency; label: string }[] = [
   { value: "weekly", label: "Weekly" },
@@ -50,6 +54,38 @@ const FREQUENCIES: { value: RecurrenceFrequency; label: string }[] = [
   { value: "quarterly", label: "Quarterly" },
   { value: "yearly", label: "Yearly" },
 ];
+
+const PLAN_TYPES: { value: ServicePlanType; label: string }[] = [
+  { value: "lighting_care_plan", label: "Lighting Care Plan" },
+  { value: "christmas_lights", label: "Christmas lights" },
+  { value: "maintenance", label: "Maintenance contract" },
+];
+
+/**
+ * Sensible starting schedule per plan type, matching what the provisioner
+ * creates on signup: a quarterly care visit, a once-a-year seasonal visit, and
+ * the generic quarterly maintenance contract.
+ */
+const PLAN_TYPE_DEFAULTS: Record<
+  ServicePlanType,
+  { frequency: RecurrenceFrequency; duration_minutes: string; generate_days_ahead: string }
+> = {
+  lighting_care_plan: {
+    frequency: "quarterly",
+    duration_minutes: "90",
+    generate_days_ahead: "14",
+  },
+  christmas_lights: {
+    frequency: "yearly",
+    duration_minutes: "240",
+    generate_days_ahead: "30",
+  },
+  maintenance: {
+    frequency: "quarterly",
+    duration_minutes: "120",
+    generate_days_ahead: "14",
+  },
+};
 
 const intString = (min: number) =>
   z
@@ -62,6 +98,8 @@ const intString = (min: number) =>
 const schema = z.object({
   contact_id: z.string().min(1, { error: "Pick a customer" }),
   title: z.string().trim().min(1, { error: "Title is required" }),
+  plan_type: z.enum(["lighting_care_plan", "christmas_lights", "maintenance"]),
+  care_plan_tier: z.string(),
   frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "yearly"]),
   interval: intString(1),
   next_run_at: z.string().min(1, { error: "Pick a first date/time" }),
@@ -76,11 +114,13 @@ type FormValues = z.infer<typeof schema>;
 const DEFAULT_VALUES: FormValues = {
   contact_id: "",
   title: "",
-  frequency: "quarterly",
+  plan_type: "maintenance",
+  care_plan_tier: "",
+  frequency: PLAN_TYPE_DEFAULTS.maintenance.frequency,
   interval: "1",
   next_run_at: "",
-  duration_minutes: "120",
-  generate_days_ahead: "14",
+  duration_minutes: PLAN_TYPE_DEFAULTS.maintenance.duration_minutes,
+  generate_days_ahead: PLAN_TYPE_DEFAULTS.maintenance.generate_days_ahead,
   description: "",
   is_active: true,
 };
@@ -105,21 +145,21 @@ function contactLabel(c: {
   return name || c.email || `Contact #${c.id}`;
 }
 
-interface RecurringJobDialogProps {
+interface ServicePlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When present the dialog edits this template; otherwise it creates one. */
-  template?: RecurringJobTemplate | null;
+  /** When present the dialog edits this plan; otherwise it creates one. */
+  plan?: ServicePlan | null;
 }
 
-export function RecurringJobDialog({
+export function ServicePlanDialog({
   open,
   onOpenChange,
-  template,
-}: RecurringJobDialogProps) {
+  plan,
+}: ServicePlanDialogProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
-  const isEdit = Boolean(template);
+  const isEdit = Boolean(plan);
   const [contactSearch, setContactSearch] = useState("");
 
   const form = useForm<FormValues>({
@@ -144,29 +184,54 @@ export function RecurringJobDialog({
   useEffect(() => {
     if (!open) return;
     form.reset(
-      template
+      plan
         ? {
-            contact_id: String(template.contact_id),
-            title: template.title,
-            frequency: template.frequency,
-            interval: String(template.interval),
-            next_run_at: isoToLocalInput(template.next_run_at),
-            duration_minutes: String(template.duration_minutes),
-            generate_days_ahead: String(template.generate_days_ahead),
-            description: template.description ?? "",
-            is_active: template.is_active,
+            contact_id: String(plan.contact_id),
+            title: plan.title,
+            plan_type: plan.plan_type,
+            care_plan_tier: plan.care_plan_tier ?? "",
+            frequency: plan.frequency,
+            interval: String(plan.interval),
+            next_run_at: isoToLocalInput(plan.next_run_at),
+            duration_minutes: String(plan.duration_minutes),
+            generate_days_ahead: String(plan.generate_days_ahead),
+            description: plan.description ?? "",
+            is_active: plan.is_active,
           }
         : DEFAULT_VALUES
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, template]);
+  }, [open, plan]);
+
+  const planType = form.watch("plan_type");
+
+  /**
+   * Switching plan type re-seeds the schedule to that plan's shape. Only done
+   * when creating: silently rewriting an existing plan's cadence would move a
+   * client's visits out from under them.
+   */
+  const handlePlanTypeChange = (next: string) => {
+    const value = next as ServicePlanType;
+    form.setValue("plan_type", value, { shouldDirty: true });
+    if (value !== "lighting_care_plan") form.setValue("care_plan_tier", "");
+    if (isEdit) return;
+    const defaults = PLAN_TYPE_DEFAULTS[value];
+    form.setValue("frequency", defaults.frequency);
+    form.setValue("duration_minutes", defaults.duration_minutes);
+    form.setValue("generate_days_ahead", defaults.generate_days_ahead);
+  };
 
   const saveMutation = useMutation({
-    mutationFn: async (values: FormValues): Promise<RecurringJobTemplate> => {
+    mutationFn: async (values: FormValues): Promise<ServicePlan> => {
       if (!workspaceId) throw new Error("No workspace selected");
       const nextRunIso = new Date(values.next_run_at).toISOString();
+      const tier = values.care_plan_tier.trim();
       const common = {
         title: values.title.trim(),
+        plan_type: values.plan_type,
+        // Only a Care Plan carries a tier; the API rejects one anywhere else.
+        care_plan_tier:
+          values.plan_type === "lighting_care_plan" && tier ? tier : null,
         frequency: values.frequency,
         interval: Number(values.interval),
         duration_minutes: Number(values.duration_minutes),
@@ -175,10 +240,10 @@ export function RecurringJobDialog({
         description: values.description.trim() || undefined,
         is_active: values.is_active,
       };
-      if (template) {
-        return recurringJobsApi.update(workspaceId, template.id, common);
+      if (plan) {
+        return servicePlansApi.update(workspaceId, plan.id, common);
       }
-      return recurringJobsApi.create(workspaceId, {
+      return servicePlansApi.create(workspaceId, {
         ...common,
         contact_id: Number(values.contact_id),
       });
@@ -187,14 +252,14 @@ export function RecurringJobDialog({
       toast.success(isEdit ? `Updated ${saved.title}` : `Created ${saved.title}`);
       if (workspaceId) {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.recurringJobs.all(workspaceId),
+          queryKey: queryKeys.servicePlans.all(workspaceId),
         });
       }
       setContactSearch("");
       onOpenChange(false);
     },
     onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save recurring job")),
+      toast.error(getApiErrorMessage(err, "Failed to save service plan")),
   });
 
   const handleOpenChange = (next: boolean) => {
@@ -210,10 +275,11 @@ export function RecurringJobDialog({
       <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isEdit ? "Edit recurring job" : "New recurring job"}
+            {isEdit ? "Edit service plan" : "New service plan"}
           </DialogTitle>
           <DialogDescription>
-            Auto-generate a job on a schedule — the classic maintenance contract.
+            Put a client on recurring work. Each plan auto-generates its next
+            visit on the schedule.
           </DialogDescription>
         </DialogHeader>
 
@@ -271,12 +337,71 @@ export function RecurringJobDialog({
 
             <FormField
               control={form.control}
+              name="plan_type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Plan type</FormLabel>
+                  <Select
+                    onValueChange={handlePlanTypeChange}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {PLAN_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Care Plans and Christmas signups are normally created
+                    automatically when a client approves their proposal.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {planType === "lighting_care_plan" && (
+              <FormField
+                control={form.control}
+                name="care_plan_tier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Care Plan tier (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. gold" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      The tier key from your pricing config, shown as a badge on
+                      the plan.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <FormField
+              control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Quarterly HVAC service" {...field} />
+                    <Input
+                      placeholder={
+                        planType === "christmas_lights"
+                          ? "e.g. Christmas Lighting — Install"
+                          : "e.g. Quarterly HVAC service"
+                      }
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -328,7 +453,9 @@ export function RecurringJobDialog({
               name="next_run_at"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{isEdit ? "Next occurrence" : "First occurrence"}</FormLabel>
+                  <FormLabel>
+                    {isEdit ? "Next occurrence" : "First occurrence"}
+                  </FormLabel>
                   <FormControl>
                     <Input type="datetime-local" {...field} />
                   </FormControl>

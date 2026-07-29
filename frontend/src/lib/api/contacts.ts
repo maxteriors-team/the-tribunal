@@ -199,7 +199,7 @@ export const contactsApi = {
    * Fetch every contact in a workspace by paging through the list endpoint.
    *
    * `list` caps `page_size` at 100 server-side, so callers that need the full
-   * roster (e.g. resolving customer names for recurring-job templates) can't
+   * roster (e.g. resolving customer names for service plans) can't
    * grab everything in one request. This pages through instead: fetch page 1,
    * then fetch any remaining pages in parallel and concatenate their items.
    */

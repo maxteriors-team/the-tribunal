@@ -96,6 +96,7 @@ from app.services.quotes.proposal_pricing import (
     price_permanent,
 )
 from app.services.quotes.proposal_template import get_proposal_template
+from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 
 logger = structlog.get_logger()
 
@@ -830,6 +831,12 @@ class QuoteService:
         quote.status = "approved"
         quote.approved_at = datetime.now(UTC)
         await self._emit_lifecycle_event(quote, EVENT_QUOTE_APPROVED)
+        # Approval is the moment the client signed up, so their Care Plan or
+        # Christmas season becomes a Service Plan here, *inside* the approval
+        # transaction: a silently missing plan is lost recurring revenue, which
+        # makes it data rather than a best-effort side effect like the parts
+        # notification below. Re-approving a quote provisions nothing new.
+        await ServicePlanProvisioner(self.db).provision_from_quote(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))

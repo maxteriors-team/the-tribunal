@@ -16,6 +16,7 @@ the quote/invoice schemas; the server recomputes canonical totals with
 ``Numeric`` in :mod:`app.services.quotes.proposal_pricing`.
 """
 
+from calendar import monthrange
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -433,6 +434,14 @@ class ChristmasConfig(BaseModel):
     takedown_enabled: bool = True
     takedown_rate: float = Field(default=0.25, ge=0, le=1)  # of install subtotal
     storage_price: float = Field(default=0, ge=0)  # flat off-season storage fee
+    # Season anchors for the Service Plans a Christmas signup provisions: the
+    # yearly install and takedown plans start on these calendar days (the year
+    # is resolved at signup, always forward from the approval date). Defaults
+    # mirror a typical mid-November install / early-January takedown season.
+    season_install_month: int = Field(default=11, ge=1, le=12)
+    season_install_day: int = Field(default=15, ge=1, le=31)
+    season_takedown_month: int = Field(default=1, ge=1, le=12)
+    season_takedown_day: int = Field(default=8, ge=1, le=31)
     minimum: float = Field(default=0, ge=0)
     label: str = "Christmas Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
@@ -467,6 +476,25 @@ class ChristmasConfig(BaseModel):
             data = {k: v for k, v in data.items() if k not in legacy_keys}
             data["items"] = [i.model_dump() for i in legacy]
         return data
+
+    @model_validator(mode="after")
+    def _clamp_season_days(self) -> "ChristmasConfig":
+        """Clamp season anchor days to a day that exists in their month.
+
+        Day is capped at 31 per-field, so a month/day pair like ``(2, 31)`` is
+        individually valid but not a real date. Clamping (rather than raising)
+        keeps the lenient-read contract: a hand-edited blob still yields a
+        usable season anchor instead of 500ing every pricing read.
+        """
+        # 2001 is a non-leap year: February clamps to 28, the safe anchor for a
+        # yearly plan that must land on a real date every year.
+        self.season_install_day = min(
+            self.season_install_day, monthrange(2001, self.season_install_month)[1]
+        )
+        self.season_takedown_day = min(
+            self.season_takedown_day, monthrange(2001, self.season_takedown_month)[1]
+        )
+        return self
 
 
 # --------------------------------------------------------------------------- #

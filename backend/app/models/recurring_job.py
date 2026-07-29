@@ -1,4 +1,4 @@
-"""Recurring job templates (maintenance contracts).
+"""Service plans: the persisted record of what a client signed up for.
 
 A :class:`RecurringJobTemplate` describes a job that should repeat on a schedule
 — the classic "quarterly HVAC service" or "weekly lawn care" maintenance
@@ -13,10 +13,22 @@ idempotent per period: a job is created for a given occurrence exactly once.
 Generated jobs link back via ``Job.recurring_template_id`` for provenance and as
 a defensive duplicate guard.
 
-Frequency is stored as a short ``String`` (not a Postgres enum) so the schedule
-vocabulary can grow without a type migration — the allowed values are enforced by
-:class:`RecurrenceFrequency` at the schema/service boundary, mirroring the
-enum-free posture of the job-costing models.
+``plan_type`` is what makes this table a *Service Plan* rather than a bare
+schedule: it records which subscription the client bought.
+:class:`ServicePlanType.LIGHTING_CARE_PLAN` rows carry the tier the client picked
+on their proposal (``care_plan_tier``), and Christmas signups become a **pair**
+of :class:`ServicePlanType.CHRISTMAS_LIGHTS` rows (install and takedown) because
+those are genuinely different dispatchable jobs — different crew, duration, and
+checklist. Both are provisioned from the approved quote (``source_quote_id``) by
+:mod:`app.services.recurring_jobs.service_plan_provisioner`, and the partial
+unique index on ``(source_quote_id, plan_type, title)`` makes re-approving a
+quote a no-op instead of a double signup.
+
+Frequency and plan type are stored as short ``String`` columns (not Postgres
+enums) so the schedule/plan vocabulary can grow without a type migration — the
+allowed values are enforced by :class:`RecurrenceFrequency` and
+:class:`ServicePlanType` at the schema/service boundary, mirroring the enum-free
+posture of the job-costing models.
 """
 
 import uuid
@@ -32,6 +44,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -60,8 +73,23 @@ class RecurrenceFrequency(StrEnum):
     YEARLY = "yearly"
 
 
+class ServicePlanType(StrEnum):
+    """Which recurring service a client signed up for.
+
+    ``LIGHTING_CARE_PLAN`` is the landscape-lighting maintenance subscription
+    (the tier the client selected lives in ``care_plan_tier``).
+    ``CHRISTMAS_LIGHTS`` covers the seasonal holiday signup, which is stored as
+    an install plan plus a takedown plan. ``MAINTENANCE`` is the generic
+    hand-built contract every pre-existing row backfills to.
+    """
+
+    LIGHTING_CARE_PLAN = "lighting_care_plan"
+    CHRISTMAS_LIGHTS = "christmas_lights"
+    MAINTENANCE = "maintenance"
+
+
 class RecurringJobTemplate(Base):
-    """A maintenance-contract template that materializes jobs on a schedule."""
+    """A service plan: what a client signed up for, and how it materializes."""
 
     __tablename__ = "recurring_job_templates"
     __table_args__ = (
@@ -75,6 +103,25 @@ class RecurringJobTemplate(Base):
             "ix_recurring_job_templates_due",
             "is_active",
             "next_run_at",
+        ),
+        # Backs the Service Plans list filtered by plan type.
+        Index(
+            "ix_recurring_job_templates_workspace_plan_type",
+            "workspace_id",
+            "plan_type",
+        ),
+        # Authoritative guard against double-provisioning: approving the same
+        # quote twice (operator retry, client double-click on the public page)
+        # must not sign the client up twice. ``title`` is part of the key because
+        # a Christmas signup provisions an install *and* a takedown plan that
+        # share both the quote and the plan type.
+        Index(
+            "uq_recurring_job_templates_source_quote_plan",
+            "source_quote_id",
+            "plan_type",
+            "title",
+            unique=True,
+            postgresql_where=text("source_quote_id IS NOT NULL"),
         ),
     )
 
@@ -104,6 +151,26 @@ class RecurringJobTemplate(Base):
         ForeignKey("crews.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+
+    # Which subscription this plan represents. Validated against
+    # ``ServicePlanType`` at the schema boundary; rows predating service plans
+    # backfill to ``maintenance`` via the server default.
+    plan_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ServicePlanType.MAINTENANCE,
+        server_default="maintenance",
+    )
+    # Care Plan tier the client picked (``ProposalCarePlan.selected``), for
+    # ``lighting_care_plan`` plans only.
+    care_plan_tier: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The approved quote this plan was provisioned from. SET NULL keeps the
+    # client's plan alive if the quote is ever deleted.
+    source_quote_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quotes.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     # Copied onto each generated job.
@@ -165,5 +232,6 @@ class RecurringJobTemplate(Base):
     def __repr__(self) -> str:
         return (
             f"<RecurringJobTemplate(id={self.id}, title={self.title}, "
-            f"frequency={self.frequency}, next_run_at={self.next_run_at})>"
+            f"plan_type={self.plan_type}, frequency={self.frequency}, "
+            f"next_run_at={self.next_run_at})>"
         )

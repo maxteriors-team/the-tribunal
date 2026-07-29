@@ -24,9 +24,14 @@ from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.field_service import Job, JobAssignment, JobStatus, Technician
-from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
+from app.models.recurring_job import (
+    RecurrenceFrequency,
+    RecurringJobTemplate,
+    ServicePlanType,
+)
 from app.models.workspace import Workspace
 from app.schemas.recurring_job import RecurringJobTemplateCreate
+from app.services.exceptions import ValidationError
 from app.services.recurring_jobs import RecurringJobService, advance_occurrence
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -306,3 +311,77 @@ async def test_cross_workspace_template_is_404() -> None:
             await svc.get(tpl.id, ws_b.id)
         with pytest.raises(HTTPException):
             await svc.run_template(tpl.id, ws_b.id)
+
+
+# --------------------------------------------------------------------------- #
+# Service plan type + Care Plan tier
+# --------------------------------------------------------------------------- #
+async def test_plans_default_to_maintenance_and_filter_by_type() -> None:
+    """The Service Plans tabs filter on ``plan_type``; hand-built plans are maintenance."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        svc = RecurringJobService(db)
+        start = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
+
+        hand_built = await svc.create(ws.id, _create_payload(contact.id, start))
+        assert hand_built.plan_type == ServicePlanType.MAINTENANCE
+        assert hand_built.care_plan_tier is None
+        assert hand_built.source_quote_id is None
+
+        await svc.create(
+            ws.id,
+            _create_payload(
+                contact.id,
+                start,
+                title="Care Plan — Gold",
+                plan_type=ServicePlanType.LIGHTING_CARE_PLAN,
+                care_plan_tier="gold",
+            ),
+        )
+
+        assert (await svc.list(ws.id))["total"] == 2
+        care = await svc.list(ws.id, plan_type=ServicePlanType.LIGHTING_CARE_PLAN)
+        assert care["total"] == 1
+        assert care["items"][0].care_plan_tier == "gold"
+        assert (await svc.list(ws.id, plan_type=ServicePlanType.CHRISTMAS_LIGHTS))["total"] == 0
+
+
+async def test_care_plan_tier_is_rejected_on_a_non_care_plan() -> None:
+    """A Christmas or maintenance plan can never display a tier it doesn't sell."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        svc = RecurringJobService(db)
+        start = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
+
+        with pytest.raises(ValidationError):
+            await svc.create(
+                ws.id,
+                _create_payload(
+                    contact.id,
+                    start,
+                    plan_type=ServicePlanType.CHRISTMAS_LIGHTS,
+                    care_plan_tier="gold",
+                ),
+            )
+
+        care = await svc.create(
+            ws.id,
+            _create_payload(
+                contact.id,
+                start,
+                plan_type=ServicePlanType.LIGHTING_CARE_PLAN,
+                care_plan_tier="gold",
+            ),
+        )
+        # Switching a care plan to another service must drop the tier with it.
+        with pytest.raises(ValidationError):
+            await svc.update(care.id, ws.id, {"plan_type": ServicePlanType.MAINTENANCE})
+        switched = await svc.update(
+            care.id,
+            ws.id,
+            {"plan_type": ServicePlanType.MAINTENANCE, "care_plan_tier": None},
+        )
+        assert switched.plan_type == ServicePlanType.MAINTENANCE
+        assert switched.care_plan_tier is None
