@@ -55,6 +55,7 @@ from app.workers.reminder_worker import _registry as reminder_registry
 from app.workers.reputation_worker import _registry as reputation_registry
 from app.workers.review_request_worker import _registry as review_request_registry
 from app.workers.transcript_analysis_worker import _registry as transcript_analysis_registry
+from app.workers.unsold_quote_worker import _registry as unsold_quote_registry
 from app.workers.voice_campaign_worker import _registry as voice_campaign_registry
 from app.workers.web_people_discovery_worker import (
     _registry as web_people_discovery_registry,
@@ -278,6 +279,13 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="outbound_auto_draft_worker",
         registry=outbound_auto_draft_registry,
         dependencies=("postgres",),
+    ),
+    # Per-workspace opt-in lives in workspace settings (unsold_quotes.enabled,
+    # default off); the worker itself is always started and cheap when idle.
+    WorkerSpec(
+        name="unsold_quote_worker",
+        registry=unsold_quote_registry,
+        dependencies=("postgres", "text_message_provider"),
     ),
     # Appended at the very end on purpose: startup order is pinned by
     # tests/workers/test_registry_specs.py, so inserting a spec mid-tuple

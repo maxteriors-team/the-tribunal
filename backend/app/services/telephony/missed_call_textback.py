@@ -33,9 +33,8 @@ import contextlib
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, time
+from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 from sqlalchemy import select
@@ -48,6 +47,7 @@ from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
 from app.services.ai.opt_out_detector import has_potential_opt_out_keywords
 from app.services.automations.events import EVENT_MISSED_CALL, emit_automation_event
+from app.services.compliance.quiet_hours import is_within_quiet_hours as _in_quiet_window
 from app.services.outbound.delivery import (
     OutboundDeliveryChannel,
     OutboundDeliveryRequest,
@@ -102,47 +102,19 @@ def get_missed_call_textback_settings(workspace: Workspace) -> MissedCallTextbac
     )
 
 
-def _parse_clock(value: str | None) -> time | None:
-    """Parse an ``HH:MM`` (or ``HH:MM:SS``) string into a :class:`time`."""
-    if not value:
-        return None
-    try:
-        parts = [int(p) for p in str(value).split(":")]
-    except ValueError:
-        return None
-    if not parts:
-        return None
-    hour = parts[0]
-    minute = parts[1] if len(parts) > 1 else 0
-    second = parts[2] if len(parts) > 2 else 0
-    if not (0 <= hour < 24 and 0 <= minute < 60 and 0 <= second < 60):
-        return None
-    return time(hour, minute, second)
-
-
 def is_within_quiet_hours(
     config: MissedCallTextbackSettings,
     workspace: Workspace,
     now: datetime | None = None,
 ) -> bool:
     """Return True when ``now`` falls inside the workspace quiet-hours window."""
-    start = _parse_clock(config.quiet_hours_start)
-    end = _parse_clock(config.quiet_hours_end)
-    if start is None or end is None:
-        return False
-
     timezone_name = config.timezone or (workspace.settings or {}).get("timezone") or "UTC"
-    reference = now or datetime.now(UTC)
-    try:
-        local_now = reference.astimezone(ZoneInfo(timezone_name))
-    except ZoneInfoNotFoundError:
-        local_now = reference.astimezone(ZoneInfo("UTC"))
-
-    local_time = local_now.time()
-    if start <= end:
-        return start <= local_time < end
-    # Window wraps past midnight (e.g. 21:00 -> 08:00).
-    return local_time >= start or local_time < end
+    return _in_quiet_window(
+        config.quiet_hours_start,
+        config.quiet_hours_end,
+        timezone_name=timezone_name,
+        now=now,
+    )
 
 
 def render_textback_template(template: str, contact: Contact | None) -> str:
