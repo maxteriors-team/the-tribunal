@@ -32,7 +32,8 @@ interface ClientProposalViewProps {
   justDeclined: boolean;
   busy: boolean;
   actionError: boolean;
-  onApprove: () => void;
+  /** Accepts the proposal at the package key the client chose. */
+  onApprove: (selectedTier: string | null) => void;
   onDecline: (reason: string) => void;
 }
 
@@ -53,6 +54,54 @@ export function ClientProposalView({
   const [term, setTerm] = useState<number>(financing?.default_term ?? 24);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+
+  // Packages the client may pick between, priced server-side. One package is
+  // not a choice, so the cards stay presentational in that case.
+  const packages = useMemo(() => data.packages ?? [], [data.packages]);
+  const choosable = packages.length > 1 && !data.is_decided;
+  const packagesByKey = useMemo(
+    () => new Map(packages.map((p) => [p.key, p])),
+    [packages],
+  );
+  // Starts on the rep's recommendation and follows the client from there.
+  const [chosenTier, setChosenTier] = useState<string | null>(null);
+  const selectedTier = chosenTier ?? doc.selected_tier ?? null;
+  const chosenPackage = selectedTier
+    ? (packagesByKey.get(selectedTier) ?? null)
+    : null;
+
+  const onChoose = (key: string) => {
+    if (!choosable) return;
+    setChosenTier(key);
+  };
+
+  // Roving-focus arrow keys, per the ARIA radiogroup pattern.
+  const onCardKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    key: string,
+  ) => {
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      onChoose(key);
+      return;
+    }
+    const step =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const at = packages.findIndex((p) => p.key === key);
+    const next = packages[(at + step + packages.length) % packages.length];
+    if (!next) return;
+    onChoose(next.key);
+    const card = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+      `.pkg-card.${CSS.escape(next.key)}`,
+    );
+    card?.focus();
+  };
 
   const first = doc.client?.first_name?.trim() || "";
   const last = doc.client?.last_name?.trim() || "";
@@ -109,6 +158,17 @@ export function ClientProposalView({
   const contactLine = [branding.business_phone, branding.business_email]
     .filter(Boolean)
     .join(" \u00b7 ");
+
+  // The accept button names what's being accepted and what it costs today, so
+  // the last click is never ambiguous about which package was bought.
+  const chosenLabel = choosable
+    ? (chosenPackage?.name ?? chosenPackage?.label ?? null)
+    : null;
+  const ctaDeposit = choosable
+    ? (chosenPackage?.deposit_amount ?? null)
+    : data.deposit_required
+      ? (data.deposit_amount ?? null)
+      : null;
 
   return (
     <div className={`proposal-view ${proposalFontVars}`}>
@@ -206,17 +266,41 @@ export function ClientProposalView({
         ) : null}
 
         {hasTiers ? (
-          <div className="pkg-grid">
+          <div
+            className="pkg-grid"
+            role={choosable ? "radiogroup" : undefined}
+            aria-label={choosable ? "Choose your package" : undefined}
+            // Columns follow the package count: a two-package quote must not
+            // leave a dead third column beside the cards.
+            style={
+              {
+                "--pkg-count": doc.tiers.length,
+              } as React.CSSProperties
+            }
+          >
             {doc.tiers.map((tier) => {
               const hasValue = tier.pricing.base > 0;
-              const lead = hasValue
-                ? fmt(tier.pricing.financed_total)
-                : "Custom Quote";
-              const isSelected = hasValue && tier.key === doc.selected_tier;
+              const offer = packagesByKey.get(tier.key);
+              // Priced from the server per package, so the card shows the
+              // all-in total the client actually pays for that package — not
+              // the tier's own subtotal.
+              const lead = offer
+                ? fmt(offer.total)
+                : hasValue
+                  ? fmt(tier.pricing.financed_total)
+                  : "Custom Quote";
+              const isSelected = hasValue && tier.key === selectedTier;
+              const isChoice = choosable && Boolean(offer);
+              const dueToday = offer?.deposit_amount ?? null;
               return (
                 <div
-                  className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}`}
+                  className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}${isChoice ? " pp-choosable" : ""}`}
                   key={tier.key}
+                  role={isChoice ? "radio" : undefined}
+                  aria-checked={isChoice ? isSelected : undefined}
+                  tabIndex={isChoice ? (isSelected ? 0 : -1) : undefined}
+                  onClick={isChoice ? () => onChoose(tier.key) : undefined}
+                  onKeyDown={isChoice ? (e) => onCardKeyDown(e, tier.key) : undefined}
                 >
                   {tier.popular ? (
                     <div className="pkg-popular-bar">&#9670; Most Popular</div>
@@ -234,7 +318,11 @@ export function ClientProposalView({
                     <div className="pkg-price-wrap">
                       <div className="pkg-price">{lead}</div>
                       <div className="pkg-price-label">{priceLabel}</div>
-                      {hasValue && tier.pricing.monthly_payment > 0 ? (
+                      {dueToday && dueToday > 0 ? (
+                        <div className="pkg-monthly">
+                          {`${fmt(dueToday)} due today to start`}
+                        </div>
+                      ) : hasValue && tier.pricing.monthly_payment > 0 ? (
                         <div className="pkg-monthly">
                           Financing options shown below
                         </div>
@@ -257,13 +345,21 @@ export function ClientProposalView({
                   </div>
                   {isSelected ? (
                     <div className="pkg-selected-bar">
-                      &#9733; Your Selected Package
+                      &#9733; {choosable ? "Your Choice" : "Your Selected Package"}
                     </div>
+                  ) : isChoice ? (
+                    <div className="pkg-choose-bar">Choose this package</div>
                   ) : null}
                 </div>
               );
             })}
           </div>
+        ) : null}
+        {choosable && !decided ? (
+          <p className="pkg-grid-hint">
+            Tap a package to choose it. You can change your mind right up until
+            you accept.
+          </p>
         ) : null}
 
         {doc.additional_charges.length ? (
@@ -633,7 +729,16 @@ export function ClientProposalView({
           </div>
         ) : null}
 
-        <DepositPanel data={data} />
+        {/* While a package is still up for grabs, the deposit is whatever the
+            client's current choice costs, and paying goes through accept so
+            they're never charged for a package they didn't pick. */}
+        <DepositPanel
+          data={data}
+          amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
+          onPayInstead={choosable ? () => onApprove(selectedTier) : undefined}
+          payLabel={choosable ? "Accept & Pay Deposit" : undefined}
+          busy={busy}
+        />
 
         <div className="cta-section no-print">
           {decided ? (
@@ -703,14 +808,19 @@ export function ClientProposalView({
                   type="button"
                   className="cta-btn-primary"
                   disabled={busy}
-                  onClick={onApprove}
+                  onClick={() => onApprove(selectedTier)}
                 >
                   {busy ? (
                     "Approving…"
-                  ) : data.deposit_required ? (
-                    <>&#10003;&nbsp; Approve &amp; Pay Deposit</>
                   ) : (
-                    <>&#10003;&nbsp; Approve Proposal</>
+                    <>
+                      &#10003;&nbsp;
+                      {ctaDeposit && ctaDeposit > 0
+                        ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} \u0026 Pay ${fmt(ctaDeposit)}`
+                        : chosenLabel
+                          ? `Accept ${chosenLabel}`
+                          : "Approve Proposal"}
+                    </>
                   )}
                 </button>
                 <button

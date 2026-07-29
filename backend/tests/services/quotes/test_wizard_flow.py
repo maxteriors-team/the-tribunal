@@ -27,6 +27,7 @@ from app.schemas.proposal_wizard import (
     WizardCharge,
     WizardChristmasSelection,
     WizardClient,
+    WizardDepositSelection,
     WizardFixtureQty,
     WizardPermanentSelection,
 )
@@ -512,7 +513,6 @@ async def test_deliver_quote_validates_missing_destination_and_channel() -> None
 async def test_wizard_deposit_persists_and_shows_in_document() -> None:
     """A rep-set wizard deposit is priced into the document (on the financed
     total) and persisted onto the saved quote."""
-    from app.schemas.proposal_wizard import WizardDepositSelection
 
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
@@ -567,3 +567,135 @@ async def test_wizard_links_contact_and_converts_to_scheduled_job() -> None:
         # Re-quoting the same phone reuses the contact rather than duplicating it.
         again = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         assert again.contact_id == saved.contact_id
+
+
+# --------------------------------------------------------------------------- #
+# The client picks their own package on the public page, then pays for it.
+# --------------------------------------------------------------------------- #
+async def _sent_wizard_quote(
+    svc: QuoteService,
+    workspace_id: uuid.UUID,
+    *,
+    deposit: WizardDepositSelection | None = None,
+) -> str:
+    """Save + send a two-package wizard proposal, returning its share token."""
+    payload = _payload()
+    payload.deposit = deposit
+    saved = await svc.save_from_wizard(workspace_id, payload, created_by_id=None)
+    sent = await svc.mark_sent(workspace_id, uuid.UUID(str(saved.id)))
+    assert sent.public_token
+    return sent.public_token
+
+
+async def test_public_read_offers_every_package_with_its_own_deposit() -> None:
+    """The client page can only ask "which package?" if the server prices each
+    one — total *and* money due today, so no figure is computed in a browser."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(
+            svc, ws.id, deposit=WizardDepositSelection(mode="percentage", value=50)
+        )
+
+        public = await svc.get_public_proposal(token)
+        packages = {p.key: p for p in public.packages}
+        assert set(packages) == {"best", "good"}
+
+        # Each package total is its tier plus the charges/bistro that ride along
+        # with every package — the same recipe the quote's line items use.
+        assert packages["best"].total == 13692.0 + 3090.0
+        assert packages["best"].is_selected is True
+        assert packages["good"].is_selected is False
+        assert packages["good"].total < packages["best"].total
+
+        # Deposit is priced per package, not once off the rep's pick.
+        assert packages["best"].deposit_amount == round(packages["best"].total * 0.5, 2)
+        assert packages["good"].deposit_amount == round(packages["good"].total * 0.5, 2)
+
+
+async def test_client_package_choice_repoints_quote_lines_totals_and_deposit() -> None:
+    """Choosing the cheaper package on approve must move the money with it:
+    line items, quote total, snapshot, and the deposit Stripe will charge."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(
+            svc, ws.id, deposit=WizardDepositSelection(mode="percentage", value=50)
+        )
+
+        before = await svc.get_public_proposal(token)
+        good = next(p for p in before.packages if p.key == "good")
+
+        result = await svc.approve_public(token, selected_tier="good")
+        assert result.status == "approved"
+        assert result.deposit_required is True
+        assert result.deposit_amount == good.deposit_amount
+
+        after = await svc.get_public_proposal(token)
+        assert after.total == good.total
+        assert after.proposal_document["selected_tier"] == "good"
+        # Lines describe the chosen package's fixtures, not the rep's.
+        names = [li.name for li in after.line_items]
+        assert names == [
+            "EX 150W Transformer",
+            "EVO Accent Uplight",
+            "Core drilling",
+            "Color Changing Bistro Lights",
+        ]
+        assert after.deposit_amount == good.deposit_amount
+
+
+async def test_client_cannot_invent_a_package() -> None:
+    """Only a real, priced package on this proposal is sellable — anything else
+    is rejected rather than silently approving at the rep's price."""
+    from app.services.exceptions import ValidationError
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(svc, ws.id)
+
+        with pytest.raises(ValidationError):
+            await svc.approve_public(token, selected_tier="platinum")
+
+        # The proposal is untouched and still acceptable.
+        public = await svc.get_public_proposal(token)
+        assert public.status == "sent"
+        assert public.proposal_document["selected_tier"] == "best"
+
+
+async def test_package_switch_is_refused_after_the_quote_is_decided() -> None:
+    """An approved quote is a signed agreement; a late package switch must not
+    rewrite what was already accepted."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(svc, ws.id)
+
+        await svc.approve_public(token, selected_tier="good")
+        approved = await svc.get_public_proposal(token)
+        assert approved.proposal_document["selected_tier"] == "good"
+
+        # Re-approving with a different package is idempotent, not a rewrite.
+        await svc.approve_public(token, selected_tier="best")
+        again = await svc.get_public_proposal(token)
+        assert again.proposal_document["selected_tier"] == "good"
+        assert again.total == approved.total
+
+
+async def test_single_package_proposal_offers_no_choice() -> None:
+    """One priced package is not a choice — the page shouldn't stage one."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        # Drop the "good" tier's quantities so only "best" carries a price.
+        payload.quantities = [
+            WizardFixtureQty(item_id="tx-luxor", quantity=1),
+            WizardFixtureQty(item_id="up-zdc", quantity=12),
+        ]
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+
+        public = await svc.get_public_proposal(sent.public_token)
+        assert public.packages == []

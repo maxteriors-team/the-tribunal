@@ -99,6 +99,27 @@ class PublicProposalBranding(BaseModel):
     footer: str | None = None
 
 
+class PublicProposalPackage(BaseModel):
+    """One package the client can choose and buy, priced by the server.
+
+    Every figure here is derived server-side from the saved proposal snapshot so
+    the page can show "this is the total, this is due today" per package without
+    the browser doing money math. The client only ever sends ``key`` back.
+    """
+
+    key: str
+    label: str
+    name: str | None = None
+    # All-in total for this package: its own lines plus the charges, bistro, and
+    # category lines that ride along with every package on this quote.
+    total: float
+    # Deposit owed today if this package is accepted; null when none is due.
+    deposit_amount: float | None = None
+    # The package the quote currently sits on (the rep's pick until the client
+    # chooses otherwise).
+    is_selected: bool = False
+
+
 class PublicProposal(BaseModel):
     """Read-only proposal payload for the client-facing page.
 
@@ -133,6 +154,10 @@ class PublicProposal(BaseModel):
     deposit_paid: bool = False
     # True when a deposit is owed and not yet paid (drives the client CTA).
     deposit_required: bool = False
+    # Packages the client may choose between before accepting. Empty for plain
+    # quotes and for any proposal that offers a single priced package — there is
+    # nothing to choose, so the page shouldn't ask.
+    packages: list[PublicProposalPackage] = Field(default_factory=list)
     line_items: list[PublicProposalLineItem] = Field(default_factory=list)
     # Rich multi-tier presentation snapshot built by the sales wizard. When set,
     # the public page renders the Good/Better/Best tiers, financing, Care Plan,
@@ -145,6 +170,17 @@ class PublicProposalDecline(BaseModel):
     """Optional decline reason from the client."""
 
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class PublicProposalApprove(BaseModel):
+    """The client's acceptance, optionally naming the package they picked.
+
+    Only the package *key* crosses the wire: the server re-derives the lines and
+    totals from the saved snapshot, so a client can never talk their own price
+    down. Omitting it accepts the package the quote already sits on.
+    """
+
+    selected_tier: str | None = Field(default=None, max_length=60)
 
 
 class PublicProposalActionResult(BaseModel):

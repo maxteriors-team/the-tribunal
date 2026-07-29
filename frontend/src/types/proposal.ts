@@ -27,6 +27,23 @@ export type PublicProposalStatus =
   | "declined"
   | "expired";
 
+/**
+ * One package the client can choose between before accepting. Every figure is
+ * priced by the server from the saved snapshot — the page renders them, it
+ * never computes them.
+ */
+export interface PublicProposalPackage {
+  key: string;
+  label: string;
+  name?: string | null;
+  /** All-in total for this package, including charges that ride along. */
+  total: number;
+  /** Money due today if this package is accepted; null when none is due. */
+  deposit_amount?: number | null;
+  /** The package the quote currently sits on (the rep's pick). */
+  is_selected: boolean;
+}
+
 export interface PublicProposal {
   token: string;
   number: string;
@@ -51,6 +68,11 @@ export interface PublicProposal {
   deposit_paid: boolean;
   /** True when a deposit is owed and not yet paid (drives the client CTA). */
   deposit_required?: boolean;
+  /**
+   * Packages the client may pick between. Empty when there's nothing to choose
+   * (a plain quote, or a proposal offering a single priced package).
+   */
+  packages?: PublicProposalPackage[];
   line_items: PublicProposalLineItem[];
   branding: PublicProposalBranding;
   /** Sales-wizard snapshot (multi-tier presentation); null for plain quotes. */

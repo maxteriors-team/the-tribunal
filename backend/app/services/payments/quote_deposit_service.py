@@ -58,14 +58,15 @@ def resolve_deposit(mode: str, value: float, total: float) -> float:
     return round(total * value / 100, 2)
 
 
-def deposit_amount(quote: Quote) -> float | None:
-    """Return the derived deposit amount (major units), or None when not set.
+def deposit_for_total(quote: Quote, total: float) -> float | None:
+    """Deposit owed on ``total`` under this quote's deposit terms, or None.
 
-    A fixed amount (``deposit_amount_fixed``) takes precedence over a percentage
-    and is clamped to the quote total so a deposit never exceeds what's owed.
-    Returns None when no deposit is requested or the amount resolves to zero.
+    Split out from :func:`deposit_amount` so the client proposal page can price
+    "due today" for *each* package it offers without re-implementing the rule:
+    a fixed amount (``deposit_amount_fixed``) takes precedence over a percentage
+    and is clamped so a deposit never exceeds what's owed. Returns None when no
+    deposit is requested or the amount resolves to zero.
     """
-    total = float(quote.total or 0)
     fixed = getattr(quote, "deposit_amount_fixed", None)
     if fixed is not None:
         amount = float(fixed)
@@ -78,6 +79,11 @@ def deposit_amount(quote: Quote) -> float | None:
     if pct <= 0:
         return None
     return round(total * pct / 100, 2)
+
+
+def deposit_amount(quote: Quote) -> float | None:
+    """Return the derived deposit amount (major units), or None when not set."""
+    return deposit_for_total(quote, float(quote.total or 0))
 
 
 async def create_deposit_checkout_session(
