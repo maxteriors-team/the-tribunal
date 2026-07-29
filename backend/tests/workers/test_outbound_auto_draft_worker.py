@@ -145,9 +145,7 @@ async def test_missing_offer_emits_nudge_instead_of_guessing() -> None:
         await worker._process_items()
 
         assert await _launch_actions(db, ws.id) == []
-        nudges = await db.execute(
-            select(HumanNudge).where(HumanNudge.workspace_id == ws.id)
-        )
+        nudges = await db.execute(select(HumanNudge).where(HumanNudge.workspace_id == ws.id))
         rows = list(nudges.scalars().all())
         assert len(rows) == 1
         assert rows[0].contact_id is None

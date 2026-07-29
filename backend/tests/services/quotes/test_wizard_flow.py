@@ -350,9 +350,7 @@ async def test_deliver_quote_emails_snapshot_client(monkeypatch) -> None:
         payload.client.email = "sarah@example.com"
         saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
 
-        result = await svc.deliver_quote(
-            ws.id, uuid.UUID(str(saved.id)), channel="email", to=None
-        )
+        result = await svc.deliver_quote(ws.id, uuid.UUID(str(saved.id)), channel="email", to=None)
 
         assert result.ok is True
         assert result.to == "sarah@example.com"

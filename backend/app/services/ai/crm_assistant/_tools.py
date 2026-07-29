@@ -7,30 +7,57 @@ Mirrors the prompt-hint style in ezcoder's tools/prompt-hints.ts.
 from copy import deepcopy
 from typing import Any
 
-from app.schemas.automation import AUTOMATION_TRIGGER_TYPES
-from app.services.ai.crm_assistant._tool_metadata import get_tool_policy
+from app.models.campaign import CampaignContactStatus, CampaignStatus, CampaignType
+from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_TRIGGER_TYPES
+from app.schemas.offer import DiscountType, GuaranteeType, UrgencyType
 
-CONFIRMED_PARAM = {
-    "type": "boolean",
-    "description": "True only after explicit user confirmation",
-}
+# ── Closed value sets ────────────────────────────────────────────────
+# These used to live only in prose descriptions, so the model guessed. The
+# worst case was `list_campaigns(status="active")` — not a real status —
+# returning `success: true, total: 0`, which the model reported as "you have
+# no active campaigns". An enum turns that guess into a hard schema error.
+CAMPAIGN_STATUSES = [status.value for status in CampaignStatus]
+CAMPAIGN_TYPES = [campaign_type.value for campaign_type in CampaignType]
+CAMPAIGN_CONTACT_STATUSES = [status.value for status in CampaignContactStatus]
+CHANNEL_MODES = ["voice", "text", "both"]
+VOICE_PROVIDERS = ["openai", "elevenlabs"]
+DISCOUNT_TYPES = [discount.value for discount in DiscountType]
+GUARANTEE_TYPES = [guarantee.value for guarantee in GuaranteeType]
+URGENCY_TYPES = [urgency.value for urgency in UrgencyType]
+CONTACT_STATUSES = ["new", "contacted", "qualified", "converted", "lost"]
+CONTACT_TAG_MATCH_MODES = ["any", "all", "none"]
 
 
-def _with_confirmation_property(tool: dict[str, Any]) -> dict[str, Any]:
-    """Add the confirmation parameter when tool metadata requires it."""
+def _harden_object_schema(schema: dict[str, Any]) -> None:
+    """Recursively forbid unknown keys on every closed object schema.
 
-    function = tool["function"]
-    if not get_tool_policy(function["name"]).requires_confirmation:
-        return tool
-    properties = function.setdefault("parameters", {}).setdefault("properties", {})
-    properties.setdefault("confirmed", CONFIRMED_PARAM)
-    return tool
+    Object schemas that omit ``properties`` entirely are intentionally open
+    (free-form ``trigger_config`` / action ``config`` payloads); locking those
+    down would forbid every key and break the tool outright. An *empty*
+    ``properties`` map is different — that is a no-argument tool, which should
+    reject every key.
+    """
+
+    if schema.get("type") == "object" and "properties" in schema:
+        schema.setdefault("additionalProperties", False)
+        for child in schema["properties"].values():
+            if isinstance(child, dict):
+                _harden_object_schema(child)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _harden_object_schema(items)
 
 
 def _apply_tool_policy_metadata(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return OpenAI tool definitions augmented from CRM tool metadata."""
+    """Return hardened copies of the OpenAI tool definitions."""
 
-    return [_with_confirmation_property(deepcopy(tool)) for tool in tools]
+    hardened: list[dict[str, Any]] = []
+    for tool in tools:
+        copied = deepcopy(tool)
+        parameters = copied["function"].setdefault("parameters", {})
+        _harden_object_schema(parameters)
+        hardened.append(copied)
+    return hardened
 
 
 CRM_TOOLS: list[dict[str, Any]] = [
@@ -39,7 +66,9 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "search_contacts",
             "description": (
-                "Search contacts by name, phone, email, or company, newest first. "
+                "Search contacts, newest first. Name and company match on partial "
+                "text; phone and email must be the complete value (any format) "
+                "because they are stored encrypted and only match exactly. "
                 "Returns dated status, qualification, engagement, source, "
                 "and appointment evidence. "
                 "Use an empty query to list the newest contacts."
@@ -75,6 +104,183 @@ CRM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_contact",
+            "description": (
+                "Get one contact by id with full profile, tags, notes, qualification, "
+                "and engagement fields. Set include_timeline to see recent messages/calls. "
+                "Use after an appointment, opportunity, or conversation returns a contact id."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer", "minimum": 1},
+                    "include_timeline": {
+                        "type": "boolean",
+                        "description": "Include recent messages and calls (default false)",
+                    },
+                    "timeline_limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Timeline rows when included (default 20)",
+                    },
+                },
+                "required": ["contact_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_contact",
+            "description": (
+                "Update fields on an existing contact. This edits the record in place; "
+                "never create a replacement contact. Use add_contact_note and "
+                "add_contact_tags for additive notes/tags."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer", "minimum": 1},
+                    "first_name": {"type": "string", "minLength": 1, "maxLength": 100},
+                    "last_name": {"type": "string", "maxLength": 100},
+                    "email": {"type": "string", "format": "email"},
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Complete phone number; E.164 preferred",
+                    },
+                    "company_name": {"type": "string", "maxLength": 255},
+                    "address_line1": {"type": "string", "maxLength": 255},
+                    "address_line2": {"type": "string", "maxLength": 255},
+                    "address_city": {"type": "string", "maxLength": 100},
+                    "address_state": {"type": "string", "maxLength": 50},
+                    "address_zip": {"type": "string", "maxLength": 20},
+                    "status": {"type": "string", "enum": CONTACT_STATUSES},
+                    "lead_score": {"type": "integer", "minimum": 0},
+                    "important_dates": {
+                        "type": "object",
+                        "description": "Birthday, anniversary, or named dates",
+                    },
+                },
+                "required": ["contact_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_contact_note",
+            "description": (
+                "Append a timestamped note to a contact without overwriting existing notes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer", "minimum": 1},
+                    "note": {"type": "string", "minLength": 1, "maxLength": 5000},
+                },
+                "required": ["contact_id", "note"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_contact_tags",
+            "description": (
+                "Idempotently add tags to one contact. Existing tags are preserved; "
+                "missing workspace tags are created."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer", "minimum": 1},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1, "maxLength": 100},
+                        "minItems": 1,
+                        "maxItems": 20,
+                    },
+                },
+                "required": ["contact_id", "tags"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_contacts",
+            "description": (
+                "Find contacts with structured filters: tags, lifecycle status, score, "
+                "qualification, source/company, created dates, or last-contacted dates. "
+                "Use search_contacts for name/phone/email text lookups. Returns truthful "
+                "returned/total/has_more counts."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filters": {
+                        "type": "object",
+                        "properties": {
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Workspace tag names, not ids",
+                            },
+                            "tags_match": {
+                                "type": "string",
+                                "enum": CONTACT_TAG_MATCH_MODES,
+                                "description": "Match any, all, or none of the tags",
+                            },
+                            "status": {"type": "string", "enum": CONTACT_STATUSES},
+                            "lead_score_min": {"type": "integer", "minimum": 0},
+                            "lead_score_max": {"type": "integer", "minimum": 0},
+                            "is_qualified": {"type": "boolean"},
+                            "source": {"type": "string"},
+                            "company_name": {"type": "string"},
+                            "created_after": {
+                                "type": "string",
+                                "description": "ISO date/datetime, inclusive",
+                            },
+                            "created_before": {
+                                "type": "string",
+                                "description": "ISO date/datetime, inclusive",
+                            },
+                            "last_engaged_before": {
+                                "type": "string",
+                                "description": "ISO date/datetime; finds stale contacts",
+                            },
+                            "last_engaged_after": {
+                                "type": "string",
+                                "description": "ISO date/datetime",
+                            },
+                            "not_contacted_days": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 3650,
+                                "description": "No engagement in this many days",
+                            },
+                            "include_never_contacted": {
+                                "type": "boolean",
+                                "description": "Include contacts with no engagement (default true)",
+                            },
+                            "enrichment_status": {"type": "string"},
+                        },
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Max rows returned (default 20)",
+                    },
+                },
+                "required": ["filters"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_campaigns",
             "description": "List campaigns. Filter by status if provided.",
             "parameters": {
@@ -82,12 +288,135 @@ CRM_TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "status": {
                         "type": "string",
-                        "description": (
-                            "draft | scheduled | running | paused | completed | canceled"
-                        ),
+                        "enum": CAMPAIGN_STATUSES,
+                        "description": "Filter to one campaign status",
                     },
                     "limit": {"type": "integer", "description": "Max results (default 10)"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_campaign",
+            "description": (
+                "Create a draft campaign without enrolling contacts or sending anything. "
+                "For SMS/voice, from_phone_number defaults to the workspace's first active "
+                "sender. Email campaigns require email_subject. Review the returned draft "
+                "before separately starting it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1, "maxLength": 255},
+                    "campaign_type": {"type": "string", "enum": CAMPAIGN_TYPES},
+                    "agent_id": {"type": "string", "format": "uuid"},
+                    "offer_id": {"type": "string", "format": "uuid"},
+                    "from_phone_number": {
+                        "type": "string",
+                        "description": (
+                            "Workspace-owned sender; omit to choose the first active sender"
+                        ),
+                    },
+                    "initial_message": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "SMS text or email body; supports {first_name}",
+                    },
+                    "email_subject": {"type": "string", "minLength": 1},
+                    "ai_enabled": {"type": "boolean"},
+                    "qualification_criteria": {"type": "string"},
+                    "scheduled_start": {"type": "string", "format": "date-time"},
+                    "sending_hours_start": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    },
+                    "sending_hours_end": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    },
+                    "sending_days": {
+                        "type": "array",
+                        "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                        "uniqueItems": True,
+                    },
+                    "timezone": {"type": "string"},
+                    "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "follow_up_enabled": {"type": "boolean"},
+                    "follow_up_delay_hours": {"type": "integer", "minimum": 1},
+                    "follow_up_message": {"type": "string"},
+                    "max_follow_ups": {"type": "integer", "minimum": 0, "maximum": 10},
+                    "guarantee_target": {"type": "integer", "minimum": 1},
+                    "guarantee_window_days": {"type": "integer", "minimum": 1},
+                },
+                "required": ["name", "campaign_type", "initial_message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_campaign",
+            "description": (
+                "Edit an existing draft or paused campaign in place, including its "
+                "initial_message before launch. Does not start or resume the campaign."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "campaign_id": {"type": "string", "format": "uuid"},
+                    "name": {"type": "string", "minLength": 1, "maxLength": 255},
+                    "agent_id": {"type": "string", "format": "uuid"},
+                    "offer_id": {"type": "string", "format": "uuid"},
+                    "from_phone_number": {"type": "string"},
+                    "initial_message": {"type": "string", "minLength": 1},
+                    "email_subject": {"type": "string", "minLength": 1},
+                    "ai_enabled": {"type": "boolean"},
+                    "qualification_criteria": {"type": "string"},
+                    "scheduled_start": {"type": "string", "format": "date-time"},
+                    "sending_hours_start": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    },
+                    "sending_hours_end": {
+                        "type": "string",
+                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                    },
+                    "sending_days": {
+                        "type": "array",
+                        "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                        "uniqueItems": True,
+                    },
+                    "timezone": {"type": "string"},
+                    "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "follow_up_enabled": {"type": "boolean"},
+                    "follow_up_delay_hours": {"type": "integer", "minimum": 1},
+                    "follow_up_message": {"type": "string"},
+                    "max_follow_ups": {"type": "integer", "minimum": 0, "maximum": 10},
+                    "guarantee_target": {"type": "integer", "minimum": 1},
+                    "guarantee_window_days": {"type": "integer", "minimum": 1},
+                },
+                "required": ["campaign_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_campaign_contacts",
+            "description": (
+                "List people enrolled in one campaign with contact ids, names, phone/email, "
+                "delivery/reply status, qualification, opt-out, and truthful total count."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "campaign_id": {"type": "string", "format": "uuid"},
+                    "status": {"type": "string", "enum": CAMPAIGN_CONTACT_STATUSES},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+                "required": ["campaign_id"],
             },
         },
     },
@@ -247,7 +576,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "type": {"type": "string"},
+                                "type": {"type": "string", "enum": list(AUTOMATION_ACTION_TYPES)},
                                 "config": {"type": "object"},
                             },
                             "required": ["type"],
@@ -345,8 +674,8 @@ CRM_TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "channel_mode": {"type": "string", "description": "voice | text | both"},
-                    "voice_provider": {"type": "string", "description": "openai | elevenlabs"},
+                    "channel_mode": {"type": "string", "enum": CHANNEL_MODES},
+                    "voice_provider": {"type": "string", "enum": VOICE_PROVIDERS},
                     "voice_id": {"type": "string"},
                     "language": {"type": "string"},
                     "system_prompt": {"type": "string"},
@@ -368,7 +697,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "agent_id": {"type": "string", "description": "Agent UUID"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "channel_mode": {"type": "string", "description": "voice | text | both"},
+                    "channel_mode": {"type": "string", "enum": CHANNEL_MODES},
                     "system_prompt": {"type": "string"},
                     "temperature": {"type": "number"},
                     "is_active": {"type": "boolean"},
@@ -510,10 +839,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
                 "properties": {
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "discount_type": {
-                        "type": "string",
-                        "description": "percentage | fixed | free_service",
-                    },
+                    "discount_type": {"type": "string", "enum": DISCOUNT_TYPES},
                     "discount_value": {"type": "number"},
                     "terms": {"type": "string"},
                     "headline": {"type": "string"},
@@ -521,16 +847,10 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "regular_price": {"type": "number"},
                     "offer_price": {"type": "number"},
                     "savings_amount": {"type": "number"},
-                    "guarantee_type": {
-                        "type": "string",
-                        "description": "money_back | satisfaction | results",
-                    },
+                    "guarantee_type": {"type": "string", "enum": GUARANTEE_TYPES},
                     "guarantee_days": {"type": "integer"},
                     "guarantee_text": {"type": "string"},
-                    "urgency_type": {
-                        "type": "string",
-                        "description": "limited_time | limited_quantity | expiring",
-                    },
+                    "urgency_type": {"type": "string", "enum": URGENCY_TYPES},
                     "urgency_text": {"type": "string"},
                     "scarcity_count": {"type": "integer"},
                     "value_stack_items": {
@@ -564,10 +884,7 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "offer_id": {"type": "string", "description": "Offer UUID"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
-                    "discount_type": {
-                        "type": "string",
-                        "description": "percentage | fixed | free_service",
-                    },
+                    "discount_type": {"type": "string", "enum": DISCOUNT_TYPES},
                     "discount_value": {"type": "number"},
                     "terms": {"type": "string"},
                     "is_active": {"type": "boolean"},
@@ -576,16 +893,10 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "regular_price": {"type": "number"},
                     "offer_price": {"type": "number"},
                     "savings_amount": {"type": "number"},
-                    "guarantee_type": {
-                        "type": "string",
-                        "description": "money_back | satisfaction | results",
-                    },
+                    "guarantee_type": {"type": "string", "enum": GUARANTEE_TYPES},
                     "guarantee_days": {"type": "integer"},
                     "guarantee_text": {"type": "string"},
-                    "urgency_type": {
-                        "type": "string",
-                        "description": "limited_time | limited_quantity | expiring",
-                    },
+                    "urgency_type": {"type": "string", "enum": URGENCY_TYPES},
                     "urgency_text": {"type": "string"},
                     "scarcity_count": {"type": "integer"},
                     "value_stack_items": {

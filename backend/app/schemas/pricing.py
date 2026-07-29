@@ -17,7 +17,8 @@ the quote/invoice schemas; the server recomputes canonical totals with
 """
 
 from calendar import monthrange
-from typing import Any, Literal
+from collections.abc import Mapping
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -528,6 +529,146 @@ class LandscapeConfig(BaseModel):
     perks: list[str] = Field(default_factory=_default_landscape_perks)
 
 
+# --------------------------------------------------------------------------- #
+# Service packages (Good / Better / Best for any service category)
+# --------------------------------------------------------------------------- #
+# How a category converts a measurement into money. ``per_unit`` bills the tier's
+# rate against the measured quantity (roofing squares, siding sq ft, gutter feet);
+# ``flat`` ignores the measurement and sells the tier at its base price.
+ServicePricingBasis = Literal["flat", "per_unit"]
+
+
+class ServiceInclusion(BaseModel):
+    """One scope item a service package may include (the non-seasonal analog of
+    :class:`SeasonalItem`).
+
+    A category declares its scope items once — "Ice & water shield", "Ridge
+    vent", "Gutter guards" — and each tier lists the ones it covers by ``key``.
+    That is what makes a tier ladder *inclusive by construction*: Better is Good
+    plus two more keys, so widening a tier is a config edit and the totals stay
+    monotonic without a second pricing path.
+    """
+
+    key: str = Field(min_length=1, max_length=60)
+    label: str
+    # Net price added to any tier that includes this item. Grossed up by the
+    # shared engine like every other price, never stored pre-grossed.
+    price: float = Field(default=0, ge=0)
+    # When True ``price`` is per measured unit rather than a flat add.
+    per_unit: bool = False
+
+
+class ServicePackage(BaseModel):
+    """One tier of a non-seasonal service category (roof, siding, gutters, …).
+
+    The category-agnostic sibling of :class:`ChristmasPackage`: same presentation
+    fields (so one set of cards renders either), different pricing inputs —
+    a measurement-driven ``per_unit_price`` plus a flat ``base_price`` instead of
+    a roofline flag and decor keys.
+
+    ``recommended`` is the tier the operator steers toward. Seasonal packages have
+    no such flag and fall back to "most inclusive wins"; declaring it here lets a
+    three-tier ladder anchor on its middle option, which is the whole point of
+    good/better/best.
+    """
+
+    key: str = Field(min_length=1, max_length=60)  # "good" | "better" | "best"
+    label: str
+    name: str | None = None
+    marker: str | None = None
+    card_tier: str | None = None
+    experience: str | None = None
+    warranty: str | None = None
+    points: list[str] = Field(default_factory=list)
+    value_tag: str | None = None
+    popular: bool = False
+    recommended: bool = False
+    # Net flat price for this tier (mobilization, permits, the base scope).
+    base_price: float = Field(default=0, ge=0)
+    # Net price per measured unit for this tier; ignored on a ``flat`` category.
+    per_unit_price: float = Field(default=0, ge=0)
+    # :class:`ServiceInclusion` keys this tier covers.
+    inclusion_keys: list[str] = Field(default_factory=list)
+
+
+def _default_service_packages() -> list[ServicePackage]:
+    """Three tiers with the middle one steered — the default for a new category.
+
+    Good / Better / Best with **Better flagged ``recommended``**: a three-tier
+    ladder anchored on a middle option is the lever this whole module exists to
+    give the core trades, and an operator who never opens the editor should still
+    get it. Copy is deliberately service-neutral (the category could be roofing,
+    siding, or gutters) and every price is 0 so a half-configured category can
+    never quote a number the operator did not type.
+    """
+    return [
+        ServicePackage(
+            key="good",
+            label="Good",
+            name="Essential",
+            marker="\u25cf",  # ●
+            card_tier="Good",
+            experience="The work done right, with the materials the job calls for.",
+            points=["Everything needed to complete the job", "Workmanship warranty"],
+        ),
+        ServicePackage(
+            key="better",
+            label="Better",
+            name="Preferred",
+            marker="\u25c6",  # ◆
+            card_tier="Better",
+            experience="The upgrades most homeowners choose — the ones that pay for themselves.",
+            points=["Everything in Essential", "Upgraded materials", "Extended warranty"],
+            popular=True,
+            recommended=True,
+        ),
+        ServicePackage(
+            key="best",
+            label="Best",
+            name="Premier",
+            marker="\u2605",  # ★
+            card_tier="Best",
+            experience="The complete job, nothing deferred to a future service call.",
+            points=["Everything in Preferred", "Top-tier materials", "Longest warranty offered"],
+        ),
+    ]
+
+
+class ServicePackageConfig(BaseModel):
+    """A service category sold as tiers — the non-seasonal package set.
+
+    One entry per ``service_category`` (matching
+    :attr:`app.models.catalog.CatalogItem.service_category`, e.g. ``"roof"``), so
+    the trades that pay the bills get the same good/better/best presentation the
+    seasonal lighting side already has. Everything the presentation layer needs
+    lives on the tiers; everything the engine needs — the measurement basis, the
+    shared scope catalog, and the job minimum — lives here.
+
+    Off by default and absent from every existing settings blob, so a workspace
+    that never configures a category behaves exactly as it does today.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    # Free-form like the catalog's own taxonomy: "roof", "siding", "Gutters".
+    service_category: str = Field(min_length=1, max_length=60)
+    label: str
+    enabled: bool = False
+    basis: ServicePricingBasis = "per_unit"
+    # What the measured quantity is called on the rep tool ("sq ft", "squares").
+    unit_label: str = "sq ft"
+    # Client-facing note under each price ("One-time install", "Per season", …).
+    price_note: str | None = None
+    minimum: float = Field(default=0, ge=0)
+    # Client-facing selling points for the category as a whole.
+    perks: list[str] = Field(default_factory=list)
+    # Shared scope catalog every tier draws its ``inclusion_keys`` from.
+    inclusions: list[ServiceInclusion] = Field(default_factory=list)
+    # Tier keys low→high; falls back to the declared ``packages`` order.
+    package_order: list[str] = Field(default_factory=list)
+    packages: list[ServicePackage] = Field(default_factory=_default_service_packages)
+
+
 class PricingSettings(BaseModel):
     """The full sales-pricing config for a workspace (read view, lenient).
 
@@ -551,6 +692,11 @@ class PricingSettings(BaseModel):
     landscape: LandscapeConfig = Field(default_factory=LandscapeConfig)
     permanent: PermanentConfig = Field(default_factory=PermanentConfig)
     christmas: ChristmasConfig = Field(default_factory=ChristmasConfig)
+    # Good/Better/Best ladders for the non-seasonal trades (roof, siding,
+    # gutters, …), one entry per ``service_category``. Empty by default: an
+    # existing settings blob has no such key, parses to ``[]``, and every
+    # seasonal/landscape flow behaves exactly as it did before this existed.
+    service_packages: list[ServicePackageConfig] = Field(default_factory=list)
     # Horizon (seasons) for the permanent-vs-temporary multi-year savings pitch.
     comparison_years: int = Field(default=5, ge=1, le=30)
     # Show the client a roofline-only cost comparison (permanent one-time install
@@ -679,6 +825,69 @@ class ChristmasPricing(BaseModel):
     lines: list[CategoryLine] = Field(default_factory=list)
 
 
+# --------------------------------------------------------------------------- #
+# The presentation contract every priced package satisfies
+# --------------------------------------------------------------------------- #
+@runtime_checkable
+class PackagePricing(Protocol):
+    """Structural type of a priced package, as the *presentation layer* sees it.
+
+    Everything a good/better/best card needs and nothing more. Seasonal
+    (:class:`ChristmasPackagePricing`) and non-seasonal
+    (:class:`ServicePackagePricing`) packages price through completely different
+    engines but present identically, so the public mapping in
+    :mod:`app.services.quotes.quote_service` is written once against this
+    protocol rather than once per trade.
+
+    Two members are deliberately *derived*, not raw fields:
+
+    * ``total`` is the single money figure a homeowner may see. The full pricing
+      breakdown behind it carries the measurement (``roofline_feet`` and
+      friends) and is not part of this contract — a card built from a
+      ``PackagePricing`` structurally cannot leak one.
+    * ``includes`` is the category-agnostic form of the ``includes_*`` flags
+      (seasonal: ``{"roofline": bool}``), so presentation can ask what a tier
+      covers without knowing which trade it belongs to.
+
+    Structural, not inherited: implementations stay plain Pydantic models whose
+    serialized shape (and therefore every saved link) is unaffected by this
+    protocol existing.
+    """
+
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def label(self) -> str: ...
+
+    @property
+    def name(self) -> str | None: ...
+
+    @property
+    def marker(self) -> str | None: ...
+
+    @property
+    def experience(self) -> str | None: ...
+
+    @property
+    def points(self) -> list[str]: ...
+
+    @property
+    def value_tag(self) -> str | None: ...
+
+    @property
+    def popular(self) -> bool: ...
+
+    @property
+    def recommended(self) -> bool: ...
+
+    @property
+    def total(self) -> float: ...
+
+    @property
+    def includes(self) -> Mapping[str, bool]: ...
+
+
 class ChristmasPackagePricing(BaseModel):
     """One priced seasonal-Christmas package (a tier card + its computed price).
 
@@ -686,6 +895,10 @@ class ChristmasPackagePricing(BaseModel):
     package's included categories (+ roofline when ``includes_roofline``), so the
     display lines and totals reuse the same engine as the à la carte flow. The
     copy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.
+
+    Implements :class:`PackagePricing` through the three derived members below.
+    They are properties, not fields, so ``model_dump()`` — and therefore every
+    already-shared seasonal link — is byte-for-byte what it was before.
     """
 
     key: str
@@ -698,6 +911,84 @@ class ChristmasPackagePricing(BaseModel):
     popular: bool = False
     includes_roofline: bool = False
     pricing: ChristmasPricing
+
+    @property
+    def total(self) -> float:
+        """The one figure that may cross to the homeowner (never the breakdown)."""
+        return self.pricing.total
+
+    @property
+    def recommended(self) -> bool:
+        """Seasonal tiers never self-declare; the resolver steers to the most
+        inclusive one instead. Kept constant so the seasonal highlight is exactly
+        what it has always been."""
+        return False
+
+    @property
+    def includes(self) -> Mapping[str, bool]:
+        """Seasonal coverage in category-agnostic form."""
+        return {"roofline": self.includes_roofline}
+
+
+class ServiceInclusionCost(BaseModel):
+    """Grossed cost of one scope item inside a computed service price."""
+
+    key: str  # matches the ServiceInclusion key ("ice_shield", "ridge_vent", …)
+    label: str
+    cost: float
+
+
+class ServicePricing(BaseModel):
+    """Computed price + component breakdown for one service tier.
+
+    The non-seasonal counterpart of :class:`ChristmasPricing`: ``lines`` is the
+    authoritative display breakdown that sums to ``raw_total``, ``total`` applies
+    the category's job minimum, and ``units`` is the measurement — internal, the
+    same way ``roofline_feet`` is.
+    """
+
+    units: float
+    unit_label: str
+    base_cost: float
+    units_cost: float
+    inclusions: list[ServiceInclusionCost] = Field(default_factory=list)
+    minimum: float
+    raw_total: float
+    total: float
+    min_applied: bool
+    lines: list[CategoryLine] = Field(default_factory=list)
+
+
+class ServicePackagePricing(BaseModel):
+    """One priced service tier (a card + its computed price).
+
+    Implements :class:`PackagePricing`, so it renders through the exact same
+    public mapping and the exact same cards as a seasonal package — that
+    equivalence is the point of this module's refactor.
+    """
+
+    key: str
+    label: str
+    name: str | None = None
+    marker: str | None = None
+    experience: str | None = None
+    points: list[str] = Field(default_factory=list)
+    value_tag: str | None = None
+    popular: bool = False
+    recommended: bool = False
+    service_category: str
+    inclusion_keys: list[str] = Field(default_factory=list)
+    pricing: ServicePricing
+
+    @property
+    def total(self) -> float:
+        """The one figure that may cross to the homeowner (never the breakdown)."""
+        return self.pricing.total
+
+    @property
+    def includes(self) -> Mapping[str, bool]:
+        """Which scope items this tier covers, keyed by inclusion key."""
+        return dict.fromkeys(self.inclusion_keys, True)
 
 
 class PricingSettingsUpdate(BaseModel):
@@ -721,5 +1012,6 @@ class PricingSettingsUpdate(BaseModel):
     landscape: LandscapeConfig | None = None
     permanent: PermanentConfig | None = None
     christmas: ChristmasConfig | None = None
+    service_packages: list[ServicePackageConfig] | None = None
     comparison_years: int | None = Field(default=None, ge=1, le=30)
     roofline_comparison_enabled: bool | None = None

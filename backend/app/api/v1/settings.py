@@ -6,6 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.attach_rules import (
+    AttachRulesSettings,
+    AttachRulesSettingsUpdate,
+)
 from app.schemas.pricing import (
     PricingSettings,
     PricingSettingsUpdate,
@@ -21,6 +25,10 @@ from app.schemas.speed_to_lead import (
     SpeedToLeadSettingsResponse,
     SpeedToLeadSettingsUpdate,
 )
+from app.schemas.unsold_quotes import (
+    UnsoldQuoteSettings,
+    UnsoldQuoteSettingsUpdate,
+)
 from app.schemas.user import (
     BusinessHoursSettings,
     BusinessHoursUpdate,
@@ -34,6 +42,12 @@ from app.schemas.user import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.quotes.attach_rules_config import (
+    SETTINGS_KEY as ATTACH_RULES_KEY,
+)
+from app.services.quotes.attach_rules_config import (
+    get_attach_rules_config,
+)
 from app.services.quotes.pricing_config import (
     SETTINGS_KEY as PRICING_KEY,
 )
@@ -45,6 +59,12 @@ from app.services.quotes.proposal_template import (
 )
 from app.services.quotes.proposal_template import (
     get_proposal_template,
+)
+from app.services.quotes.unsold_quote_config import (
+    SETTINGS_KEY as UNSOLD_QUOTES_KEY,
+)
+from app.services.quotes.unsold_quote_config import (
+    get_unsold_quote_config,
 )
 from app.services.sla.speed_to_lead import (
     SETTINGS_KEY as SPEED_TO_LEAD_KEY,
@@ -353,6 +373,83 @@ async def update_pricing_settings(
     await db.refresh(workspace)
 
     return get_pricing_config(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/attach-rules",
+    response_model=AttachRulesSettings,
+)
+async def get_attach_rules_settings(
+    workspace: WorkspaceAccess,
+) -> AttachRulesSettings:
+    """Get the workspace's attach-rule config (the cross-sell prompt)."""
+    return get_attach_rules_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/attach-rules",
+    response_model=AttachRulesSettings,
+)
+async def update_attach_rules_settings(
+    update: AttachRulesSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> AttachRulesSettings:
+    """Update the attach-rule config (shallow top-level merge into ``settings``).
+
+    Only provided keys are written, so editing the prompt copy never clobbers the
+    rules. A provided ``rules`` list replaces the whole list (validated at the
+    edge), matching how the pricing config writes blocks wholesale.
+    """
+    current_settings = dict(workspace.settings)
+    config = dict(current_settings.get(ATTACH_RULES_KEY, {}))
+    config.update(update.model_dump(exclude_unset=True))
+    current_settings[ATTACH_RULES_KEY] = config
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    return get_attach_rules_config(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/unsold-quotes",
+    response_model=UnsoldQuoteSettings,
+)
+async def get_unsold_quote_settings(
+    workspace: WorkspaceAccess,
+) -> UnsoldQuoteSettings:
+    """Get the workspace's unsold-quote follow-up config (the quiet-quote sequence)."""
+    return get_unsold_quote_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/unsold-quotes",
+    response_model=UnsoldQuoteSettings,
+)
+async def update_unsold_quote_settings(
+    update: UnsoldQuoteSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> UnsoldQuoteSettings:
+    """Update the unsold-quote config (shallow top-level merge into ``settings``).
+
+    Only provided keys are written, so pausing the sequence (``enabled: false``)
+    never clobbers the cadence an operator tuned. A provided ``touches`` list
+    replaces the whole list, validated at the edge, matching how the pricing
+    config writes blocks wholesale.
+    """
+    current_settings = dict(workspace.settings)
+    config = dict(current_settings.get(UNSOLD_QUOTES_KEY, {}))
+    config.update(update.model_dump(exclude_unset=True))
+    current_settings[UNSOLD_QUOTES_KEY] = config
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    return get_unsold_quote_config(workspace)
 
 
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)

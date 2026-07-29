@@ -8,6 +8,7 @@ client's submitted quantities are the only untrusted input.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -46,6 +47,12 @@ class CatalogEntry:
     unit_price: Decimal  # net (pre-gross-up)
     transformer: bool = False
     components: list[dict[str, Any]] = field(default_factory=list)
+    # The price-book row's real primary key, carried alongside the stable
+    # ``item_id`` key (a ``sku``) so an emitted line can tell the quote service
+    # which catalog item to snapshot its ``service_category`` from. Without it a
+    # wizard quote saves entirely uncategorized and reports no primary service,
+    # which makes both attach metrics and attach rules blind to it.
+    catalog_item_id: uuid.UUID | None = None
 
 
 def _d(value: float | int | Decimal) -> Decimal:
@@ -148,6 +155,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                 ProposalCharge(
                     description=(c.description or "").strip() or "Additional Services",
                     amount=float(amount),
+                    catalog_item_id=c.catalog_item_id,
                 )
             )
     additional_total = sum((_d(c.amount) for c in charges), Decimal("0"))
@@ -388,8 +396,10 @@ def select_tier(
     package. Grand totals are summed from the emitted line items so a document's
     display figures can never drift from the server-recomputed quote total.
 
-    ``catalog`` is only needed for the staff fulfillment sheet; pass ``None``
-    when pricing a package for display and the sheet comes back empty.
+    ``catalog`` supplies the staff fulfillment sheet and the price-book id each
+    fixture line snapshots its service category from; pass ``None`` when pricing
+    a package purely for display, and the sheet comes back empty and the lines
+    uncategorized (neither affects a displayed total).
     """
     selected_view = next((v for v in tier_views if v.key == selected), None)
 
@@ -399,15 +409,16 @@ def select_tier(
         for line in selected_view.lines:
             if line.quantity <= 0:
                 continue
+            entry = (catalog or {}).get(line.item_id)
             line_items.append(
                 QuoteLineItemCreate(
                     name=line.name,
                     quantity=line.quantity,
                     unit_price=line.unit_price,
                     discount=0,
+                    catalog_item_id=entry.catalog_item_id if entry else None,
                 )
             )
-            entry = (catalog or {}).get(line.item_id)
             for comp in entry.components if entry else []:
                 sku = str(comp.get("sku") or "").strip()
                 if not sku:
@@ -422,7 +433,11 @@ def select_tier(
     for charge in charges:
         line_items.append(
             QuoteLineItemCreate(
-                name=charge.description, quantity=1, unit_price=charge.amount, discount=0
+                name=charge.description,
+                quantity=1,
+                unit_price=charge.amount,
+                discount=0,
+                catalog_item_id=charge.catalog_item_id,
             )
         )
     if bistro is not None and bistro.total > 0:

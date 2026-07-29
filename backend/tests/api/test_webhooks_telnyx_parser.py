@@ -135,9 +135,7 @@ async def test_verify_and_parse_returns_event_type_and_payload(
     fixture = load_fixture("telnyx", "call_initiated.json")
     body = json.dumps(fixture).encode()
 
-    monkeypatch.setattr(
-        parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr(parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True))
     log = MagicMock()
 
     result = await verify_and_parse(_request_with_body(body), log)
@@ -173,9 +171,7 @@ async def test_verify_and_parse_propagates_signature_failure(
 async def test_verify_and_parse_returns_none_on_invalid_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr(parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True))
     request = MagicMock()
     request.json = AsyncMock(side_effect=ValueError("not json"))
     log = MagicMock()
@@ -190,9 +186,7 @@ async def test_verify_and_parse_defaults_when_data_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Payload without ``data`` key still returns a tuple of empty defaults."""
-    monkeypatch.setattr(
-        parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr(parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True))
     request = MagicMock()
     request.json = AsyncMock(return_value={"meta": {}})
     log = MagicMock()
@@ -208,9 +202,7 @@ async def test_verify_and_parse_with_sms_inbound_fixture(
     fixture = load_fixture("telnyx", "sms_inbound.json")
     body = json.dumps(fixture).encode()
 
-    monkeypatch.setattr(
-        parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr(parser_module, "verify_telnyx_webhook", AsyncMock(return_value=True))
     log = MagicMock()
 
     result = await verify_and_parse(_request_with_body(body), log)

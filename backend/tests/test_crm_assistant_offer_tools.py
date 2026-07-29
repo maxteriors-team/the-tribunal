@@ -206,6 +206,8 @@ def db() -> MagicMock:
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     session.add = MagicMock()
+    # List tools issue a COUNT(*) through scalar() for the truthful `total`.
+    session.scalar = AsyncMock(return_value=1)
     return session
 
 
@@ -238,8 +240,10 @@ def test_approval_tool_metadata_drives_schema_and_executor_bindings() -> None:
         "assign_ai_responder",
     }
 
+    # Gated tools bind an approved-action executor. None of them — gated or not
+    # — exposes an approval flag the model could set on itself.
     for tool_name in confirmation_required:
-        assert "confirmed" in tools_by_name[tool_name]["function"]["parameters"]["properties"]
+        assert "confirmed" not in tools_by_name[tool_name]["function"]["parameters"]["properties"]
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is not None
 
     pause_properties = tools_by_name["pause_campaign"]["function"]["parameters"]["properties"]
@@ -258,7 +262,9 @@ async def test_list_offers_returns_campaign_ready_summaries(
     result = await executor.execute("list_offers", {"limit": 5, "active_only": True})
 
     assert result["success"] is True
-    assert result["count"] == 1
+    assert result["returned"] == 1
+    assert result["total"] == 1
+    assert result["has_more"] is False
     assert result["data"] == [
         {
             "id": str(offer.id),
@@ -283,7 +289,9 @@ async def test_get_offer_details_rejects_invalid_offer_id(
 
     result = await executor.execute("get_offer_details", {"offer_id": "not-a-uuid"})
 
-    assert result == {"success": False, "error": "Invalid offer_id"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert "offer_id" in result["message"]
     db.execute.assert_not_called()
 
 
@@ -316,7 +324,9 @@ async def test_get_offer_details_hides_cross_workspace_offers(
 
     result = await executor.execute("get_offer_details", {"offer_id": str(uuid.uuid4())})
 
-    assert result == {"success": False, "error": "Offer not found"}
+    assert result["success"] is False
+    assert result["code"] == "not_found"
+    assert result["message"] == "Offer not found in this workspace."
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "workspace_id" in compiled
     assert workspace_id.hex in compiled
@@ -388,7 +398,9 @@ async def test_update_offer_draft_requires_fields(
 
     result = await executor.execute("update_offer_draft", {"offer_id": str(offer.id)})
 
-    assert result == {"success": False, "error": "No offer fields provided"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert result["message"] == "No offer fields were provided to update."
     db.flush.assert_not_awaited()
 
 
@@ -405,9 +417,15 @@ async def test_gated_outbound_action_creates_pending_action(
 
     assert result == {
         "success": False,
+        "code": "pending_approval",
         "pending_approval": True,
         "pending_action_id": str(db.add.call_args.args[0].id),
         "message": "Approval required before I can create this AI agent.",
+        "retryable": False,
+        "hint": (
+            "Tell the operator it is waiting for their approval in this chat. "
+            "Do not call the tool again."
+        ),
     }
     pending_action = db.add.call_args.args[0]
     assert pending_action.workspace_id == workspace_id
@@ -610,7 +628,8 @@ async def test_confirmed_agent_creation_executes_immediately(
 
     result = await executor.execute(
         "create_agent",
-        {"name": "Closer", "system_prompt": "Qualify and book.", "confirmed": True},
+        {"name": "Closer", "system_prompt": "Qualify and book."},
+        approval_granted=True,
     )
 
     assert result["success"] is True
@@ -631,7 +650,8 @@ async def test_confirmed_start_campaign_runs_existing_validation(
 
     result = await executor.execute(
         "start_campaign",
-        {"campaign_id": str(campaign.id), "confirmed": True},
+        {"campaign_id": str(campaign.id)},
+        approval_granted=True,
     )
 
     assert result["success"] is True
@@ -650,8 +670,11 @@ async def test_confirmed_start_campaign_rejects_empty_campaign(
 
     result = await executor.execute(
         "start_campaign",
-        {"campaign_id": str(campaign.id), "confirmed": True},
+        {"campaign_id": str(campaign.id)},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Campaign has no contacts"}
+    assert result["success"] is False
+    assert result["code"] == "conflict"
+    assert result["message"] == "Campaign has no contacts"
     db.flush.assert_not_awaited()

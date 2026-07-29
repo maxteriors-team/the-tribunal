@@ -111,9 +111,7 @@ async def test_404_raises_not_found_without_retry(service: CalComService) -> Non
 
 
 @pytest.mark.asyncio
-async def test_5xx_retries_then_succeeds(
-    service: CalComService, _no_sleep: AsyncMock
-) -> None:
+async def test_5xx_retries_then_succeeds(service: CalComService, _no_sleep: AsyncMock) -> None:
     client, requests = _client_from_responses(
         [
             httpx.Response(500, text="boom"),
@@ -305,9 +303,7 @@ async def test_429_exhausts_retries_raises_rate_limit_error(service: CalComServi
 
 
 @pytest.mark.asyncio
-async def test_backoff_includes_random_jitter(
-    service: CalComService, _no_sleep: AsyncMock
-) -> None:
+async def test_backoff_includes_random_jitter(service: CalComService, _no_sleep: AsyncMock) -> None:
     """random.uniform(0, backoff_seconds) is added to the current backoff each retry."""
     with patch("app.services.providers.http.random.uniform", return_value=0.5) as mock_uniform:
         client, _requests = _client_from_responses(

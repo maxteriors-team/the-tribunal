@@ -1,14 +1,20 @@
 "use client";
 
 /**
- * Settings → Pricing: the seasonal-decor editor (operator self-serve).
+ * Settings → Pricing: the package editor for every service the shop sells.
  *
- * Lets a non-technical operator add, edit, reorder-free, and remove seasonal
- * decor categories (trees, bushes, wreaths, garland, and anything new) plus the
- * roofline base rate — the exact `christmas.items` catalog the sales wizard and
- * roofline estimator render from. Saving PUTs the whole `christmas` block back
- * (the endpoint replaces blocks wholesale), so every other pricing field is
- * preserved. No code change or deploy needed to add a new add-on.
+ * A category selector at the top picks which package set is being edited:
+ *
+ * * **Seasonal decor** — the `christmas.items` catalog (trees, bushes, wreaths,
+ *   garland, anything new) plus the roofline rate and the seasonal Good/Better/
+ *   Best packages. Unchanged; this is live, revenue-critical config.
+ * * **A service category** — roofing, siding, gutters: the same three-tier ladder
+ *   for the trades that pay the bills, edited through
+ *   {@link ServicePackagesEditor} and saved into `service_packages`.
+ *
+ * Saving PUTs whole blocks back (the endpoint replaces blocks wholesale), so
+ * every pricing field this editor doesn't expose round-trips untouched. No code
+ * change or deploy needed to add an add-on or a whole new service.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
@@ -35,7 +41,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
@@ -44,9 +49,23 @@ import type {
   ChristmasConfig,
   ChristmasPackage,
   SeasonalItem,
+  ServicePackageConfig,
 } from "@/types/sales-wizard";
 
+import { cid, slugify, uniqueKey } from "./editor-keys";
+import { PackageCopyFields } from "./package-copy-fields";
+import {
+  ServicePackagesEditor,
+  buildServiceCategory,
+  newServiceCategoryDraft,
+  toServiceCategoryDrafts,
+  type EditServiceCategory,
+} from "./service-packages-editor";
+
 type SeasonalUnit = "each" | "per_ft";
+
+// The seasonal set is always offered; service categories are appended by key.
+const SEASONAL = "__seasonal__";
 
 // Client-side working shapes. `_cid` is a stable React list key; `key` is the
 // backend key (frozen once saved, assigned on save for new rows so links stay
@@ -80,32 +99,6 @@ interface EditPackage {
   includesRoofline: boolean;
   itemCids: string[];
   src: ChristmasPackage | null;
-}
-
-const cid = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `cid-${Math.random().toString(36).slice(2)}`;
-
-function slugify(value: string, fallback: string): string {
-  const slug = value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || fallback;
-}
-
-/** Ensure a unique key within an already-used set (append -2, -3, …). */
-function uniqueKey(base: string, used: Set<string>): string {
-  let candidate = base;
-  let n = 2;
-  while (used.has(candidate)) {
-    candidate = `${base}-${n}`;
-    n += 1;
-  }
-  used.add(candidate);
-  return candidate;
 }
 
 function toEditModel(items: SeasonalItem[]): EditCategory[] {
@@ -183,6 +176,11 @@ export function SeasonalPricingSettingsTab() {
   const [serverChristmas, setServerChristmas] = useState<ChristmasConfig | null>(
     null,
   );
+  // Non-seasonal service categories (roof, siding, gutters). Held here rather
+  // than inside the per-category editor so switching the selector never
+  // discards an unsaved edit to the category you just left.
+  const [services, setServices] = useState<EditServiceCategory[]>([]);
+  const [selected, setSelected] = useState<string>(SEASONAL);
 
   // Seed/re-seed the editable draft from the server config, resetting when its
   // identity changes (first load, or after a save replaces the cached copy).
@@ -202,11 +200,21 @@ export function SeasonalPricingSettingsTab() {
         pricing.christmas.package_order ?? [],
       ),
     );
+    setServices(toServiceCategoryDrafts(pricing.service_packages ?? []));
   }
+
+  // A category removed (or renamed away) under the selector falls back to the
+  // seasonal set rather than rendering an editor for nothing.
+  const activeService =
+    selected === SEASONAL
+      ? null
+      : (services.find((s) => s._cid === selected) ?? null);
+  const editingSeasonal = activeService === null;
 
   const mutation = useMutation({
     mutationFn: (update: {
       christmas: ChristmasConfig;
+      service_packages: ServicePackageConfig[];
       roofline_comparison_enabled: boolean;
     }) => salesWizardApi.updatePricing(workspaceId!, update),
     onSuccess: (updated) => {
@@ -214,10 +222,10 @@ export function SeasonalPricingSettingsTab() {
         queryKeys.salesWizard.pricing(workspaceId ?? ""),
         updated,
       );
-      toast.success("Seasonal pricing saved");
+      toast.success("Pricing saved");
     },
     onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save seasonal pricing")),
+      toast.error(getApiErrorMessage(err, "Failed to save pricing")),
   });
 
   const disabled = mutation.isPending || !serverChristmas;
@@ -335,6 +343,23 @@ export function SeasonalPricingSettingsTab() {
       ),
     );
 
+  // ── Service categories ────────────────────────────────────────────────────
+  const patchService = (svcCid: string, patch: Partial<EditServiceCategory>) =>
+    setServices((prev) =>
+      prev.map((s) => (s._cid === svcCid ? { ...s, ...patch } : s)),
+    );
+
+  const addService = () => {
+    const draft = newServiceCategoryDraft();
+    setServices((prev) => [...prev, draft]);
+    setSelected(draft._cid);
+  };
+
+  const removeService = (svcCid: string) => {
+    setServices((prev) => prev.filter((s) => s._cid !== svcCid));
+    setSelected(SEASONAL);
+  };
+
   // ── Save ────────────────────────────────────────────────────────────────
   const save = () => {
     if (!serverChristmas) return;
@@ -424,6 +449,24 @@ export function SeasonalPricingSettingsTab() {
       });
     }
 
+    // Every service category is validated and rebuilt on every save, whichever
+    // one the selector happens to be showing: the endpoint replaces the whole
+    // `service_packages` block, so sending only the visible category would drop
+    // the others.
+    const usedServiceKeys = new Set<string>(
+      services.map((s) => s.serviceCategory).filter(Boolean),
+    );
+    const builtServices: ServicePackageConfig[] = [];
+    for (const service of services) {
+      const built = buildServiceCategory(service, usedServiceKeys);
+      if (!built.ok) {
+        toast.error(built.error);
+        setSelected(service._cid);
+        return;
+      }
+      builtServices.push(built.value);
+    }
+
     mutation.mutate({
       christmas: {
         ...serverChristmas,
@@ -433,6 +476,7 @@ export function SeasonalPricingSettingsTab() {
         package_order: builtPackages.map((p) => p.key),
         packages: builtPackages,
       },
+      service_packages: builtServices,
       roofline_comparison_enabled: rooflineComparison,
     });
   };
@@ -447,6 +491,87 @@ export function SeasonalPricingSettingsTab() {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Packages &amp; Pricing</CardTitle>
+          <CardDescription>
+            Pick the service you&apos;re pricing. Each one can be sold as ready-made
+            Good / Better / Best packages instead of a line-item list — the tier
+            you steer gets the Recommended badge on the customer&apos;s page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-2 min-w-[240px]">
+              <Label htmlFor="pricing-service">Service</Label>
+              <Select
+                value={editingSeasonal ? SEASONAL : selected}
+                onValueChange={setSelected}
+                disabled={disabled}
+              >
+                <SelectTrigger id="pricing-service">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEASONAL}>
+                    Christmas Lighting (seasonal)
+                  </SelectItem>
+                  {services.map((service) => (
+                    <SelectItem key={service._cid} value={service._cid}>
+                      {service.label.trim() || "Untitled service"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addService}
+              disabled={disabled}
+            >
+              <Plus className="size-4" /> Add service
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {activeService ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {activeService.label.trim() || "New service"} Packages
+            </CardTitle>
+            <CardDescription>
+              Roofing, siding, gutters — the same three-tier ladder the seasonal
+              side has always had. Declare what can be included, tick the
+              upgrades each package covers, and steer the middle one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <ServicePackagesEditor
+              draft={activeService}
+              onChange={(patch) => patchService(activeService._cid, patch)}
+              onRemove={() => removeService(activeService._cid)}
+              disabled={disabled}
+            />
+
+            <Separator />
+
+            <div className="flex justify-end">
+              <Button type="button" onClick={save} disabled={disabled}>
+                {mutation.isPending ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Saving…
+                  </>
+                ) : (
+                  "Save pricing"
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
       <Card>
         <CardHeader>
           <CardTitle>Seasonal Decor Pricing</CardTitle>
@@ -676,61 +801,17 @@ export function SeasonalPricingSettingsTab() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <div className="space-y-2 flex-1 min-w-[180px]">
-                    <Label>Package label</Label>
-                    <Input
-                      placeholder="e.g. Premier — The Full Display"
-                      value={pkg.label}
-                      onChange={(e) =>
-                        patchPackage(pkg._cid, { label: e.target.value })
-                      }
-                      disabled={disabled}
-                    />
-                  </div>
-                  <div className="space-y-2 flex-1 min-w-[180px]">
-                    <Label>Display name</Label>
-                    <Input
-                      placeholder="e.g. The Premier"
-                      value={pkg.name}
-                      onChange={(e) =>
-                        patchPackage(pkg._cid, { name: e.target.value })
-                      }
-                      disabled={disabled}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Experience</Label>
-                  <Textarea
-                    rows={2}
-                    placeholder="A sentence or two describing the look and feel…"
-                    value={pkg.experience}
-                    onChange={(e) =>
-                      patchPackage(pkg._cid, { experience: e.target.value })
-                    }
-                    disabled={disabled}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Selling points</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder={
-                      "One per line, e.g.\nFull roofline outlined\nTrees and bushes wrapped"
-                    }
-                    value={pkg.points}
-                    onChange={(e) =>
-                      patchPackage(pkg._cid, { points: e.target.value })
-                    }
-                    disabled={disabled}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    One bullet per line.
-                  </p>
-                </div>
+                <PackageCopyFields
+                  value={pkg}
+                  onChange={(patch) => patchPackage(pkg._cid, patch)}
+                  disabled={disabled}
+                  labelPlaceholder="e.g. Premier — The Full Display"
+                  namePlaceholder="e.g. The Premier"
+                  experiencePlaceholder="A sentence or two describing the look and feel…"
+                  pointsPlaceholder={
+                    "One per line, e.g.\nFull roofline outlined\nTrees and bushes wrapped"
+                  }
+                />
 
                 <div className="flex items-center justify-between gap-3">
                   <div className="space-y-0.5">
@@ -833,12 +914,16 @@ export function SeasonalPricingSettingsTab() {
                   <Loader2 className="size-4 animate-spin" /> Saving…
                 </>
               ) : (
-                "Save seasonal pricing"
+                // One draft, one save: this writes the seasonal block *and*
+                // every service category the tab is holding, so a label that
+                // said "seasonal" would be lying about what it persists.
+                "Save pricing"
               )}
             </Button>
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

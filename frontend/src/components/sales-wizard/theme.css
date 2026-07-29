@@ -713,3 +713,28 @@
 .sales-wizard .deposit-due { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
 .sales-wizard .deposit-due-amount { font-family: var(--font-cormorant), serif; font-size: 24px; font-weight: 300; color: var(--gold); line-height: 1; }
 .sales-wizard .deposit-due-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t4); }
+
+/* ── Attach prompt ───────────────────────────────────────────────────────────
+ * The cross-sell reminder shown at save time when a job is missing its add-on
+ * (gutters on a roof). Deliberately loud in the wizard's own accent rather than
+ * a generic warning colour: this is a selling opportunity the rep is about to
+ * walk past, not a system error. A blocking rule reads red because the save
+ * genuinely did not happen and the copy must not imply otherwise.
+ */
+.sales-wizard .attach-prompt { border: 1px solid var(--bdr-g); border-left-width: 3px; background: var(--s1); padding: 16px 18px; margin-bottom: 18px; }
+.sales-wizard .attach-prompt.blocking { border-color: rgba(224, 114, 106, 0.55); }
+.sales-wizard .attach-prompt-title { display: flex; align-items: center; gap: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold-d); margin-bottom: 8px; }
+.sales-wizard .attach-prompt.blocking .attach-prompt-title { color: #e0726a; }
+.sales-wizard .attach-prompt-body { font-family: var(--font-cormorant), serif; font-size: 17px; font-weight: 300; line-height: 1.45; color: var(--t1); margin-bottom: 14px; }
+.sales-wizard .attach-prompt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sales-wizard .attach-prompt-reason { padding: 9px 12px; background: var(--black); border: 1px solid var(--bdr); color: var(--t1); font-family: var(--font-montserrat), sans-serif; font-size: 12px; outline: none; transition: border-color 0.15s var(--ease); }
+.sales-wizard .attach-prompt-reason:focus-visible { border-color: var(--gold); }
+.sales-wizard .attach-prompt-note { font-size: 10px; color: var(--t4); font-style: italic; font-family: var(--font-cormorant), serif; margin-top: 10px; }
+.sales-wizard .attach-prompt-sep { flex: 1 1 auto; }
+/* The shared catalog picker's trigger, restyled to match the wizard's controls.
+ * `!important` is required only because the picker's Tailwind utilities land in
+ * a later cascade layer than this stylesheet; the dropdown it opens portals to
+ * the app shell and is deliberately left in the app's own styling. */
+.sales-wizard .attach-prompt-add { background: transparent !important; border: 1px solid var(--gold-d) !important; color: var(--gold) !important; font-family: var(--font-montserrat), sans-serif !important; font-size: 9px !important; font-weight: 700 !important; letter-spacing: 0.16em !important; text-transform: uppercase; border-radius: 0 !important; height: auto !important; padding: 7px 14px !important; transition: background-color 0.2s var(--ease), color 0.2s var(--ease) !important; }
+.sales-wizard .attach-prompt-add:hover { background: var(--gold-g) !important; color: var(--gold-l) !important; }
+.sales-wizard .attach-prompt-add:disabled { opacity: 0.55; cursor: not-allowed; }

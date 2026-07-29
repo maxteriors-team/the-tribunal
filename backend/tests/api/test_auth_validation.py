@@ -60,16 +60,12 @@ def _mock_db_no_user() -> AsyncMock:
 class TestLoginValidation:
     """Validation failures on POST /api/v1/auth/login."""
 
-    async def test_login_missing_fields_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_missing_fields_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/login with no form fields returns 422."""
         response = await client.post("/api/v1/auth/login", data={})
         assert response.status_code == 422
 
-    async def test_login_missing_password_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_missing_password_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/login with no password returns 422."""
         response = await client.post(
             "/api/v1/auth/login",
@@ -77,9 +73,7 @@ class TestLoginValidation:
         )
         assert response.status_code == 422
 
-    async def test_login_missing_username_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_missing_username_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/login with no username returns 422."""
         response = await client.post(
             "/api/v1/auth/login",
@@ -87,9 +81,7 @@ class TestLoginValidation:
         )
         assert response.status_code == 422
 
-    async def test_login_with_json_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_with_json_body_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/login with JSON content-type (instead of form) returns 422.
 
         The endpoint expects OAuth2PasswordRequestForm (application/x-www-form-urlencoded).
@@ -104,16 +96,12 @@ class TestLoginValidation:
 class TestRegisterValidation:
     """Validation failures on POST /api/v1/auth/register."""
 
-    async def test_register_empty_body_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_empty_body_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/register with empty body returns 422."""
         response = await client.post("/api/v1/auth/register", json={})
         assert response.status_code == 422
 
-    async def test_register_invalid_email_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_invalid_email_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/register with an invalid email returns 422."""
         response = await client.post(
             "/api/v1/auth/register",
@@ -124,9 +112,7 @@ class TestRegisterValidation:
         )
         assert response.status_code == 422
 
-    async def test_register_short_password_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_short_password_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/register with a password shorter than 8 chars returns 422."""
         response = await client.post(
             "/api/v1/auth/register",
@@ -137,9 +123,7 @@ class TestRegisterValidation:
         )
         assert response.status_code == 422
 
-    async def test_register_missing_password_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_missing_password_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/register without a password field returns 422."""
         response = await client.post(
             "/api/v1/auth/register",
@@ -147,9 +131,7 @@ class TestRegisterValidation:
         )
         assert response.status_code == 422
 
-    async def test_register_missing_email_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_register_missing_email_returns_422(self, client: AsyncClient) -> None:
         """POST /auth/register without an email field returns 422."""
         response = await client.post(
             "/api/v1/auth/register",
@@ -161,16 +143,12 @@ class TestRegisterValidation:
 class TestMeEndpointAuth:
     """Auth failures on GET /api/v1/auth/me."""
 
-    async def test_me_without_token_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_me_without_token_returns_401(self, client: AsyncClient) -> None:
         """GET /auth/me without Authorization header returns 401."""
         response = await client.get("/api/v1/auth/me")
         assert response.status_code == 401
 
-    async def test_me_with_invalid_token_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_me_with_invalid_token_returns_401(self, client: AsyncClient) -> None:
         """GET /auth/me with a bogus bearer token returns 401."""
         response = await client.get(
             "/api/v1/auth/me",
@@ -178,9 +156,7 @@ class TestMeEndpointAuth:
         )
         assert response.status_code == 401
 
-    async def test_me_with_malformed_auth_header_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_me_with_malformed_auth_header_returns_401(self, client: AsyncClient) -> None:
         """GET /auth/me with a malformed Authorization header returns 401."""
         response = await client.get(
             "/api/v1/auth/me",
@@ -192,9 +168,7 @@ class TestMeEndpointAuth:
 class TestChangePasswordAuth:
     """Auth failures on POST /api/v1/auth/change-password."""
 
-    async def test_change_password_without_token_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_change_password_without_token_returns_401(self, client: AsyncClient) -> None:
         """POST /auth/change-password without token returns 401."""
         response = await client.post(
             "/api/v1/auth/change-password",
@@ -223,9 +197,7 @@ class TestChangePasswordAuth:
 class TestLoginFlow:
     """Happy/error paths on POST /api/v1/auth/login with mocked DB."""
 
-    async def test_login_wrong_credentials_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_login_wrong_credentials_returns_401(self, client: AsyncClient) -> None:
         """POST /auth/login with unknown user returns 401 after DB lookup."""
         mock_db = _mock_db_no_user()
 
@@ -244,9 +216,7 @@ class TestLoginFlow:
 class TestRefreshEndpoint:
     """Tests for POST /api/v1/auth/refresh."""
 
-    async def test_refresh_without_cookie_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_refresh_without_cookie_returns_401(self, client: AsyncClient) -> None:
         """POST /auth/refresh with no refresh_token cookie returns 401."""
         mock_db = _mock_db_no_user()
 
@@ -304,9 +274,7 @@ class TestAccessCookieAuth:
 
         assert response.status_code == 401
 
-    async def test_ws_ticket_without_auth_returns_401(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_ws_ticket_without_auth_returns_401(self, client: AsyncClient) -> None:
         """POST /auth/ws-ticket without any credentials returns 401."""
         response = await client.post("/api/v1/auth/ws-ticket")
         assert response.status_code == 401

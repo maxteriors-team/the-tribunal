@@ -409,9 +409,7 @@ async def test_approving_a_quote_signs_the_client_up() -> None:
             approved = await QuoteService(db).approve_quote(workspace_id, quote_id)
             assert approved.status == "approved"
             plans = await _plans(db, quote_id)
-            assert [plan.plan_type for plan in plans].count(
-                ServicePlanType.CHRISTMAS_LIGHTS
-            ) == 2
+            assert [plan.plan_type for plan in plans].count(ServicePlanType.CHRISTMAS_LIGHTS) == 2
             assert any(plan.care_plan_tier == "gold" for plan in plans)
 
         # Re-approving is idempotent at the plan level too.

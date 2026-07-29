@@ -74,9 +74,7 @@ def test_build_stream_url_embeds_a_verifiable_ticket() -> None:
 
 
 def test_build_stream_url_keeps_outbound_flag_alongside_the_ticket() -> None:
-    url = TelnyxVoiceService.build_stream_url(
-        CALL_ID, "https://api.example.com", is_outbound=True
-    )
+    url = TelnyxVoiceService.build_stream_url(CALL_ID, "https://api.example.com", is_outbound=True)
 
     assert "is_outbound=true" in url
     token = url.split(f"{STREAM_TOKEN_PARAM}=", 1)[1].split("&", 1)[0]

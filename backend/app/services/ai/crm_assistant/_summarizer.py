@@ -16,6 +16,8 @@ from typing import Any
 import structlog
 from openai import AsyncOpenAI
 
+from app.core.config import settings
+
 logger = structlog.get_logger()
 
 # ── Tunables ─────────────────────────────────────────────────────────
@@ -35,8 +37,9 @@ TOOL_RESULT_MAX_CHARS = 1_500
 # Cap on the summarizer's own output.
 MAX_SUMMARY_TOKENS = 600
 
-# Model for summarization — cheap + fast, same as the main loop.
-SUMMARY_MODEL = "gpt-5.4-nano"
+# Summarisation is one mechanical rewrite with no tools, so it deliberately
+# stays on the cheapest tier even though the main tool loop does not.
+SUMMARY_MODEL = settings.openai_assistant_summary_model
 
 _SUMMARY_SYSTEM_PROMPT = (
     "You compact CRM operator chat history into a brief technical summary. "
@@ -110,6 +113,23 @@ def _flatten_for_summary(messages: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
+def system_prefix_length(messages: list[dict[str, Any]]) -> int:
+    """Return how many leading messages form the system prefix.
+
+    The prefix is the static ``SYSTEM_PROMPT`` plus the live workspace-context
+    message appended after it. Both must survive compaction: dropping the
+    context block would silently make the assistant context-blind again the
+    moment a conversation grew long enough to summarize.
+    """
+
+    length = 0
+    for message in messages:
+        if message.get("role") != "system":
+            break
+        length += 1
+    return length
+
+
 def _find_split_point(messages: list[dict[str, Any]]) -> int:
     """Return the index where recent-tail starts.
 
@@ -146,8 +166,9 @@ async def maybe_summarize(  # noqa: PLR0911
     """If `messages` exceed the trigger budget, replace older messages
     with a single system summary message and return the new list.
 
-    The first message (system prompt) is always preserved verbatim — it
-    must stay byte-identical for prompt caching to hit.
+    The leading system prefix (static prompt + live workspace context) is
+    always preserved verbatim — ``messages[0]`` must stay byte-identical for
+    prompt caching to hit, and the context block must survive compaction.
 
     Args:
         client: AsyncOpenAI client used for the summary call.
@@ -155,7 +176,7 @@ async def maybe_summarize(  # noqa: PLR0911
 
     Returns:
         Either the original list (no compaction needed) or a new list
-        of the form [system, summary_system, ...recent].
+        of the form [*system_prefix, summary_system, ...recent].
     """
     if not messages or messages[0].get("role") != "system":
         # Defensive: only run when the canonical system prompt is at index 0.
@@ -164,11 +185,12 @@ async def maybe_summarize(  # noqa: PLR0911
     if estimate_tokens(messages) < SUMMARIZE_TRIGGER_TOKENS:
         return messages
 
+    prefix_length = system_prefix_length(messages)
     split = _find_split_point(messages)
-    if split <= 1:  # nothing useful to summarize
+    if split <= prefix_length:  # nothing useful to summarize
         return messages
 
-    middle = messages[1:split]
+    middle = messages[prefix_length:split]
     if not middle:
         return messages
 
@@ -216,4 +238,4 @@ async def maybe_summarize(  # noqa: PLR0911
         ),
     }
     recent = messages[split:]
-    return [messages[0], summary_msg, *recent]
+    return [*messages[:prefix_length], summary_msg, *recent]

@@ -153,7 +153,8 @@ async def test_inbound_message_returns_when_phone_number_unknown(
     await handlers.handle_inbound_message(sms_inbound, log)
 
     log.warning.assert_any_call(
-        "phone_number_not_found", to_number="+12125550101",
+        "phone_number_not_found",
+        to_number="+12125550101",
     )
 
 
@@ -265,7 +266,9 @@ async def test_inbound_message_processes_and_schedules_ai_response(
     sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: sms_service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: sms_service,
     )
 
     # Silence drip-pause + campaign-reply side effects (already a try/except).
@@ -273,7 +276,9 @@ async def test_inbound_message_processes_and_schedules_ai_response(
     from app.services.reactivation import drip_runner
 
     monkeypatch.setattr(
-        drip_runner, "handle_inbound_reply", AsyncMock(return_value=None),
+        drip_runner,
+        "handle_inbound_reply",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         campaign_sms_stats,
@@ -312,7 +317,7 @@ async def test_inbound_message_skips_ai_when_paused(
     db = _make_db(
         execute_returns=[
             _Result(scalar=phone_record),
-            _Result(scalar=None),       # operator miss
+            _Result(scalar=None),  # operator miss
             _Result(scalar=conversation),
             _Result(scalar=conversation),
         ]
@@ -323,14 +328,18 @@ async def test_inbound_message_skips_ai_when_paused(
     sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: sms_service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: sms_service,
     )
 
     from app.services.campaigns import campaign_sms_stats
     from app.services.reactivation import drip_runner
 
     monkeypatch.setattr(
-        drip_runner, "handle_inbound_reply", AsyncMock(return_value=None),
+        drip_runner,
+        "handle_inbound_reply",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         campaign_sms_stats,
@@ -377,7 +386,9 @@ def _stub_telnyx_sms_service(
     )
     service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: service,
     )
     return service
 
@@ -393,7 +404,9 @@ def _stub_reputation_tracker(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     from app.services.rate_limiting import reputation_tracker as tracker_mod
 
     monkeypatch.setattr(
-        tracker_mod, "ReputationTracker", lambda *a, **kw: tracker,
+        tracker_mod,
+        "ReputationTracker",
+        lambda *a, **kw: tracker,
     )
     return tracker
 
@@ -413,7 +426,9 @@ async def test_delivery_status_delivered_increments_reputation(
     db = _make_db(execute_returns=[])
     _patch_session_local(monkeypatch, db)
     _stub_telnyx_sms_service(
-        monkeypatch, message=message, previous_status="sent",
+        monkeypatch,
+        message=message,
+        previous_status="sent",
     )
     tracker = _stub_reputation_tracker(monkeypatch)
 
@@ -421,7 +436,9 @@ async def test_delivery_status_delivered_increments_reputation(
 
     update_delivery = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        campaign_sms_stats, "update_campaign_sms_delivery", update_delivery,
+        campaign_sms_stats,
+        "update_campaign_sms_delivery",
+        update_delivery,
     )
 
     await handlers.handle_delivery_status(sms_delivered, _make_log())
@@ -475,7 +492,8 @@ async def test_delivery_status_hard_bounce_classifies_and_tracks(
     tracker.increment_hard_bounce.assert_awaited_once_with(phone_number_id, db)
     tracker.increment_soft_bounce.assert_not_awaited()
     _stub_modules["observe_sms_bounce"].assert_called_once_with(
-        workspace_id, bounce_type="hard",
+        workspace_id,
+        bounce_type="hard",
     )
 
 
@@ -569,7 +587,9 @@ async def test_delivery_status_skips_campaign_stats_for_non_final(
 
     update_delivery = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        campaign_sms_stats, "update_campaign_sms_delivery", update_delivery,
+        campaign_sms_stats,
+        "update_campaign_sms_delivery",
+        update_delivery,
     )
 
     await handlers.handle_delivery_status(payload, _make_log())

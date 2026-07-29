@@ -4,7 +4,6 @@ Tests pure Python functions: CSV parsing, field mapping, validation,
 and row processing — no database or external services required.
 """
 
-
 from app.services.contacts.contact_import import (
     CONTACT_FIELDS,
     CSV_FIELD_MAPPING,

@@ -117,18 +117,22 @@ async def test_upsert_is_idempotent_and_tracks_transitions() -> None:
 
         # Only one advertiser row exists (idempotent on the unique key).
         adv_rows = (
-            await db.execute(
-                select(AdAdvertiser).where(AdAdvertiser.workspace_id == workspace.id)
+            (
+                await db.execute(
+                    select(AdAdvertiser).where(AdAdvertiser.workspace_id == workspace.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(adv_rows) == 1
 
         # Three creatives total (ads 1, 2, 3) — no duplicates for re-seen ads.
         creatives = (
-            await db.execute(
-                select(AdCreative).where(AdCreative.advertiser_id == advertiser.id)
-            )
-        ).scalars().all()
+            (await db.execute(select(AdCreative).where(AdCreative.advertiser_id == advertiser.id)))
+            .scalars()
+            .all()
+        )
         assert len(creatives) == 3
         by_id = {c.ad_external_id: c for c in creatives}
         assert by_id["1"].is_active is True

@@ -82,9 +82,7 @@ def _compiled(statement: Any) -> str:
 def _assert_claims_rows(session: _RecordingSession, *, table: str) -> None:
     """Assert some captured SELECT claims ``table`` with SKIP LOCKED."""
     selects = [_compiled(s) for s in session.statements]
-    claiming = [
-        sql for sql in selects if "FOR UPDATE" in sql and table.upper() in sql
-    ]
+    claiming = [sql for sql in selects if "FOR UPDATE" in sql and table.upper() in sql]
     assert claiming, (
         f"No statement claimed {table!r}. Without FOR UPDATE a second replica "
         f"reads the same rows and repeats the work. Captured SQL: {selects}"

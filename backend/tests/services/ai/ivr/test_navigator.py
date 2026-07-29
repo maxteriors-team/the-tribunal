@@ -1,6 +1,5 @@
 """Tests for ScriptedNavigator - IVR menu extraction and DTMF navigation."""
 
-
 from app.services.ai.ivr.navigator import NavigationAction, ScriptedNavigator
 
 
@@ -26,18 +25,14 @@ class TestExtractMenuOptions:
     def test_to_y_press_x(self):
         """'To speak to a representative, press 0' pattern."""
         nav = ScriptedNavigator()
-        options = nav.extract_menu_options(
-            "To speak to a representative, press 0."
-        )
+        options = nav.extract_menu_options("To speak to a representative, press 0.")
         digits = {o.digit for o in options}
         assert "0" in digits
 
     def test_option_x_for_y(self):
         """'Option 1 for billing' pattern."""
         nav = ScriptedNavigator()
-        options = nav.extract_menu_options(
-            "Option 1 for billing. Option 2 for tech support."
-        )
+        options = nav.extract_menu_options("Option 1 for billing. Option 2 for tech support.")
         digits = {o.digit for o in options}
         assert "1" in digits
         assert "2" in digits
@@ -45,9 +40,7 @@ class TestExtractMenuOptions:
     def test_say_or_press_x(self):
         """'Say or press 1 for sales' pattern."""
         nav = ScriptedNavigator()
-        options = nav.extract_menu_options(
-            "Say or press 1 for sales. Say or press 2 for support."
-        )
+        options = nav.extract_menu_options("Say or press 1 for sales. Say or press 2 for support.")
         digits = {o.digit for o in options}
         assert "1" in digits
         assert "2" in digits
@@ -71,9 +64,7 @@ class TestExtractMenuOptions:
     def test_deduplication(self):
         """Same digit mentioned twice should only appear once."""
         nav = ScriptedNavigator()
-        options = nav.extract_menu_options(
-            "Press 1 for sales. For orders, press 1."
-        )
+        options = nav.extract_menu_options("Press 1 for sales. For orders, press 1.")
         digits = [o.digit for o in options]
         assert digits.count("1") == 1
 
@@ -99,9 +90,7 @@ class TestSelectDigit:
     def test_goal_match_human(self):
         """Should match 'representative' when goal is reaching a human."""
         nav = ScriptedNavigator(navigation_goal="Reach a human representative")
-        result = nav.select_digit(
-            "Press 1 for billing. Press 0 for a representative."
-        )
+        result = nav.select_digit("Press 1 for billing. Press 0 for a representative.")
         assert result.action == NavigationAction.PRESS_DIGIT
         assert result.digit == "0"
 

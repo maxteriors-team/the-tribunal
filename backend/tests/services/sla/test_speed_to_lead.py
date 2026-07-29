@@ -119,9 +119,7 @@ class TestRecordFirstResponse:
     def test_naive_anchor_is_treated_as_utc(self) -> None:
         naive_anchor = datetime(2026, 1, 1, 12, 0, 0)  # noqa: DTZ001
         conv = _conversation(first_inbound_at=naive_anchor)
-        seconds = stl.record_first_response(
-            conv, datetime(2026, 1, 1, 12, 0, 10, tzinfo=UTC)
-        )
+        seconds = stl.record_first_response(conv, datetime(2026, 1, 1, 12, 0, 10, tzinfo=UTC))
         assert seconds == 10
 
 
@@ -158,9 +156,7 @@ class TestRecordAndAlert:
         conv = _conversation(first_inbound_at=anchor)
         db = MagicMock()
         db.get = AsyncMock(
-            return_value=_workspace(
-                {stl.SETTINGS_KEY: {"sla_seconds": 60, "alert_enabled": True}}
-            )
+            return_value=_workspace({stl.SETTINGS_KEY: {"sla_seconds": 60, "alert_enabled": True}})
         )
 
         push = AsyncMock()
@@ -181,9 +177,7 @@ class TestRecordAndAlert:
         conv = _conversation(first_inbound_at=anchor)
         db = MagicMock()
         db.get = AsyncMock(
-            return_value=_workspace(
-                {stl.SETTINGS_KEY: {"sla_seconds": 60, "alert_enabled": False}}
-            )
+            return_value=_workspace({stl.SETTINGS_KEY: {"sla_seconds": 60, "alert_enabled": False}})
         )
         push = AsyncMock()
         monkeypatch.setattr(
@@ -215,9 +209,7 @@ class TestComputeMetrics:
         db = MagicMock()
         one = MagicMock(return_value=(10, 9, 14.2, 12.0, 3))
         db.execute = AsyncMock(return_value=MagicMock(one=one))
-        metrics = await stl.compute_sla_metrics(
-            db, uuid.uuid4(), sla_seconds=60, window_days=30
-        )
+        metrics = await stl.compute_sla_metrics(db, uuid.uuid4(), sla_seconds=60, window_days=30)
         assert metrics.leads_measured == 10
         assert metrics.within_sla == 9
         assert metrics.pct_within_sla == 90.0

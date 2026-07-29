@@ -9,7 +9,6 @@ The fix ensures that:
 2. Voicemail is only returned when there are NO IVR patterns
 """
 
-
 from app.services.ai.ivr_detector import IVRClassifier, IVRMode
 
 
@@ -53,11 +52,7 @@ class TestIVRClassifierVoicemailEdgeCases:
 
     def test_press_option_with_voicemail_mention(self, ivr_classifier: IVRClassifier):
         """IVR menu that mentions voicemail as option should be IVR."""
-        transcript = (
-            "Press 1 to leave a voicemail. "
-            "Press 2 for sales. "
-            "Press 0 for an operator."
-        )
+        transcript = "Press 1 to leave a voicemail. Press 2 for sales. Press 0 for an operator."
 
         mode, confidence = ivr_classifier.classify(transcript)
 

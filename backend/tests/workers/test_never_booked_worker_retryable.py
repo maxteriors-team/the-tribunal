@@ -37,9 +37,7 @@ async def test_failed_reengagement_routes_to_dlq() -> None:
         raise RuntimeError("send failed")
 
     item_key = f"never_booked:{agent.id}:contact:{contact.id}"
-    await worker.execute_with_retry(
-        fail, contact, agent, db, item_key=item_key
-    )
+    await worker.execute_with_retry(fail, contact, agent, db, item_key=item_key)
 
     assert len(recorder.calls) == 1
     assert recorder.calls[0]["worker_name"] == "never_booked_worker"

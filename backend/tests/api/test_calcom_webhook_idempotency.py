@@ -66,10 +66,7 @@ def test_build_key_falls_back_to_trigger_uid_timestamp() -> None:
 
     key = _build_idempotency_key(payload)
 
-    assert key == (
-        f"{_IDEMPOTENCY_KEY_PREFIX}BOOKING_CREATED:booking-uid-xyz:"
-        "2026-05-15T10:00:00Z"
-    )
+    assert key == (f"{_IDEMPOTENCY_KEY_PREFIX}BOOKING_CREATED:booking-uid-xyz:2026-05-15T10:00:00Z")
 
 
 def test_build_key_supports_calcom_canonical_field_names() -> None:
@@ -83,8 +80,7 @@ def test_build_key_supports_calcom_canonical_field_names() -> None:
     key = _build_idempotency_key(payload)
 
     assert key == (
-        f"{_IDEMPOTENCY_KEY_PREFIX}BOOKING_RESCHEDULED:"
-        "booking-uid-resched:2026-05-15T11:00:00Z"
+        f"{_IDEMPOTENCY_KEY_PREFIX}BOOKING_RESCHEDULED:booking-uid-resched:2026-05-15T11:00:00Z"
     )
 
 
@@ -98,10 +94,7 @@ def test_build_key_handles_flat_meeting_ended_payload() -> None:
 
     key = _build_idempotency_key(payload)
 
-    assert key == (
-        f"{_IDEMPOTENCY_KEY_PREFIX}MEETING_ENDED:"
-        "booking-uid-meet:2026-05-15T12:00:00Z"
-    )
+    assert key == (f"{_IDEMPOTENCY_KEY_PREFIX}MEETING_ENDED:booking-uid-meet:2026-05-15T12:00:00Z")
 
 
 def test_build_key_returns_none_when_no_usable_fields() -> None:
@@ -127,16 +120,12 @@ async def test_claim_uses_set_nx_ex_with_7d_ttl(monkeypatch: pytest.MonkeyPatch)
     """First delivery → SET NX EX 604800, returns True."""
     redis_client = MagicMock()
     redis_client.set = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        calcom_module, "get_redis", AsyncMock(return_value=redis_client)
-    )
+    monkeypatch.setattr(calcom_module, "get_redis", AsyncMock(return_value=redis_client))
 
     claimed = await _claim_webhook_delivery("calcom:webhook:abc", log=MagicMock())
 
     assert claimed is True
-    redis_client.set.assert_awaited_once_with(
-        "calcom:webhook:abc", "1", nx=True, ex=604800
-    )
+    redis_client.set.assert_awaited_once_with("calcom:webhook:abc", "1", nx=True, ex=604800)
 
 
 @pytest.mark.asyncio
@@ -144,9 +133,7 @@ async def test_claim_returns_false_on_replay(monkeypatch: pytest.MonkeyPatch) ->
     """redis-py returns ``None`` when NX prevents the write → caller skips."""
     redis_client = MagicMock()
     redis_client.set = AsyncMock(return_value=None)
-    monkeypatch.setattr(
-        calcom_module, "get_redis", AsyncMock(return_value=redis_client)
-    )
+    monkeypatch.setattr(calcom_module, "get_redis", AsyncMock(return_value=redis_client))
 
     claimed = await _claim_webhook_delivery("calcom:webhook:abc", log=MagicMock())
 
@@ -164,9 +151,7 @@ async def test_claim_fails_closed_on_redis_error(monkeypatch: pytest.MonkeyPatch
     """
     redis_client = MagicMock()
     redis_client.set = AsyncMock(side_effect=ConnectionError("redis down"))
-    monkeypatch.setattr(
-        calcom_module, "get_redis", AsyncMock(return_value=redis_client)
-    )
+    monkeypatch.setattr(calcom_module, "get_redis", AsyncMock(return_value=redis_client))
     log = MagicMock()
 
     with pytest.raises(HTTPException) as exc_info:
@@ -197,22 +182,16 @@ def _make_request(payload: dict[str, Any], *, signature: str = "sig-default") ->
     return request
 
 
-def _install_redis_mock(
-    monkeypatch: pytest.MonkeyPatch, set_returns: list[Any]
-) -> MagicMock:
+def _install_redis_mock(monkeypatch: pytest.MonkeyPatch, set_returns: list[Any]) -> MagicMock:
     """Patch ``get_redis`` so ``set()`` returns each value in turn."""
     redis_client = MagicMock()
     redis_client.set = AsyncMock(side_effect=set_returns)
-    monkeypatch.setattr(
-        calcom_module, "get_redis", AsyncMock(return_value=redis_client)
-    )
+    monkeypatch.setattr(calcom_module, "get_redis", AsyncMock(return_value=redis_client))
     return redis_client
 
 
 def _disable_signature_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        calcom_module, "verify_calcom_webhook", AsyncMock(return_value=True)
-    )
+    monkeypatch.setattr(calcom_module, "verify_calcom_webhook", AsyncMock(return_value=True))
 
 
 def _disable_replay_ledger(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
@@ -299,12 +278,8 @@ async def test_distinct_events_for_same_booking_are_not_deduped(
     redis_client = _install_redis_mock(monkeypatch, set_returns=[True, True])
     created_handler = AsyncMock()
     rescheduled_handler = AsyncMock()
-    monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", created_handler
-    )
-    monkeypatch.setitem(
-        calcom_module._EVENT_DISPATCH, "BOOKING_RESCHEDULED", rescheduled_handler
-    )
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", created_handler)
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_RESCHEDULED", rescheduled_handler)
 
     await calcom_module.calcom_booking_webhook(
         _make_request(
@@ -347,9 +322,7 @@ async def test_redis_outage_fails_closed_with_503(
     _disable_replay_ledger(monkeypatch)
     redis_client = MagicMock()
     redis_client.set = AsyncMock(side_effect=ConnectionError("redis down"))
-    monkeypatch.setattr(
-        calcom_module, "get_redis", AsyncMock(return_value=redis_client)
-    )
+    monkeypatch.setattr(calcom_module, "get_redis", AsyncMock(return_value=redis_client))
     handler = AsyncMock()
     monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
 
@@ -404,9 +377,7 @@ def _install_ledger_mock(
     monkeypatch: pytest.MonkeyPatch, outcomes: list[SignatureClaimOutcome]
 ) -> AsyncMock:
     """Patch ``claim_webhook_signature`` to return each outcome in turn."""
-    claim = AsyncMock(
-        side_effect=[SignatureClaim(outcome=outcome) for outcome in outcomes]
-    )
+    claim = AsyncMock(side_effect=[SignatureClaim(outcome=outcome) for outcome in outcomes])
     monkeypatch.setattr(calcom_module, "claim_webhook_signature", claim)
     return claim
 

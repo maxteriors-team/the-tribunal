@@ -56,9 +56,7 @@ async def test_find_contact_falls_back_to_phone_when_email_misses() -> None:
     contact.id = 11
 
     db = MagicMock()
-    db.execute = AsyncMock(
-        side_effect=[_result_with(None), _result_with(contact)]
-    )
+    db.execute = AsyncMock(side_effect=[_result_with(None), _result_with(contact)])
     log = MagicMock()
 
     found = await find_contact_by_attendee(
@@ -176,7 +174,10 @@ async def test_find_contact_with_real_calcom_attendee_payload(
     log = MagicMock()
 
     found = await find_contact_by_attendee(
-        email=email, phone=phone, db=db, log=log,
+        email=email,
+        phone=phone,
+        db=db,
+        log=log,
     )
 
     assert found is contact

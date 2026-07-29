@@ -305,9 +305,9 @@ class TestSecurityHeadersMiddleware:
         response = await headers_client.get("/ping")
         assert response.status_code == 200
         for header, value in _EXPECTED_SECURITY_HEADERS.items():
-            assert (
-                response.headers.get(header) == value
-            ), f"missing or wrong {header}; got {response.headers.get(header)!r}"
+            assert response.headers.get(header) == value, (
+                f"missing or wrong {header}; got {response.headers.get(header)!r}"
+            )
 
     async def test_csp_locks_default_src(self, headers_client: AsyncClient) -> None:
         response = await headers_client.get("/ping")

@@ -163,9 +163,7 @@ async def test_service_category_and_attach_fields_round_trip() -> None:
         assert retargeted.attach_targets == ["roof", "siding"]
         assert retargeted.service_category == "gutters"  # unchanged
 
-        cleared = await svc.update_item(
-            ws.id, created.id, CatalogItemUpdate(service_category=None)
-        )
+        cleared = await svc.update_item(ws.id, created.id, CatalogItemUpdate(service_category=None))
         assert cleared.service_category is None
         assert cleared.is_attachable is True  # unchanged
 

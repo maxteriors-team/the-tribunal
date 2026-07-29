@@ -43,8 +43,7 @@ class TestCampaignReplyKeywordClassification:
 
     def test_objection_reply(self) -> None:
         assert (
-            classify_by_keywords("No thanks, I already have an agent")
-            == ResponseCategory.OBJECTION
+            classify_by_keywords("No thanks, I already have an agent") == ResponseCategory.OBJECTION
         )
 
     def test_question_reply(self) -> None:
