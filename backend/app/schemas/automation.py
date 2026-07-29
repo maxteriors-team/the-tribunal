@@ -41,6 +41,22 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "job_completed",
 )
 
+# Action identifiers the automation worker dispatches on. Kept here (not in the
+# worker) so schemas, the CRM assistant tool enum, and the worker share one
+# source of truth; ``tests/workers/test_automation_worker.py`` asserts parity.
+# ``add_tag``/``delay`` are accepted aliases of ``apply_tag``/``wait``.
+AUTOMATION_ACTION_TYPES: tuple[str, ...] = (
+    "send_sms",
+    "send_email",
+    "make_call",
+    "enroll_campaign",
+    "move_to_stage",
+    "apply_tag",
+    "add_tag",
+    "wait",
+    "delay",
+)
+
 _TRIGGER_PATTERN = "^(" + "|".join(AUTOMATION_TRIGGER_TYPES) + ")$"
 
 

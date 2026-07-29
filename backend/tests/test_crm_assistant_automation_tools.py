@@ -69,6 +69,9 @@ def db() -> MagicMock:
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     session.add = MagicMock()
+    session.delete = AsyncMock()
+    # List tools issue a COUNT(*) through scalar() for the truthful `total`.
+    session.scalar = AsyncMock(return_value=1)
     return session
 
 
@@ -77,21 +80,31 @@ def test_automation_tools_are_registered() -> None:
 
     assert {
         "list_automations",
+        "get_automation",
         "create_automation",
+        "update_automation",
         "enable_automation",
         "disable_automation",
+        "delete_automation",
     }.issubset(names)
 
 
 def test_automation_tool_confirmation_and_executor_bindings() -> None:
     tools_by_name = {tool["function"]["name"]: tool for tool in get_crm_tools()}
 
-    for tool_name in ("create_automation", "enable_automation"):
+    # Gated tools bind an approved-action executor, and none of them expose a
+    # model-settable approval flag: approval lives in the executor alone.
+    for tool_name in (
+        "create_automation",
+        "update_automation",
+        "enable_automation",
+        "delete_automation",
+    ):
         properties = tools_by_name[tool_name]["function"]["parameters"]["properties"]
-        assert "confirmed" in properties
+        assert "confirmed" not in properties
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is not None
 
-    for tool_name in ("list_automations", "disable_automation"):
+    for tool_name in ("list_automations", "get_automation", "disable_automation"):
         properties = tools_by_name[tool_name]["function"]["parameters"]["properties"]
         assert "confirmed" not in properties
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is None
@@ -117,7 +130,9 @@ async def test_list_automations_returns_summaries(
     result = await executor.execute("list_automations", {"active_only": True})
 
     assert result["success"] is True
-    assert result["count"] == 1
+    assert result["returned"] == 1
+    assert result["total"] == 1
+    assert result["has_more"] is False
     assert result["data"] == [
         {
             "id": str(automation.id),
@@ -128,7 +143,9 @@ async def test_list_automations_returns_summaries(
             "actions": [{"type": "send_sms", "config": {"message": "Thanks {first_name}!"}}],
             "is_active": True,
             "last_triggered_at": None,
+            "last_evaluated_at": None,
             "created_at": "2026-06-01T00:00:00+00:00",
+            "updated_at": "2026-06-02T00:00:00+00:00",
         }
     ]
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
@@ -151,9 +168,15 @@ async def test_create_automation_queues_pending_approval_when_not_confirmed(
 
     assert result == {
         "success": False,
+        "code": "pending_approval",
         "pending_approval": True,
         "pending_action_id": str(db.add.call_args.args[0].id),
         "message": "Approval required before I can create this automation.",
+        "retryable": False,
+        "hint": (
+            "Tell the operator it is waiting for their approval in this chat. "
+            "Do not call the tool again."
+        ),
     }
     pending_action = db.add.call_args.args[0]
     assert pending_action.action_type == "crm_assistant.create_automation"
@@ -205,12 +228,13 @@ async def test_create_automation_rejects_invalid_trigger(
             "name": "Bad trigger",
             "trigger_type": "not_a_trigger",
             "actions": [{"type": "send_sms", "config": {"message": "hi"}}],
-            "confirmed": True,
         },
+        approval_granted=True,
     )
 
     assert result["success"] is False
-    assert "trigger_type" in result["error"]
+    assert result["code"] == "invalid_argument"
+    assert "trigger_type" in result["detail"]
     db.add.assert_not_called()
 
 
@@ -222,10 +246,13 @@ async def test_create_automation_requires_actions(
 
     result = await executor.execute(
         "create_automation",
-        {"name": "No-op", "trigger_type": "review_received", "actions": [], "confirmed": True},
+        {"name": "No-op", "trigger_type": "review_received", "actions": []},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Automation needs at least one action"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert result["message"] == "An automation needs at least one action."
     db.add.assert_not_called()
 
 
@@ -238,10 +265,13 @@ async def test_enable_automation_not_found(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": str(uuid.uuid4()), "confirmed": True},
+        {"automation_id": str(uuid.uuid4())},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Automation not found"}
+    assert result["success"] is False
+    assert result["code"] == "not_found"
+    assert result["hint"] == "Call list_automations to get a valid id."
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "workspace_id" in compiled
     assert workspace_id.hex in compiled
@@ -255,10 +285,13 @@ async def test_enable_automation_rejects_invalid_id(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": "not-a-uuid", "confirmed": True},
+        {"automation_id": "not-a-uuid"},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Invalid automation_id"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert "automation_id" in result["message"]
     db.execute.assert_not_called()
 
 
@@ -272,7 +305,8 @@ async def test_enable_automation_activates_when_confirmed(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": str(automation.id), "confirmed": True},
+        {"automation_id": str(automation.id)},
+        approval_granted=True,
     )
 
     assert result["success"] is True
@@ -294,3 +328,130 @@ async def test_disable_automation_sets_inactive_without_confirmation(
 
     assert result["success"] is True
     assert automation.is_active is False
+
+
+def test_automation_trigger_and_action_configs_are_typed() -> None:
+    tools_by_name = {tool["function"]["name"]: tool["function"] for tool in get_crm_tools()}
+    create_properties = tools_by_name["create_automation"]["parameters"]["properties"]
+
+    trigger_variants = create_properties["trigger_config"]["anyOf"]
+    tagged = next(
+        variant
+        for variant in trigger_variants
+        if variant["description"].startswith("contact_tagged")
+    )
+    assert tagged["required"] == ["tag"]
+    assert tagged["properties"]["tag"]["minLength"] == 1
+    assert tagged["additionalProperties"] is False
+
+    action_variants = create_properties["actions"]["items"]["anyOf"]
+    wait_action = next(
+        variant for variant in action_variants if "wait" in variant["properties"]["type"]["enum"]
+    )
+    assert wait_action["properties"]["config"]["properties"]["hours"] == {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8760,
+    }
+    assert wait_action["properties"]["config"]["additionalProperties"] is False
+
+
+async def test_get_automation_returns_full_workspace_scoped_configuration(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute("get_automation", {"automation_id": str(automation.id)})
+
+    assert result["success"] is True
+    assert result["data"]["actions"] == automation.actions
+    assert result["data"]["updated_at"] == "2026-06-02T00:00:00+00:00"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "workspace_id" in compiled
+    assert workspace_id.hex in compiled
+
+
+async def test_update_automation_replaces_wait_with_complete_action_list(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id, is_active=False)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    actions = [
+        {"type": "send_sms", "config": {"message": "Thanks {first_name}!"}},
+        {"type": "wait", "config": {"hours": 24}},
+    ]
+
+    result = await executor.execute(
+        "update_automation",
+        {"automation_id": str(automation.id), "name": "24-hour follow-up", "actions": actions},
+        approval_granted=True,
+    )
+
+    assert result["success"] is True
+    assert automation.name == "24-hour follow-up"
+    assert automation.actions == actions
+    db.flush.assert_awaited_once()
+
+
+async def test_update_automation_rejects_empty_actions(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute(
+        "update_automation",
+        {"automation_id": str(automation.id), "actions": []},
+        approval_granted=True,
+    )
+
+    assert result["code"] == "invalid_argument"
+    assert "at least one action" in result["message"]
+    db.flush.assert_not_awaited()
+
+
+async def test_update_automation_without_changes_is_actionable(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute(
+        "update_automation",
+        {"automation_id": str(automation.id)},
+        approval_granted=True,
+    )
+
+    assert result["code"] == "invalid_argument"
+    assert result["hint"] == "Provide at least one field to update."
+
+
+async def test_delete_automation_removes_workspace_scoped_row_after_approval(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+
+    result = await executor.execute(
+        "delete_automation",
+        {"automation_id": str(automation.id)},
+        approval_granted=True,
+    )
+
+    assert result == {
+        "success": True,
+        "data": {"id": str(automation.id), "name": automation.name, "deleted": True},
+    }
+    db.delete.assert_awaited_once_with(automation)
+    db.flush.assert_awaited_once()
