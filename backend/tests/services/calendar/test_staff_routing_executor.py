@@ -113,9 +113,7 @@ async def test_book_appointment_routes_to_selected_staff() -> None:
     executor = VoiceToolExecutor(agent=agent)
 
     with (
-        patch.object(
-            db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)
-        ),
+        patch.object(db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)),
         patch.object(base_tool_executor, "BookingService", _FakeBookingService),
     ):
         result = await executor.execute(

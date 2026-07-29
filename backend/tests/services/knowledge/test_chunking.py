@@ -102,9 +102,7 @@ class TestOverlap:
         chunks = chunk_text(text, target_tokens=8, overlap_tokens=3, count_tokens=_words)
         assert len(chunks) >= 2
         # With overlap, a later chunk starts before the previous chunk ends.
-        assert any(
-            chunks[i + 1].char_start < chunks[i].char_end for i in range(len(chunks) - 1)
-        )
+        assert any(chunks[i + 1].char_start < chunks[i].char_end for i in range(len(chunks) - 1))
 
     def test_zero_overlap_chunks_do_not_share_text(self) -> None:
         text = " ".join(f"token{i}" for i in range(40))

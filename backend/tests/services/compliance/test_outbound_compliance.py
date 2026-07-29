@@ -146,13 +146,9 @@ class TestEvaluateGates:
         assert result.allowed is False
         assert result.reason == "global_opt_out"
 
-    async def test_missing_sms_consent_blocks(
-        self, service: OutboundComplianceService
-    ) -> None:
+    async def test_missing_sms_consent_blocks(self, service: OutboundComplianceService) -> None:
         contact = _StubContact(sms_consent_status="unknown")
-        result = await service.evaluate(
-            _build_request(contact=contact), AsyncMock()
-        )
+        result = await service.evaluate(_build_request(contact=contact), AsyncMock())
         assert result.allowed is False
         assert result.reason == "missing_sms_consent"
         assert result.details["sms_consent_status"] == "unknown"
@@ -248,20 +244,14 @@ class TestEvaluateGates:
         assert result.reason == "quiet_hours"
         assert result.details["timezone"] == "UTC"
 
-    async def test_campaign_cap_blocks(
-        self, service: OutboundComplianceService
-    ) -> None:
+    async def test_campaign_cap_blocks(self, service: OutboundComplianceService) -> None:
         campaign = _StubCampaign(max_messages_per_campaign=10, messages_sent=10)
-        result = await service.evaluate(
-            _build_request(campaign=campaign), AsyncMock()
-        )
+        result = await service.evaluate(_build_request(campaign=campaign), AsyncMock())
         assert result.allowed is False
         assert result.reason == "campaign_send_cap_reached"
         assert result.details["max_messages_per_campaign"] == 10
 
-    async def test_contact_cap_blocks(
-        self, service: OutboundComplianceService
-    ) -> None:
+    async def test_contact_cap_blocks(self, service: OutboundComplianceService) -> None:
         campaign = _StubCampaign(max_messages_per_contact=3)
         campaign_contact = _StubCampaignContact(messages_sent=3)
         result = await service.evaluate(
@@ -345,9 +335,7 @@ class TestApplySuppression:
         assert campaign_contact.suppressed_reason is None
         assert campaign_contact.status == CampaignContactStatus.PENDING
 
-    def test_records_suppression_on_blocked(
-        self, service: OutboundComplianceService
-    ) -> None:
+    def test_records_suppression_on_blocked(self, service: OutboundComplianceService) -> None:
         campaign_contact = _StubCampaignContact()
         result = OutboundComplianceResult(allowed=False, reason="quiet_hours")
         service.apply_suppression(campaign_contact, result)  # type: ignore[arg-type]

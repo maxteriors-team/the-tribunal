@@ -136,20 +136,14 @@ async def client(
 
 
 class TestListNudges:
-    async def test_list_nudges(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_nudges(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """GET /nudges → 200 with paginated list."""
         nudge = _make_mock_nudge()
-        pagination_result = PaginationResult(
-            items=[nudge], total=1, page=1, page_size=20, pages=1
-        )
+        pagination_result = PaginationResult(items=[nudge], total=1, page=1, page_size=20, pages=1)
 
         with patch("app.api.v1.nudges.paginate", new_callable=AsyncMock) as mock_paginate:
             mock_paginate.return_value = pagination_result
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/nudges"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/nudges")
 
         assert response.status_code == 200
         data = response.json()
@@ -157,44 +151,30 @@ class TestListNudges:
         assert len(data["items"]) == 1
         assert data["items"][0]["nudge_type"] == "birthday"
 
-    async def test_list_nudges_filter_status(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_nudges_filter_status(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """GET /nudges?status=pending → filter applied."""
-        pagination_result = PaginationResult(
-            items=[], total=0, page=1, page_size=20, pages=1
-        )
+        pagination_result = PaginationResult(items=[], total=0, page=1, page_size=20, pages=1)
 
         with patch("app.api.v1.nudges.paginate", new_callable=AsyncMock) as mock_paginate:
             mock_paginate.return_value = pagination_result
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/nudges?status=pending"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/nudges?status=pending")
 
         assert response.status_code == 200
         assert response.json()["total"] == 0
 
-    async def test_list_nudges_filter_type(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_list_nudges_filter_type(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """GET /nudges?nudge_type=birthday → filter applied."""
-        pagination_result = PaginationResult(
-            items=[], total=0, page=1, page_size=20, pages=1
-        )
+        pagination_result = PaginationResult(items=[], total=0, page=1, page_size=20, pages=1)
 
         with patch("app.api.v1.nudges.paginate", new_callable=AsyncMock) as mock_paginate:
             mock_paginate.return_value = pagination_result
-            response = await client.get(
-                f"/api/v1/workspaces/{WS_ID}/nudges?nudge_type=birthday"
-            )
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/nudges?nudge_type=birthday")
 
         assert response.status_code == 200
 
 
 class TestGetStats:
-    async def test_get_stats(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_get_stats(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """GET /nudges/stats → returns counts."""
         mock_result = MagicMock()
         mock_result.all.return_value = [
@@ -204,9 +184,7 @@ class TestGetStats:
         ]
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/nudges/stats"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/nudges/stats")
 
         assert response.status_code == 200
         data = response.json()
@@ -218,9 +196,7 @@ class TestGetStats:
 
 
 class TestActOnNudge:
-    async def test_act_on_nudge(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_act_on_nudge(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """PUT /nudges/{id}/act → status=acted."""
         nudge = _make_mock_nudge()
 
@@ -228,9 +204,7 @@ class TestActOnNudge:
         mock_result.unique.return_value.scalar_one_or_none.return_value = nudge
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        response = await client.put(
-            f"/api/v1/workspaces/{WS_ID}/nudges/{NUDGE_ID}/act"
-        )
+        response = await client.put(f"/api/v1/workspaces/{WS_ID}/nudges/{NUDGE_ID}/act")
 
         assert response.status_code == 200
         assert nudge.status == "acted"
@@ -238,9 +212,7 @@ class TestActOnNudge:
 
 
 class TestDismissNudge:
-    async def test_dismiss_nudge(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_dismiss_nudge(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """PUT /nudges/{id}/dismiss → status=dismissed."""
         nudge = _make_mock_nudge()
 
@@ -248,18 +220,14 @@ class TestDismissNudge:
         mock_result.unique.return_value.scalar_one_or_none.return_value = nudge
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        response = await client.put(
-            f"/api/v1/workspaces/{WS_ID}/nudges/{NUDGE_ID}/dismiss"
-        )
+        response = await client.put(f"/api/v1/workspaces/{WS_ID}/nudges/{NUDGE_ID}/dismiss")
 
         assert response.status_code == 200
         assert nudge.status == "dismissed"
 
 
 class TestSnoozeNudge:
-    async def test_snooze_nudge(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_snooze_nudge(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """PUT /nudges/{id}/snooze → status=snoozed."""
         nudge = _make_mock_nudge()
         snooze_time = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
@@ -278,13 +246,9 @@ class TestSnoozeNudge:
 
 
 class TestGetNudgeSettings:
-    async def test_get_nudge_settings(
-        self, client: AsyncClient, mock_workspace: MagicMock
-    ) -> None:
+    async def test_get_nudge_settings(self, client: AsyncClient, mock_workspace: MagicMock) -> None:
         """GET /nudge-settings → defaults returned."""
-        response = await client.get(
-            f"/api/v1/workspaces/{WS_ID}/nudge-settings"
-        )
+        response = await client.get(f"/api/v1/workspaces/{WS_ID}/nudge-settings")
 
         assert response.status_code == 200
         data = response.json()
@@ -307,9 +271,7 @@ class TestUpdateNudgeSettings:
 
 
 class TestCrossWorkspaceBlocked:
-    async def test_cross_workspace_blocked(
-        self, client: AsyncClient, mock_db: AsyncMock
-    ) -> None:
+    async def test_cross_workspace_blocked(self, client: AsyncClient, mock_db: AsyncMock) -> None:
         """Nudge from another workspace → 404."""
         other_ws_nudge_id = uuid.uuid4()
 
@@ -317,8 +279,6 @@ class TestCrossWorkspaceBlocked:
         mock_result.unique.return_value.scalar_one_or_none.return_value = None
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        response = await client.put(
-            f"/api/v1/workspaces/{WS_ID}/nudges/{other_ws_nudge_id}/act"
-        )
+        response = await client.put(f"/api/v1/workspaces/{WS_ID}/nudges/{other_ws_nudge_id}/act")
 
         assert response.status_code == 404

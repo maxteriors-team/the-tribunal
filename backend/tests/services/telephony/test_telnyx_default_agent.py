@@ -36,9 +36,7 @@ class TestResolveDefaultAgentId:
             "app.services.telephony.telnyx.ensure_default_agent",
             new=AsyncMock(),
         ) as ensure_mock:
-            resolved = await svc._resolve_default_agent_id(
-                db, workspace_id, "+12485930266"
-            )
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
 
         assert resolved == phone_agent_id
         ensure_mock.assert_not_awaited()
@@ -58,9 +56,7 @@ class TestResolveDefaultAgentId:
             "app.services.telephony.telnyx.ensure_default_agent",
             new=AsyncMock(return_value=default_agent),
         ) as ensure_mock:
-            resolved = await svc._resolve_default_agent_id(
-                db, workspace_id, "+12485930266"
-            )
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
 
         assert resolved == default_agent_id
         ensure_mock.assert_awaited_once_with(db, workspace_id)

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pending_action import PendingAction
 from app.services.ai.crm_assistant._tool_context import ToolArguments, ToolHandler
+from app.services.ai.crm_assistant._tool_errors import internal_error
 
 type ApprovedActionExecutor = Callable[[AsyncSession, PendingAction], Awaitable[dict[str, Any]]]
 
@@ -68,7 +69,7 @@ class CRMToolMetadata:
 
 
 async def _missing_handler(_args: ToolArguments) -> dict[str, Any]:
-    return {"success": False, "error": "Tool handler is not bound"}
+    return internal_error("This tool")
 
 
 async def execute_approved_crm_assistant_tool(
@@ -86,7 +87,14 @@ async def execute_approved_crm_assistant_tool(
     except ValueError:
         user_id = 0
     executor = CRMToolExecutor(db=db, workspace_id=action.workspace_id, user_id=user_id)
-    result = await executor.execute(tool_name, {**action.action_payload, "confirmed": True})
+    # A human approved this pending action, so the gate is satisfied. This is
+    # passed as a keyword argument rather than a tool-payload key precisely so
+    # the model can never forge it.
+    result = await executor.execute(
+        tool_name,
+        dict(action.action_payload),
+        approval_granted=True,
+    )
     return {"tool": tool_name, **result}
 
 
@@ -135,10 +143,50 @@ _DEFAULT_TOOL_POLICY = CRMToolMetadata(
 
 
 _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
+    "get_contact": CRMToolMetadata(
+        name="get_contact",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "find_contacts": CRMToolMetadata(
+        name="find_contacts",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
     "create_contact": CRMToolMetadata(
         name="create_contact",
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "update_contact": CRMToolMetadata(
+        name="update_contact",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "add_contact_note": CRMToolMetadata(
+        name="add_contact_note",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "add_contact_tags": CRMToolMetadata(
+        name="add_contact_tags",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "create_campaign": CRMToolMetadata(
+        name="create_campaign",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "update_campaign": CRMToolMetadata(
+        name="update_campaign",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "list_campaign_contacts": CRMToolMetadata(
+        name="list_campaign_contacts",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
     ),
     "send_sms": CRMToolMetadata(
         name="send_sms",
@@ -204,6 +252,11 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
     ),
+    "get_automation": CRMToolMetadata(
+        name="get_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
     "create_automation": CRMToolMetadata(
         name="create_automation",
         handler=_missing_handler,
@@ -215,6 +268,18 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         ),
         approved_executor=execute_approved_crm_assistant_tool,
         description_template="Create automation {name}",
+    ),
+    "update_automation": CRMToolMetadata(
+        name="update_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I can update this automation.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Update automation {automation_id}",
     ),
     "enable_automation": CRMToolMetadata(
         name="enable_automation",
@@ -233,6 +298,18 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
     ),
+    "delete_automation": CRMToolMetadata(
+        name="delete_automation",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I can delete this automation.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Delete automation {automation_id}",
+    )
     "create_agent": CRMToolMetadata(
         name="create_agent",
         handler=_missing_handler,

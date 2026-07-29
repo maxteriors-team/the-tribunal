@@ -140,16 +140,12 @@ async def test_lead_form_submission_auto_tags_by_source() -> None:
 
     try:
         # A lead comes in from the perm-lighting form.
-        perm_resp = await _submit_lead(
-            perm_key, perm_domain, first_name="Pam", phone=perm_phone
-        )
+        perm_resp = await _submit_lead(perm_key, perm_domain, first_name="Pam", phone=perm_phone)
         assert perm_resp.status_code == 200, perm_resp.text
         assert perm_resp.json()["success"] is True
 
         # And a separate lead comes in from the landscape-lighting form.
-        land_resp = await _submit_lead(
-            land_key, land_domain, first_name="Larry", phone=land_phone
-        )
+        land_resp = await _submit_lead(land_key, land_domain, first_name="Larry", phone=land_phone)
         assert land_resp.status_code == 200, land_resp.text
         assert land_resp.json()["success"] is True
 

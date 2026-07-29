@@ -141,9 +141,7 @@ class TestExecuteKnowledgeSearch:
         assert retriever.calls[0]["top_k"] == 2
 
     @pytest.mark.asyncio
-    async def test_top_k_clamped_before_retrieval(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_top_k_clamped_before_retrieval(self, monkeypatch: pytest.MonkeyPatch) -> None:
         retriever = _RecordingRetriever([])
         monkeypatch.setattr(search_tool, "knowledge_retrieval_service", retriever)
 

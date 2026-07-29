@@ -9,12 +9,14 @@ from sqlalchemy import select
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.conversation import Conversation, Message
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
+from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import (
     CRMToolContext,
     ToolArguments,
     ToolHandler,
     parse_uuid,
 )
+from app.services.ai.crm_assistant._tool_errors import invalid_id, not_found
 
 
 class ConversationAssistantTools:
@@ -46,16 +48,18 @@ class ConversationAssistantTools:
         conversation_id = parse_uuid(args.get("conversation_id"))
         agent_id = parse_uuid(args.get("agent_id"))
         if conversation_id is None:
-            return {"success": False, "error": "Invalid conversation_id"}
+            return invalid_id(
+                "conversation_id", "Call list_recent_conversations to get a valid id."
+            )
         if agent_id is None:
-            return {"success": False, "error": "Invalid agent_id"}
+            return invalid_id("agent_id", "Call list_agents to get a valid agent id.")
 
         conversation = await self.get_conversation_for_workspace(conversation_id)
         if conversation is None:
-            return {"success": False, "error": "Conversation not found"}
+            return not_found("Conversation", "Call list_recent_conversations for valid ids.")
         agent = await self.agent_tools.get_agent_for_workspace(agent_id)
         if agent is None:
-            return {"success": False, "error": "Agent not found"}
+            return not_found("Agent", "Call list_agents to get a valid agent id.")
 
         conversation.assigned_agent_id = agent.id
         conversation.ai_enabled = args.get("ai_enabled", True)
@@ -83,31 +87,17 @@ class ConversationAssistantTools:
         )
         conversation = conv_result.scalar_one_or_none()
         if not conversation:
-            return {"success": True, "data": [], "count": 0}
+            return listing([], total=0)
 
+        message_stmt = select(Message).where(Message.conversation_id == conversation.id)
+        total = await count_matching(self.context.db, Message, message_stmt)
         msg_result = await self.context.db.execute(
-            select(Message)
-            .where(Message.conversation_id == conversation.id)
-            .order_by(Message.created_at.desc())
-            .limit(limit)
+            message_stmt.order_by(Message.created_at.desc()).limit(limit)
         )
         messages = msg_result.scalars().all()
 
-        return {
-            "success": True,
-            "conversation": {
-                "id": str(conversation.id),
-                "contact_id": conversation.contact_id,
-                "channel": conversation.channel,
-                "last_message_at": (
-                    conversation.last_message_at.isoformat()
-                    if conversation.last_message_at
-                    else None
-                ),
-                "ai_enabled": conversation.ai_enabled,
-                "ai_paused": conversation.ai_paused,
-            },
-            "data": [
+        return listing(
+            [
                 {
                     "direction": message.direction,
                     "body": message.body,
@@ -117,24 +107,38 @@ class ConversationAssistantTools:
                 }
                 for message in reversed(messages)
             ],
-            "count": len(messages),
-        }
+            total=total,
+            extra={
+                "conversation": {
+                    "id": str(conversation.id),
+                    "contact_id": conversation.contact_id,
+                    "channel": conversation.channel,
+                    "last_message_at": (
+                        conversation.last_message_at.isoformat()
+                        if conversation.last_message_at
+                        else None
+                    ),
+                    "ai_enabled": conversation.ai_enabled,
+                    "ai_paused": conversation.ai_paused,
+                }
+            },
+        )
 
     async def list_recent_conversations(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
-        stmt = (
-            select_workspace_owned(Conversation, self.context.workspace_id)
-            .order_by(Conversation.last_message_at.desc())
-            .limit(limit)
+        stmt = select_workspace_owned(Conversation, self.context.workspace_id)
+
+        total = await count_matching(self.context.db, Conversation, stmt)
+        result = await self.context.db.execute(
+            stmt.order_by(Conversation.last_message_at.desc()).limit(limit)
         )
-        result = await self.context.db.execute(stmt)
         conversations = result.scalars().all()
 
-        return {
-            "success": True,
-            "data": [
+        return listing(
+            [
                 {
                     "id": str(conversation.id),
+                    "contact_id": conversation.contact_id,
                     "contact_phone": conversation.contact_phone,
                     "last_message": conversation.last_message_preview,
                     "last_message_at": (
@@ -146,5 +150,5 @@ class ConversationAssistantTools:
                 }
                 for conversation in conversations
             ],
-            "count": len(conversations),
-        }
+            total=total,
+        )

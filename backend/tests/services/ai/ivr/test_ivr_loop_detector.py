@@ -6,7 +6,6 @@ Tests verify:
 - Threshold tuning behavior
 """
 
-
 from app.services.ai.ivr_detector import LoopDetector
 
 
@@ -39,12 +38,8 @@ class TestLoopDetectorBasics:
     def test_loop_detected_with_similar_transcripts(self, loop_detector: LoopDetector):
         """Nearly identical transcripts should trigger loop detection."""
         # Use same words in same order (Jaccard sees these as identical)
-        loop_detector.add_transcript(
-            "Press 1 for sales press 2 for support press 0 for operator"
-        )
-        loop_detector.add_transcript(
-            "Press 1 for sales press 2 for support press 0 for operator"
-        )
+        loop_detector.add_transcript("Press 1 for sales press 2 for support press 0 for operator")
+        loop_detector.add_transcript("Press 1 for sales press 2 for support press 0 for operator")
 
         assert loop_detector.is_loop_detected()
 
@@ -104,9 +99,7 @@ class TestLoopDetectorReset:
         assert loop_detector.is_loop_detected()
 
         # Add completely different transcript
-        loop_detector.add_transcript(
-            "Connecting you to the sales department. Please hold."
-        )
+        loop_detector.add_transcript("Connecting you to the sales department. Please hold.")
 
         # Now the most recent is different from previous
         assert not loop_detector.is_loop_detected()
@@ -207,10 +200,7 @@ class TestLoopDetectorIntegration:
 
     def test_typical_ivr_loop_scenario(self, loop_detector: LoopDetector):
         """Test typical scenario where IVR repeats menu on timeout."""
-        menu = (
-            "Welcome to Acme Corp. Press 1 for sales, "
-            "press 2 for support, press 0 for operator."
-        )
+        menu = "Welcome to Acme Corp. Press 1 for sales, press 2 for support, press 0 for operator."
 
         # First time hearing the menu
         loop_detector.add_transcript(menu)

@@ -203,9 +203,7 @@ async def test_job_pnl_summary_aggregates_revenue_minus_costs() -> None:
         contact = await _contact(db, ws.id)
         start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
 
-        invoice = await _invoice(
-            db, ws.id, contact.id, total=1000, status="sent", due_date=None
-        )
+        invoice = await _invoice(db, ws.id, contact.id, total=1000, status="sent", due_date=None)
         job = await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)
         # 4h @ $90 = $360 labor.
         db.add(
@@ -217,9 +215,7 @@ async def test_job_pnl_summary_aggregates_revenue_minus_costs() -> None:
                 rate=90,
             )
         )
-        db.add(
-            JobExpense(workspace_id=ws.id, job_id=job.id, description="Parts", amount=200)
-        )
+        db.add(JobExpense(workspace_id=ws.id, job_id=job.id, description="Parts", amount=200))
         # A second, non-billable job (no invoice) in range.
         await _job(db, ws.id, contact.id, start=start + timedelta(days=1))
         await db.flush()
@@ -241,9 +237,7 @@ async def test_job_pnl_summary_does_not_double_count_shared_invoice() -> None:
         contact = await _contact(db, ws.id)
         start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
 
-        invoice = await _invoice(
-            db, ws.id, contact.id, total=1000, status="sent", due_date=None
-        )
+        invoice = await _invoice(db, ws.id, contact.id, total=1000, status="sent", due_date=None)
         # Two jobs share one invoice → revenue counted once.
         await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)
         await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)

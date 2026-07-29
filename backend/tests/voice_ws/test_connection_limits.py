@@ -117,9 +117,7 @@ class TestAcquireWorkspaceSlot:
         async def fake_get_redis() -> Any:
             return fake_client
 
-        with patch(
-            "app.websockets.connection_limits.get_redis", new=fake_get_redis
-        ):
+        with patch("app.websockets.connection_limits.get_redis", new=fake_get_redis):
             async with acquire_workspace_slot(ws, "ws-1", log) as (ok, sid):
                 assert ok is True
                 assert isinstance(sid, str) and sid
@@ -135,9 +133,7 @@ class TestAcquireWorkspaceSlot:
         async def fake_get_redis() -> Any:
             raise ConnectionError("redis down")
 
-        with patch(
-            "app.websockets.connection_limits.get_redis", new=fake_get_redis
-        ):
+        with patch("app.websockets.connection_limits.get_redis", new=fake_get_redis):
             async with acquire_workspace_slot(ws, "ws-1", log) as (ok, sid):
                 # Cache outage \u2192 admit the connection. Global semaphore is still
                 # in force upstream.
@@ -152,9 +148,7 @@ class TestHeartbeatMonitor:
         ws = _fake_ws()
         log = MagicMock()
 
-        monitor = HeartbeatMonitor(
-            ws, log, interval=0.01, timeout=0.02, send_ping=False
-        )
+        monitor = HeartbeatMonitor(ws, log, interval=0.01, timeout=0.02, send_ping=False)
         monitor.start()
         # Sleep past the timeout without marking activity.
         await asyncio.sleep(0.1)
@@ -169,9 +163,7 @@ class TestHeartbeatMonitor:
         ws = _fake_ws()
         log = MagicMock()
 
-        monitor = HeartbeatMonitor(
-            ws, log, interval=0.01, timeout=0.05, send_ping=False
-        )
+        monitor = HeartbeatMonitor(ws, log, interval=0.01, timeout=0.05, send_ping=False)
         monitor.start()
         # Mark activity faster than the timeout repeatedly.
         for _ in range(10):

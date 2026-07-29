@@ -5,12 +5,14 @@ import {
   Loader2,
   MessageSquare,
   Mic,
+  Pencil,
   Phone,
   Plus,
   RefreshCw,
   Search,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 
 import {
   AlertDialog,
@@ -23,8 +25,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  CampaignPicker,
+  LeadSourcePicker,
+  sourceTypeLabel,
+} from "@/components/lead-sources/source-pickers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,7 +63,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { PhoneNumberSearchResult } from "@/lib/api/phone-numbers";
+import type {
+  PhoneNumberSearchResult,
+  PhoneNumberUpdateRequest,
+} from "@/lib/api/phone-numbers";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { PhoneNumber } from "@/types";
 
@@ -121,6 +140,157 @@ export function ReleaseNumberDialog({
   );
 }
 
+function TrackingAttributionSummary({ number }: { number: PhoneNumber }) {
+  if (!number.lead_source) {
+    return <span className="text-xs text-muted-foreground">Unmapped</span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-sm font-medium">{number.lead_source.name}</span>
+        <Badge variant="outline" className="text-xs font-normal">
+          {sourceTypeLabel(number.lead_source.source_type)}
+        </Badge>
+      </div>
+      {number.lead_source_campaign && (
+        <p className="text-xs text-muted-foreground">
+          Campaign: {number.lead_source_campaign.name}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function TrackingAttributionDialog({
+  workspaceId,
+  number,
+  trigger,
+  isUpdating,
+  onUpdate,
+}: {
+  workspaceId: string;
+  number: PhoneNumber;
+  trigger: React.ReactNode;
+  isUpdating: boolean;
+  onUpdate: (
+    phoneNumberId: string,
+    data: PhoneNumberUpdateRequest,
+  ) => Promise<PhoneNumber>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [leadSourceId, setLeadSourceId] = useState<string | undefined>(
+    number.lead_source_id ?? undefined,
+  );
+  const [campaignId, setCampaignId] = useState<string | undefined>(
+    number.lead_source_campaign_id ?? undefined,
+  );
+  const [trackingLabel, setTrackingLabel] = useState(
+    number.tracking_label ?? "",
+  );
+
+  const resetForm = () => {
+    setLeadSourceId(number.lead_source_id ?? undefined);
+    setCampaignId(number.lead_source_campaign_id ?? undefined);
+    setTrackingLabel(number.tracking_label ?? "");
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) resetForm();
+    setOpen(nextOpen);
+  };
+
+  const handleSave = async () => {
+    try {
+      await onUpdate(number.id, {
+        lead_source_id: leadSourceId ?? null,
+        lead_source_campaign_id: campaignId ?? null,
+        tracking_label: trackingLabel.trim() || null,
+      });
+      setOpen(false);
+    } catch {
+      // The mutation displays the API error and keeps the form open for retry.
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Call Tracking</DialogTitle>
+          <DialogDescription>
+            Attribute inbound calls to the source and optional campaign promoted
+            with {formatPhoneNumber(number.phone_number)}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor={`tracking-label-${number.id}`}>Tracking label</Label>
+            <Input
+              id={`tracking-label-${number.id}`}
+              value={trackingLabel}
+              onChange={(event) => setTrackingLabel(event.target.value)}
+              placeholder="e.g. Westside truck wrap"
+              maxLength={120}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use a label that identifies where this number appears.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`lead-source-${number.id}`}>Lead source</Label>
+            <LeadSourcePicker
+              id={`lead-source-${number.id}`}
+              workspaceId={workspaceId}
+              value={leadSourceId}
+              allowClear
+              onClear={() => {
+                setLeadSourceId(undefined);
+                setCampaignId(undefined);
+              }}
+              onChange={(sourceId) => {
+                setLeadSourceId(sourceId);
+                setCampaignId(undefined);
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`lead-campaign-${number.id}`}>Campaign</Label>
+            <CampaignPicker
+              id={`lead-campaign-${number.id}`}
+              workspaceId={workspaceId}
+              leadSourceId={leadSourceId}
+              value={campaignId}
+              allowClear
+              onClear={() => setCampaignId(undefined)}
+              onChange={setCampaignId}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={isUpdating}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isUpdating || !workspaceId}
+          >
+            {isUpdating && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Save mapping
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SearchNumbersForm({
   variant,
   country,
@@ -183,15 +353,24 @@ export function SearchNumbersForm({
 
 export function OwnedNumbersContent({
   variant,
+  workspaceId,
   phoneNumbers,
   isLoading,
   hasError,
+  isUpdating,
+  onUpdate,
   onRelease,
 }: {
   variant: PhoneNumbersTableVariant;
+  workspaceId: string;
   phoneNumbers: PhoneNumber[];
   isLoading: boolean;
   hasError: boolean;
+  isUpdating: boolean;
+  onUpdate: (
+    phoneNumberId: string,
+    data: PhoneNumberUpdateRequest,
+  ) => Promise<PhoneNumber>;
   onRelease: (phoneNumberId: string) => void;
 }) {
   if (isLoading) {
@@ -238,27 +417,26 @@ export function OwnedNumbersContent({
         {phoneNumbers.map((number) => (
           <div
             key={number.id}
-            className="flex items-center justify-between p-3 rounded-lg border"
+            className="flex items-center justify-between gap-4 rounded-lg border p-3"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex size-8 items-center justify-center rounded-full bg-green-500/10">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-green-500/10">
                 <Phone className="size-4 text-green-500" />
               </div>
-              <div>
+              <div className="min-w-0 space-y-1">
                 <p className="font-medium">
                   {formatPhoneNumber(number.phone_number)}
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {number.friendly_name && (
-                    <span className="text-xs text-muted-foreground">
-                      {number.friendly_name}
-                    </span>
-                  )}
-                </div>
+                {(number.tracking_label || number.friendly_name) && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {number.tracking_label || number.friendly_name}
+                  </p>
+                )}
+                <TrackingAttributionSummary number={number} />
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="hidden items-center gap-1.5 md:flex">
                 {number.sms_enabled && (
                   <Badge
                     variant="outline"
@@ -278,9 +456,21 @@ export function OwnedNumbersContent({
                   </Badge>
                 )}
               </div>
-              {number.assigned_agent_id && (
-                <Badge variant="secondary">Assigned to Agent</Badge>
-              )}
+              <TrackingAttributionDialog
+                workspaceId={workspaceId}
+                number={number}
+                isUpdating={isUpdating}
+                onUpdate={onUpdate}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Edit call tracking for ${formatPhoneNumber(number.phone_number)}`}
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                }
+              />
               <ReleaseNumberDialog
                 number={number}
                 onRelease={onRelease}
@@ -288,6 +478,7 @@ export function OwnedNumbersContent({
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    aria-label={`Release ${formatPhoneNumber(number.phone_number)}`}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="size-4" />
@@ -306,7 +497,8 @@ export function OwnedNumbersContent({
       <TableHeader>
         <TableRow>
           <TableHead>Phone Number</TableHead>
-          <TableHead>Label</TableHead>
+          <TableHead>Tracking Label</TableHead>
+          <TableHead>Attribution</TableHead>
           <TableHead>Capabilities</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -315,13 +507,23 @@ export function OwnedNumbersContent({
       <TableBody>
         {phoneNumbers.map((number) => (
           <TableRow key={number.id}>
-            <TableCell className="font-medium">
-              {formatPhoneNumber(number.phone_number)}
+            <TableCell>
+              <p className="font-medium">
+                {formatPhoneNumber(number.phone_number)}
+              </p>
+              {number.friendly_name && (
+                <p className="text-xs text-muted-foreground">
+                  {number.friendly_name}
+                </p>
+              )}
             </TableCell>
             <TableCell>
-              {number.friendly_name || (
-                <span className="text-muted-foreground">-</span>
+              {number.tracking_label || (
+                <span className="text-muted-foreground">—</span>
               )}
+            </TableCell>
+            <TableCell>
+              <TrackingAttributionSummary number={number} />
             </TableCell>
             <TableCell>
               <div className="flex items-center gap-1.5">
@@ -355,19 +557,34 @@ export function OwnedNumbersContent({
               )}
             </TableCell>
             <TableCell className="text-right">
-              <ReleaseNumberDialog
-                number={number}
-                onRelease={onRelease}
-                trigger={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                }
-              />
+              <div className="flex justify-end gap-1">
+                <TrackingAttributionDialog
+                  workspaceId={workspaceId}
+                  number={number}
+                  isUpdating={isUpdating}
+                  onUpdate={onUpdate}
+                  trigger={
+                    <Button variant="ghost" size="sm">
+                      <Pencil className="mr-2 size-4" />
+                      Edit tracking
+                    </Button>
+                  }
+                />
+                <ReleaseNumberDialog
+                  number={number}
+                  onRelease={onRelease}
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Release ${formatPhoneNumber(number.phone_number)}`}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  }
+                />
+              </div>
             </TableCell>
           </TableRow>
         ))}

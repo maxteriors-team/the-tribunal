@@ -64,8 +64,7 @@ def test_pool_absorbs_a_worker_burst_without_starving_requests() -> None:
 def test_pool_fits_under_server_max_connections_during_a_rolling_deploy() -> None:
     """Two full pools plus migration/admin overhead must fit in the server budget."""
     worst_case = (
-        _peak_connections() * CONCURRENT_INSTANCES_DURING_DEPLOY
-        + OPERATIONAL_CONNECTION_HEADROOM
+        _peak_connections() * CONCURRENT_INSTANCES_DURING_DEPLOY + OPERATIONAL_CONNECTION_HEADROOM
     )
 
     assert worst_case <= USABLE_CONNECTIONS, (

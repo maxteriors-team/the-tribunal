@@ -96,9 +96,7 @@ async def test_worker_noop_on_empty_queue() -> None:
 
     with (
         patch.object(worker_module, "AsyncSessionLocal", fake_sessionmaker),
-        patch.object(
-            worker_module, "analyze_transcript", AsyncMock()
-        ) as mocked_analyze,
+        patch.object(worker_module, "analyze_transcript", AsyncMock()) as mocked_analyze,
     ):
         worker = worker_module.TranscriptAnalysisWorker()
         await worker._process_items()

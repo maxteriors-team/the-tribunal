@@ -210,10 +210,12 @@ class TestMockLLMClient:
 
     async def test_returns_responses_in_order(self) -> None:
         """Test mock returns responses sequentially."""
-        client = MockLLMClient(responses=[
-            "First response",
-            "Second response",
-        ])
+        client = MockLLMClient(
+            responses=[
+                "First response",
+                "Second response",
+            ]
+        )
 
         r1 = await client.generate_response("prompt", "transcript", [])
         r2 = await client.generate_response("prompt", "transcript", [])
@@ -256,9 +258,11 @@ class TestIVRTestHarness:
     ) -> None:
         """Test successful navigation to terminal state."""
         # Mock responses that press 1 to reach sales
-        client = MockLLMClient(responses=[
-            "I'll press 1 for sales. <dtmf>1</dtmf>",
-        ])
+        client = MockLLMClient(
+            responses=[
+                "I'll press 1 for sales. <dtmf>1</dtmf>",
+            ]
+        )
         harness = IVRTestHarness(llm_client=client)
 
         result = await harness.run_scenario(mock_agent, simple_scenario, "Test Workspace")
@@ -277,10 +281,12 @@ class TestIVRTestHarness:
     ) -> None:
         """Test navigation through nested menus."""
         # Navigate: main_menu -> support_menu -> operator
-        client = MockLLMClient(responses=[
-            "I'll try technical support. <dtmf>2</dtmf>",  # main -> support
-            "Let me speak to an operator. <dtmf>0</dtmf>",  # support -> operator
-        ])
+        client = MockLLMClient(
+            responses=[
+                "I'll try technical support. <dtmf>2</dtmf>",  # main -> support
+                "Let me speak to an operator. <dtmf>0</dtmf>",  # support -> operator
+            ]
+        )
         harness = IVRTestHarness(llm_client=client)
 
         result = await harness.run_scenario(mock_agent, nested_scenario, "Test Workspace")
@@ -299,12 +305,14 @@ class TestIVRTestHarness:
     ) -> None:
         """Test that loops are detected and reported."""
         # Mock responses that always press 1 (which loops back in stuck_loop scenario)
-        client = MockLLMClient(responses=[
-            "Pressing 1 <dtmf>1</dtmf>",
-            "Pressing 1 again <dtmf>1</dtmf>",
-            "Pressing 1 again <dtmf>1</dtmf>",
-            "Pressing 1 again <dtmf>1</dtmf>",
-        ])
+        client = MockLLMClient(
+            responses=[
+                "Pressing 1 <dtmf>1</dtmf>",
+                "Pressing 1 again <dtmf>1</dtmf>",
+                "Pressing 1 again <dtmf>1</dtmf>",
+                "Pressing 1 again <dtmf>1</dtmf>",
+            ]
+        )
         config = IVRTestConfig(loop_threshold=3)
         harness = IVRTestHarness(llm_client=client, config=config)
 
@@ -321,11 +329,13 @@ class TestIVRTestHarness:
     ) -> None:
         """Test that max turns limit is enforced."""
         # Mock responses that never send DTMF
-        client = MockLLMClient(responses=[
-            "I'm not sure what to press.",
-            "Still thinking...",
-            "Hmm...",
-        ])
+        client = MockLLMClient(
+            responses=[
+                "I'm not sure what to press.",
+                "Still thinking...",
+                "Hmm...",
+            ]
+        )
         config = IVRTestConfig(max_turns=3, loop_threshold=10)
         harness = IVRTestHarness(llm_client=client, config=config)
 
@@ -358,13 +368,15 @@ class TestIVRTestHarness:
     ) -> None:
         """Test running multiple scenarios generates report."""
         # Set up responses for both scenarios
-        client = MockLLMClient(responses=[
-            # Simple scenario - press 1
-            "Press 1 <dtmf>1</dtmf>",
-            # Nested scenario - press 2 then 0
-            "Press 2 <dtmf>2</dtmf>",
-            "Press 0 <dtmf>0</dtmf>",
-        ])
+        client = MockLLMClient(
+            responses=[
+                # Simple scenario - press 1
+                "Press 1 <dtmf>1</dtmf>",
+                # Nested scenario - press 2 then 0
+                "Press 2 <dtmf>2</dtmf>",
+                "Press 0 <dtmf>0</dtmf>",
+            ]
+        )
         harness = IVRTestHarness(llm_client=client)
 
         report = await harness.run_scenarios(
@@ -384,10 +396,12 @@ class TestIVRTestHarness:
         simple_scenario,
     ) -> None:
         """Test handling of responses without DTMF tags."""
-        client = MockLLMClient(responses=[
-            "I'm listening to the options...",  # No DTMF
-            "Let me press 1 for sales. <dtmf>1</dtmf>",  # Has DTMF
-        ])
+        client = MockLLMClient(
+            responses=[
+                "I'm listening to the options...",  # No DTMF
+                "Let me press 1 for sales. <dtmf>1</dtmf>",  # Has DTMF
+            ]
+        )
         harness = IVRTestHarness(llm_client=client)
 
         result = await harness.run_scenario(mock_agent, simple_scenario, "Test Workspace")
@@ -404,10 +418,12 @@ class TestIVRTestHarness:
         simple_scenario,
     ) -> None:
         """Test handling of invalid DTMF input."""
-        client = MockLLMClient(responses=[
-            "Press 9 <dtmf>9</dtmf>",  # Invalid option
-            "Press 1 <dtmf>1</dtmf>",  # Valid option
-        ])
+        client = MockLLMClient(
+            responses=[
+                "Press 9 <dtmf>9</dtmf>",  # Invalid option
+                "Press 1 <dtmf>1</dtmf>",  # Valid option
+            ]
+        )
         harness = IVRTestHarness(llm_client=client)
 
         result = await harness.run_scenario(mock_agent, simple_scenario, "Test Workspace")

@@ -132,9 +132,7 @@ async def test_approve_forwards_the_clients_package_choice(
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
     async with await _client() as ac:
-        resp = await ac.post(
-            "/api/v1/p/quotes/tok/approve", json={"selected_tier": "good"}
-        )
+        resp = await ac.post("/api/v1/p/quotes/tok/approve", json={"selected_tier": "good"})
 
     assert resp.status_code == 200
     assert seen["selected_tier"] == "good"

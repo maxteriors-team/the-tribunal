@@ -193,9 +193,7 @@ class TestAudioCodecService:
         """Test converting to the same format returns input unchanged."""
         service = AudioCodecService()
         data = b"test audio data"
-        result = service.convert_for_provider(
-            data, AudioFormat.MULAW_8K, AudioFormat.MULAW_8K
-        )
+        result = service.convert_for_provider(data, AudioFormat.MULAW_8K, AudioFormat.MULAW_8K)
         assert result == data
 
     def test_convert_mulaw_to_pcm24k(self) -> None:
@@ -221,9 +219,7 @@ class TestAudioCodecService:
         service = AudioCodecService()
         with pytest.raises(AudioConversionError):
             # This conversion path doesn't exist
-            service.convert_for_provider(
-                b"data", AudioFormat.G711_ULAW, AudioFormat.PCM16_24K
-            )
+            service.convert_for_provider(b"data", AudioFormat.G711_ULAW, AudioFormat.PCM16_24K)
 
     def test_needs_conversion_openai(self) -> None:
         """Test needs_conversion for OpenAI provider."""

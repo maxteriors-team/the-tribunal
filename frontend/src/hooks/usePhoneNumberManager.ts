@@ -8,11 +8,13 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   phoneNumbersApi,
   type PhoneNumberSearchResult,
+  type PhoneNumberUpdateRequest,
 } from "@/lib/api/phone-numbers";
 import { queryKeys } from "@/lib/query-keys";
 import type { PhoneNumber } from "@/types";
 
 export interface UsePhoneNumberManagerResult {
+  workspaceId: string | null;
   phoneNumbers: PhoneNumber[];
   isLoadingNumbers: boolean;
   numbersError: unknown;
@@ -24,16 +26,21 @@ export interface UsePhoneNumberManagerResult {
   hasSearched: boolean;
   isSearching: boolean;
   isPurchasing: boolean;
+  isUpdating: boolean;
   isSyncing: boolean;
   handleSearch: (event: React.FormEvent) => void;
   purchase: (phoneNumber: string) => void;
+  updateAttribution: (
+    phoneNumberId: string,
+    data: PhoneNumberUpdateRequest,
+  ) => Promise<PhoneNumber>;
   release: (phoneNumberId: string) => void;
   sync: () => void;
 }
 
 /**
  * Container hook for {@link PhoneNumbersTable}: owns the owned-numbers query and
- * the search / purchase / release / sync mutations plus the search form state,
+ * the search / purchase / update / release / sync mutations plus form state,
  * so the table itself can stay presentational across its `section`/`page`
  * variants.
  */
@@ -108,6 +115,26 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({
+      phoneNumberId,
+      data,
+    }: {
+      phoneNumberId: string;
+      data: PhoneNumberUpdateRequest;
+    }) => {
+      if (!workspaceId) throw new Error("Workspace not loaded");
+      return phoneNumbersApi.update(workspaceId, phoneNumberId, data);
+    },
+    onSuccess: () => {
+      toast.success("Call tracking attribution saved");
+      void invalidatePhoneNumbers();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update phone number");
+    },
+  });
+
   const releaseMutation = useMutation({
     mutationFn: (phoneNumberId: string) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
@@ -150,6 +177,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
   };
 
   return {
+    workspaceId,
     phoneNumbers,
     isLoadingNumbers,
     numbersError,
@@ -161,9 +189,12 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
     hasSearched,
     isSearching: searchMutation.isPending,
     isPurchasing: purchaseMutation.isPending,
+    isUpdating: updateMutation.isPending,
     isSyncing: syncMutation.isPending,
     handleSearch,
     purchase: (phoneNumber) => purchaseMutation.mutate(phoneNumber),
+    updateAttribution: (phoneNumberId, data) =>
+      updateMutation.mutateAsync({ phoneNumberId, data }),
     release: (phoneNumberId) => releaseMutation.mutate(phoneNumberId),
     sync: () => syncMutation.mutate(),
   };

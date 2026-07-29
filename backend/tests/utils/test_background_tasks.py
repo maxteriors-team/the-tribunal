@@ -53,9 +53,7 @@ class TestSpawnBackgroundTask:
         assert background_task_count() == before
 
     @pytest.mark.asyncio
-    async def test_exceptions_are_logged_not_raised(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_exceptions_are_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
         """A failing task logs the exception instead of crashing the loop."""
 
         async def boom() -> None:

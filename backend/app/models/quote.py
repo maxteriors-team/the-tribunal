@@ -151,6 +151,19 @@ class Quote(Base):
     attach_value: Mapped[float] = mapped_column(
         Numeric(12, 2), nullable=False, default=0, server_default="0"
     )
+    # Recorded "we asked and they said no" events from the attach prompt (see
+    # ``app.services.quotes.attach_rules``), each a
+    # ``{primary_service, categories, reason, dismissed_at}`` object. A list, not
+    # a single record, because a quote can be re-saved after the rep re-opens the
+    # conversation and dismisses again — the history is the audit trail.
+    #
+    # This is the half of attach reporting the metrics above cannot supply: a
+    # workspace at 20% attach looks identical whether the other 80% were never
+    # asked or were asked and declined, and those two problems have opposite
+    # fixes. Server-written only; a client cannot post its own dismissals.
+    attach_dismissals: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
 
     # Dates / lifecycle timestamps.
     issue_date: Mapped[date | None] = mapped_column(DATE, nullable=True)

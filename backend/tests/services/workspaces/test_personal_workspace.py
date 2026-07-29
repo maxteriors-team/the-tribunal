@@ -65,11 +65,7 @@ async def test_ensure_personal_workspace_provisions_owner_membership_and_pipelin
         assert membership.is_default is True
 
         pipelines = (
-            (
-                await db.execute(
-                    select(Pipeline).where(Pipeline.workspace_id == workspace.id)
-                )
-            )
+            (await db.execute(select(Pipeline).where(Pipeline.workspace_id == workspace.id)))
             .scalars()
             .all()
         )
@@ -92,9 +88,7 @@ async def test_ensure_personal_workspace_is_idempotent() -> None:
         memberships = (
             (
                 await db.execute(
-                    select(WorkspaceMembership).where(
-                        WorkspaceMembership.user_id == user.id
-                    )
+                    select(WorkspaceMembership).where(WorkspaceMembership.user_id == user.id)
                 )
             )
             .scalars()
@@ -110,9 +104,7 @@ async def test_ensure_personal_workspace_returns_existing_default() -> None:
         db.add(ws)
         await db.flush()
         db.add(
-            WorkspaceMembership(
-                user_id=user.id, workspace_id=ws.id, role="owner", is_default=True
-            )
+            WorkspaceMembership(user_id=user.id, workspace_id=ws.id, role="owner", is_default=True)
         )
         await db.flush()
 

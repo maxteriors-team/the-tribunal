@@ -102,6 +102,8 @@ export function LeadSourcePicker({
   workspaceId,
   value,
   onChange,
+  onClear,
+  allowClear = false,
   sourceType,
   id,
   placeholder = "Select a lead source",
@@ -110,6 +112,8 @@ export function LeadSourcePicker({
   workspaceId: string;
   value: string | undefined;
   onChange: (leadSourceId: string, source: LeadSource) => void;
+  onClear?: () => void;
+  allowClear?: boolean;
   /** When set, only sources matching this channel are listed. */
   sourceType?: LeadSourceType;
   id?: string;
@@ -134,17 +138,26 @@ export function LeadSourcePicker({
 
   return (
     <Select
-      value={value ?? ""}
+      value={value ?? (allowClear ? "__none__" : "")}
       onValueChange={(v) => {
+        if (v === "__none__") {
+          onClear?.();
+          return;
+        }
         const picked = options.find((s) => s.id === v);
         if (picked) onChange(v, picked);
       }}
-      disabled={isPending || options.length === 0}
+      disabled={isPending || (options.length === 0 && !allowClear)}
     >
       <SelectTrigger id={id} aria-label={ariaLabel} className="w-full">
-        <SelectValue placeholder={options.length === 0 ? emptyLabel : placeholder} />
+        <SelectValue
+          placeholder={options.length === 0 ? emptyLabel : placeholder}
+        />
       </SelectTrigger>
       <SelectContent>
+        {allowClear && (
+          <SelectItem value="__none__">No lead source</SelectItem>
+        )}
         {options.map((source) => (
           <SelectItem key={source.id} value={source.id}>
             {source.name}
@@ -164,6 +177,8 @@ export function CampaignPicker({
   leadSourceId,
   value,
   onChange,
+  onClear,
+  allowClear = false,
   id,
   "aria-label": ariaLabel = "Campaign",
 }: {
@@ -171,6 +186,8 @@ export function CampaignPicker({
   leadSourceId: string | undefined;
   value: string | undefined;
   onChange: (campaignId: string) => void;
+  onClear?: () => void;
+  allowClear?: boolean;
   id?: string;
   "aria-label"?: string;
 }) {
@@ -181,7 +198,8 @@ export function CampaignPicker({
   });
 
   const options = campaigns ?? [];
-  const disabled = !leadSourceId || isPending || options.length === 0;
+  const disabled =
+    !leadSourceId || isPending || (options.length === 0 && !allowClear);
 
   const placeholder = !leadSourceId
     ? "Pick a source first"
@@ -193,14 +211,21 @@ export function CampaignPicker({
 
   return (
     <Select
-      value={value ?? ""}
-      onValueChange={onChange}
+      value={value ?? (allowClear ? "__none__" : "")}
+      onValueChange={(v) => {
+        if (v === "__none__") {
+          onClear?.();
+          return;
+        }
+        onChange(v);
+      }}
       disabled={disabled}
     >
       <SelectTrigger id={id} aria-label={ariaLabel} className="w-full">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
+        {allowClear && <SelectItem value="__none__">No campaign</SelectItem>}
         {options.map((campaign) => (
           <SelectItem key={campaign.id} value={campaign.id}>
             {campaign.name}

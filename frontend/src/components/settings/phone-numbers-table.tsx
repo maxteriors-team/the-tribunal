@@ -27,6 +27,7 @@ export interface PhoneNumbersTableProps {
 
 export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
   const {
+    workspaceId,
     phoneNumbers,
     isLoadingNumbers,
     numbersError,
@@ -38,9 +39,11 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
     hasSearched,
     isSearching,
     isPurchasing,
+    isUpdating,
     isSyncing,
     handleSearch,
     purchase,
+    updateAttribution,
     release,
     sync,
   } = usePhoneNumberManager();
@@ -52,9 +55,12 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
   const ownedNumbersContent = (
     <OwnedNumbersContent
       variant={variant}
+      workspaceId={workspaceId ?? ""}
       phoneNumbers={phoneNumbers}
       isLoading={isLoadingNumbers}
       hasError={!!numbersError}
+      isUpdating={isUpdating}
+      onUpdate={updateAttribution}
       onRelease={release}
     />
   );

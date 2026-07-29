@@ -114,9 +114,7 @@ async def test_no_deposit_yields_null_amount() -> None:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
         svc = QuoteService(db)
-        token, _ = await _sent_quote_with_deposit(
-            svc, ws.id, contact.id, deposit_percentage=None
-        )
+        token, _ = await _sent_quote_with_deposit(svc, ws.id, contact.id, deposit_percentage=None)
 
         proposal = await svc.get_public_proposal(token)
         assert proposal.deposit_percentage is None
@@ -339,9 +337,7 @@ async def test_reconcile_reports_unpaid_when_stripe_not_paid(monkeypatch) -> Non
         monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
 
         async def _unpaid_status(session_id: str) -> SessionStatus:
-            return SessionStatus(
-                payment_status="unpaid", status="open", payment_intent_id=None
-            )
+            return SessionStatus(payment_status="unpaid", status="open", payment_intent_id=None)
 
         monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _unpaid_status)
 

@@ -46,13 +46,9 @@ class TestClassifyNoAnswerCauses:
     """NO_ANSWER_CAUSES → no_answer outcome."""
 
     @pytest.mark.parametrize("cause", ["NO_ANSWER", "TIMEOUT", "ORIGINATOR_CANCEL"])
-    def test_no_answer_causes(
-        self, classifier: CallOutcomeClassifier, cause: str
-    ) -> None:
+    def test_no_answer_causes(self, classifier: CallOutcomeClassifier, cause: str) -> None:
         """Each NO_ANSWER cause classifies to no_answer + failed."""
-        result = classifier.classify(
-            hangup_cause=cause, duration_secs=0, hangup_source="caller"
-        )
+        result = classifier.classify(hangup_cause=cause, duration_secs=0, hangup_source="caller")
         assert result.outcome == "no_answer"
         assert result.message_status == "failed"
         assert result.is_rejection is False
@@ -113,9 +109,7 @@ class TestClassifyNormalClearing:
         self, classifier: CallOutcomeClassifier, cause: str
     ) -> None:
         """NORMAL_CLEARING with 0 duration = no_answer + failed."""
-        result = classifier.classify(
-            hangup_cause=cause, duration_secs=0, hangup_source="caller"
-        )
+        result = classifier.classify(hangup_cause=cause, duration_secs=0, hangup_source="caller")
         assert result.outcome == "no_answer"
         assert result.message_status == "failed"
         assert result.error_code == cause
@@ -154,9 +148,7 @@ class TestClassifyNormalClearing:
         )
         assert result.outcome == "no_answer"
 
-    def test_long_duration_is_completed(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_long_duration_is_completed(self, classifier: CallOutcomeClassifier) -> None:
         """5+ seconds with NORMAL_CLEARING leaves as completed with no outcome."""
         result = classifier.classify(
             hangup_cause="NORMAL_CLEARING", duration_secs=5, hangup_source="callee"
@@ -167,9 +159,7 @@ class TestClassifyNormalClearing:
         assert result.error_code is None
         assert result.error_message is None
 
-    def test_very_long_duration_is_completed(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_very_long_duration_is_completed(self, classifier: CallOutcomeClassifier) -> None:
         """Long call is completed."""
         result = classifier.classify(
             hangup_cause="NORMAL_CLEARING", duration_secs=120, hangup_source="caller"
@@ -181,9 +171,7 @@ class TestClassifyNormalClearing:
 class TestClassifyBookingOverride:
     """booking_outcome='success' overrides failed status."""
 
-    def test_booking_success_overrides_failed(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_booking_success_overrides_failed(self, classifier: CallOutcomeClassifier) -> None:
         """Booking success upgrades failed to completed."""
         result = classifier.classify(
             hangup_cause="NO_ANSWER",
@@ -198,9 +186,7 @@ class TestClassifyBookingOverride:
         assert result.error_code is None
         assert result.error_message is None
 
-    def test_booking_non_success_does_not_override(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_booking_non_success_does_not_override(self, classifier: CallOutcomeClassifier) -> None:
         """Non-success booking outcome does not upgrade status."""
         result = classifier.classify(
             hangup_cause="USER_BUSY",
@@ -211,9 +197,7 @@ class TestClassifyBookingOverride:
         assert result.message_status == "failed"
         assert result.error_code == "USER_BUSY"
 
-    def test_booking_success_on_already_completed(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_booking_success_on_already_completed(self, classifier: CallOutcomeClassifier) -> None:
         """Booking success on already completed call stays completed."""
         result = classifier.classify(
             hangup_cause="NORMAL_CLEARING",
@@ -246,17 +230,13 @@ class TestClassifyNormalization:
 
     def test_empty_hangup_cause(self, classifier: CallOutcomeClassifier) -> None:
         """Empty hangup cause leaves outcome None, status completed."""
-        result = classifier.classify(
-            hangup_cause="", duration_secs=0, hangup_source="caller"
-        )
+        result = classifier.classify(hangup_cause="", duration_secs=0, hangup_source="caller")
         assert result.outcome is None
         assert result.message_status == "completed"
         assert result.error_code is None
         assert result.error_message is None
 
-    def test_unknown_hangup_cause_stays_completed(
-        self, classifier: CallOutcomeClassifier
-    ) -> None:
+    def test_unknown_hangup_cause_stays_completed(self, classifier: CallOutcomeClassifier) -> None:
         """Unknown hangup cause defaults to completed with no outcome."""
         result = classifier.classify(
             hangup_cause="SOMETHING_WEIRD", duration_secs=10, hangup_source="caller"

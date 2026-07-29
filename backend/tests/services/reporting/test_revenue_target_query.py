@@ -284,9 +284,7 @@ async def test_database_refuses_a_period_month_that_is_not_the_first() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         db.add(
-            RevenueTarget(
-                workspace_id=ws.id, period_month=date(2026, 6, 14), revenue_goal=130_000
-            )
+            RevenueTarget(workspace_id=ws.id, period_month=date(2026, 6, 14), revenue_goal=130_000)
         )
 
         with pytest.raises(IntegrityError, match="period_month_is_first_of_month"):
@@ -336,7 +334,7 @@ async def test_pace_counts_the_month_actuals_from_the_live_crm() -> None:
 
 
 async def test_pace_ignores_work_dated_after_today() -> None:
-    """"To date" means to date: a deal closed later this month is not sold yet."""
+    """ "To date" means to date: a deal closed later this month is not sold yet."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)

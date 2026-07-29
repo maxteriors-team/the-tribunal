@@ -145,9 +145,7 @@ class TestVoicePromptBuilder:
         """Test context section for outbound calls."""
         builder = VoicePromptBuilder()
         contact_info = {"name": "Jane Smith"}
-        context = builder.build_context_section(
-            contact_info=contact_info, is_outbound=True
-        )
+        context = builder.build_context_section(contact_info=contact_info, is_outbound=True)
 
         assert "OUTBOUND CALL" in context
         assert "Customer You Are Calling" in context
@@ -156,9 +154,7 @@ class TestVoicePromptBuilder:
         """Test context section for inbound calls."""
         builder = VoicePromptBuilder()
         contact_info = {"name": "Jane Smith"}
-        context = builder.build_context_section(
-            contact_info=contact_info, is_outbound=False
-        )
+        context = builder.build_context_section(contact_info=contact_info, is_outbound=False)
 
         assert "INBOUND CALL" in context
         assert "Customer Information" in context
@@ -215,15 +211,11 @@ class TestVoicePromptBuilder:
     def test_get_inbound_greeting_prompt_with_greeting(self) -> None:
         """Test inbound greeting prompt with specific greeting."""
         builder = VoicePromptBuilder()
-        prompt = builder.get_inbound_greeting_prompt(
-            greeting="Welcome to Acme Corp!"
-        )
+        prompt = builder.get_inbound_greeting_prompt(greeting="Welcome to Acme Corp!")
 
         assert "Welcome to Acme Corp!" in prompt
 
-    def test_get_inbound_greeting_prompt_default(
-        self, mock_agent: MagicMock
-    ) -> None:
+    def test_get_inbound_greeting_prompt_default(self, mock_agent: MagicMock) -> None:
         """Test inbound greeting prompt with default."""
         builder = VoicePromptBuilder(agent=mock_agent)
         prompt = builder.get_inbound_greeting_prompt()

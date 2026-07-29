@@ -69,6 +69,8 @@ def db() -> MagicMock:
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
     session.add = MagicMock()
+    # List tools issue a COUNT(*) through scalar() for the truthful `total`.
+    session.scalar = AsyncMock(return_value=1)
     return session
 
 
@@ -86,9 +88,11 @@ def test_automation_tools_are_registered() -> None:
 def test_automation_tool_confirmation_and_executor_bindings() -> None:
     tools_by_name = {tool["function"]["name"]: tool for tool in get_crm_tools()}
 
+    # Gated tools bind an approved-action executor, and none of them expose a
+    # model-settable approval flag: approval lives in the executor alone.
     for tool_name in ("create_automation", "enable_automation"):
         properties = tools_by_name[tool_name]["function"]["parameters"]["properties"]
-        assert "confirmed" in properties
+        assert "confirmed" not in properties
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is not None
 
     for tool_name in ("list_automations", "disable_automation"):
@@ -117,7 +121,9 @@ async def test_list_automations_returns_summaries(
     result = await executor.execute("list_automations", {"active_only": True})
 
     assert result["success"] is True
-    assert result["count"] == 1
+    assert result["returned"] == 1
+    assert result["total"] == 1
+    assert result["has_more"] is False
     assert result["data"] == [
         {
             "id": str(automation.id),
@@ -151,9 +157,15 @@ async def test_create_automation_queues_pending_approval_when_not_confirmed(
 
     assert result == {
         "success": False,
+        "code": "pending_approval",
         "pending_approval": True,
         "pending_action_id": str(db.add.call_args.args[0].id),
         "message": "Approval required before I can create this automation.",
+        "retryable": False,
+        "hint": (
+            "Tell the operator it is waiting for their approval in this chat. "
+            "Do not call the tool again."
+        ),
     }
     pending_action = db.add.call_args.args[0]
     assert pending_action.action_type == "crm_assistant.create_automation"
@@ -205,12 +217,13 @@ async def test_create_automation_rejects_invalid_trigger(
             "name": "Bad trigger",
             "trigger_type": "not_a_trigger",
             "actions": [{"type": "send_sms", "config": {"message": "hi"}}],
-            "confirmed": True,
         },
+        approval_granted=True,
     )
 
     assert result["success"] is False
-    assert "trigger_type" in result["error"]
+    assert result["code"] == "invalid_argument"
+    assert "trigger_type" in result["detail"]
     db.add.assert_not_called()
 
 
@@ -222,10 +235,13 @@ async def test_create_automation_requires_actions(
 
     result = await executor.execute(
         "create_automation",
-        {"name": "No-op", "trigger_type": "review_received", "actions": [], "confirmed": True},
+        {"name": "No-op", "trigger_type": "review_received", "actions": []},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Automation needs at least one action"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert result["message"] == "An automation needs at least one action."
     db.add.assert_not_called()
 
 
@@ -238,10 +254,13 @@ async def test_enable_automation_not_found(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": str(uuid.uuid4()), "confirmed": True},
+        {"automation_id": str(uuid.uuid4())},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Automation not found"}
+    assert result["success"] is False
+    assert result["code"] == "not_found"
+    assert result["hint"] == "Call list_automations to get a valid id."
     compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
     assert "workspace_id" in compiled
     assert workspace_id.hex in compiled
@@ -255,10 +274,13 @@ async def test_enable_automation_rejects_invalid_id(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": "not-a-uuid", "confirmed": True},
+        {"automation_id": "not-a-uuid"},
+        approval_granted=True,
     )
 
-    assert result == {"success": False, "error": "Invalid automation_id"}
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    assert "automation_id" in result["message"]
     db.execute.assert_not_called()
 
 
@@ -272,7 +294,8 @@ async def test_enable_automation_activates_when_confirmed(
 
     result = await executor.execute(
         "enable_automation",
-        {"automation_id": str(automation.id), "confirmed": True},
+        {"automation_id": str(automation.id)},
+        approval_granted=True,
     )
 
     assert result["success"] is True

@@ -69,9 +69,7 @@ async def test_enhance_prompt_uses_workspace_client_without_executing_tools() ->
             )
         )
     )
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
     with patch.object(
         processor,
@@ -104,15 +102,19 @@ async def test_simple_response_no_tools() -> None:
         )
     )
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ) as client_factory, patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ) as client_factory,
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
     ):
         result = await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=42, message="hi",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=42,
+            message="hi",
         )
 
     assert result["response"] == "Hello, operator."
@@ -137,13 +139,15 @@ async def test_stream_uses_workspace_openai_client() -> None:
             "tool_calls_payload": [],
         }
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ) as client_factory, patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(processor, "_collect_stream_turn", new=fake_stream_turn):
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ) as client_factory,
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(processor, "_collect_stream_turn", new=fake_stream_turn),
+    ):
         events = [
             event
             async for event in processor.stream_assistant_message(
@@ -174,23 +178,26 @@ async def test_tool_loop_dispatches_and_records_actions() -> None:
             _make_response(content="You have 5 contacts."),
         ]
     )
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(
-        processor.CRMToolExecutor,
-        "execute",
-        AsyncMock(return_value={"success": True, "data": {"contacts": 5}}),
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(
+            processor.CRMToolExecutor,
+            "execute",
+            AsyncMock(return_value={"success": True, "data": {"contacts": 5}}),
+        ),
     ):
         result = await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=42, message="how many contacts?",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=42,
+            message="how many contacts?",
         )
 
     assert result["response"] == "You have 5 contacts."
@@ -223,20 +230,20 @@ async def test_five_contact_summary_can_reach_terminal_response() -> None:
         _make_response(content="Contact summary complete."),
     ]
     create = AsyncMock(side_effect=responses)
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(
-        processor.CRMToolExecutor,
-        "execute",
-        AsyncMock(return_value={"success": True, "data": []}),
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(
+            processor.CRMToolExecutor,
+            "execute",
+            AsyncMock(return_value={"success": True, "data": []}),
+        ),
     ):
         result = await processor.process_assistant_message(
             db=db,
@@ -272,19 +279,21 @@ async def test_prompt_cache_key_passed_to_openai_call() -> None:
     db = _make_db()
     workspace_id = uuid.uuid4()
     create = AsyncMock(return_value=_make_response(content="ok"))
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
     ):
         await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=99, message="ping",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=99,
+            message="ping",
         )
 
     assert create.await_count == 1
@@ -312,8 +321,11 @@ def test_repair_pairing_strips_orphan_tool_calls_from_assistant() -> None:
             "role": "assistant",
             "content": "thinking…",
             "tool_calls": [
-                {"id": "call_orphan", "type": "function",
-                 "function": {"name": "foo", "arguments": "{}"}},
+                {
+                    "id": "call_orphan",
+                    "type": "function",
+                    "function": {"name": "foo", "arguments": "{}"},
+                },
             ],
         },
     ]
@@ -331,8 +343,11 @@ def test_repair_pairing_drops_assistant_with_only_orphan_calls_and_no_text() -> 
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_orphan", "type": "function",
-                 "function": {"name": "foo", "arguments": "{}"}},
+                {
+                    "id": "call_orphan",
+                    "type": "function",
+                    "function": {"name": "foo", "arguments": "{}"},
+                },
             ],
         },
         {"role": "user", "content": "hi"},
