@@ -38,6 +38,14 @@ class CatalogItemBase(BaseModel):
     unit_price: float = Field(default=0.0, ge=0)
     taxable: bool = True
     is_active: bool = True
+    # Service line this item belongs to. Free-form on purpose (see
+    # ``DEFAULT_SERVICE_CATEGORIES``) so a workspace can use its own trades;
+    # the UI offers the defaults and accepts anything else.
+    service_category: str | None = Field(default=None, max_length=60)
+    # True for add-ons sold alongside a primary job (attach-rate numerator).
+    is_attachable: bool = False
+    # Categories this item can be attached to, e.g. ``["roof"]`` for a gutter add-on.
+    attach_targets: list[str] = Field(default_factory=list)
     # Free-form flags a fixture/service carries beyond price (e.g. transformer,
     # per-linear-foot). Drives config behaviour with no new columns.
     attributes: dict[str, Any] | None = None
@@ -59,6 +67,12 @@ class CatalogItemUpdate(BaseModel):
     unit_price: float | None = Field(default=None, ge=0)
     taxable: bool | None = None
     is_active: bool | None = None
+    # Sending an explicit ``null`` clears the category (unlike the other optional
+    # fields, whose ``None`` means "unchanged"); the service checks whether the
+    # field was set. Nothing else can uncategorize an item.
+    service_category: str | None = Field(default=None, max_length=60)
+    is_attachable: bool | None = None
+    attach_targets: list[str] | None = None
     attributes: dict[str, Any] | None = None
     components: list[CatalogComponent] | None = None
 

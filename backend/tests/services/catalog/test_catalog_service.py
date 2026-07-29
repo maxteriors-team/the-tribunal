@@ -120,6 +120,56 @@ async def test_update_changes_only_provided_fields() -> None:
         assert updated.taxable is True  # unchanged
 
 
+async def test_service_category_and_attach_fields_round_trip() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = CatalogService(db)
+
+        created = await svc.create_item(
+            ws.id,
+            CatalogItemCreate(
+                name="Gutter guard",
+                unit_price=12.0,
+                service_category="gutters",
+                is_attachable=True,
+                attach_targets=["roof"],
+            ),
+        )
+        assert created.service_category == "gutters"
+        assert created.is_attachable is True
+        assert created.attach_targets == ["roof"]
+
+        # Defaults keep uncategorized items out of the attach-rate numerator.
+        plain = await svc.create_item(ws.id, CatalogItemCreate(name="Roof replacement"))
+        assert plain.service_category is None
+        assert plain.is_attachable is False
+        assert plain.attach_targets == []
+
+        # A category is free-form: workspaces are not limited to the default set.
+        updated = await svc.update_item(
+            ws.id,
+            plain.id,
+            CatalogItemUpdate(service_category="holiday-lighting"),
+        )
+        assert updated.service_category == "holiday-lighting"
+        assert updated.name == "Roof replacement"  # unchanged
+
+        # Attach targets replace wholesale; an explicit null clears the category.
+        retargeted = await svc.update_item(
+            ws.id,
+            created.id,
+            CatalogItemUpdate(attach_targets=["roof", "siding"]),
+        )
+        assert retargeted.attach_targets == ["roof", "siding"]
+        assert retargeted.service_category == "gutters"  # unchanged
+
+        cleared = await svc.update_item(
+            ws.id, created.id, CatalogItemUpdate(service_category=None)
+        )
+        assert cleared.service_category is None
+        assert cleared.is_attachable is True  # unchanged
+
+
 async def test_delete_removes_item() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

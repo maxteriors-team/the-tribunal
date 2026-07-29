@@ -81,6 +81,9 @@ class CatalogService:
             unit_price=item_in.unit_price,
             taxable=item_in.taxable,
             is_active=item_in.is_active,
+            service_category=item_in.service_category,
+            is_attachable=item_in.is_attachable,
+            attach_targets=list(item_in.attach_targets),
             attributes=item_in.attributes,
             components=(
                 [c.model_dump() for c in item_in.components]
@@ -125,11 +128,17 @@ class CatalogService:
             "unit_price",
             "taxable",
             "is_active",
+            "is_attachable",
+            "attach_targets",
             "attributes",
         ):
             value = getattr(item_in, field)
             if value is not None:
                 setattr(item, field, value)
+        # The one field an explicit null clears rather than skips: without this an
+        # operator could reclassify an item but never uncategorize a wrong guess.
+        if "service_category" in item_in.model_fields_set:
+            item.service_category = item_in.service_category
         # Components are Pydantic models — serialize to plain dicts for JSONB.
         if item_in.components is not None:
             item.components = [c.model_dump() for c in item_in.components]

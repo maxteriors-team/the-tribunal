@@ -25,7 +25,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -39,6 +39,13 @@ if TYPE_CHECKING:
 # distinction drives nothing in the backend today; it is a grouping/label that
 # the UI filters on, kept as a constrained enum so the set stays clean.
 CATALOG_ITEM_KINDS = ("service", "product")
+
+# Which service line an item belongs to, so attach-rate reporting can tell a roof
+# job apart from gutters. Unlike ``CATALOG_ITEM_KINDS`` this is only the *suggested*
+# set the UI offers: the column is a plain ``String``, never a DB enum, because
+# workspaces run trades we did not enumerate (decks, fencing, holiday lighting)
+# and must be able to type their own category without a migration.
+DEFAULT_SERVICE_CATEGORIES = ("roof", "siding", "gutters", "windows", "trim", "other")
 
 
 class CatalogItem(Base):
@@ -73,6 +80,25 @@ class CatalogItem(Base):
     taxable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Soft archive: inactive items are hidden from pickers but kept for history.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    # Service line this item belongs to (see ``DEFAULT_SERVICE_CATEGORIES``).
+    # Free-form and nullable: existing rows stay uncategorized until an operator
+    # classifies them, and reporting treats NULL as "unknown", not as a category.
+    # Indexed because attach-rate reporting groups by it.
+    service_category: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    # Whether this item is an add-on sold alongside a primary job (a gutter guard
+    # attached to a roof) rather than a standalone job. Drives attach-rate
+    # numerator selection; defaults false so existing items keep counting as primary.
+    is_attachable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # The ``service_category`` values this item can be attached to — e.g. ``["roof"]``
+    # on a gutter add-on. Stored inline as a text array (not a join table) because
+    # it is a short label list matched against a free-form category, not a
+    # relationship. Empty list means "no restriction recorded".
+    attach_targets: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
 
     # Free-form attributes a fixture/service carries beyond price. Drives config
     # behaviour without new columns — e.g. ``{"transformer": true}`` excludes a
