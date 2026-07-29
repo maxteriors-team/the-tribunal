@@ -11,7 +11,8 @@ For each fixture under ``tests/contract/fixtures/calcom/``:
    ``data`` block from the fixture.
 
 The router's Redis-backed idempotency layer is mocked to always claim
-the slot (first delivery) so dispatch can run. Replay behaviour is
+the slot (first delivery) so dispatch can run, and the Postgres-backed
+signature ledger is neutralised by an autouse fixture. Replay behaviour is
 covered exhaustively in ``tests/api/test_calcom_webhook_idempotency.py``.
 """
 
@@ -26,6 +27,7 @@ import pytest
 from app.api.webhooks import calcom as calcom_router_module
 from app.api.webhooks.calcom import router as calcom_router
 from app.core.config import settings as app_settings
+from app.services.webhook_replay import SignatureClaim, SignatureClaimOutcome
 from tests.contract._helpers import (
     CALCOM_TEST_SIGNING_KEY,
     build_app,
@@ -38,6 +40,22 @@ from tests.contract.fixtures import load_fixture
 # --------------------------------------------------------------------------- #
 # Plumbing
 # --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(autouse=True)
+def stub_signature_ledger(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Neutralise the Postgres-backed replay ledger for every contract test.
+
+    The router claims ``(provider, signature)`` in ``seen_webhook_signatures``
+    before dispatching. These fixtures are signed deterministically, so without
+    this stub the suite would (a) write rows to the developer's database and
+    (b) 409 on every run after the first, because a re-run presents byte-identical
+    signatures. Replay rejection itself is covered against a stubbed ledger in
+    ``tests/api/test_calcom_webhook_idempotency.py``.
+    """
+    claim = AsyncMock(return_value=SignatureClaim(outcome=SignatureClaimOutcome.CLAIMED))
+    monkeypatch.setattr(calcom_router_module, "claim_webhook_signature", claim)
+    return claim
 
 
 @pytest.fixture

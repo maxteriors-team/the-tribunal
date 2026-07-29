@@ -8,6 +8,7 @@ without the key, and provides built-in timestamp-based token expiration support.
 import base64
 import hashlib
 import json
+from functools import lru_cache
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -19,12 +20,26 @@ from sqlalchemy.types import TEXT, TypeDecorator
 from app.core.config import settings
 
 
+@lru_cache(maxsize=8)
 def _derive_fernet_key(secret: str) -> bytes:
     """Derive a valid 32-byte Fernet key from an arbitrary secret string.
 
     Uses PBKDF2-HMAC-SHA256 with 310,000 iterations (OWASP 2024 minimum)
     and a deterministic salt derived from the secret itself, ensuring
     backwards compatibility without needing to store a separate salt.
+
+    PERFORMANCE: the result is cached because 310,000 iterations cost ~95ms,
+    and this is on the path of *every* encrypt and decrypt. Once conversation,
+    message, and contact PII moved under ``EncryptedString`` the derivation ran
+    once per row per encrypted column: a single 100-row contacts page spent
+    ~28s deriving the same key 300 times, blocking the event loop and stalling
+    every other request and background worker in the process. The derivation is
+    a pure function of ``secret`` (the salt is itself derived from it), so
+    caching returns an identical key and changes no ciphertext. Keyed on the
+    secret rather than cached globally so key rotation still derives a fresh
+    key. Bounded at 8 entries so a rotation cannot grow this without limit; the
+    secret is already resident in ``settings``, so the cache exposes nothing
+    new.
     """
     salt = hashlib.sha256(secret.encode()).digest()[:16]
     kdf = PBKDF2HMAC(

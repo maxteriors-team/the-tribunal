@@ -87,6 +87,15 @@ class Settings(BaseSettings):
     mac_relay_webhook_token: str = ""
     mac_relay_backend_webhook_url: str = ""
     mac_relay_default_service: str = "imessage"  # imessage | sms | auto
+    # Escape hatch for relay hosts that have not yet been issued a per-workspace
+    # token (see ``scripts/ops/issue_mac_relay_token.py``). Turning this on
+    # re-opens the pre-H-4 cross-tenant hole: ``mac_relay_webhook_token`` is the
+    # same secret on every customer-operated Mac, so one compromised relay host
+    # can again write into any workspace, as any operator, by choosing the
+    # request body's ``to``/``from``. Exists only to keep existing deployments
+    # sending during the migration — default OFF, and remove it once every relay
+    # presents its own token.
+    mac_relay_allow_legacy_global_token: bool = False
 
     # Cal.com
     calcom_api_key: str = ""

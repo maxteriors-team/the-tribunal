@@ -72,7 +72,14 @@ class TestMissingTimestampHeader:
 
         assert await verify_calcom_webhook(request) is True
 
-    async def test_empty_timestamp_accepted_with_valid_signature(self) -> None:
+    async def test_blank_timestamp_is_rejected(self) -> None:
+        """An empty header value must not neuter the freshness check (audit H-8).
+
+        Omitting the header entirely is normal Cal.com traffic and is accepted
+        above. Sending the header *blank* is not something the real sender does,
+        and treating it as "no timestamp" would hand an attacker a one-header
+        bypass of the skew window on a captured, still-valid signature.
+        """
         body = b'{"event":"BOOKING_CREATED"}'
         request = _make_request(
             {
@@ -82,7 +89,11 @@ class TestMissingTimestampHeader:
             body=body,
         )
 
-        assert await verify_calcom_webhook(request) is True
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_calcom_webhook(request)
+
+        assert exc_info.value.status_code == 403
+        assert "timestamp" in exc_info.value.detail.lower()
 
     async def test_missing_signature_still_rejected(self) -> None:
         """The signature is the real auth and remains mandatory."""

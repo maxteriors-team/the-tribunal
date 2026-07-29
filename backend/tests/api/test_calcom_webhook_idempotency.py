@@ -1,16 +1,23 @@
 """Tests for Cal.com webhook idempotency / replay rejection.
 
-Cal.com retries webhook deliveries on non-2xx responses (and occasionally
-on timeouts even when the server eventually returned 200). The downstream
-side effects in :mod:`app.api.webhooks.calcom_handlers` — confirmation
-SMS to the contact, owner-notification email — are not idempotent on
-their own, so the router claims a Redis-backed dedupe slot
-(``SET NX EX 604800``) keyed on ``calcom:webhook:<id|trigger+uid+ts>``
-before dispatching to the per-event handlers.
+The router runs two independent replay defences, in this order:
 
-These tests exercise the router-level dedupe in isolation: the handler
-dispatch table is monkeypatched to record invocations rather than touch
-the database / SMS / email integrations.
+1. **Durable signature ledger** (Postgres, :mod:`app.services.webhook_replay`).
+   Cal.com's HMAC authenticates the body, not the delivery, so a captured
+   ``(body, x-cal-signature-256)`` pair verifies forever. The router claims the
+   signature before touching anything; a second sighting is a 409 and a ledger
+   outage is a 503 (fail closed).
+2. **Redis delivery dedupe** (``SET NX EX 604800`` on
+   ``calcom:webhook:<id|trigger+uid+ts>``). Cal.com retries deliveries on
+   non-2xx responses and occasionally on timeouts, and the downstream side
+   effects in :mod:`app.api.webhooks.calcom_handlers` — confirmation SMS, owner
+   email — are not idempotent on their own. A retried delivery gets a friendly
+   200 + ``deduped``; an unreachable Redis is a 503 (also fail closed).
+
+These tests exercise both layers in isolation: the handler dispatch table is
+monkeypatched to record invocations rather than touch the database / SMS /
+email integrations, and each layer is stubbed out while the other is under
+test.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from app.api.webhooks import calcom as calcom_module
 from app.api.webhooks.calcom import (
@@ -27,6 +35,7 @@ from app.api.webhooks.calcom import (
     _build_idempotency_key,
     _claim_webhook_delivery,
 )
+from app.services.webhook_replay import SignatureClaim, SignatureClaimOutcome
 
 # ---------------------------------------------------------------------------
 # _build_idempotency_key — payload shape coverage
@@ -96,7 +105,7 @@ def test_build_key_handles_flat_meeting_ended_payload() -> None:
 
 
 def test_build_key_returns_none_when_no_usable_fields() -> None:
-    """Garbage payload → None so the caller can fail open with a warning."""
+    """Garbage payload → None so the caller can reject it with a 400."""
     assert _build_idempotency_key({}) is None
     assert _build_idempotency_key({"trigger": "BOOKING_CREATED"}) is None
     assert _build_idempotency_key({"data": {"uid": "x"}}) is None
@@ -145,8 +154,14 @@ async def test_claim_returns_false_on_replay(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_claim_fails_open_on_redis_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A Redis outage must NOT silently drop legitimate webhooks."""
+async def test_claim_fails_closed_on_redis_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Redis outage must NOT let an un-deduped delivery through.
+
+    Fail closed with 503: Cal.com retries, and a retry that we *can* dedupe is
+    strictly better than a delivery that re-fires confirmation SMS and owner
+    email. (The shared helper reports the outage as ``claimed=True`` so each
+    caller picks its own policy; this route picks refusal.)
+    """
     redis_client = MagicMock()
     redis_client.set = AsyncMock(side_effect=ConnectionError("redis down"))
     monkeypatch.setattr(
@@ -154,9 +169,10 @@ async def test_claim_fails_open_on_redis_error(monkeypatch: pytest.MonkeyPatch) 
     )
     log = MagicMock()
 
-    claimed = await _claim_webhook_delivery("calcom:webhook:abc", log=log)
+    with pytest.raises(HTTPException) as exc_info:
+        await _claim_webhook_delivery("calcom:webhook:abc", log=log)
 
-    assert claimed is True
+    assert exc_info.value.status_code == 503
     log.warning.assert_called_once()
     # The warning carries a structured event name and the offending key.
     args, kwargs = log.warning.call_args
@@ -165,14 +181,19 @@ async def test_claim_fails_open_on_redis_error(monkeypatch: pytest.MonkeyPatch) 
 
 
 # ---------------------------------------------------------------------------
-# Route integration — replay returns 200 without invoking handlers
+# Route integration — Redis dedupe layer
 # ---------------------------------------------------------------------------
 
 
-def _make_request(payload: dict[str, Any]) -> MagicMock:
-    """Build a minimal FastAPI ``Request`` stub."""
+def _make_request(payload: dict[str, Any], *, signature: str = "sig-default") -> MagicMock:
+    """Build a minimal FastAPI ``Request`` stub.
+
+    ``headers`` is a real dict so ``_reject_replayed_signature`` reads the same
+    verbatim value production would hand to the ledger.
+    """
     request = MagicMock()
     request.json = AsyncMock(return_value=payload)
+    request.headers = {"x-cal-signature-256": signature}
     return request
 
 
@@ -194,9 +215,23 @@ def _disable_signature_check(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _disable_replay_ledger(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Stub the Postgres signature ledger into always saying "first sighting".
+
+    Required by every test that targets the *Redis* dedupe layer: the ledger
+    runs first, is backed by a real database, and would otherwise (a) write
+    rows into the developer's DB and (b) 409 the second delivery before Redis
+    is ever consulted — which would silently gut the layer under test.
+    """
+    claim = AsyncMock(return_value=SignatureClaim(outcome=SignatureClaimOutcome.CLAIMED))
+    monkeypatch.setattr(calcom_module, "claim_webhook_signature", claim)
+    return claim
+
+
 @pytest.mark.asyncio
 async def test_first_delivery_invokes_handler(monkeypatch: pytest.MonkeyPatch) -> None:
     _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
     _install_redis_mock(monkeypatch, set_returns=[True])
     handler = AsyncMock()
     monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
@@ -224,8 +259,13 @@ async def test_replay_is_rejected_without_invoking_handler(
     The second delivery sees a populated Redis key and short-circuits with
     ``{"status": "ok", "deduped": "true"}`` — Cal.com gets a 200 so it
     stops retrying, but the SMS/email side effects do not run again.
+
+    This targets the REDIS layer, so the durable signature ledger is stubbed
+    out: it runs first and would 409 the second delivery before Redis is even
+    consulted, leaving the behaviour under test unexercised.
     """
     _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
     # First call → key set (True). Second call → NX collision (None).
     _install_redis_mock(monkeypatch, set_returns=[True, None])
     handler = AsyncMock()
@@ -255,6 +295,7 @@ async def test_distinct_events_for_same_booking_are_not_deduped(
     Cal.com events for the same booking get distinct dedupe slots.
     """
     _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
     redis_client = _install_redis_mock(monkeypatch, set_returns=[True, True])
     created_handler = AsyncMock()
     rescheduled_handler = AsyncMock()
@@ -293,11 +334,17 @@ async def test_distinct_events_for_same_booking_are_not_deduped(
 
 
 @pytest.mark.asyncio
-async def test_redis_outage_falls_open_and_processes_webhook(
+async def test_redis_outage_fails_closed_with_503(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If Redis is unreachable the handler still runs (per-row guards remain)."""
+    """If Redis is unreachable we refuse the delivery instead of guessing.
+
+    Previously this failed open "because the per-row guards remain" — but those
+    guards only cover BOOKING_CREATED. 503 makes Cal.com retry the delivery
+    once we can actually dedupe it.
+    """
     _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
     redis_client = MagicMock()
     redis_client.set = AsyncMock(side_effect=ConnectionError("redis down"))
     monkeypatch.setattr(
@@ -306,18 +353,19 @@ async def test_redis_outage_falls_open_and_processes_webhook(
     handler = AsyncMock()
     monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
 
-    response = await calcom_module.calcom_booking_webhook(
-        _make_request(
-            {
-                "trigger": "BOOKING_CREATED",
-                "createdAt": "2026-05-15T10:00:00Z",
-                "data": {"uid": "booking-uid-failopen"},
-            }
+    with pytest.raises(HTTPException) as exc_info:
+        await calcom_module.calcom_booking_webhook(
+            _make_request(
+                {
+                    "trigger": "BOOKING_CREATED",
+                    "createdAt": "2026-05-15T10:00:00Z",
+                    "data": {"uid": "booking-uid-failclosed"},
+                }
+            )
         )
-    )
 
-    assert response == {"status": "ok"}
-    handler.assert_awaited_once()
+    assert exc_info.value.status_code == 503
+    handler.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -330,6 +378,7 @@ async def test_unhandled_trigger_still_claims_dedupe_slot(
     forever — we want to return 200 once and stay quiet.
     """
     _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
     redis_client = _install_redis_mock(monkeypatch, set_returns=[True])
 
     response = await calcom_module.calcom_booking_webhook(
@@ -344,3 +393,137 @@ async def test_unhandled_trigger_still_claims_dedupe_slot(
 
     assert response == {"status": "ok"}
     redis_client.set.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Route integration — durable signature ledger (replay rejection proper)
+# ---------------------------------------------------------------------------
+
+
+def _install_ledger_mock(
+    monkeypatch: pytest.MonkeyPatch, outcomes: list[SignatureClaimOutcome]
+) -> AsyncMock:
+    """Patch ``claim_webhook_signature`` to return each outcome in turn."""
+    claim = AsyncMock(
+        side_effect=[SignatureClaim(outcome=outcome) for outcome in outcomes]
+    )
+    monkeypatch.setattr(calcom_module, "claim_webhook_signature", claim)
+    return claim
+
+
+_LEDGER_PAYLOAD: dict[str, Any] = {
+    "trigger": "BOOKING_CREATED",
+    "createdAt": "2026-05-15T10:00:00Z",
+    "data": {"uid": "booking-uid-ledger"},
+}
+
+
+@pytest.mark.asyncio
+async def test_genuine_first_delivery_claims_signature_and_dispatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First sighting of a signature → claimed, then normal dispatch."""
+    _disable_signature_check(monkeypatch)
+    claim = _install_ledger_mock(monkeypatch, [SignatureClaimOutcome.CLAIMED])
+    _install_redis_mock(monkeypatch, set_returns=[True])
+    handler = AsyncMock()
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
+
+    response = await calcom_module.calcom_booking_webhook(
+        _make_request(_LEDGER_PAYLOAD, signature="a" * 64)
+    )
+
+    assert response == {"status": "ok"}
+    handler.assert_awaited_once()
+    # The ledger gets the provider slug and the VERBATIM header value.
+    provider, signature = claim.await_args.args
+    assert provider == "calcom"
+    assert signature == "a" * 64
+
+
+@pytest.mark.asyncio
+async def test_replayed_signature_is_rejected_with_409(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Second delivery of the same signature → 409, handler never re-runs.
+
+    Cal.com's HMAC covers the body only, so a captured ``(body, signature)``
+    pair stays valid forever; the ledger is what makes the *second* use of it
+    fail. Redis is stubbed to claim both slots so the 409 can only come from
+    the ledger.
+    """
+    _disable_signature_check(monkeypatch)
+    _install_ledger_mock(
+        monkeypatch,
+        [SignatureClaimOutcome.CLAIMED, SignatureClaimOutcome.REPLAY],
+    )
+    _install_redis_mock(monkeypatch, set_returns=[True, True])
+    handler = AsyncMock()
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
+
+    first = await calcom_module.calcom_booking_webhook(
+        _make_request(_LEDGER_PAYLOAD, signature="b" * 64)
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await calcom_module.calcom_booking_webhook(
+            _make_request(_LEDGER_PAYLOAD, signature="b" * 64)
+        )
+
+    assert first == {"status": "ok"}
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Duplicate Cal.com webhook signature"
+    handler.assert_awaited_once()  # NOT twice.
+
+
+@pytest.mark.asyncio
+async def test_ledger_outage_returns_503_instead_of_passing_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreachable ledger must refuse the delivery, not wave it through.
+
+    Fail closed: a delivery we cannot dedupe is exactly what the ledger exists
+    to stop, and 503 makes Cal.com retry once Postgres is back.
+    """
+    _disable_signature_check(monkeypatch)
+    _install_ledger_mock(monkeypatch, [SignatureClaimOutcome.LEDGER_UNAVAILABLE])
+    redis_client = _install_redis_mock(monkeypatch, set_returns=[True])
+    handler = AsyncMock()
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await calcom_module.calcom_booking_webhook(
+            _make_request(_LEDGER_PAYLOAD, signature="c" * 64)
+        )
+
+    assert exc_info.value.status_code == 503
+    handler.assert_not_awaited()
+    # Refused before any downstream work, including the Redis claim.
+    redis_client.set.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_idempotency_fields_returns_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No usable delivery identity → 400 rather than an un-deduped dispatch.
+
+    ``_build_idempotency_key`` returns ``None`` only for payloads real Cal.com
+    never sends. Dispatching one anyway would re-fire side effects on every
+    retry, since there is no key to claim.
+    """
+    _disable_signature_check(monkeypatch)
+    _disable_replay_ledger(monkeypatch)
+    redis_client = _install_redis_mock(monkeypatch, set_returns=[True])
+    handler = AsyncMock()
+    monkeypatch.setitem(calcom_module._EVENT_DISPATCH, "BOOKING_CREATED", handler)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await calcom_module.calcom_booking_webhook(
+            # No ``id``, no ``uid`` — nothing to key a dedupe slot on.
+            _make_request({"trigger": "BOOKING_CREATED"}, signature="d" * 64)
+        )
+
+    assert exc_info.value.status_code == 400
+    handler.assert_not_awaited()
+    redis_client.set.assert_not_awaited()
