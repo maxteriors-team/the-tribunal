@@ -168,3 +168,4 @@ visual-snapshots/
 backend/backups/
 *.dump
 .local-bundles/
+.worktrees/
