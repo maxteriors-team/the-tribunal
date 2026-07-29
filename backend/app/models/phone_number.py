@@ -86,6 +86,16 @@ class PhoneNumber(Base):
     telnyx_phone_number_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telnyx_messaging_profile_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mac_relay_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Per-relay-host credential for the Mac relay webhook (audit finding H-4).
+    # Only the SHA-256 hex digest is stored, the same shape as ``api_keys.key_hash``:
+    # the plaintext exists once, at issue time, so a database read primitive yields
+    # no usable credential. It lives on this row because the row already carries the
+    # authoritative ``workspace_id``, which makes the presented token — not the
+    # request body — the tenancy decision. Uniquely indexed because the digest *is*
+    # the lookup key: two rows sharing one would make tenant resolution ambiguous.
+    mac_relay_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
 
     # Capabilities
     sms_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

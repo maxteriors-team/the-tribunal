@@ -1,26 +1,47 @@
-"""Mac relay iMessage webhook handlers."""
+"""Mac relay iMessage webhook handlers.
+
+Every database lookup here is scoped to the :class:`MacRelayCredential` the
+request authenticated with (audit finding H-4). The payload's ``to``/``from``
+are attacker-chosen: they may only *select within* the credential's workspace,
+never widen past it.
+"""
 
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.conversation import Conversation, Message, MessageChannel
 from app.models.phone_number import PhoneNumber
+from app.models.user import User
 from app.services.telephony.inbound_text import (
     InboundTextEvent,
+    OperatorChecker,
+    check_operator_by_phone,
     persist_inbound_text_message,
     process_inbound_text_event,
 )
+from app.services.telephony.mac_relay_auth import MacRelayCredential
 from app.utils.phone import normalize_phone_safe
 
 
-async def handle_mac_relay_message(payload: dict[str, Any], log: Any) -> dict[str, str]:
-    """Handle an inbound message event from the Mac relay."""
+async def handle_mac_relay_message(
+    payload: dict[str, Any],
+    log: Any,
+    credential: MacRelayCredential,
+) -> dict[str, str]:
+    """Handle an inbound message event from the Mac relay.
+
+    ``credential`` is the tenant the request authenticated as. A credential that
+    binds a workspace scopes both the sender-identity lookup and the operator
+    check to it; only the legacy un-scoped token (``workspace_id is None``) falls
+    back to the pre-H-4 body-derived behaviour.
+    """
     if bool(payload.get("is_from_me", False)):
         log.info("mac_relay_outbound_echo_ignored", event_id=payload.get("event_id"))
         return {"status": "ignored", "reason": "outbound_echo"}
@@ -44,8 +65,22 @@ async def handle_mac_relay_message(payload: dict[str, Any], log: Any) -> dict[st
         return {"status": "ignored", "reason": "missing_required_fields"}
 
     async with AsyncSessionLocal() as db:
-        phone_record = await _find_workspace_phone(db, to_number)
+        phone_record = await _find_workspace_phone(db, to_number, credential.workspace_id)
         if phone_record is None:
+            if credential.workspace_id is not None:
+                # The relay authenticated as workspace X but addressed a number
+                # that workspace X does not own. Pre-H-4 this silently resolved
+                # to whoever *did* own it — the cross-tenant write.
+                log.warning(
+                    "mac_relay_cross_workspace_number_rejected",
+                    security_event=True,
+                    to_number=to_number,
+                    workspace_id=str(credential.workspace_id),
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="phone number not found for this relay credential",
+                )
             log.warning("mac_relay_phone_number_not_found", to_number=to_number)
             return {"status": "ignored", "reason": "phone_number_not_found"}
 
@@ -72,6 +107,7 @@ async def handle_mac_relay_message(payload: dict[str, Any], log: Any) -> dict[st
             event=event,
             ingest_message=_build_mac_relay_ingestor(log),
             log=log,
+            check_operator_fn=_operator_checker_for(credential),
         )
         if message is None:
             return {"status": "ok"}
@@ -100,6 +136,37 @@ def _build_mac_relay_ingestor(
     return ingest
 
 
+def _operator_checker_for(credential: MacRelayCredential) -> OperatorChecker | None:
+    """Return the operator lookup for this credential, pinned to its workspace.
+
+    ``None`` (the pipeline's body-derived default) is only returned for the
+    legacy un-scoped token, which carries no tenant to pin to.
+    """
+    if credential.workspace_id is None:
+        return None
+    return _build_operator_checker(credential.workspace_id)
+
+
+def _build_operator_checker(pinned_workspace_id: uuid.UUID) -> OperatorChecker:
+    """Pin operator identification to the authenticated workspace.
+
+    The pipeline passes the body's ``from`` as ``from_number``, so without this
+    a relay could impersonate another tenant's operator by naming a sender that
+    tenant trusts. The workspace the pipeline supplies is discarded in favour of
+    the credential-derived one; the parameter must still be *named*
+    ``workspace_id`` because :class:`OperatorChecker` is a callable protocol and
+    mypy matches parameter names — hence the distinct outer
+    ``pinned_workspace_id``.
+    """
+
+    async def check_operator(
+        db: AsyncSession, from_number: str, workspace_id: uuid.UUID
+    ) -> User | None:
+        return await check_operator_by_phone(db, from_number, pinned_workspace_id)
+
+    return check_operator
+
+
 async def _message_already_ingested(
     db: AsyncSession,
     provider_message_id: str,
@@ -116,24 +183,35 @@ async def _message_already_ingested(
     return result.scalar_one_or_none() is not None
 
 
-async def _find_workspace_phone(db: AsyncSession, to_number: str) -> PhoneNumber | None:
-    """Find the workspace sender identity addressed by a relay event."""
+async def _find_workspace_phone(
+    db: AsyncSession,
+    to_number: str,
+    workspace_id: uuid.UUID | None,
+) -> PhoneNumber | None:
+    """Find the sender identity addressed by a relay event, within its tenant.
+
+    ``workspace_id`` comes from the presented token, not the payload. Without
+    that filter this query matched *any* workspace's number, so a relay host
+    could name another tenant's number in ``to`` and have the message written
+    into their conversations. ``None`` is only reachable via the legacy
+    un-scoped global token.
+    """
     candidates = [to_number]
     normalized = normalize_phone_safe(to_number)
     if normalized and normalized not in candidates:
         candidates.append(normalized)
 
-    result = await db.execute(
-        select(PhoneNumber)
-        .where(
-            PhoneNumber.is_active.is_(True),
-            or_(
-                PhoneNumber.phone_number.in_(candidates),
-                PhoneNumber.mac_relay_sender_id.in_(candidates),
-            ),
-        )
-        .limit(1)
+    query = select(PhoneNumber).where(
+        PhoneNumber.is_active.is_(True),
+        or_(
+            PhoneNumber.phone_number.in_(candidates),
+            PhoneNumber.mac_relay_sender_id.in_(candidates),
+        ),
     )
+    if workspace_id is not None:
+        query = query.where(PhoneNumber.workspace_id == workspace_id)
+
+    result = await db.execute(query.limit(1))
     return result.scalar_one_or_none()
 
 

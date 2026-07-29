@@ -59,6 +59,9 @@ from app.workers.voice_campaign_worker import _registry as voice_campaign_regist
 from app.workers.web_people_discovery_worker import (
     _registry as web_people_discovery_registry,
 )
+from app.workers.webhook_signature_cleanup_worker import (
+    _registry as webhook_signature_cleanup_registry,
+)
 
 logger = structlog.get_logger()
 WorkerEnabledPredicate = Callable[[Settings], bool]
@@ -274,6 +277,16 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
     WorkerSpec(
         name="outbound_auto_draft_worker",
         registry=outbound_auto_draft_registry,
+        dependencies=("postgres",),
+    ),
+    # Appended at the very end on purpose: startup order is pinned by
+    # tests/workers/test_registry_specs.py, so inserting a spec mid-tuple
+    # shifts every worker after it. This sweep is order-independent (one daily
+    # range delete against seen_webhook_signatures), so the tail is the correct
+    # home for it.
+    WorkerSpec(
+        name="webhook_signature_cleanup",
+        registry=webhook_signature_cleanup_registry,
         dependencies=("postgres",),
     ),
 )

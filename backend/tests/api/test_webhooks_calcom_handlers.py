@@ -27,9 +27,28 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.api.webhooks import calcom as _calcom_router_module
 from app.api.webhooks import calcom_handlers as handlers
 from app.models.appointment import AppointmentStatus
+from app.services.webhook_replay import SignatureClaim, SignatureClaimOutcome
 from tests.fixtures.webhooks import load_calcom_data
+
+
+@pytest.fixture(autouse=True)
+def _stub_signature_ledger(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Neutralise the Postgres-backed replay ledger for every test in this module.
+
+    The router-level tests below POST deterministically signed bodies, and
+    ``_reject_replayed_signature`` claims ``(provider, signature)`` in the
+    ``seen_webhook_signatures`` table before dispatch. Without this stub the
+    suite would write rows into the developer's database and then 409 on the
+    *second* run of the same test, because the replayed signature is byte for
+    byte the one the first run already burned. Autouse (rather than per-test) so
+    a future router test cannot silently reintroduce the dependency.
+    """
+    claim = AsyncMock(return_value=SignatureClaim(outcome=SignatureClaimOutcome.CLAIMED))
+    monkeypatch.setattr(_calcom_router_module, "claim_webhook_signature", claim)
+    return claim
 
 
 def _make_log() -> MagicMock:

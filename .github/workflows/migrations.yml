@@ -19,7 +19,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        # pgvector image (not plain postgres) — a migration runs
+        # `CREATE EXTENSION vector`, which needs the pgvector binaries.
+        # Matches backend/docker-compose.yml and visual-preview.yml.
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: aicrm
           POSTGRES_PASSWORD: aicrm_dev_password

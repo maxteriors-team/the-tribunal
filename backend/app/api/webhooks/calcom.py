@@ -10,7 +10,7 @@ This module is a thin FastAPI router. All real work is delegated:
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.api.webhooks.calcom_handlers import (
     handle_booking_cancelled,
@@ -30,6 +30,10 @@ from app.services.idempotency import (
     derive_webhook_delivery_key,
     webhook_key_prefix,
 )
+from app.services.webhook_replay import (
+    SignatureClaimOutcome,
+    claim_webhook_signature,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -40,6 +44,14 @@ logger = structlog.get_logger()
 # Redis footprint bounded.
 _IDEMPOTENCY_TTL_SECONDS = DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS
 _IDEMPOTENCY_KEY_PREFIX = webhook_key_prefix("calcom")
+
+# Header carrying the HMAC-SHA256 digest Cal.com computes over the raw body.
+_SIGNATURE_HEADER = "x-cal-signature-256"
+
+# ``claim_redis_idempotency_key`` reports an unreachable Redis by returning
+# ``claimed=True`` with this reason (fail open) so callers can choose. This
+# route chooses to fail closed — see ``_claim_webhook_delivery``.
+_REDIS_UNAVAILABLE_REASON = "redis_unavailable"
 
 
 def _build_idempotency_key(payload: dict[str, Any]) -> str | None:
@@ -54,8 +66,9 @@ def _build_idempotency_key(payload: dict[str, Any]) -> str | None:
        of distinct events for the same booking (e.g. created then
        rescheduled).
 
-    Returns ``None`` if we can't build any meaningful key — caller must
-    fail open in that case rather than block traffic.
+    Returns ``None`` when the payload carries no usable delivery identity. The
+    caller rejects those with 400: a delivery we cannot dedupe is a delivery we
+    would happily replay, and Cal.com always sends at least one of these fields.
     """
     delivery_id = payload.get("id")
     if delivery_id:
@@ -84,10 +97,14 @@ async def _claim_webhook_delivery(key: str, log: Any) -> bool:
     won the race and should process the webhook; ``False`` when a prior
     delivery already claimed the slot (replay — skip side effects).
 
-    Fails open on Redis errors: the handlers' own per-row guards
-    (``is_new_booking`` etc.) remain the primary defense; the Redis
-    check is an explicit safety net layered on top. A Redis outage
-    must not silently drop legitimate webhooks.
+    Fails CLOSED on Redis errors. The shared helper reports an unreachable
+    Redis as "claimed" so each caller can pick a policy; this route picks 503.
+    Letting a delivery through un-deduped means re-firing confirmation SMS and
+    owner email, and the per-row handler guards do not cover every trigger. A
+    503 costs us nothing: Cal.com retries, and by then Redis is usually back.
+
+    Raises:
+        HTTPException: 503 when the idempotency store is unreachable.
     """
     claim = await claim_redis_idempotency_key(
         key,
@@ -96,7 +113,60 @@ async def _claim_webhook_delivery(key: str, log: Any) -> bool:
         redis_getter=get_redis,
         failure_event="calcom_idempotency_redis_unavailable",
     )
+    if claim.reason == _REDIS_UNAVAILABLE_REASON:
+        log.error("calcom_webhook_idempotency_store_unavailable", key=key)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook idempotency store unavailable",
+        )
     return claim.claimed
+
+
+async def _reject_replayed_signature(request: Request, log: Any) -> None:
+    """Burn this delivery's signature in the durable ledger, or refuse it.
+
+    Cal.com's HMAC authenticates the *body*, not the *delivery*: a captured
+    ``(body, x-cal-signature-256)`` pair verifies forever, and the unsigned
+    ``x-cal-timestamp`` header cannot fix that (see
+    :func:`app.core.webhook_security.verify_calcom_webhook`). Remembering which
+    signatures we already honoured is the defence that does not depend on
+    attacker-supplied input.
+
+    Must be called AFTER signature verification (so only digests we computed
+    ourselves can reach the table) and BEFORE any dispatch or side effect.
+    Split out as its own coroutine so tests can patch the whole check in one
+    place.
+
+    Raises:
+        HTTPException: 409 if this exact signature was already accepted, 503 if
+            the ledger is unreachable (fail closed — Cal.com retries).
+    """
+    signature = request.headers.get(_SIGNATURE_HEADER, "")
+    if not signature:
+        # Only reachable via ``settings.skip_webhook_verification`` (local dev):
+        # in production, verification 403s an unsigned delivery long before
+        # this point. Nothing to remember, so there is nothing to enforce.
+        log.warning("calcom_webhook_signature_ledger_skipped_unsigned")
+        return
+
+    claim = await claim_webhook_signature("calcom", signature, log=log)
+
+    if claim.outcome is SignatureClaimOutcome.REPLAY:
+        log.warning("calcom_webhook_signature_replay_rejected")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate Cal.com webhook signature",
+        )
+
+    if claim.outcome is SignatureClaimOutcome.LEDGER_UNAVAILABLE:
+        # Fail closed. Processing a delivery we cannot dedupe is precisely the
+        # failure mode the ledger exists to remove, and the handlers need the
+        # same database anyway.
+        log.error("calcom_webhook_signature_ledger_unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook replay ledger unavailable",
+        )
 
 
 # Dispatch table keyed by Cal.com ``trigger`` field.
@@ -120,7 +190,8 @@ async def calcom_booking_webhook(request: Request) -> dict[str, str]:
     - ``BOOKING_CANCELLED``: Booking cancelled
     - ``MEETING_ENDED``: Meeting completed (or marked no-show)
 
-    All webhooks are signature-verified before processing.
+    Every delivery passes two gates before a single side effect runs:
+    signature verification, then the durable replay ledger. Both fail closed.
     """
     log = logger.bind(endpoint="calcom_booking_webhook")
 
@@ -130,6 +201,12 @@ async def calcom_booking_webhook(request: Request) -> dict[str, str]:
         log.error("webhook_verification_failed", error=str(e))
         observe_calcom_signature_invalid()
         raise
+
+    # Replay rejection, immediately after verification and before anything
+    # observable happens. A verified signature we have already honoured is a
+    # replay no matter how fresh it looks, so it never reaches parsing,
+    # metrics, or dispatch.
+    await _reject_replayed_signature(request, log)
 
     try:
         payload = await request.json()
@@ -152,16 +229,24 @@ async def calcom_booking_webhook(request: Request) -> dict[str, str]:
     # events; this Redis dedupe is the explicit safety net for that and
     # for every other handler.
     idempotency_key = _build_idempotency_key(payload)
-    if idempotency_key is not None:
-        claimed = await _claim_webhook_delivery(idempotency_key, log)
-        if not claimed:
-            log.info(
-                "calcom_webhook_replay_skipped",
-                idempotency_key=idempotency_key,
-            )
-            return {"status": "ok", "deduped": "true"}
-    else:
+    if idempotency_key is None:
+        # No delivery identity means no dedupe slot, and dispatching anyway
+        # would re-run side effects on every retry. Reject instead of
+        # proceeding blind; real Cal.com payloads always carry these fields, so
+        # this is a malformed delivery, not a legitimate one we are dropping.
         log.warning("calcom_webhook_missing_idempotency_fields")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cal.com webhook payload is missing delivery identity fields",
+        )
+
+    claimed = await _claim_webhook_delivery(idempotency_key, log)
+    if not claimed:
+        log.info(
+            "calcom_webhook_replay_skipped",
+            idempotency_key=idempotency_key,
+        )
+        return {"status": "ok", "deduped": "true"}
 
     handler = _EVENT_DISPATCH.get(trigger)
     if handler is None:

@@ -135,6 +135,7 @@ from app.models.segment import Segment
 from app.models.short_link import ShortLink
 from app.models.tag import ContactTag, Tag
 from app.models.user import User
+from app.models.webhook_signature import SeenWebhookSignature
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
 
 __all__ = [
@@ -271,4 +272,5 @@ __all__ = [
     "AssistantMessage",
     "AuthRateLimit",
     "RefreshToken",
+    "SeenWebhookSignature",
 ]

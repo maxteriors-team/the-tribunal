@@ -39,7 +39,30 @@ Net: a determined attacker does not need to break your crypto or your auth. They
 | **H-2** | Plaintext TCPA suppression list + lead PII; rotation script silently no-oped | `global_opt_outs`, `lead_magnet_leads`, `demo_requests`, `human_profiles`, `phone_messages`, `caller_memories`, `link_clicks` encrypted; `uq_workspace_opt_out` and `ix_demo_requests_phone_created_at` re-pointed at hashes. `scripts/ops/reencrypt_with_old_key.py` now validates every declared target is genuinely an `EncryptedString` and exits non-zero on a misdeclared target or a wholly-skipped table — that new guard immediately caught `LeadMagnetLead.name`, still plaintext, now encrypted. |
 | **§5** | Search-engine discoverability | `frontend/src/app/robots.ts`, default `robots` metadata in `layout.tsx`, and a `headers()` block adding `X-Robots-Tag` + the full security header set. Verified live: `/login` returns `X-Frame-Options: DENY` + `frame-ancestors 'none'`; `/embed/*` deliberately keeps `frame-ancestors https:` so customer iframes still work. |
 
-**Still open — needs a human (see §9):** C-3 (shred prod dumps + rotate DB credential), H-7 (rotate Telnyx/ngrok keys), Vercel Deployment Protection, H-4, H-8, and the M/L series.
+**Also fixed since:** **C-3** — all 9 database dumps (5 prod + 4 local, every one containing plaintext customer phone numbers) are now AES-256-CBC + PBKDF2 encrypted at mode 600, with the plaintext originals removed only after a byte-for-byte `sha256` round-trip check passed on all 9. `make db.backup.local` / `db.backup.prod` now encrypt at creation and `db.restore.local` transparently decrypts `.enc`; the key lives outside the repo at `~/.the-tribunal-backup-keys/backups.key` (mode 600). The two credential notes were `chmod 600`'d as interim mitigation pending rotation.
+
+**Still open — needs a human (see §9):** H-7 (rotate Telnyx/ngrok keys — dashboard-only), the DB credential rotation half of C-3, Google Search Console removals, and the M/L series.
+
+### Correction to §5 Fix 5 — Vercel Deployment Protection was already enabled
+
+The original recommendation ("turn on Standard Protection, highest-value single toggle") was **wrong, and following it literally would have taken the lead-capture funnel offline.** Recorded here so it isn't re-tried.
+
+Queried live via the Vercel API: the project already has `ssoProtection: {"deploymentType": "all_except_custom_domains"}` — i.e. Standard Protection, already on. Verified empirically:
+
+- Deployment-specific URLs (`the-tribunal-<hash>-maxteriors.vercel.app`) → **302 to `vercel.com/sso-api`**. These are the URLs enumerable through certificate-transparency logs, and they are protected.
+- The production alias (`the-tribunal-two.vercel.app`) → **200, real app**. Standard Protection deliberately exempts the production domain.
+
+The original audit probed only the production alias, saw `200`, and concluded protection was off. It was measuring the one surface the setting is designed to exclude.
+
+**Protection must NOT be extended to the production domain.** The same Vercel project serves the public lead-capture surfaces — `/offers` and `/lead-magnets` both return 200 today, plus `/p/<slug>` forms and the `/embed/<publicId>` widget that customer sites iframe. Putting Vercel SSO in front of the production domain would require a Vercel account login to reach any of them, breaking inbound lead capture and every embedded widget.
+
+The dashboard's actual protection is application auth, and that was verified: an unauthenticated `GET /contacts` returns only the Next.js shell — grepping the response for emails, phone numbers, and `@domain` patterns yields no customer data. Combined with the `noindex` header now shipping, the residual exposure is "an unauthenticated visitor can see a login page," which is standard SaaS posture rather than a finding.
+
+### Incident note — uncommitted work lost to a concurrent `git reset`
+
+During the H-4/H-8 work a concurrent branch-protection experiment ran `git reset` back to `origin/main` (visible in `git reflog` as `reset: moving to origin/main`, alongside two discarded probe commits). That discarded **every uncommitted edit to tracked files** — the H-4/H-8 route wiring, the model column, the worker/model registrations, the test updates, and the Makefile/CLAUDE.md/audit-doc edits. Untracked new files survived, so the substantive new modules (`mac_relay_auth.py`, `webhook_replay.py`, `webhook_signature.py`, the cleanup worker, both migrations) were unaffected, as were the already-encrypted dumps on disk.
+
+The work was rebuilt against those surviving modules. Two lessons worth keeping: commit security fixes as soon as they verify rather than batching them, and note that both migrations had already been applied to the local database, so after the reset the schema was *ahead* of the models — `alembic check` is the fastest way to detect that split.
 
 ### Encryption migration — verification record (`1dce03676e16`)
 

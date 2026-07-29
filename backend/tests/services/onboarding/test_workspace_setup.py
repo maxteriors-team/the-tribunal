@@ -15,13 +15,13 @@ from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.agents import ensure_default_agent
 from app.services.contacts import ImportResult
 from app.services.onboarding.exceptions import (
     OnboardingPermissionError,
     OnboardingValidationError,
     OnboardingWorkspaceError,
 )
-from app.services.agents import ensure_default_agent
 from app.services.onboarding.workspace_setup import (
     REACTIVATION_AGENT_NAME,
     CampaignInput,
