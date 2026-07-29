@@ -39,12 +39,26 @@ if TYPE_CHECKING:
 
 
 class LeadSourceType(StrEnum):
-    """Top-level channel used for lead attribution ROI reporting."""
+    """Top-level channel used for lead attribution ROI reporting.
+
+    Declaration order is the dashboard display order: the four paid/organic
+    channels operators compare week over week first, then the word-of-mouth and
+    physical channels a home-service business actually runs, then the catch-all.
+
+    Persisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``
+    on :attr:`LeadSource.source_type`), **not** a Postgres ``ENUM`` type, so adding
+    a member here needs no DDL migration. Keep every value under 50 characters.
+    """
 
     FACEBOOK_ADS = "facebook_ads"
     GOOGLE_ADS = "google_ads"
     ORGANIC = "organic"
     PHONE_RADIO = "phone_radio"
+    REFERRAL_PARTNER = "referral_partner"
+    REPEAT_CUSTOMER = "repeat_customer"
+    TRUCK_WRAP = "truck_wrap"
+    YARD_SIGN = "yard_sign"
+    CANVASS_NEIGHBOR = "canvass_neighbor"
     OTHER = "other"
 
 

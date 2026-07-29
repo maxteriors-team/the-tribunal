@@ -1,8 +1,12 @@
 """Lead-source ROI computation for the dashboard.
 
-Ranks acquisition channels (Facebook Ads, Google Ads, Organic, Phone/Radio,
-and an "other" catch-all) by ad spend and closed-won jobs so operators can see
-which lead source is actually winning.
+Ranks acquisition channels by ad spend and closed-won jobs so operators can see
+which lead source is actually winning. The four paid/organic channels (Facebook
+Ads, Google Ads, Organic, Phone/Radio) always render, even at zero, so a missing
+channel reads as "no results" rather than "not tracked". Every other channel —
+referral partners, repeat customers, truck wraps, yard signs, jobsite canvassing
+and the "other" catch-all — renders only once it has spend or a closed-won job,
+so a business that never runs yard signs is not staring at permanently empty rows.
 
 Only channels that produced at least one closed-won job can win; ad spend with
 no attributed jobs is a loss, never a winner. Among winner-eligible channels the
@@ -36,8 +40,7 @@ from app.schemas.lead_source import (
     SourceROIRow,
 )
 
-# Channels surfaced in the ranked table, in display order. ``other`` is only
-# included when it has activity (handled below).
+# Channels always surfaced in the ranked table, in display order.
 RANKED_SOURCE_TYPES: list[LeadSourceType] = [
     LeadSourceType.FACEBOOK_ADS,
     LeadSourceType.GOOGLE_ADS,
@@ -45,15 +48,36 @@ RANKED_SOURCE_TYPES: list[LeadSourceType] = [
     LeadSourceType.PHONE_RADIO,
 ]
 
+# Every remaining channel, in enum declaration order. These render only when
+# they have spend or closed-won jobs. Derived rather than hand-listed so a new
+# ``LeadSourceType`` member starts reporting ROI without editing this module.
+ACTIVITY_GATED_SOURCE_TYPES: list[LeadSourceType] = [
+    source_type for source_type in LeadSourceType if source_type not in RANKED_SOURCE_TYPES
+]
+
 SOURCE_TYPE_LABELS: dict[LeadSourceType, str] = {
     LeadSourceType.FACEBOOK_ADS: "Facebook Ads",
     LeadSourceType.GOOGLE_ADS: "Google Ads",
     LeadSourceType.ORGANIC: "Organic",
     LeadSourceType.PHONE_RADIO: "Phone / Radio",
+    LeadSourceType.REFERRAL_PARTNER: "Referral Partner",
+    LeadSourceType.REPEAT_CUSTOMER: "Repeat Customer",
+    LeadSourceType.TRUCK_WRAP: "Truck Wrap",
+    LeadSourceType.YARD_SIGN: "Yard Sign",
+    LeadSourceType.CANVASS_NEIGHBOR: "Jobsite Canvass",
     LeadSourceType.OTHER: "Other",
 }
 
 DEFAULT_CURRENCY = "USD"
+
+
+def source_type_label(source_type: LeadSourceType) -> str:
+    """Human label for a channel.
+
+    Falls back to a title-cased value so an unmapped future enum member degrades
+    to an ugly label instead of raising ``KeyError`` and 500ing the dashboard.
+    """
+    return SOURCE_TYPE_LABELS.get(source_type) or source_type.value.replace("_", " ").title()
 
 
 @dataclass
@@ -161,13 +185,14 @@ def assemble_roi_stats(
     Pure function (no I/O) so the ranking, cost-per-job, ROI, and confidence
     logic can be unit-tested with fabricated aggregates.
     """
+
     # --- Assemble rows -------------------------------------------------------
+    def has_activity(source_type: LeadSourceType) -> bool:
+        agg = aggregates.get(source_type)
+        return agg is not None and (agg.spend > 0 or agg.closed_won_jobs > 0)
+
     display_types = list(RANKED_SOURCE_TYPES)
-    if LeadSourceType.OTHER in aggregates and (
-        aggregates[LeadSourceType.OTHER].spend > 0
-        or aggregates[LeadSourceType.OTHER].closed_won_jobs > 0
-    ):
-        display_types.append(LeadSourceType.OTHER)
+    display_types.extend(t for t in ACTIVITY_GATED_SOURCE_TYPES if has_activity(t))
 
     rows: list[SourceROIRow] = []
     for source_type in display_types:
@@ -182,7 +207,7 @@ def assemble_roi_stats(
             SourceROIRow(
                 rank=1,  # provisional; assigned after sorting
                 source_type=source_type,
-                source_name=SOURCE_TYPE_LABELS[source_type],
+                source_name=source_type_label(source_type),
                 lead_source_id=None,
                 spend=spend,
                 closed_won_jobs=jobs,
