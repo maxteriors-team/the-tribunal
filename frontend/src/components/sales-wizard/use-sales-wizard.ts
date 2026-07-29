@@ -15,6 +15,8 @@ import { DEFAULT_DUSK } from "@/lib/estimator/render";
 import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
 import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
+import { formatPhoneNumber } from "@/lib/utils/phone";
+import type { Contact } from "@/types";
 import type {
   CatalogItemResponse,
   PricingSettings,
@@ -197,6 +199,19 @@ const EMPTY_CLIENT: ClientDraft = {
   zip: "",
 };
 
+/**
+ * Fields that identify *who* the quote is for. Hand-editing one means this is
+ * no longer the customer the rep picked, so the contact link drops rather than
+ * silently filing the quote on the wrong record. The job site and rep name are
+ * not identity: a quote for a second property keeps the link.
+ */
+const IDENTITY_FIELDS: ReadonlySet<keyof ClientDraft> = new Set([
+  "first_name",
+  "last_name",
+  "email",
+  "phone",
+]);
+
 const PREVIEW_DEBOUNCE_MS = 350;
 
 function toWizardClient(draft: ClientDraft): WizardClient {
@@ -215,6 +230,8 @@ function toWizardClient(draft: ClientDraft): WizardClient {
 }
 
 export interface UseSalesWizardReturn {
+  /** Workspace this quote belongs to (scopes client lookups to its own CRM). */
+  workspaceId: string;
   // Config + catalog
   pricing: PricingSettings | undefined;
   catalog: CatalogItemResponse[] | undefined;
@@ -231,6 +248,12 @@ export interface UseSalesWizardReturn {
   // Selection state
   client: ClientDraft;
   setClientField: (key: keyof ClientDraft, value: string) => void;
+  /** Existing customer this quote is filed against, when the rep picked one. */
+  linkedContactId: number | null;
+  /** Fill the client block from an existing contact and link the quote to it. */
+  applyContact: (contact: Contact) => void;
+  /** Detach the linked customer, keeping the typed details as a new client. */
+  clearLinkedContact: () => void;
   quantities: Record<string, number>;
   setQty: (itemId: string, qty: number) => void;
   changeQty: (itemId: string, delta: number) => void;
@@ -304,6 +327,7 @@ export function useSalesWizard(
 
   // ── Selection state ──
   const [client, setClient] = useState<ClientDraft>(EMPTY_CLIENT);
+  const [linkedContactId, setLinkedContactId] = useState<number | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [charges, setCharges] = useState<ChargeDraft[]>([
     { description: "", amount: "" },
@@ -371,10 +395,34 @@ export function useSalesWizard(
 
   const setClientField = useCallback(
     (key: keyof ClientDraft, value: string) => {
+      if (IDENTITY_FIELDS.has(key)) setLinkedContactId(null);
       setClient((prev) => ({ ...prev, [key]: value }));
     },
     [],
   );
+
+  // Taking a suggestion adopts that customer's details wholesale, except where
+  // the record is blank — an empty address must not wipe what the rep typed.
+  const applyContact = useCallback((contact: Contact) => {
+    setLinkedContactId(contact.id);
+    setClient((prev) => ({
+      ...prev,
+      first_name: contact.first_name ?? "",
+      last_name: contact.last_name ?? "",
+      email: contact.email || prev.email,
+      // Formatted on the way in so the filled field reads the way a rep types
+      // it. Phone lookups hash on digits only, so this can't break matching.
+      phone: contact.phone_number
+        ? formatPhoneNumber(contact.phone_number)
+        : prev.phone,
+      street: contact.address_line1 || prev.street,
+      city: contact.address_city || prev.city,
+      state: contact.address_state || prev.state,
+      zip: contact.address_zip || prev.zip,
+    }));
+  }, []);
+
+  const clearLinkedContact = useCallback(() => setLinkedContactId(null), []);
 
   const setQty = useCallback((itemId: string, qty: number) => {
     const clamped = Math.max(0, Math.min(999, Math.floor(qty)));
@@ -519,6 +567,9 @@ export function useSalesWizard(
     const hasChristmas = categories.includes("christmas");
     const permFeet = Number.parseFloat(permanent.feet) || 0;
     return {
+      // Linked customer wins over the server's email/phone lookup, so re-quoting
+      // an existing client files on their record instead of creating a twin.
+      contact_id: linkedContactId,
       client: toWizardClient(client),
       quantities: qtyList,
       additional_charges: chargeList,
@@ -571,6 +622,7 @@ export function useSalesWizard(
     };
   }, [
     client,
+    linkedContactId,
     quantities,
     charges,
     activeTier,
@@ -668,12 +720,16 @@ export function useSalesWizard(
   );
 
   return {
+    workspaceId,
     pricing,
     catalog: catalogQuery.data,
     isLoadingConfig: pricingQuery.isPending || catalogQuery.isPending,
     configError: pricingQuery.isError || catalogQuery.isError,
     client,
     setClientField,
+    linkedContactId,
+    applyContact,
+    clearLinkedContact,
     quantities,
     setQty,
     changeQty,

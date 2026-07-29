@@ -71,6 +71,15 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Suggestion panels drop in from under their field. */
+@keyframes sw-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sales-wizard .sw-typeahead-panel { animation: none; }
+}
+
 /* Client "Save as PDF": keep the dark/gold surface in print and drop chrome. */
 @media print {
   .sales-wizard { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -146,6 +155,26 @@
   .field-input { background: transparent; border: none; border-bottom: 1px solid rgba(255, 255, 255, 0.18); padding: 9px 0; font-size: 14px; font-family: var(--font-montserrat), sans-serif; font-weight: 400; color: var(--t1); outline: none; transition: border-color 0.2s; width: 100%; }
   .field-input::placeholder { color: var(--t4); }
   .field-input:focus { border-bottom-color: var(--gold); }
+
+  /* Client-name typeahead (Client step) */
+  .fields-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .fields-block-head .fields-block-label { margin-bottom: 0; }
+  .client-link-chip { display: inline-flex; align-items: center; gap: 10px; padding: 5px 6px 5px 10px; border: 1px solid var(--bdr-g); background: var(--gold-g); }
+  .client-link-chip-text { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-l); }
+  .client-link-chip button { background: transparent; border: 0; border-left: 1px solid var(--bdr-g); padding: 2px 4px 2px 10px; font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t3); cursor: pointer; transition: color 0.2s var(--ease); }
+  .client-link-chip button:hover { color: var(--gold); }
+  .sw-typeahead { position: relative; }
+  .sw-typeahead-panel { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40; max-height: 292px; overflow-y: auto; overscroll-behavior: contain; background: var(--s2); border: 1px solid var(--bdr-g); border-top: 1px solid var(--gold); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55); animation: sw-pop 0.14s var(--ease) both; }
+  .sw-typeahead-list { list-style: none; }
+  .sw-typeahead-option { border-left: 2px solid transparent; padding: 9px 12px 10px; cursor: pointer; transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease); }
+  .sw-typeahead-option + .sw-typeahead-option { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+  .sw-typeahead-option[aria-selected="true"] { background: var(--gold-g); border-left-color: var(--gold); }
+  .sw-typeahead-name { display: block; font-size: 13px; font-weight: 500; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sw-typeahead-option[aria-selected="true"] .sw-typeahead-name { color: var(--gold-l); }
+  .sw-typeahead-name mark { background: transparent; color: var(--gold); font-weight: 700; }
+  .sw-typeahead-meta { display: block; margin-top: 3px; font-size: 11px; color: var(--t3); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sw-typeahead-foot { padding: 8px 12px 9px; background: rgba(0, 0, 0, 0.25); border-top: 1px solid var(--bdr); font-size: 10px; letter-spacing: 0.06em; line-height: 1.5; color: var(--t3); }
+  .sw-vis-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
 
   /* Internal rep notes / commission */
   .rep-notes, .commission-panel { margin: 18px 0 26px; padding: 16px 20px; background: rgba(212, 175, 90, 0.05); border: 1px dashed rgba(212, 175, 90, 0.35); }

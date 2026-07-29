@@ -7,9 +7,12 @@
  * service nor by toggling an individual product line.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+
+import { salesWizardApi } from "@/lib/api/sales-wizard";
+import type { Contact } from "@/types";
 
 import {
   SERVICE_CATEGORIES,
@@ -43,6 +46,22 @@ function renderWizard(service?: ServiceKey) {
   return renderHook(() => useSalesWizard("ws-1", service), { wrapper });
 }
 
+const SAVED_CLIENT = {
+  id: 42,
+  user_id: 1,
+  first_name: "Max",
+  last_name: "Sherrod",
+  email: "max@maxteriors.com",
+  phone_number: "2485550100",
+  address_line1: "123 Oak Lane",
+  address_city: "Birmingham",
+  address_state: "MI",
+  address_zip: "48009",
+  status: "new",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+} as Contact;
+
 describe("service paths", () => {
   it("maps every product line to exactly one service", () => {
     expect(serviceForCategory("landscape")).toBe("landscape");
@@ -59,6 +78,83 @@ describe("service paths", () => {
     expect(serviceForCategories(["permanent"])).toBe("permanent");
     expect(serviceForCategories(["landscape", "bistro"])).toBe("landscape");
     expect(serviceForCategories([])).toBe("landscape");
+  });
+});
+
+describe("useSalesWizard client linking", () => {
+  it("starts unlinked so a typed-in client is simply a new one", () => {
+    const { result } = renderWizard();
+    expect(result.current.linkedContactId).toBeNull();
+
+    act(() => result.current.setClientField("first_name", "Maxwell"));
+    expect(result.current.client.first_name).toBe("Maxwell");
+    expect(result.current.linkedContactId).toBeNull();
+  });
+
+  it("picking a saved client fills the block and files the quote on it", async () => {
+    const { result } = renderWizard();
+
+    act(() => result.current.applyContact(SAVED_CLIENT));
+
+    expect(result.current.linkedContactId).toBe(42);
+    expect(result.current.client).toMatchObject({
+      first_name: "Max",
+      last_name: "Sherrod",
+      email: "max@maxteriors.com",
+      phone: "(248) 555-0100",
+      street: "123 Oak Lane",
+      city: "Birmingham",
+      state: "MI",
+      zip: "48009",
+    });
+
+    // The link rides along to the server, which would otherwise resolve (or
+    // create) a contact from the loose email/phone.
+    await waitFor(() =>
+      expect(salesWizardApi.preview).toHaveBeenCalledWith(
+        "ws-1",
+        expect.objectContaining({ contact_id: 42 }),
+      ),
+    );
+  });
+
+  it("never wipes typed details with a blank field on the saved record", () => {
+    const { result } = renderWizard();
+
+    act(() => result.current.setClientField("street", "77 Elm Court"));
+    act(() =>
+      result.current.applyContact({
+        ...SAVED_CLIENT,
+        address_line1: undefined,
+      } as Contact),
+    );
+
+    expect(result.current.client.street).toBe("77 Elm Court");
+  });
+
+  it("drops the link when the rep edits who the quote is for", () => {
+    const { result } = renderWizard();
+
+    act(() => result.current.applyContact(SAVED_CLIENT));
+    act(() => result.current.setClientField("last_name", "Sherrodd"));
+    expect(result.current.linkedContactId).toBeNull();
+
+    // A different job site is still the same customer, so the link holds.
+    act(() => result.current.applyContact(SAVED_CLIENT));
+    act(() => result.current.setClientField("street", "900 Second Property"));
+    act(() => result.current.setClientField("rep_name", "Maxwell"));
+    expect(result.current.linkedContactId).toBe(42);
+  });
+
+  it("unlinks on request without clearing what was typed", () => {
+    const { result } = renderWizard();
+
+    act(() => result.current.applyContact(SAVED_CLIENT));
+    act(() => result.current.clearLinkedContact());
+
+    expect(result.current.linkedContactId).toBeNull();
+    expect(result.current.client.first_name).toBe("Max");
+    expect(result.current.client.email).toBe("max@maxteriors.com");
   });
 });
 

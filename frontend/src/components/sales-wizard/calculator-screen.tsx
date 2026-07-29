@@ -7,7 +7,7 @@
  * render. Every price comes from the server preview document; the review step
  * shows one combined all-in total across every selected line.
  */
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -16,6 +16,7 @@ import {
   PermanentSection,
 } from "./builder-sections";
 import { CategoryStep, SERVICE_ACCENTS } from "./category-step";
+import { ClientTypeahead } from "./client-typeahead";
 import { DesignStep, MiniTotals } from "./design-step";
 import { EnhancementsStep } from "./enhancements-step";
 import { fmt, type ClientDraft, type UseSalesWizardReturn } from "./use-sales-wizard";
@@ -61,10 +62,14 @@ function ServiceTag({ label, accent }: { label: string; accent: string }) {
 }
 
 function ClientField({ wizard, field, label, placeholder, type }: FieldProps) {
+  const inputId = useId();
   return (
     <div className="field-wrap">
-      <div className="field-label">{label}</div>
+      <label className="field-label" htmlFor={inputId}>
+        {label}
+      </label>
       <input
+        id={inputId}
         className="field-input"
         type={type ?? "text"}
         placeholder={placeholder}
@@ -72,6 +77,45 @@ function ClientField({ wizard, field, label, placeholder, type }: FieldProps) {
         value={wizard.client[field]}
         onChange={(e) => wizard.setClientField(field, e.target.value)}
       />
+    </div>
+  );
+}
+
+/**
+ * Client name field with typeahead over the workspace's existing customers.
+ * Taking a suggestion fills the rest of the block and files the quote on that
+ * record; typing straight through creates a new client, as before.
+ */
+function ClientNameField({ wizard, field, label, placeholder }: FieldProps) {
+  return (
+    <ClientTypeahead
+      workspaceId={wizard.workspaceId}
+      label={label}
+      placeholder={placeholder}
+      value={wizard.client[field]}
+      onValueChange={(value) => wizard.setClientField(field, value)}
+      onPickContact={wizard.applyContact}
+    />
+  );
+}
+
+/** Shows which saved customer the quote is filed against, with a way out. */
+function LinkedClientChip({ wizard }: { wizard: UseSalesWizardReturn }) {
+  const name =
+    [wizard.client.first_name, wizard.client.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "this client";
+  return (
+    <div className="client-link-chip">
+      <span className="client-link-chip-text">Existing client · {name}</span>
+      <button
+        type="button"
+        onClick={wizard.clearLinkedContact}
+        aria-label={`Unlink ${name} and save this quote under a new client`}
+      >
+        Unlink
+      </button>
     </div>
   );
 }
@@ -329,10 +373,15 @@ export function CalculatorScreen({
               </div>
             </div>
             <div className="fields-block">
-              <div className="fields-block-label">Client Information</div>
+              <div className="fields-block-head">
+                <div className="fields-block-label">Client Information</div>
+                {wizard.linkedContactId !== null ? (
+                  <LinkedClientChip wizard={wizard} />
+                ) : null}
+              </div>
               <div className="fields-grid-2">
-                <ClientField wizard={wizard} field="first_name" label="First Name" placeholder="Sarah" />
-                <ClientField wizard={wizard} field="last_name" label="Last Name" placeholder="Henderson" />
+                <ClientNameField wizard={wizard} field="first_name" label="First Name" placeholder="Sarah" />
+                <ClientNameField wizard={wizard} field="last_name" label="Last Name" placeholder="Henderson" />
               </div>
               <div className="fields-grid-3">
                 <ClientField wizard={wizard} field="email" label="Client Email" placeholder="sarah@email.com" type="email" />
