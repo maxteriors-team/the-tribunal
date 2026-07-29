@@ -17,8 +17,12 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 
 /**
- * Channel options used to rank lead-source ROI. The first four are the ranked
- * acquisition channels; `other` is the catch-all bucket.
+ * Channel options used to rank lead-source ROI, in dashboard display order.
+ * The first four are the always-ranked acquisition channels, then the
+ * word-of-mouth and physical channels, then the `other` catch-all bucket.
+ *
+ * Mirrors `LeadSourceType` / `SOURCE_TYPE_LABELS` in
+ * `backend/app/services/dashboard/lead_source_roi_service.py`.
  */
 export const SOURCE_TYPE_OPTIONS: ReadonlyArray<{
   value: LeadSourceType;
@@ -28,12 +32,19 @@ export const SOURCE_TYPE_OPTIONS: ReadonlyArray<{
   { value: "google_ads", label: "Google Ads" },
   { value: "organic", label: "Organic" },
   { value: "phone_radio", label: "Phone / Radio" },
+  { value: "referral_partner", label: "Referral Partner" },
+  { value: "repeat_customer", label: "Repeat Customer" },
+  { value: "truck_wrap", label: "Truck Wrap" },
+  { value: "yard_sign", label: "Yard Sign" },
+  { value: "canvass_neighbor", label: "Jobsite Canvass" },
   { value: "other", label: "Other" },
 ];
 
-const SOURCE_TYPE_LABELS: Record<LeadSourceType, string> = Object.fromEntries(
-  SOURCE_TYPE_OPTIONS.map((o) => [o.value, o.label]),
-) as Record<LeadSourceType, string>;
+// Keyed lookup for `sourceTypeLabel`. Typed as a partial record so a channel
+// added to `LeadSourceType` without an option here degrades to the raw value
+// instead of silently type-asserting a missing label as present.
+const SOURCE_TYPE_LABELS: Partial<Record<LeadSourceType, string>> =
+  Object.fromEntries(SOURCE_TYPE_OPTIONS.map((o) => [o.value, o.label]));
 
 export function sourceTypeLabel(type: LeadSourceType): string {
   return SOURCE_TYPE_LABELS[type] ?? type;

@@ -6,6 +6,11 @@ export type LeadSourceType =
   | "google_ads"
   | "organic"
   | "phone_radio"
+  | "referral_partner"
+  | "repeat_customer"
+  | "truck_wrap"
+  | "yard_sign"
+  | "canvass_neighbor"
   | "other";
 
 export type LeadSourceAction =
