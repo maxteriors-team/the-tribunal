@@ -8043,7 +8043,8 @@ export interface paths {
          *     - ``BOOKING_CANCELLED``: Booking cancelled
          *     - ``MEETING_ENDED``: Meeting completed (or marked no-show)
          *
-         *     All webhooks are signature-verified before processing.
+         *     Every delivery passes two gates before a single side effect runs:
+         *     signature verification, then the durable replay ledger. Both fail closed.
          */
         post: operations["calcom_booking_webhook_webhooks_calcom_booking_post"];
         delete?: never;
@@ -11796,6 +11797,26 @@ export interface components {
              * @default 6
              */
             roofline_per_ft: number;
+            /**
+             * Season Install Day
+             * @default 15
+             */
+            season_install_day: number;
+            /**
+             * Season Install Month
+             * @default 11
+             */
+            season_install_month: number;
+            /**
+             * Season Takedown Day
+             * @default 8
+             */
+            season_takedown_day: number;
+            /**
+             * Season Takedown Month
+             * @default 1
+             */
+            season_takedown_month: number;
             /**
              * Storage Price
              * @default 0

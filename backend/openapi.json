@@ -8952,6 +8952,34 @@
             "title": "Roofline Per Ft",
             "type": "number"
           },
+          "season_install_day": {
+            "default": 15,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Season Install Day",
+            "type": "integer"
+          },
+          "season_install_month": {
+            "default": 11,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Season Install Month",
+            "type": "integer"
+          },
+          "season_takedown_day": {
+            "default": 8,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Season Takedown Day",
+            "type": "integer"
+          },
+          "season_takedown_month": {
+            "default": 1,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Season Takedown Month",
+            "type": "integer"
+          },
           "storage_price": {
             "default": 0,
             "minimum": 0.0,
@@ -72106,7 +72134,7 @@
     },
     "/webhooks/calcom/booking": {
       "post": {
-        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nAll webhooks are signature-verified before processing.",
+        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nEvery delivery passes two gates before a single side effect runs:\nsignature verification, then the durable replay ledger. Both fail closed.",
         "operationId": "calcom_booking_webhook_webhooks_calcom_booking_post",
         "responses": {
           "200": {
