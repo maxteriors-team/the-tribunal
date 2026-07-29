@@ -46,6 +46,29 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.r2.cloudflarestorage.com" },
     ],
   },
+  async redirects() {
+    return [
+      {
+        // /recurring-jobs was renamed to /service-plans. Reps keep the old URL
+        // bookmarked and it is linked from older emails, so without this the
+        // rename hands them a 404 instead of the page they asked for.
+        //
+        // Temporary (307) rather than permanent (308) on purpose: browsers cache
+        // a 308 more or less forever, so if the route is ever renamed again or
+        // /recurring-jobs is reused, anyone who hit the permanent version could
+        // not reach it without clearing their cache. The cost of 307 is one
+        // redirect hop on a stale bookmark.
+        source: "/recurring-jobs",
+        destination: "/service-plans",
+        permanent: false,
+      },
+      {
+        source: "/recurring-jobs/:path*",
+        destination: "/service-plans/:path*",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
