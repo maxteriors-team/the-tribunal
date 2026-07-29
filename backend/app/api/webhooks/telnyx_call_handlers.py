@@ -15,6 +15,7 @@ from app.core.metrics import (
 )
 from app.db.session import AsyncSessionLocal
 from app.models.phone_number import PhoneNumber
+from app.services.lead_sources.attribution_service import apply_tracking_number_attribution
 from app.services.push_notifications import push_notification_service
 from app.services.telephony.call_outcome_classifier import CallOutcomeClassifier
 from app.services.telephony.inbound_routing import classify_inbound_reason
@@ -62,6 +63,7 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
         workspace_id = phone_record.workspace_id
 
         # Create message record for incoming call
+        from app.models.contact import Contact
         from app.models.conversation import Conversation, Message
 
         # Idempotency: Telnyx retries on 5xx/timeout, so we may receive the same
@@ -88,9 +90,9 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             )
         )
         conversation = conv_result.scalar_one_or_none()
+        contact: Contact | None = None
 
         if not conversation:
-            from app.models.contact import Contact
             from app.utils.phone import phone_lookup_variants
 
             # Match the caller by deterministic phone hash, not the Fernet-
@@ -121,6 +123,8 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             )
             db.add(conversation)
             await db.flush()
+        elif conversation.contact_id is not None:
+            contact = await db.get(Contact, conversation.contact_id)
 
         # Create inbound message
         message = Message(
@@ -142,6 +146,14 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
         from app.services.sla import mark_inbound_lead
 
         mark_inbound_lead(conversation)
+
+        if contact is not None and phone_record.lead_source_id is not None:
+            await apply_tracking_number_attribution(db, contact, phone_record)
+            log.info(
+                "tracking_number_attribution_applied",
+                contact_id=contact.id,
+                lead_source_id=str(phone_record.lead_source_id),
+            )
 
         await db.commit()
         await db.refresh(message)

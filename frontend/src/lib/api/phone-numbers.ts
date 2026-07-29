@@ -1,4 +1,4 @@
-import { apiPost, apiDelete } from "@/lib/api";
+import { apiDelete, apiPost, apiPut } from "@/lib/api";
 import { createApiClient } from "@/lib/api/create-api-client";
 import type { PhoneNumber } from "@/types";
 
@@ -42,6 +42,12 @@ export interface PurchasePhoneNumberRequest {
   phone_number: string;
 }
 
+export interface PhoneNumberUpdateRequest {
+  lead_source_id?: string | null;
+  lead_source_campaign_id?: string | null;
+  tracking_label?: string | null;
+}
+
 // Create base API client with standard methods (list, get only - no create/update)
 // Note: release uses a different endpoint and return type than standard delete
 const basePhoneNumbersApi = createApiClient<PhoneNumber, never, never>({
@@ -60,6 +66,17 @@ const basePhoneNumbersApiWithGet = basePhoneNumbersApi as {
 // Phone Numbers API
 export const phoneNumbersApi = {
   ...basePhoneNumbersApiWithGet,
+
+  update: async (
+    workspaceId: string,
+    phoneNumberId: string,
+    data: PhoneNumberUpdateRequest,
+  ): Promise<PhoneNumber> => {
+    return apiPut<PhoneNumber>(
+      `/api/v1/workspaces/${workspaceId}/phone-numbers/${phoneNumberId}`,
+      data,
+    );
+  },
 
   search: async (
     workspaceId: string,

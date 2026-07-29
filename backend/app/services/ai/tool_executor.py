@@ -1280,7 +1280,11 @@ class VoiceToolExecutor(BaseToolExecutor):
         from app.db.session import AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.conversation import Message as MessageModel
+        from app.models.phone_number import PhoneNumber
         from app.services.contacts.address_parsing import parse_us_address
+        from app.services.lead_sources.attribution_service import (
+            apply_tracking_number_attribution,
+        )
 
         def _clean(value: str | None, limit: int) -> str | None:
             if value is None:
@@ -1389,6 +1393,16 @@ class VoiceToolExecutor(BaseToolExecutor):
             if conversation.contact_id is None:
                 await db.flush()
                 conversation.contact_id = contact.id
+
+            tracking_number_result = await db.execute(
+                select(PhoneNumber).where(
+                    PhoneNumber.workspace_id == workspace_id,
+                    PhoneNumber.phone_number == conversation.workspace_phone,
+                )
+            )
+            tracking_number = tracking_number_result.scalar_one_or_none()
+            if tracking_number is not None and tracking_number.lead_source_id is not None:
+                await apply_tracking_number_attribution(db, contact, tracking_number)
 
             # Auto-open a pipeline card so the caller lands on the Opportunities
             # board. Deduped + workspace-gated inside the helper; never break the
