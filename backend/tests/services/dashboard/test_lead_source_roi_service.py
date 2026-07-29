@@ -5,11 +5,16 @@ per-channel aggregates, so the ranking / cost-per-job / ROI / confidence maths
 is covered without a database.
 """
 
+import pytest
+
 from app.models.lead_source import LeadSourceType
 from app.schemas.lead_source import AttributionConfidenceLevel
 from app.services.dashboard.lead_source_roi_service import (
+    RANKED_SOURCE_TYPES,
+    SOURCE_TYPE_LABELS,
     _ChannelAgg,
     assemble_roi_stats,
+    source_type_label,
 )
 
 
@@ -162,3 +167,62 @@ def test_other_channel_only_shown_with_activity():
         total_closed_won_jobs=1,
     )
     assert LeadSourceType.OTHER in {r.source_type for r in stats_active.rows}
+
+
+@pytest.mark.parametrize(
+    ("source_type", "label"),
+    [
+        (LeadSourceType.REFERRAL_PARTNER, "Referral Partner"),
+        (LeadSourceType.REPEAT_CUSTOMER, "Repeat Customer"),
+        (LeadSourceType.TRUCK_WRAP, "Truck Wrap"),
+        (LeadSourceType.YARD_SIGN, "Yard Sign"),
+        (LeadSourceType.CANVASS_NEIGHBOR, "Jobsite Canvass"),
+    ],
+)
+def test_word_of_mouth_channels_report_roi(source_type: LeadSourceType, label: str):
+    # The channels that used to collapse into "other" now rank on their own.
+    stats = assemble_roi_stats(
+        {
+            LeadSourceType.FACEBOOK_ADS: _agg(spend=2000, jobs=2, revenue=6000),
+            source_type: _agg(spend=500, jobs=4, revenue=20000),
+        },
+        total_closed_won_jobs=6,
+    )
+
+    row = _row_for(stats, source_type)
+    assert row.source_name == label
+    assert row.roi_multiple == 40.0
+    assert row.cost_per_closed_won_job == 125.0
+    # 40x beats Facebook's 3x, so the new channel wins outright.
+    assert stats.winner.source_type == source_type
+    assert stats.winner.source_name == label
+    assert stats.rows[0].rank == 1
+
+
+def test_word_of_mouth_channels_hidden_without_activity():
+    # Zero-activity channels stay out of the table so a business that never runs
+    # yard signs is not staring at five permanently empty rows.
+    stats = assemble_roi_stats(
+        {LeadSourceType.FACEBOOK_ADS: _agg(spend=100, jobs=1, revenue=500)},
+        total_closed_won_jobs=1,
+    )
+
+    assert {r.source_type for r in stats.rows} == set(RANKED_SOURCE_TYPES)
+
+
+def test_every_channel_has_a_label():
+    # A new LeadSourceType member with no label must not KeyError the dashboard.
+    assert set(SOURCE_TYPE_LABELS) == set(LeadSourceType)
+    for source_type in LeadSourceType:
+        assert source_type_label(source_type)
+
+
+def test_unlabelled_channel_falls_back_instead_of_raising(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delitem(SOURCE_TYPE_LABELS, LeadSourceType.TRUCK_WRAP)
+
+    assert source_type_label(LeadSourceType.TRUCK_WRAP) == "Truck Wrap"
+    stats = assemble_roi_stats(
+        {LeadSourceType.TRUCK_WRAP: _agg(spend=900, jobs=1, revenue=4000)},
+        total_closed_won_jobs=1,
+    )
+    assert _row_for(stats, LeadSourceType.TRUCK_WRAP).source_name == "Truck Wrap"
