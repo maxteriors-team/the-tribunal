@@ -1,13 +1,12 @@
 "use client";
 
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
 
 import { AIAgentsSection } from "./ai-agents-section";
@@ -20,7 +19,6 @@ interface ActionsPanelProps {
 }
 
 export function ActionsPanel({ className, onClose }: ActionsPanelProps) {
-  const isMobile = useIsMobile();
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
   // Escape-to-close + focus restoration. Only active when rendered as a
@@ -57,27 +55,21 @@ export function ActionsPanel({ className, onClose }: ActionsPanelProps) {
       className={cn("flex flex-col h-full bg-background", className)}
       {...overlayProps}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-2">
-          {!isMobile && (
+      {/* Header. As a slide-over the enclosing Sheet renders the close
+          control, so only the inline console view needs the back link. */}
+      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+        {!onClose && (
+          <Button size="icon" variant="ghost" className="h-8 w-8" asChild>
             <Link href="/contacts" aria-label="Back to contacts">
-              <Button size="icon" variant="ghost" className="h-8 w-8">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+              <ArrowLeft className="h-4 w-4" />
             </Link>
-          )}
-          <h2 className="font-semibold">Actions</h2>
-        </div>
-        {isMobile && onClose && (
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClose} aria-label="Close actions panel">
-            <X className="h-4 w-4" />
           </Button>
         )}
+        <h2 className="font-semibold">Actions</h2>
       </div>
 
       {/* Scrollable Content */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-4 space-y-6">
           {/* AI Agents Section */}
           <AIAgentsSection />

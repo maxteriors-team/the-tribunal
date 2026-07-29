@@ -364,18 +364,25 @@ export function AppSidebar({ children }: AppSidebarProps) {
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
+          {/* Deep routes (e.g. /contacts/123/details) must not wrap the header:
+              ancestor crumbs collapse on narrow screens, the current page truncates. */}
+          <Breadcrumb className="min-w-0">
+            <BreadcrumbList className="flex-nowrap">
               {breadcrumbs.map((crumb, index) => (
-                <BreadcrumbItem key={crumb.href}>
+                <BreadcrumbItem
+                  key={crumb.href}
+                  className={crumb.isLast ? "min-w-0" : "hidden sm:inline-flex"}
+                >
                   {crumb.isLast ? (
-                    <BreadcrumbPage className="gradient-heading">
+                    <BreadcrumbPage className="gradient-heading truncate">
                       {crumb.label}
                     </BreadcrumbPage>
                   ) : (
                     <>
                       <BreadcrumbLink asChild>
-                        <Link href={crumb.href}>{crumb.label}</Link>
+                        <Link href={crumb.href} className="whitespace-nowrap">
+                          {crumb.label}
+                        </Link>
                       </BreadcrumbLink>
                       {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
                     </>

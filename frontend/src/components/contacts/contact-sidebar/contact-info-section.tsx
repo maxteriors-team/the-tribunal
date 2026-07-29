@@ -10,9 +10,14 @@ import type { Contact } from "@/types";
 
 interface ContactInfoSectionProps {
   contact: Contact;
+  /** Roomy layouts (the detail page) show full values instead of truncating. */
+  wrapValues?: boolean;
 }
 
-export function ContactInfoSection({ contact }: ContactInfoSectionProps) {
+export function ContactInfoSection({
+  contact,
+  wrapValues = false,
+}: ContactInfoSectionProps) {
   const tags = Array.isArray(contact.tags)
     ? contact.tags
     : typeof contact.tags === "string"
@@ -46,6 +51,7 @@ export function ContactInfoSection({ contact }: ContactInfoSectionProps) {
           icon={<Phone className="h-4 w-4 text-muted-foreground" />}
           label="Phone"
           value={contact.phone_number}
+          wrapValue={wrapValues}
           onClick={() =>
             contact.phone_number && window.open(`tel:${contact.phone_number}`)
           }
@@ -54,17 +60,20 @@ export function ContactInfoSection({ contact }: ContactInfoSectionProps) {
           icon={<Mail className="h-4 w-4 text-muted-foreground" />}
           label="Email"
           value={contact.email}
+          wrapValue={wrapValues}
           onClick={() => contact.email && window.open(`mailto:${contact.email}`)}
         />
         <InfoRow
           icon={<Building2 className="h-4 w-4 text-muted-foreground" />}
           label="Company"
           value={contact.company_name}
+          wrapValue={wrapValues}
         />
         <InfoRow
           icon={<MapPin className="h-4 w-4 text-muted-foreground" />}
           label="Address"
           value={address || null}
+          wrapValue={wrapValues}
           onClick={() =>
             address &&
             window.open(

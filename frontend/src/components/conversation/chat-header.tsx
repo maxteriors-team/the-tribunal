@@ -3,11 +3,13 @@
 import {
   Phone,
   MoreVertical,
+  History,
   Loader2,
   Bot,
   User,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import {
@@ -32,6 +34,7 @@ import type { Conversation } from "@/types";
 import type { Agent } from "@/types/agent";
 
 interface ChatHeaderProps {
+  contactId: number;
   contactName?: string;
   phoneNumber?: string | null;
   conversation?: Conversation;
@@ -46,6 +49,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({
+  contactId,
   contactName,
   phoneNumber,
   conversation,
@@ -71,14 +75,16 @@ export function ChatHeader({
 
   return (
     <>
-      <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-        <div className="flex items-center gap-3">
-          <h2 className="font-semibold">{contactName}</h2>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b shrink-0">
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 className="truncate font-semibold">{contactName}</h2>
           {phoneNumber && (
-            <span className="text-sm text-muted-foreground">{phoneNumber}</span>
+            <span className="text-sm text-muted-foreground hidden truncate sm:inline">
+              {phoneNumber}
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {/* AI Toggle Button */}
           <Button
             size="sm"
@@ -153,7 +159,12 @@ export function ChatHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>View contact details</DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/contacts/${contactId}/details`}>
+                  <History className="h-4 w-4 mr-2" />
+                  View details &amp; history
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem>Schedule appointment</DropdownMenuItem>
               <DropdownMenuItem>Add note</DropdownMenuItem>
               <DropdownMenuSeparator />
