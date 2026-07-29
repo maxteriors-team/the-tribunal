@@ -240,6 +240,17 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
     # Get offer context if conversation was from a campaign
     offer_context = await get_offer_context(conversation, db)
 
+    # Lead intake notes, mirroring what the voice pipeline already injects via
+    # VoicePromptBuilder._build_contact_section. Without this the text agent is
+    # blind to what the capture form collected and re-asks the lead for their
+    # address and project type moments after they typed both into a quote tool.
+    lead_context = None
+    if conversation.contact_id:
+        contact_row = await db.execute(select(Contact).where(Contact.id == conversation.contact_id))
+        lead_contact = contact_row.scalar_one_or_none()
+        if lead_contact and lead_contact.notes:
+            lead_context = lead_contact.notes
+
     # Build system instructions - include booking tools info if configured
     has_booking_tools = bool(
         agent.calcom_event_type_id
@@ -282,6 +293,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         offer_context=offer_context,
         booking_url=None,  # Don't include URL when using function calling
         knowledge_context=knowledge_context,
+        lead_context=lead_context,
     )
 
     # Create OpenAI client. Prefer the resolved credential so OAuth-backed

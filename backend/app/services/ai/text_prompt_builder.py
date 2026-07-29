@@ -38,6 +38,11 @@ LANGUAGE_NAMES = {
     "pt-BR": "Brazilian Portuguese",
 }
 
+# Cap on injected lead intake notes. Notes accumulate one block per form
+# submission, so a repeat lead can grow unbounded; this keeps a long history
+# from crowding out the agent's own prompt.
+MAX_LEAD_CONTEXT_CHARS = 1500
+
 
 def build_text_instructions(
     system_prompt: str,
@@ -47,6 +52,7 @@ def build_text_instructions(
     offer_context: str | None = None,
     booking_url: str | None = None,
     knowledge_context: str | None = None,
+    lead_context: str | None = None,
 ) -> str:
     """Build instructions for text agent.
 
@@ -61,6 +67,11 @@ def build_text_instructions(
         offer_context: Optional offer context to include in instructions
         booking_url: Optional Cal.com booking URL to include in instructions
         knowledge_context: Optional knowledge base context for CAG
+        lead_context: Optional lead intake notes - what the lead already told us on
+            the form that captured them. The voice pipeline has always injected
+            this (see ``VoicePromptBuilder._build_contact_section``); text agents
+            went without it and would re-ask for the address, city, and project
+            type the intake form had already collected.
 
     Returns:
         Complete instructions string for text conversations
@@ -88,6 +99,25 @@ def build_text_instructions(
             f"suggest they click here: {booking_url}"
         )
 
+    # Lead intake notes. Capped and tail-biased on purpose: notes are appended
+    # per submission (newest last), so when a repeat lead overflows the cap the
+    # most recent submission is the one worth keeping.
+    lead_section = ""
+    if lead_context and lead_context.strip():
+        notes = lead_context.strip()
+        if len(notes) > MAX_LEAD_CONTEXT_CHARS:
+            notes = "..." + notes[-MAX_LEAD_CONTEXT_CHARS:]
+        lead_section = (
+            f"\n\n[LEAD INTAKE NOTES]\n"
+            f"What this lead already told us on the form that captured them. "
+            f"Treat every detail here as known - never ask them for something "
+            f"already answered below. Use these facts silently: they exist to stop "
+            f"you asking redundant questions, not to be recited back. Do not list "
+            f"or summarise them, and do not get wordier because you have them - "
+            f"replies stay just as short.\n"
+            f"{notes}"
+        )
+
     # Add knowledge base context if available
     knowledge_section = ""
     if knowledge_context:
@@ -97,11 +127,15 @@ def build_text_instructions(
             f"{knowledge_context}"
         )
 
+    context_sections = (
+        f"{phone_context}{lead_section}{offer_section}{booking_section}{knowledge_section}"
+    )
+
     return f"""[CONTEXT]
 Language: {language_name}
 Timezone: {timezone}
 Current: {current_datetime}
-Channel: SMS/Text Message{phone_context}{offer_section}{booking_section}{knowledge_section}
+Channel: SMS/Text Message{context_sections}
 
 [RESPONSE RULES]
 - Respond ONLY in {language_name}
@@ -111,7 +145,9 @@ Channel: SMS/Text Message{phone_context}{offer_section}{booking_section}{knowled
 - Do not use markdown formatting (plain text only)
 - NEVER include stage directions or narration like "(pauses)" or "(After a moment)"
 - You are a TEXT agent - respond directly without describing your actions
-- Say "One moment" instead of "(checking...)" or theatrical descriptions
+- Never stall: no "One moment", "let me check", or "(checking...)". SMS is
+  asynchronous, so there is nothing for the recipient to hold for, and the
+  booking rules already forbid it. Answer now, or state the next step plainly
 - You may double-text for natural conversation flow
 
 [OBJECTION HANDLING]
