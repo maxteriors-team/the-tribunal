@@ -50,15 +50,11 @@ class TestEnforceScrapingRateLimit:
     async def test_allows_when_under_both_limits(self) -> None:
         workspace_id = uuid.uuid4()
 
-        async def fake_check(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def fake_check(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             del key, limit, expire_seconds
             return True, 1
 
-        with patch.object(
-            scraping_limiter, "_check_and_increment", new=fake_check
-        ):
+        with patch.object(scraping_limiter, "_check_and_increment", new=fake_check):
             # Must not raise.
             await scraping_limiter.enforce_scraping_rate_limit(workspace_id)
 
@@ -67,9 +63,7 @@ class TestEnforceScrapingRateLimit:
     ) -> None:
         workspace_id = uuid.uuid4()
 
-        async def fake_check(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def fake_check(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             # First call is the hourly window — reject it.
             del limit, expire_seconds
             assert ":hour:" in key
@@ -95,9 +89,7 @@ class TestEnforceScrapingRateLimit:
         workspace_id = uuid.uuid4()
         calls: list[str] = []
 
-        async def fake_check(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def fake_check(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             del limit, expire_seconds
             calls.append(key)
             # Hour check passes, day check fails.
@@ -126,9 +118,7 @@ class TestEnforceScrapingRateLimit:
         """A Redis outage must not lock every workspace out of search."""
         workspace_id = uuid.uuid4()
 
-        async def boom(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def boom(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             del key, limit, expire_seconds
             raise RuntimeError("redis down")
 
@@ -141,9 +131,7 @@ class TestEnforceScrapingRateLimit:
         workspace_id = uuid.UUID("12345678-1234-5678-1234-567812345678")
         captured: list[str] = []
 
-        async def fake_check(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def fake_check(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             del limit, expire_seconds
             captured.append(key)
             return True, 1
@@ -161,9 +149,7 @@ class TestEnforceScrapingRateLimit:
         workspace_id = uuid.uuid4()
         observed_limits: list[int] = []
 
-        async def fake_check(
-            key: str, limit: int, expire_seconds: int
-        ) -> tuple[bool, int]:
+        async def fake_check(key: str, limit: int, expire_seconds: int) -> tuple[bool, int]:
             del key, expire_seconds
             observed_limits.append(limit)
             return True, 1

@@ -52,7 +52,8 @@ def db() -> MagicMock:
     session.add = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
-    session.scalar = AsyncMock()
+    # List tools issue a COUNT(*) through scalar() for the truthful `total`.
+    session.scalar = AsyncMock(return_value=1)
     return session
 
 
@@ -149,7 +150,9 @@ async def test_search_contacts_returns_contact_summaries(
                 "updated_at": "2026-05-02T00:00:00+00:00",
             }
         ],
-        "count": 1,
+        "returned": 1,
+        "total": 1,
+        "has_more": False,
     }
 
 
@@ -214,7 +217,9 @@ async def test_list_appointments_returns_upcoming_summaries(
                 "notes": "Discovery call",
             }
         ],
-        "count": 1,
+        "returned": 1,
+        "total": 1,
+        "has_more": False,
     }
 
 
@@ -249,9 +254,12 @@ async def test_list_opportunities_returns_pipeline_summaries(
                 "status": "open",
                 "amount": 12500.5,
                 "probability": 65,
+                "primary_contact_id": 101,
             }
         ],
-        "count": 1,
+        "returned": 1,
+        "total": 1,
+        "has_more": False,
     }
 
 
@@ -275,7 +283,8 @@ async def test_confirmed_assign_ai_responder_updates_conversation(
 
     result = await executor.execute(
         "assign_ai_responder",
-        {"conversation_id": str(conversation.id), "agent_id": str(agent.id), "confirmed": True},
+        {"conversation_id": str(conversation.id), "agent_id": str(agent.id)},
+        approval_granted=True,
     )
 
     assert result == {

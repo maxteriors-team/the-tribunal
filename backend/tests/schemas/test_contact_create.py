@@ -167,9 +167,7 @@ class TestQualificationSignalDetail:
 
     def test_full_construction(self) -> None:
         """All fields accepted."""
-        d = QualificationSignalDetail(
-            detected=True, value="100k budget", confidence=0.9
-        )
+        d = QualificationSignalDetail(detected=True, value="100k budget", confidence=0.9)
         assert d.detected is True
         assert d.value == "100k budget"
         assert d.confidence == 0.9

@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 import structlog
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
@@ -18,8 +19,19 @@ from app.services.ai.crm_assistant._offer_tools import OfferAssistantTools
 from app.services.ai.crm_assistant._opportunity_tools import OpportunityAssistantTools
 from app.services.ai.crm_assistant._outbound_tools import OutboundAssistantTools
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
+from app.services.ai.crm_assistant._tool_errors import (
+    internal_error,
+    invalid_argument,
+    not_permitted,
+    unavailable,
+    unknown_tool,
+)
 from app.services.ai.crm_assistant._tool_metadata import CRMToolMetadata, build_tool_metadata
 from app.services.approval.approval_gate_service import approval_gate_service
+
+# Approval flags a model might try to set on itself. They are never part of a
+# tool schema; anything arriving under these keys is stripped and logged.
+_APPROVAL_FLAG_KEYS = frozenset({"confirmed", "user_confirmed"})
 
 
 class CRMToolExecutor:
@@ -55,14 +67,30 @@ class CRMToolExecutor:
         return build_tool_metadata(handlers=self._build_handlers())
 
     @staticmethod
-    def _is_explicitly_confirmed(args: ToolArguments) -> bool:
-        return bool(args.get("confirmed") or args.get("user_confirmed"))
+    def _strip_approval_flags(args: ToolArguments) -> tuple[ToolArguments, list[str]]:
+        """Remove any model-supplied approval flags and report what was found.
+
+        ``confirmed`` used to be a parameter in the tool schema the model writes,
+        gating approval on `args.get("confirmed")`. Nothing stopped the model
+        from emitting `confirmed: true` itself, which walked straight past the
+        human approval gate on send_sms, start_campaign, create_automation and
+        create_agent. ``user_confirmed`` was honoured too and appeared in no
+        schema at all. Approval is now the executor's decision alone, so these
+        keys are stripped and their presence logged as an attempted bypass.
+        """
+        present = [key for key in _APPROVAL_FLAG_KEYS if key in args]
+        if not present:
+            return args, []
+        return {
+            key: value for key, value in args.items() if key not in _APPROVAL_FLAG_KEYS
+        }, present
 
     async def _queue_pending_action(
         self,
         metadata: CRMToolMetadata,
         arguments: ToolArguments,
     ) -> dict[str, Any]:
+        """Route a gated action into the human approval queue."""
         payload = {
             key: value
             for key, value in arguments.items()
@@ -85,26 +113,80 @@ class CRMToolExecutor:
             require_approval_without_agent=True,
         )
         if decision == "blocked":
-            return {"success": False, "error": "Action blocked by approval policy"}
+            return not_permitted(
+                "That action was blocked by the workspace approval policy.",
+                "Tell the operator it needs a policy change; do not retry.",
+            )
         if decision != "pending" or approval_result is None:
-            return {"success": False, "error": "Approval gate did not create a pending action"}
+            return unavailable(
+                "The approval queue could not accept this action.",
+                "Tell the operator the action was not queued.",
+            )
         return {
             "success": False,
+            "code": "pending_approval",
             "pending_approval": True,
             "pending_action_id": approval_result["action_id"],
             "message": metadata.approval.pending_message,
+            "retryable": False,
+            "hint": (
+                "Tell the operator it is waiting for their approval in this chat. "
+                "Do not call the tool again."
+            ),
         }
 
-    async def execute(self, function_name: str, arguments: ToolArguments) -> dict[str, Any]:
-        """Dispatch a tool call to the appropriate handler."""
+    async def execute(
+        self,
+        function_name: str,
+        arguments: ToolArguments,
+        *,
+        approval_granted: bool = False,
+    ) -> dict[str, Any]:
+        """Dispatch a tool call to the appropriate handler.
+
+        ``approval_granted`` is the *only* way to skip the approval gate, and it
+        is a Python keyword argument — not tool JSON — so a model cannot reach
+        it. Only :func:`execute_approved_crm_assistant_tool`, running after a
+        human approved the pending action, passes it.
+        """
 
         metadata = self.tool_metadata.get(function_name)
         if metadata is None:
-            return {"success": False, "error": f"Unknown function: {function_name}"}
+            self.log.warning("unknown_tool_called", function_name=function_name)
+            return unknown_tool(function_name)
+
+        arguments, forged_flags = self._strip_approval_flags(arguments)
+        if forged_flags and not approval_granted:
+            self.log.warning(
+                "crm_assistant_approval_flag_ignored",
+                function_name=function_name,
+                flags=forged_flags,
+                requires_approval=metadata.requires_approval,
+            )
+
         try:
-            if metadata.requires_approval and not self._is_explicitly_confirmed(arguments):
+            if metadata.requires_approval and not approval_granted:
                 return await self._queue_pending_action(metadata, arguments)
             return await metadata.handler(arguments)
+        except (KeyError, TypeError, ValueError) as exc:
+            # Bad tool arguments: the model can fix these itself, so name the
+            # offending field. Exception text is logged, never returned.
+            self.log.warning(
+                "tool_argument_error",
+                function_name=function_name,
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            return invalid_argument(
+                f"{function_name} rejected the arguments it was given.",
+                "Check the required parameters in the tool schema and call it again.",
+            )
+        except SQLAlchemyError:
+            self.log.exception("tool_database_error", function_name=function_name)
+            return unavailable(
+                "The database is not reachable right now.",
+                "Tell the operator to try again shortly; do not retry automatically.",
+            )
         except Exception:
             self.log.exception("tool_execution_failed", function_name=function_name)
-            return {"success": False, "error": f"Failed to execute {function_name}"}
+            return internal_error(function_name)

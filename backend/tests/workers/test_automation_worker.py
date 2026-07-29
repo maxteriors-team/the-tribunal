@@ -17,13 +17,33 @@ integration layer is the end-to-end proof, run with ``pytest -m integration``.
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.schemas.automation import AUTOMATION_ACTION_TYPES
 from app.workers.automation_worker import AutomationWorker
+
+# --------------------------------------------------------------------------- #
+# Action-type parity                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_declared_action_types_match_what_the_worker_dispatches() -> None:
+    """``AUTOMATION_ACTION_TYPES`` feeds the CRM assistant tool enum.
+
+    If the worker gains or drops a branch without updating the constant, the
+    assistant would offer the model an action that silently does nothing, or
+    hide one that works. This keeps the single source of truth honest.
+    """
+    source = inspect.getsource(AutomationWorker._run_actions)
+
+    for action_type in AUTOMATION_ACTION_TYPES:
+        assert f'"{action_type}"' in source, f"{action_type} is declared but never dispatched"
+
 
 # --------------------------------------------------------------------------- #
 # Unit helpers                                                                 #

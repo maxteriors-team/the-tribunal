@@ -79,9 +79,7 @@ def test_default_confidence_when_unspecified():
 
 def test_explicit_confidence_is_respected():
     contact = _blank_contact()
-    apply_web_attribution(
-        contact, _lead_source(), WebAttributionInput(attribution_confidence=0.5)
-    )
+    apply_web_attribution(contact, _lead_source(), WebAttributionInput(attribution_confidence=0.5))
     assert contact.attribution_confidence == 0.5
 
 
@@ -106,9 +104,7 @@ def test_returning_contact_preserves_first_touch_but_refreshes_latest():
 def test_blank_submission_does_not_erase_existing_tracking_fields():
     contact = _blank_contact()
     source = _lead_source()
-    apply_web_attribution(
-        contact, source, WebAttributionInput(utm_source="google", gclid="abc123")
-    )
+    apply_web_attribution(contact, source, WebAttributionInput(utm_source="google", gclid="abc123"))
 
     # A later submission with no tracking signal must not wipe the captured ids.
     apply_web_attribution(contact, source, WebAttributionInput())

@@ -50,9 +50,7 @@ class TestRenderFallbackTemplatePlaceholders:
     def test_company_name_placeholder(self) -> None:
         """{company_name} is replaced."""
         contact = make_contact()
-        result = render_fallback_template(
-            "You work at {company_name}", contact, "no_answer"
-        )
+        result = render_fallback_template("You work at {company_name}", contact, "no_answer")
         assert result == "You work at Acme"
 
     def test_email_placeholder(self) -> None:
@@ -64,17 +62,13 @@ class TestRenderFallbackTemplatePlaceholders:
     def test_call_outcome_placeholder(self) -> None:
         """{call_outcome} is replaced with raw outcome value."""
         contact = make_contact()
-        result = render_fallback_template(
-            "Outcome: {call_outcome}", contact, "busy"
-        )
+        result = render_fallback_template("Outcome: {call_outcome}", contact, "busy")
         assert result == "Outcome: busy"
 
     def test_call_reason_placeholder(self) -> None:
         """{call_reason} is replaced with friendly text."""
         contact = make_contact()
-        result = render_fallback_template(
-            "Reason: {call_reason}", contact, "no_answer"
-        )
+        result = render_fallback_template("Reason: {call_reason}", contact, "no_answer")
         assert result == "Reason: we tried calling but couldn't reach you"
 
     def test_multiple_placeholders(self) -> None:
@@ -82,9 +76,7 @@ class TestRenderFallbackTemplatePlaceholders:
         contact = make_contact()
         template = "Hi {first_name} from {company_name}, {call_reason}."
         result = render_fallback_template(template, contact, "no_answer")
-        assert result == (
-            "Hi Alice from Acme, we tried calling but couldn't reach you."
-        )
+        assert result == ("Hi Alice from Acme, we tried calling but couldn't reach you.")
 
 
 class TestRenderFallbackTemplateCallOutcomeMappings:
@@ -114,26 +106,20 @@ class TestRenderFallbackTemplateNoneFields:
 
     def test_all_none_fields(self) -> None:
         """Contact with all None fields produces empty replacements."""
-        contact = make_contact(
-            first_name=None, last_name=None, email=None, company_name=None
-        )
+        contact = make_contact(first_name=None, last_name=None, email=None, company_name=None)
         template = "[{first_name}][{last_name}][{full_name}][{email}][{company_name}]"
         result = render_fallback_template(template, contact, "no_answer")
         assert result == "[][][][][]"
 
     def test_only_first_name_set(self) -> None:
         """Only first_name populated, full_name uses just first."""
-        contact = make_contact(
-            first_name="Alice", last_name=None, email=None, company_name=None
-        )
+        contact = make_contact(first_name="Alice", last_name=None, email=None, company_name=None)
         result = render_fallback_template("{full_name}", contact, "no_answer")
         assert result == "Alice"
 
     def test_only_last_name_set(self) -> None:
         """Only last_name populated, full_name uses just last."""
-        contact = make_contact(
-            first_name=None, last_name="Smith", email=None, company_name=None
-        )
+        contact = make_contact(first_name=None, last_name="Smith", email=None, company_name=None)
         result = render_fallback_template("{full_name}", contact, "no_answer")
         assert result == "Smith"
 
@@ -156,9 +142,7 @@ class TestRenderFallbackTemplateCaseInsensitive:
     def test_mixed_case_full_name(self) -> None:
         """{Full_Name} is replaced."""
         contact = make_contact()
-        result = render_fallback_template(
-            "Hello {Full_Name}!", contact, "no_answer"
-        )
+        result = render_fallback_template("Hello {Full_Name}!", contact, "no_answer")
         assert result == "Hello Alice Smith!"
 
 
@@ -180,9 +164,7 @@ class TestRenderFallbackTemplateEdgeCases:
     def test_unknown_placeholder_preserved(self) -> None:
         """Unknown placeholders are left as-is."""
         contact = make_contact()
-        result = render_fallback_template(
-            "Hi {unknown_placeholder}", contact, "no_answer"
-        )
+        result = render_fallback_template("Hi {unknown_placeholder}", contact, "no_answer")
         assert result == "Hi {unknown_placeholder}"
 
     def test_same_placeholder_multiple_times(self) -> None:

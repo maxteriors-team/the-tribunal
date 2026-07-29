@@ -35,7 +35,12 @@ PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
 # Fields on ProposalDocument that are deliberately staff-only. Adding a field to
 # the document without classifying it here or in the allowlist fails the guard
 # test below — the whole point of the allowlist being opt-in.
-INTERNAL_ONLY_FIELDS = frozenset({"fulfillment"})
+#
+# ``attach_warning`` is the rep-facing cross-sell prompt ("this roof job has no
+# gutters on it"). It is preview-only and never persisted, but classifying it
+# keeps the guard honest: telling a homeowner what the business wishes it had
+# sold them is not client-facing under any circumstances.
+INTERNAL_ONLY_FIELDS = frozenset({"fulfillment", "attach_warning"})
 
 
 def _document() -> dict[str, Any]:

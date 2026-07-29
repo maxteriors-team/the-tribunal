@@ -15,8 +15,7 @@ from app.core.origin_validation import validate_origin
 def _make_request(headers: dict[str, str]) -> Request:
     """Build a minimal ASGI ``Request`` carrying the given headers."""
     encoded = [
-        (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in headers.items()
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()
     ]
     scope = {
         "type": "http",

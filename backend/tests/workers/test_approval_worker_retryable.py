@@ -41,9 +41,7 @@ async def test_failed_notification_routes_to_dead_letter() -> None:
     db = MagicMock()
     db.rollback = AsyncMock()
     db.get = AsyncMock(return_value=action)
-    worker.delivery_service.notify_pending_action = AsyncMock(
-        side_effect=RuntimeError("boom")
-    )
+    worker.delivery_service.notify_pending_action = AsyncMock(side_effect=RuntimeError("boom"))
 
     await worker.execute_with_retry(
         worker._notify_pending_action,
@@ -70,9 +68,7 @@ async def test_failed_execution_routes_to_dead_letter() -> None:
     db = MagicMock()
     db.rollback = AsyncMock()
     db.get = AsyncMock(return_value=action)
-    worker.gate_service.execute_approved_action = AsyncMock(
-        side_effect=RuntimeError("nope")
-    )
+    worker.gate_service.execute_approved_action = AsyncMock(side_effect=RuntimeError("nope"))
 
     await worker.execute_with_retry(
         worker._execute_single_action,

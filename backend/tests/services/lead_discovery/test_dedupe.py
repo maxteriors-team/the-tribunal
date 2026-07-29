@@ -84,9 +84,9 @@ class TestExtractHost:
 
     def test_normalize_website_host_is_extract_host(self) -> None:
         # Public alias exists for symmetry with the other normalize_* helpers.
-        assert normalize_website_host_for_dedupe(
+        assert normalize_website_host_for_dedupe("https://www.example.com") == extract_host(
             "https://www.example.com"
-        ) == extract_host("https://www.example.com")
+        )
 
 
 class TestNormalizeOwnerName:

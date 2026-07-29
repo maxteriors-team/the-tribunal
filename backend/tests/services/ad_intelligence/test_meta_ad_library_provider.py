@@ -130,9 +130,7 @@ async def test_carousel_media_inference() -> None:
         )
 
     provider = _make_provider(handler)
-    result = await provider.search(
-        AdSearchRequest(platform="meta", country="US", search_terms="x")
-    )
+    result = await provider.search(AdSearchRequest(platform="meta", country="US", search_terms="x"))
     await provider.close()
     assert result.advertisers[0].ads[0].media_type == "carousel"
 
@@ -221,16 +219,18 @@ async def test_resolve_page_id_from_name() -> None:
         if params.get("fields") == "id,page_id,page_name":
             return httpx.Response(
                 200,
-                json={"data": [{"id": "1", "page_id": "555", "page_name": "Acme"},
-                               {"id": "2", "page_id": "555", "page_name": "Acme"}]},
+                json={
+                    "data": [
+                        {"id": "1", "page_id": "555", "page_name": "Acme"},
+                        {"id": "2", "page_id": "555", "page_name": "Acme"},
+                    ]
+                },
             )
         # Second call should now be scoped to the resolved page id.
         assert params.get("search_page_ids") == '["555"]'
         return httpx.Response(200, json={"data": [_ad("3", "555", body="hi", stop=FUTURE)]})
 
     provider = _make_provider(handler)
-    result = await provider.search(
-        AdSearchRequest(platform="meta", country="US", page_name="Acme")
-    )
+    result = await provider.search(AdSearchRequest(platform="meta", country="US", page_name="Acme"))
     await provider.close()
     assert result.advertisers[0].advertiser_key == "555"

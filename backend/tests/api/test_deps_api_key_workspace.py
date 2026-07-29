@@ -37,8 +37,7 @@ from app.models.workspace import Workspace, WorkspaceMembership
 def _make_request(headers: dict[str, str] | None = None) -> Request:
     """Build a minimal ASGI Request with the given headers."""
     raw_headers = [
-        (k.lower().encode("latin-1"), v.encode("latin-1"))
-        for k, v in (headers or {}).items()
+        (k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in (headers or {}).items()
     ]
     scope = {
         "type": "http",

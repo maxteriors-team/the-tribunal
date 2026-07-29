@@ -114,9 +114,7 @@ async def test_run_discovery_job_persists_and_scores(monkeypatch) -> None:
         assert job.completed_at is not None
 
         advertiser = (
-            await db.execute(
-                select(AdAdvertiser).where(AdAdvertiser.workspace_id == workspace.id)
-            )
+            await db.execute(select(AdAdvertiser).where(AdAdvertiser.workspace_id == workspace.id))
         ).scalar_one()
         assert advertiser.advertiser_key == "900900"
         assert advertiser.longest_running_active_days == 200
@@ -125,10 +123,10 @@ async def test_run_discovery_job_persists_and_scores(monkeypatch) -> None:
         assert advertiser.example_creative["ad_external_id"] == "a1"
 
         creatives = (
-            await db.execute(
-                select(AdCreative).where(AdCreative.advertiser_id == advertiser.id)
-            )
-        ).scalars().all()
+            (await db.execute(select(AdCreative).where(AdCreative.advertiser_id == advertiser.id)))
+            .scalars()
+            .all()
+        )
         assert len(creatives) == 1
 
         await db.rollback()

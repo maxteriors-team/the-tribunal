@@ -587,9 +587,7 @@ class TestBaseWorkerGracefulShutdown:
 
         worker = ConcreteWorker(drain_timeout=5.0)
         # Run concurrently in a fire-and-forget task so we can interleave stop().
-        runner = asyncio.create_task(
-            worker.run_concurrently([slow(0), slow(1), slow(2)])
-        )
+        runner = asyncio.create_task(worker.run_concurrently([slow(0), slow(1), slow(2)]))
         await asyncio.sleep(0)  # let tasks register in _inflight
         assert worker._inflight, "tasks should be tracked"
 

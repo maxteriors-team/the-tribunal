@@ -11,20 +11,15 @@
  */
 import { formatCurrency } from "@/lib/utils/number";
 
-// One seasonal Good/Better/Best package as the client compares it. Feet-free by
-// construction: it carries the tier copy and a single ``total`` only, never the
-// roofline breakdown, matching the public payload's privacy contract.
-export interface ComparisonPackageView {
-  key: string;
-  name: string;
-  marker?: string | null;
-  total: number;
-  valueTag?: string | null;
-  popular?: boolean;
-  recommended?: boolean;
-  points?: string[];
-  experience?: string | null;
-}
+import {
+  PackageGrid,
+  type ComparisonPackageView,
+  type PackageSectionCopy,
+} from "./package-grid";
+
+// Re-exported so existing importers (and the settings preview) have one place to
+// get the client-facing package view from.
+export type { ComparisonPackageView, PackageSectionCopy };
 
 export interface ComparisonView {
   currency?: string;
@@ -49,6 +44,11 @@ export interface ComparisonView {
   // card renders a package grid under the permanent-vs-seasonal comparison so the
   // client can compare tiers. Empty/undefined => à la carte seasonal pricing.
   christmasPackages?: ComparisonPackageView[];
+  // Category copy for that package grid. Omitted for seasonal lighting, which
+  // keeps the grid's built-in holiday wording; a non-seasonal category (roof,
+  // siding, gutters) passes its own headline and price note so the same grid
+  // sells a different trade without a second component.
+  packageSection?: PackageSectionCopy | null;
   // Roofline-only, like-for-like cost comparison: permanent's one-time roofline
   // install against the seasonal roofline paid each season. The headline totals
   // can include decor, which makes them apples-to-oranges; this block is the
@@ -213,51 +213,11 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
         </div>
       ) : null}
 
-      {packages.length > 0 ? (
-        <div className="cmp-pkg-section">
-          <div className="cmp-pkg-head">
-            <h2>Choose your seasonal package</h2>
-            <p>
-              Three ways to light up the season. Pick the look that fits your
-              home.
-            </p>
-          </div>
-          <div className="cmp-pkg-grid">
-            {packages.map((pkg) => (
-              <div
-                className={`cmp-card cmp-pkg${pkg.recommended ? " recommended" : ""}`}
-                key={pkg.key}
-              >
-                {pkg.recommended ? (
-                  <span className="cmp-card-tag">Recommended</span>
-                ) : pkg.popular ? (
-                  <span className="cmp-card-tag alt">Most popular</span>
-                ) : null}
-                <h3>
-                  {pkg.marker ? (
-                    <span className="cmp-pkg-marker">{pkg.marker}</span>
-                  ) : null}
-                  {pkg.name}
-                </h3>
-                {pkg.experience ? (
-                  <div className="cmp-pkg-exp">{pkg.experience}</div>
-                ) : null}
-                <div className="cmp-price">
-                  {formatCurrency(pkg.total, currency)}
-                </div>
-                <div className="cmp-price-note">Per season</div>
-                {pkg.points && pkg.points.length > 0 ? (
-                  <ul className="cmp-perks">
-                    {pkg.points.map((point) => (
-                      <li key={point}>{point}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <PackageGrid
+        packages={packages}
+        currency={currency}
+        copy={view.packageSection}
+      />
     </div>
   );
 }

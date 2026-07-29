@@ -121,6 +121,7 @@ const offers = createResourceQueryKeys("offers");
 const opportunities = createResourceQueryKeys("opportunities");
 const pendingActions = createResourceQueryKeys("pending-actions");
 const phoneNumbers = createResourceQueryKeys("phone-numbers");
+const revenueTargets = createResourceQueryKeys("revenue-targets");
 const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
 const technicians = createResourceQueryKeys("technicians");
@@ -129,6 +130,12 @@ const technicians = createResourceQueryKeys("technicians");
 const salesWizard = {
   pricing: (workspaceId: string) => ["sales-wizard-pricing", workspaceId] as const,
   catalog: (workspaceId: string) => ["sales-wizard-catalog", workspaceId] as const,
+};
+
+// Attach rules: the workspace's cross-sell prompt config, read by the settings
+// editor and by the builder's dismissal UI.
+const attachRules = {
+  config: (workspaceId: string) => ["attach-rules", workspaceId] as const,
 };
 
 // Roofline estimator: a live permanent-vs-temporary price for a measured
@@ -140,6 +147,7 @@ const estimator = {
 
 export const queryKeys = {
   salesWizard,
+  attachRules,
   estimator,
   adLibrary: {
     ...adAdvertisers,
@@ -394,6 +402,15 @@ export const queryKeys = {
       phoneNumbers.list(workspaceId, { active_only: false }),
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
+  revenueTargets: {
+    ...revenueTargets,
+    /** One calendar year of monthly targets — the seasonal planning screen. */
+    byYear: (workspaceId: string, year: number) =>
+      revenueTargets.list(workspaceId, { year }),
+    /** Month-pace report; `month` is any date in the month, null = this month. */
+    pace: (workspaceId: string, month?: string | null) =>
+      [...revenueTargets.all(workspaceId), "pace", month ?? null] as const,
+  },
   quotes: {
     ...quotes,
     byContact: (workspaceId: string, contactId: number | string | undefined) =>
@@ -470,6 +487,8 @@ export const queryKeys = {
       ["settings", "speed-to-lead-metrics", workspaceId] as const,
     missedCallTextback: (workspaceId: string) =>
       ["settings", "missed-call-textback", workspaceId] as const,
+    unsoldQuotes: (workspaceId: string) =>
+      ["settings", "unsold-quotes", workspaceId] as const,
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),

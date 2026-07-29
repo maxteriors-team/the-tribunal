@@ -101,7 +101,10 @@ async def test_sales_can_act_on_own_but_not_others() -> None:
         assert updated.name == "Renamed"
         with pytest.raises(NotFoundError):
             await svc.update_opportunity(
-                ws.id, theirs.id, OpportunityUpdate(name="Hijack"), rep.id,
+                ws.id,
+                theirs.id,
+                OpportunityUpdate(name="Hijack"),
+                rep.id,
                 restrict_to_user_id=rep.id,
             )
 
@@ -179,7 +182,10 @@ async def test_manager_can_update_any_opportunity() -> None:
 
         # Manager passes restrict_to_user_id=None → no ownership restriction.
         updated = await svc.update_opportunity(
-            ws.id, theirs.id, OpportunityUpdate(name="Manager edit"), 999,
+            ws.id,
+            theirs.id,
+            OpportunityUpdate(name="Manager edit"),
+            999,
             restrict_to_user_id=None,
         )
         assert updated.name == "Manager edit"

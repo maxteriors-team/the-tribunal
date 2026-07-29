@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.attach_rules import AttachDismissalRequest, AttachWarning
 from app.schemas.pricing import (
     BistroPricing,
     CarePlanPricing,
@@ -79,6 +80,13 @@ class WizardCharge(BaseModel):
 
     description: str | None = Field(default=None, max_length=300)
     net_amount: float = Field(default=0, ge=0)
+    # Set when the charge came from the price book rather than being typed by
+    # hand — the attach prompt's "Add gutters" action picks a catalog item, and
+    # this is what lets the resulting quote line snapshot that item's
+    # ``service_category`` so the attach actually registers. A request-only hint
+    # resolved within the workspace; an id that no longer resolves leaves the
+    # line uncategorized, exactly like a hand-typed charge.
+    catalog_item_id: uuid.UUID | None = None
 
 
 class WizardDepositSelection(BaseModel):
@@ -184,6 +192,10 @@ class ProposalWizardPayload(BaseModel):
     terms: str | None = None
     # Optional upfront deposit; falls back to the workspace default when null.
     deposit: WizardDepositSelection | None = None
+    # Set when the rep saw the attach prompt and chose to skip the add-on. Only
+    # the reason crosses the wire; the skipped categories are resolved on the
+    # server from the rule that fired. Required to save past a ``blocking`` rule.
+    attach_dismissal: AttachDismissalRequest | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -221,6 +233,9 @@ class ProposalCharge(BaseModel):
 
     description: str
     amount: float
+    # Price-book provenance, carried through so the saved quote line can snapshot
+    # the item's service category. Null for a hand-typed charge.
+    catalog_item_id: uuid.UUID | None = None
 
 
 class ProposalCarePlan(BaseModel):
@@ -315,6 +330,15 @@ class ProposalDocument(BaseModel):
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
     notes: str | None = None
     terms: str | None = None
+    # The cross-sell prompt this selection currently earns, e.g. a roof job with
+    # no gutters on it. **Preview-only and never persisted**: the live preview
+    # sets it so the builder can prompt the rep while the quote is still being
+    # built — which is the only point at which adding the attach costs nothing
+    # and a dismissal can be recorded against the quote as it is created. The
+    # save path deliberately leaves it null, so a stored snapshot never carries
+    # a stale prompt, and enforcement still happens server-side on save rather
+    # than being something the client can talk its way out of.
+    attach_warning: AttachWarning | None = None
 
 
 # Fields of :class:`ProposalDocument` that may cross to the unauthenticated

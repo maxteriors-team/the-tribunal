@@ -135,8 +135,7 @@ class TestIVRSimulatorVoicemailOption:
         mode, confidence = ivr_classifier.classify(transcript)
 
         assert mode == IVRMode.IVR, (
-            f"Menu with voicemail OPTION should be IVR, not {mode.value}. "
-            f"Transcript: {transcript}"
+            f"Menu with voicemail OPTION should be IVR, not {mode.value}. Transcript: {transcript}"
         )
 
     def test_navigate_to_voicemail(self, ivr_simulator_voicemail: IVRSimulator):
@@ -193,8 +192,7 @@ class TestIVRSimulatorPureVoicemail:
         mode, confidence = ivr_classifier.classify(transcript)
 
         assert mode == IVRMode.VOICEMAIL, (
-            f"Pure voicemail should be VOICEMAIL, not {mode.value}. "
-            f"Transcript: {transcript}"
+            f"Pure voicemail should be VOICEMAIL, not {mode.value}. Transcript: {transcript}"
         )
 
 

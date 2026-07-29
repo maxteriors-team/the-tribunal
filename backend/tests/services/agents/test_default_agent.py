@@ -46,8 +46,6 @@ async def test_ensure_default_agent_provisions_and_is_idempotent() -> None:
         await db.flush()
         assert again.id == agent.id
         all_agents = (
-            (await db.execute(select(Agent).where(Agent.workspace_id == ws.id)))
-            .scalars()
-            .all()
+            (await db.execute(select(Agent).where(Agent.workspace_id == ws.id))).scalars().all()
         )
         assert len(all_agents) == 1

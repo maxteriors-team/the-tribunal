@@ -65,9 +65,7 @@ class TestToolDefinitions:
 # ── Opt-in enablement ───────────────────────────────────────────────────────
 class TestEnablement:
     def test_is_enabled_reads_enabled_tools(self) -> None:
-        assert is_search_knowledge_enabled(
-            SimpleNamespace(enabled_tools=["search_knowledge"])
-        )
+        assert is_search_knowledge_enabled(SimpleNamespace(enabled_tools=["search_knowledge"]))
         assert not is_search_knowledge_enabled(SimpleNamespace(enabled_tools=["web_search"]))
         assert not is_search_knowledge_enabled(SimpleNamespace(enabled_tools=None))
         assert not is_search_knowledge_enabled(None)
@@ -115,9 +113,7 @@ class TestVoiceExecutorDispatch:
             "app.services.knowledge.search_tool.execute_knowledge_search", fake_search
         )
 
-        result = await executor.execute(
-            "search_knowledge", {"query": "hours", "top_k": 3}
-        )
+        result = await executor.execute("search_knowledge", {"query": "hours", "top_k": 3})
         assert result["success"] is True
         assert captured["db"] == "db-session"
         assert captured["workspace_id"] == ws  # executor scope wins

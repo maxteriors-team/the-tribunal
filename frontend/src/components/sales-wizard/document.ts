@@ -7,6 +7,7 @@
  * single, fully-populated `WizardDocument` shape to render.
  */
 import type {
+  AttachWarning,
   BistroPricing,
   CarePlanPricing,
   CategoryLine,
@@ -83,6 +84,12 @@ export interface WizardDocument {
   deposit_mode: string | null;
   deposit_value: number;
   deposit_amount: number;
+  /**
+   * The cross-sell prompt this selection currently earns (a roof job with no
+   * gutters on it), or null when there is nothing to ask. Preview-only: the
+   * public page renders stored snapshots, which never carry it.
+   */
+  attach_warning: AttachWarning | null;
 }
 
 export function normalizeDocument(doc: ProposalDocument): WizardDocument {
@@ -145,6 +152,7 @@ export function normalizeDocument(doc: ProposalDocument): WizardDocument {
     grand_financed_total: doc.grand_financed_total ?? 0,
     grand_cash_total: doc.grand_cash_total ?? 0,
     grand_monthly_payment: doc.grand_monthly_payment ?? 0,
+    attach_warning: doc.attach_warning ?? null,
     deposit_mode: doc.deposit_mode ?? null,
     deposit_value: doc.deposit_value ?? 0,
     deposit_amount: doc.deposit_amount ?? 0,

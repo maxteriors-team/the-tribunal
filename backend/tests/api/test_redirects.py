@@ -221,9 +221,7 @@ async def test_campaign_counter_bumped_when_attributed() -> None:
     # SELECT short link + UPDATE short link + UPDATE campaign = 3 statements.
     assert len(captured) == 3
     update_targets = [
-        _update_target_name(stmt)
-        for stmt in captured[1:]
-        if isinstance(stmt, Update)
+        _update_target_name(stmt) for stmt in captured[1:] if isinstance(stmt, Update)
     ]
     assert ShortLink.__tablename__ in update_targets
     assert Campaign.__tablename__ in update_targets
@@ -241,9 +239,7 @@ async def test_no_campaign_update_for_standalone_link(
         await client.get("/r/abc123", follow_redirects=False)
 
     update_targets = [
-        _update_target_name(stmt)
-        for stmt in captured[1:]
-        if isinstance(stmt, Update)
+        _update_target_name(stmt) for stmt in captured[1:] if isinstance(stmt, Update)
     ]
     assert Campaign.__tablename__ not in update_targets
 

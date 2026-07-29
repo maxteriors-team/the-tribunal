@@ -84,8 +84,12 @@ async def test_search_people_filters_and_signals() -> None:
 
         marketer = _person(ws.id, title="Head of Marketing", lead_score=70)
         engineer = _person(
-            ws.id, full_name="Bob Jones", first_name="Bob", last_name="Jones",
-            title="Software Engineer", lead_score=50,
+            ws.id,
+            full_name="Bob Jones",
+            first_name="Bob",
+            last_name="Jones",
+            title="Software Engineer",
+            lead_score=50,
         )
         company = LeadProspect(
             workspace_id=ws.id,
@@ -121,9 +125,7 @@ async def test_search_people_filters_and_signals() -> None:
         assert all_people.total == 2
 
         # Title filter.
-        marketing = await service.search_people(
-            ws.id, PeopleSearchRequest(title="marketing")
-        )
+        marketing = await service.search_people(ws.id, PeopleSearchRequest(title="marketing"))
         assert [p.full_name for p in marketing.items] == ["Jane Smith"]
 
         # Signal filter + attached signals payload.
@@ -201,9 +203,7 @@ async def test_reveal_phone_scrapes_and_persists() -> None:
         db.add(person)
         await db.flush()
 
-        scraper = _FakeScraper(
-            {"https://acme.com": '<a href="tel:+14155550132">Call us</a>'}
-        )
+        scraper = _FakeScraper({"https://acme.com": '<a href="tel:+14155550132">Call us</a>'})
         service = ProspectSearchService(db)
         result = await service.reveal_phone(ws.id, person.id, scraper=scraper)
 
@@ -228,15 +228,11 @@ async def test_reveal_phone_never_overwrites_existing() -> None:
         db.add(ws)
         await db.flush()
         existing = "+12025550111"
-        person = _person(
-            ws.id, phone_number=existing, phone_hash=hash_value(existing)
-        )
+        person = _person(ws.id, phone_number=existing, phone_hash=hash_value(existing))
         db.add(person)
         await db.flush()
 
-        scraper = _FakeScraper(
-            {"https://acme.com": '<a href="tel:+14155550132">Call us</a>'}
-        )
+        scraper = _FakeScraper({"https://acme.com": '<a href="tel:+14155550132">Call us</a>'})
         service = ProspectSearchService(db)
         result = await service.reveal_phone(ws.id, person.id, scraper=scraper)
 
