@@ -53,6 +53,7 @@ from app.api.v1 import (
     realtime,
     recurring_jobs,
     reporting,
+    revenue_targets,
     reviews,
     roleplay,
     scorecard,
@@ -362,6 +363,11 @@ api_router.include_router(
 api_router.include_router(
     reporting.router,
     prefix="/workspaces/{workspace_id}/reports",
+    tags=["Reporting"],
+)
+api_router.include_router(
+    revenue_targets.router,
+    prefix="/workspaces/{workspace_id}/revenue-targets",
     tags=["Reporting"],
 )
 api_router.include_router(
