@@ -805,33 +805,65 @@ class QuoteService:
             raise ValidationError(
                 "No client phone on this proposal — add one or pass a destination."
             )
-        if not settings.telnyx_api_key:
-            raise ValidationError("Texting isn't configured (Telnyx API key missing).")
+        first = (client.get("first_name") or "").strip()
+        greeting = f"Hi {first}, " if first else ""
+        await self._text_client_link(
+            workspace_id,
+            phone=phone,
+            contact_id=quote.contact_id,
+            body=(
+                f"{greeting}your lighting proposal from {business} is ready — "
+                f"view and approve it here: {link}"
+            ),
+            idempotency_scope="quote_sms",
+            idempotency_id=quote.id,
+        )
+        self.log.info("quote_delivered", quote_id=str(quote.id), channel="sms")
+        return QuoteDeliverResult(ok=True, channel="sms", to=phone)
 
+    async def _text_client_link(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        phone: str,
+        contact_id: int | None,
+        body: str,
+        idempotency_scope: str,
+        idempotency_id: uuid.UUID,
+    ) -> None:
+        """Text a client-facing link, or raise ``ValidationError`` saying why not.
+
+        Shared by proposal and estimate delivery so both honour the same rails:
+        Telnyx configured, the number hasn't opted out, and the workspace owns an
+        SMS-capable sender. Every refusal names the fix, because a rep watching a
+        button fail can act on "add a number under Settings" and cannot act on a
+        generic send error.
+
+        The sender follows the contact's own conversation when there is one, so a
+        homeowner sees the number that has been texting them all along rather
+        than a stranger's.
+        """
+        from app.core.config import settings
         from app.services.calendar.reminder_service import resolve_from_number
         from app.services.idempotency import derive_outbound_key
         from app.services.rate_limiting.opt_out_manager import OptOutManager
         from app.services.telephony.telnyx import TelnyxSMSService
 
+        if not settings.telnyx_api_key:
+            raise ValidationError("Texting isn't configured (Telnyx API key missing).")
+
         if await OptOutManager().check_opt_out(workspace_id, phone, self.db):
             raise ValidationError("This phone number has opted out of texts.")
 
         from_number = None
-        if quote.contact_id is not None:
-            from_number = await resolve_from_number(self.db, quote.contact_id, workspace_id, None)
+        if contact_id is not None:
+            from_number = await resolve_from_number(self.db, contact_id, workspace_id, None)
         if not from_number:
             from_number = await self._any_sms_number(workspace_id)
         if not from_number:
             raise ValidationError(
                 "No SMS-enabled phone number in this workspace — add one under Settings."
             )
-
-        first = (client.get("first_name") or "").strip()
-        greeting = f"Hi {first}, " if first else ""
-        body = (
-            f"{greeting}your lighting proposal from {business} is ready — "
-            f"view and approve it here: {link}"
-        )
 
         sms = TelnyxSMSService(settings.telnyx_api_key)
         try:
@@ -842,13 +874,14 @@ class QuoteService:
                 db=self.db,
                 workspace_id=workspace_id,
                 idempotency_key=derive_outbound_key(
-                    "quote_sms", quote.id, phone, datetime.now(UTC).isoformat()
+                    idempotency_scope,
+                    idempotency_id,
+                    phone,
+                    datetime.now(UTC).isoformat(),
                 ),
             )
         finally:
             await sms.close()
-        self.log.info("quote_delivered", quote_id=str(quote.id), channel="sms")
-        return QuoteDeliverResult(ok=True, channel="sms", to=phone)
 
     async def _any_sms_number(self, workspace_id: uuid.UUID) -> str | None:
         """Oldest active SMS-enabled workspace number (agentless fallback)."""
@@ -1770,11 +1803,15 @@ class QuoteService:
         workspace_id: uuid.UUID,
         token: str,
         *,
+        channel: str = "email",
         to: str | None = None,
     ) -> ComparisonDeliverResult:
-        """Email a saved estimate's client link to the customer.
+        """Send a saved estimate's client link by ``email`` or ``sms``.
 
-        Destination precedence: explicit ``to`` → the linked contact's email.
+        Destination precedence: explicit ``to`` → the linked contact's email or
+        phone. An estimate saved without a phone has no contact at all (contacts
+        are phone-keyed), so both rails then need an explicit ``to``.
+
         Raises ``ValidationError`` when there's no destination, and
         ``NotFoundError`` for an unknown/other-workspace token.
         """
@@ -1796,15 +1833,47 @@ class QuoteService:
         if comparison is None:
             raise NotFoundError("Comparison not found")
 
+        workspace = comparison.workspace
+        business = workspace.name if workspace else "our team"
+        url = f"{settings.frontend_url.rstrip('/')}/p/compare/{comparison.public_token}"
+
+        if channel not in ("email", "sms"):
+            raise ValidationError(f"Unknown delivery channel: {channel!r}")
+
+        if channel == "sms":
+            phone = (to or "").strip() or (
+                comparison.contact.phone_number if comparison.contact else None
+            )
+            if not phone:
+                raise ValidationError(
+                    "No customer phone for this estimate — add one or pass a destination."
+                )
+            first = (comparison.client_name or "").strip().split(" ")[0]
+            greeting = f"Hi {first}, " if first else ""
+            await self._text_client_link(
+                workspace_id,
+                phone=phone,
+                contact_id=comparison.contact_id,
+                body=(
+                    f"{greeting}your lighting estimate from {business} is ready — "
+                    f"take a look here: {url}"
+                ),
+                idempotency_scope="estimate_sms",
+                idempotency_id=comparison.id,
+            )
+            self.log.info(
+                "roofline_comparison_delivered",
+                comparison_id=str(comparison.id),
+                workspace_id=str(workspace_id),
+                channel="sms",
+            )
+            return ComparisonDeliverResult(ok=True, channel="sms", to=phone)
+
         email_to = (to or "").strip() or (comparison.contact.email if comparison.contact else None)
         if not email_to:
             raise ValidationError(
                 "No customer email for this estimate — add one or pass a destination."
             )
-
-        workspace = comparison.workspace
-        business = workspace.name if workspace else "our team"
-        url = f"{settings.frontend_url.rstrip('/')}/p/compare/{comparison.public_token}"
 
         sent = await send_estimate_email(
             to_email=email_to,
@@ -1820,8 +1889,9 @@ class QuoteService:
             "roofline_comparison_delivered",
             comparison_id=str(comparison.id),
             workspace_id=str(workspace_id),
+            channel="email",
         )
-        return ComparisonDeliverResult(ok=True, to=email_to)
+        return ComparisonDeliverResult(ok=True, channel="email", to=email_to)
 
     async def get_public_comparison(self, token: str) -> PublicComparison:
         """Return the safe, feet-free comparison for a public token.

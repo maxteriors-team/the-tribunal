@@ -353,6 +353,90 @@ async def test_deliver_comparison_unknown_token_404() -> None:
             await svc.deliver_comparison(ws.id, "does-not-exist", to="x@example.com")
 
 
+async def test_deliver_comparison_texts_the_linked_contacts_phone(monkeypatch) -> None:  # noqa: ANN001
+    """The SMS rail reaches the customer with the same public link as email."""
+    texted: list[dict] = []
+
+    async def fake_text(self, workspace_id, **kwargs):  # noqa: ANN001, ANN003
+        texted.append({"workspace_id": workspace_id, **kwargs})
+
+    monkeypatch.setattr(QuoteService, "_text_client_link", fake_text)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=120,
+                client_name="Dana Homeowner",
+                client_email="dana@example.com",
+                client_phone="+15551230000",
+            ),
+        )
+
+        result = await svc.deliver_comparison(ws.id, share.token, channel="sms", to=None)
+        assert result.ok is True
+        assert result.channel == "sms"
+        # Falls back to the linked contact's phone, not their email.
+        assert result.to == "+15551230000"
+        assert texted and texted[0]["phone"] == "+15551230000"
+        # The client link the text carries is the public estimate page.
+        assert f"/p/compare/{share.token}" in texted[0]["body"]
+        # Greets by first name only — the body is a text, not a letter.
+        assert texted[0]["body"].startswith("Hi Dana, ")
+
+
+async def test_deliver_comparison_sms_without_a_phone_raises() -> None:
+    """No phone anywhere is a refusal, never a silent no-op."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        # Shared without a phone -> no linked contact -> nothing to text.
+        share = await svc.share_comparison(
+            ws.id, ComparisonShareRequest(feet=90, client_name="No Phone")
+        )
+        with pytest.raises(ValidationError, match="phone"):
+            await svc.deliver_comparison(ws.id, share.token, channel="sms", to=None)
+
+
+async def test_deliver_comparison_rejects_an_unknown_channel() -> None:
+    """An unknown rail fails loudly instead of quietly falling back to email."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(feet=90, client_name="Dana", client_phone="+15551230000"),
+        )
+        with pytest.raises(ValidationError, match="channel"):
+            await svc.deliver_comparison(ws.id, share.token, channel="carrier-pigeon")
+
+
+async def test_deliver_comparison_defaults_to_email(monkeypatch) -> None:  # noqa: ANN001
+    """Callers predating SMS delivery keep emailing without passing a channel."""
+    sent: list[dict] = []
+
+    async def fake_send_estimate_email(**kwargs):  # noqa: ANN003
+        sent.append(kwargs)
+        return True
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_estimate_email", fake_send_estimate_email)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        share = await svc.share_comparison(
+            ws.id, ComparisonShareRequest(feet=90, client_name="Dana")
+        )
+        result = await svc.deliver_comparison(ws.id, share.token, to="buyer@example.com")
+        assert result.channel == "email"
+        assert sent[0]["to_email"] == "buyer@example.com"
+
+
 async def test_resharing_same_phone_reuses_one_customer() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

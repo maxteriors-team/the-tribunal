@@ -226,7 +226,11 @@ describe("LightDesigner", () => {
       contact_id: null,
       saved_to_customer: false,
     });
-    vi.mocked(estimatorApi.deliver).mockResolvedValue({ ok: true, to: "" });
+    vi.mocked(estimatorApi.deliver).mockResolvedValue({
+      ok: true,
+      channel: "email",
+      to: "",
+    });
     vi.mocked(estimatorApi.createQuote).mockResolvedValue({
       number: "QUO-000007",
     } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
@@ -441,6 +445,7 @@ describe("LightDesigner", () => {
     });
     vi.mocked(estimatorApi.deliver).mockResolvedValue({
       ok: true,
+      channel: "email",
       to: "buyer@example.com",
     });
 
@@ -471,10 +476,87 @@ describe("LightDesigner", () => {
         "ws_1",
         "tok_123",
         "buyer@example.com",
+        "email",
       ),
     );
     expect(
-      await screen.findByText(/Sent to buyer@example\.com/i),
+      await screen.findByText(/Emailed to buyer@example\.com/i),
+    ).toBeInTheDocument();
+  });
+
+  it("texts the estimate to the customer's phone, minting a share link first", async () => {
+    vi.mocked(estimatorApi.share).mockResolvedValue({
+      url: "https://app.test/p/compare/tok_123",
+      token: "tok_123",
+      contact_id: 42,
+      saved_to_customer: true,
+    });
+    vi.mocked(estimatorApi.deliver).mockResolvedValue({
+      ok: true,
+      channel: "sms",
+      to: "+15551234567",
+    });
+
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    // Same deal as email: present from the start, disabled until there's a
+    // number to send to.
+    const textBtn = screen.getByRole("button", { name: /Text estimate/i });
+    expect(textBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Customer phone/i), {
+      target: { value: "+15551234567" },
+    });
+    expect(textBtn).toBeEnabled();
+
+    fireEvent.click(textBtn);
+
+    await waitFor(() =>
+      expect(estimatorApi.deliver).toHaveBeenCalledWith(
+        "ws_1",
+        "tok_123",
+        "+15551234567",
+        "sms",
+      ),
+    );
+    // Names the rail, so a bare phone number never leaves the rep guessing
+    // whether this went out as a text or an email.
+    expect(
+      await screen.findByText(/Texted to \+15551234567/i),
+    ).toBeInTheDocument();
+  });
+
+  it("tells the rep what to fix when a text can't be sent", async () => {
+    vi.mocked(estimatorApi.share).mockResolvedValue({
+      url: "https://app.test/p/compare/tok_123",
+      token: "tok_123",
+      contact_id: 42,
+      saved_to_customer: true,
+    });
+    // The server's refusals are actionable; a generic "couldn't send" would
+    // throw away the only sentence that tells the rep what to do next.
+    vi.mocked(estimatorApi.deliver).mockRejectedValue(
+      Object.assign(new Error("Request failed"), {
+        response: {
+          status: 422,
+          data: {
+            detail:
+              "No SMS-enabled phone number in this workspace \u2014 add one under Settings.",
+          },
+        },
+      }),
+    );
+
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    fireEvent.change(screen.getByLabelText(/Customer phone/i), {
+      target: { value: "+15551234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Text estimate/i }));
+
+    expect(
+      await screen.findByText(/add one under Settings/i),
     ).toBeInTheDocument();
   });
 

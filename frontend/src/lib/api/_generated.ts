@@ -6506,7 +6506,7 @@ export interface paths {
         put?: never;
         /**
          * Deliver Comparison
-         * @description Email a saved estimate's client link to the customer.
+         * @description Send a saved estimate's client link to the customer by email or SMS.
          */
         post: operations["deliver_comparison_api_v1_workspaces__workspace_id__quotes_estimate_comparison__token__send_post"];
         delete?: never;
@@ -12189,21 +12189,36 @@ export interface components {
         };
         /**
          * ComparisonDeliverRequest
-         * @description Email a saved estimate's client link to the customer.
+         * @description Send a saved estimate's client link to the customer by email or SMS.
          *
-         *     ``to`` overrides the destination; otherwise the linked contact's email is
-         *     used. Contacts are phone-keyed, so an estimate saved without a phone has no
-         *     contact email — pass ``to`` explicitly in that case.
+         *     ``to`` overrides the destination; otherwise the linked contact's email or
+         *     phone is used. Contacts are phone-keyed, so an estimate saved without a
+         *     phone has no contact at all — pass ``to`` explicitly in that case.
+         *
+         *     ``channel`` defaults to ``email`` so callers that predate SMS delivery keep
+         *     working unchanged.
          */
         ComparisonDeliverRequest: {
+            /**
+             * Channel
+             * @default email
+             * @enum {string}
+             */
+            channel: "email" | "sms";
             /** To */
             to?: string | null;
         };
         /**
          * ComparisonDeliverResult
-         * @description Outcome of emailing an estimate to the customer.
+         * @description Outcome of sending an estimate to the customer.
          */
         ComparisonDeliverResult: {
+            /**
+             * Channel
+             * @default email
+             * @enum {string}
+             */
+            channel: "email" | "sms";
             /** Ok */
             ok: boolean;
             /** To */

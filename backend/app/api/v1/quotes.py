@@ -338,9 +338,11 @@ async def deliver_comparison(
     db: DB,
     membership: CanWriteBilling,
 ) -> ComparisonDeliverResult:
-    """Email a saved estimate's client link to the customer."""
+    """Send a saved estimate's client link to the customer by email or SMS."""
     service = QuoteService(db)
-    return await service.deliver_comparison(workspace_id, token, to=payload.to)
+    return await service.deliver_comparison(
+        workspace_id, token, channel=payload.channel, to=payload.to
+    )
 
 
 # Line-item sub-resource. Mutations return the full quote because totals change.
