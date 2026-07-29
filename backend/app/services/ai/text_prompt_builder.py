@@ -43,6 +43,45 @@ LANGUAGE_NAMES = {
 # from crowding out the agent's own prompt.
 MAX_LEAD_CONTEXT_CHARS = 1500
 
+# Typographic characters an LLM emits by habit, mapped to GSM-7 equivalents.
+# Why this is code and not a prompt rule: SMS is billed per segment, and GSM-7
+# fits 160 chars while UCS-2 fits only 70. A SINGLE curly apostrophe in
+# "what's" therefore doubles the cost of a 111-character reply. Prompt
+# instructions reduced but never eliminated these - the model still slipped a
+# U+2019 into 1 of 4 rehearsal replies - so the guarantee belongs here, where
+# it is deterministic.
+_GSM7_SUBSTITUTIONS = {
+    "\u2018": "'",  # left single quote
+    "\u2019": "'",  # right single quote / curly apostrophe
+    "\u201a": "'",
+    "\u201b": "'",
+    "\u201c": '"',  # left double quote
+    "\u201d": '"',  # right double quote
+    "\u201e": '"',
+    "\u2013": "-",  # en dash
+    "\u2014": "-",  # em dash
+    "\u2015": "-",
+    "\u2212": "-",  # minus sign
+    "\u2026": "...",  # ellipsis
+    "\u00a0": " ",  # non-breaking space
+    "\u200b": "",  # zero-width space
+    "\u2022": "-",  # bullet
+    "\u00b7": "-",  # middle dot
+    "\u2032": "'",  # prime
+    "\u2033": '"',  # double prime
+}
+_GSM7_TRANSLATION = str.maketrans(_GSM7_SUBSTITUTIONS)
+
+
+def to_gsm7_safe(text: str) -> str:
+    """Replace smart typography with GSM-7 equivalents so SMS stays 1 segment.
+
+    Only substitutes characters with an unambiguous ASCII equivalent. Anything
+    else (accented names, other scripts) is left untouched: a legitimately
+    non-Latin reply should still send correctly, just as UCS-2.
+    """
+    return text.translate(_GSM7_TRANSLATION)
+
 
 def build_text_instructions(
     system_prompt: str,
