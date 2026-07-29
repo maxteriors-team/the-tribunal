@@ -157,7 +157,10 @@ class RecurringJobTemplate(Base):
     # ``ServicePlanType`` at the schema boundary; rows predating service plans
     # backfill to ``maintenance`` via the server default.
     plan_type: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=ServicePlanType.MAINTENANCE, server_default="maintenance"
+        String(32),
+        nullable=False,
+        default=ServicePlanType.MAINTENANCE,
+        server_default="maintenance",
     )
     # Care Plan tier the client picked (``ProposalCarePlan.selected``), for
     # ``lighting_care_plan`` plans only.
