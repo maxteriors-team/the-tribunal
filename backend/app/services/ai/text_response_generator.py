@@ -34,6 +34,7 @@ from app.services.ai.text_prompt_builder import (
     FOLLOWUP_SYSTEM_PROMPT,
     build_booking_instructions,
     build_text_instructions,
+    to_gsm7_safe,
 )
 from app.services.ai.text_tool_executor import TextToolExecutor
 from app.services.ai.voice_tools import get_text_booking_tools, get_text_search_knowledge_tool
@@ -441,6 +442,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             final_text: str | None = final_message.content
 
             if final_text:
+                final_text = to_gsm7_safe(final_text)
                 log.info(
                     "response_generated_with_tools",
                     length=len(final_text),
@@ -450,6 +452,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             # No tool calls, use direct response
             response_text: str | None = assistant_message.content
             if response_text:
+                response_text = to_gsm7_safe(response_text)
                 log.info("response_generated", length=len(response_text))
                 return response_text
 
@@ -551,7 +554,7 @@ Recent conversation:
 
         followup_text: str | None = response.choices[0].message.content
         if followup_text:
-            followup_text = followup_text.strip()
+            followup_text = to_gsm7_safe(followup_text.strip())
             log.info("followup_message_generated", length=len(followup_text))
             return followup_text
 
