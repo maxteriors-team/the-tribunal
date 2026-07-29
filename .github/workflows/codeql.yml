@@ -43,6 +43,22 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
+          # Alembic revision scripts are generated boilerplate whose required
+          # module globals (revision, down_revision, branch_labels, depends_on)
+          # are read by Alembic via introspection, never imported. The quality
+          # suite reports all four as unused on *every* migration — 4 guaranteed
+          # false positives per file. `main` requires review conversations to be
+          # resolved before merge, so each one must be dismissed by hand before a
+          # release can land, which trains people to click through CodeQL rather
+          # than read it.
+          #
+          # Migrations keep their own safety net: migrations.yml runs a real
+          # up -> check -> down -> up against Postgres, catching what actually
+          # goes wrong here (irreversibility, drift) and which static analysis
+          # cannot see anyway.
+          config: |
+            paths-ignore:
+              - backend/alembic/versions
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
