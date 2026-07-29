@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from app.db.scope import select_workspace_owned
 from app.models.appointment import Appointment
+from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 
 
@@ -20,21 +21,18 @@ class AppointmentAssistantTools:
 
     async def list_appointments(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
-        stmt = (
-            select_workspace_owned(
-                Appointment,
-                self.context.workspace_id,
-                Appointment.scheduled_at >= datetime.now(UTC),
-            )
-            .order_by(Appointment.scheduled_at)
-            .limit(limit)
+        stmt = select_workspace_owned(
+            Appointment,
+            self.context.workspace_id,
+            Appointment.scheduled_at >= datetime.now(UTC),
         )
-        result = await self.context.db.execute(stmt)
+
+        total = await count_matching(self.context.db, Appointment, stmt)
+        result = await self.context.db.execute(stmt.order_by(Appointment.scheduled_at).limit(limit))
         appointments = result.scalars().all()
 
-        return {
-            "success": True,
-            "data": [
+        return listing(
+            [
                 {
                     "id": appointment.id,
                     "contact_id": appointment.contact_id,
@@ -47,5 +45,5 @@ class AppointmentAssistantTools:
                 }
                 for appointment in appointments
             ],
-            "count": len(appointments),
-        }
+            total=total,
+        )

@@ -48,7 +48,9 @@ async def test_execute_unknown_tool_returns_error() -> None:
     executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1)
     result = await executor.execute("nonexistent_tool", {})
     assert result["success"] is False
-    assert "Unknown function" in result["error"]
+    assert result["code"] == "unknown_tool"
+    assert "nonexistent_tool" in result["message"]
+    assert result["retryable"] is False
 
 
 @pytest.mark.asyncio
@@ -63,7 +65,10 @@ async def test_execute_handler_exception_returns_error() -> None:
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1)
     result = await executor.execute("search_contacts", {"query": "x"})
     assert result["success"] is False
-    assert "search_contacts" in result["error"]
+    assert result["code"] == "internal"
+    assert "search_contacts" in result["message"]
+    # An unexpected bug must not tell the model to retry.
+    assert result["retryable"] is False
 
 
 @pytest.mark.asyncio
@@ -72,6 +77,7 @@ async def test_search_contacts_filters_by_workspace() -> None:
     workspace_id = uuid.uuid4()
 
     captured_stmts: list[Any] = []
+    captured_counts: list[Any] = []
 
     async def fake_execute(stmt: Any) -> Any:
         captured_stmts.append(stmt)
@@ -79,18 +85,27 @@ async def test_search_contacts_filters_by_workspace() -> None:
         result.scalars.return_value.all.return_value = []
         return result
 
+    async def fake_scalar(stmt: Any) -> int:
+        captured_counts.append(stmt)
+        return 0
+
     db = AsyncMock()
     db.execute = fake_execute  # type: ignore[assignment]
+    db.scalar = fake_scalar  # type: ignore[assignment]
 
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1)
     out = await executor.execute("search_contacts", {"query": "alice"})
 
     assert out["success"] is True
-    assert out["count"] == 0
-    # The bound parameters must include the workspace_id (multi-tenant scoping).
+    assert out["returned"] == 0
+    assert out["total"] == 0
+    assert out["has_more"] is False
+    # The bound parameters must include the workspace_id (multi-tenant scoping)
+    # on both the fetch and the COUNT(*) that produces `total`.
     assert len(captured_stmts) == 1
-    compiled = captured_stmts[0].compile()
-    assert workspace_id in compiled.params.values()
+    assert len(captured_counts) == 1
+    for stmt in (*captured_stmts, *captured_counts):
+        assert workspace_id in stmt.compile().params.values()
 
 
 @pytest.mark.asyncio

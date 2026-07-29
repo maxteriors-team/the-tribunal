@@ -167,6 +167,12 @@ Good news: **the services already exist and are simply unwired.** `contact_repos
 
 **Also worth fixing:** `list_agents` returns no `system_prompt` and there is no `get_agent`, yet `update_agent` can overwrite that prompt — the model can blind-write a field it cannot read.
 
+### Post-Phase-2 eval check (2026-07-29)
+
+All Phase 2 tool families are now registered. **43/48 cases are structurally
+scoreable**; the remaining 5 all require Phase 3's `search_help` tool. The live
+accuracy run still self-skips because OpenAI credentials are not configured.
+
 ---
 
 ## Phase 3 — "General questions and facts about the CRM"
