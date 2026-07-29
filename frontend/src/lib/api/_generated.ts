@@ -988,6 +988,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/attach-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attach Rules Settings
+         * @description Get the workspace's attach-rule config (the cross-sell prompt).
+         */
+        get: operations["get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get"];
+        /**
+         * Update Attach Rules Settings
+         * @description Update the attach-rule config (shallow top-level merge into ``settings``).
+         *
+         *     Only provided keys are written, so editing the prompt copy never clobbers the
+         *     rules. A provided ``rules`` list replaces the whole list (validated at the
+         *     edge), matching how the pricing config writes blocks wholesale.
+         */
+        put: operations["update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/business-hours": {
         parameters: {
             query?: never;
@@ -9898,6 +9926,136 @@ export interface components {
              * @default 0
              */
             total_amount_at_risk: number;
+        };
+        /**
+         * AttachDismissal
+         * @description A recorded "we asked and they said no", stored on the quote.
+         *
+         *     This is the half of attach reporting that a bare attach *rate* cannot give
+         *     you: a workspace at 20% attach looks identical whether the other 80% were
+         *     never asked or were asked and declined, and those two problems have opposite
+         *     fixes (coaching vs pricing). Persisted as JSONB on
+         *     :attr:`app.models.quote.Quote.attach_dismissals`.
+         */
+        AttachDismissal: {
+            /** Categories */
+            categories?: string[];
+            /**
+             * Dismissed At
+             * Format: date-time
+             */
+            dismissed_at: string;
+            /** Primary Service */
+            primary_service: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AttachDismissalRequest
+         * @description A rep dismissing the attach prompt for the quote being saved.
+         *
+         *     Only the reason crosses the wire. The categories are resolved server-side
+         *     from the rule that actually fired, so a client cannot record a dismissal for
+         *     an attach that was never suggested (which would corrupt attach reporting the
+         *     same way a client-set ``service_category`` would corrupt attach rate).
+         */
+        AttachDismissalRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AttachRule
+         * @description One rule: when a quote is *this* job, prompt for *these* add-ons.
+         *
+         *     ``suggested_categories`` is an any-of test, not an all-of one: a roof quote
+         *     that already carries gutters satisfies a ``roof -> [gutters, trim]`` rule.
+         *     The rep is being reminded to have the conversation, not forced to sell every
+         *     line on the list.
+         */
+        AttachRule: {
+            /**
+             * Mode
+             * @default advisory
+             * @enum {string}
+             */
+            mode: "off" | "advisory" | "blocking";
+            /** Primary Category */
+            primary_category: string;
+            /** Suggested Categories */
+            suggested_categories?: string[];
+        };
+        /**
+         * AttachRulesSettings
+         * @description The full attach-rule config for a workspace (read view, lenient).
+         */
+        AttachRulesSettings: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Prompt Template
+             * @default This is a {primary} job with no add-on attached. Ask about the services below before sending it.
+             */
+            prompt_template: string;
+            /**
+             * Require Dismissal Reason
+             * @default true
+             */
+            require_dismissal_reason: boolean;
+            /** Rules */
+            rules?: components["schemas"]["AttachRule"][];
+        };
+        /**
+         * AttachRulesSettingsUpdate
+         * @description Partial update of the attach-rule config (shallow top-level merge).
+         *
+         *     Every block is optional; only provided keys are written, so editing the
+         *     prompt copy never clobbers the rules. Mirrors
+         *     :class:`app.schemas.pricing.PricingSettingsUpdate`.
+         */
+        AttachRulesSettingsUpdate: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[] | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Prompt Template */
+            prompt_template?: string | null;
+            /** Require Dismissal Reason */
+            require_dismissal_reason?: boolean | null;
+            /** Rules */
+            rules?: components["schemas"]["AttachRule"][] | null;
+        };
+        /**
+         * AttachWarning
+         * @description A missing attach, returned on the quote that triggered it.
+         *
+         *     Structured rather than a rendered string so the builder can offer the exact
+         *     next action ("Add gutters") instead of only telling the rep off. ``mode`` is
+         *     never ``off`` here — an off rule produces no warning at all.
+         */
+        AttachWarning: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[];
+            /** Message */
+            message: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "advisory" | "blocking";
+            /** Primary Service */
+            primary_service: string;
+            /**
+             * Require Dismissal Reason
+             * @default true
+             */
+            require_dismissal_reason: boolean;
+            /** Suggested Categories */
+            suggested_categories: string[];
         };
         /**
          * AttributionConfidenceLevel
@@ -19412,6 +19570,8 @@ export interface components {
         ProposalCharge: {
             /** Amount */
             amount: number;
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
             /** Description */
             description: string;
         };
@@ -19422,6 +19582,7 @@ export interface components {
         ProposalDocument: {
             /** Additional Charges */
             additional_charges?: components["schemas"]["ProposalCharge"][];
+            attach_warning?: components["schemas"]["AttachWarning"] | null;
             bistro?: components["schemas"]["BistroPricing"] | null;
             care_plan?: components["schemas"]["ProposalCarePlan"] | null;
             /** Categories */
@@ -19663,6 +19824,7 @@ export interface components {
         ProposalWizardPayload: {
             /** Additional Charges */
             additional_charges?: components["schemas"]["WizardCharge"][];
+            attach_dismissal?: components["schemas"]["AttachDismissalRequest"] | null;
             bistro?: components["schemas"]["WizardBistroSelection"] | null;
             /** Care Count Manual */
             care_count_manual?: number | null;
@@ -20519,6 +20681,7 @@ export interface components {
          * @description Create a quote with its initial line items.
          */
         QuoteCreate: {
+            attach_dismissal?: components["schemas"]["AttachDismissalRequest"] | null;
             /** Contact Id */
             contact_id?: number | null;
             /**
@@ -20608,11 +20771,14 @@ export interface components {
              * @default 0
              */
             attach_count: number;
+            /** Attach Dismissals */
+            attach_dismissals?: components["schemas"]["AttachDismissal"][];
             /**
              * Attach Value
              * @default 0
              */
             attach_value: number;
+            attach_warning?: components["schemas"]["AttachWarning"] | null;
             /** Contact Id */
             contact_id?: number | null;
             /** Converted Invoice Id */
@@ -20809,6 +20975,8 @@ export interface components {
              * @default 0
              */
             attach_count: number;
+            /** Attach Dismissals */
+            attach_dismissals?: components["schemas"]["AttachDismissal"][];
             /**
              * Attach Value
              * @default 0
@@ -24075,6 +24243,8 @@ export interface components {
          *     server grosses it up by the finance buffer like every other price.
          */
         WizardCharge: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
             /** Description */
             description?: string | null;
             /**
@@ -26031,6 +26201,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachRulesSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachRulesSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachRulesSettings"];
                 };
             };
             /** @description Validation Error */

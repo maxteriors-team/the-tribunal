@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
@@ -25,6 +26,11 @@ from app.models.field_service import Job, ServiceLocation
 from app.models.invoice import Invoice
 from app.models.quote import Quote
 from app.models.workspace import Workspace
+from app.schemas.attach_rules import (
+    AttachDismissalRequest,
+    AttachRule,
+    AttachRulesSettings,
+)
 from app.schemas.estimate import EstimateQuoteRequest
 from app.schemas.pricing import (
     ChristmasConfig,
@@ -40,6 +46,7 @@ from app.schemas.quote import (
 )
 from app.services.exceptions import ConflictError, ValidationError
 from app.services.quotes import QuoteService
+from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -258,6 +265,199 @@ async def test_catalog_item_from_another_workspace_leaves_line_uncategorized() -
         assert quote.primary_service is None
         assert quote.attach_count == 0
         assert quote.attach_value == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Attach rules (the cross-sell prompt enforced at save time)
+# --------------------------------------------------------------------------- #
+async def _attach_workspace(db: AsyncSession, **rule: object) -> Workspace:
+    """A workspace with a single roof -> gutters attach rule."""
+    ws = await _make_workspace(db)
+    ws.settings = {
+        ATTACH_RULES_KEY: AttachRulesSettings(
+            rules=[
+                AttachRule(
+                    primary_category="roof",
+                    suggested_categories=["gutters"],
+                    **rule,  # type: ignore[arg-type]
+                )
+            ]
+        ).model_dump(mode="json")
+    }
+    await db.flush()
+    return ws
+
+
+async def _count_quotes(db: AsyncSession, workspace_id: uuid.UUID) -> int:
+    result = await db.execute(select(Quote).where(Quote.workspace_id == workspace_id))
+    return len(result.scalars().all())
+
+
+def _roof_only(roof: CatalogItem, **extra: object) -> QuoteCreate:
+    return QuoteCreate(
+        line_items=[
+            QuoteLineItemCreate(name=roof.name, unit_price=9000.0, catalog_item_id=roof.id)
+        ],
+        **extra,  # type: ignore[arg-type]
+    )
+
+
+async def test_advisory_rule_warns_but_still_saves() -> None:
+    """Advisory is the shipped default: it prompts, it never costs the rep a save."""
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="advisory")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(ws.id, _roof_only(roof))
+
+        assert quote.attach_warning is not None
+        assert quote.attach_warning.mode == "advisory"
+        assert quote.attach_warning.suggested_categories == ["gutters"]
+        # Saved, not rejected, and nothing was recorded as declined.
+        assert quote.status == "draft"
+        assert quote.attach_dismissals == []
+
+
+async def test_satisfied_rule_returns_no_warning() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="blocking")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        gutters = await _make_catalog_item(db, ws.id, "Gutter Guard", 1200.0, "gutters")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                line_items=[
+                    QuoteLineItemCreate(
+                        name="Roof Replacement", unit_price=9000.0, catalog_item_id=roof.id
+                    ),
+                    QuoteLineItemCreate(
+                        name="Gutter Guard", unit_price=1200.0, catalog_item_id=gutters.id
+                    ),
+                ]
+            ),
+        )
+
+        assert quote.attach_warning is None
+        assert quote.attach_count == 1
+
+
+async def test_blocking_rule_rejects_the_save_and_persists_nothing() -> None:
+    """A rejected save must leave no quote behind, or the rep gets a ghost draft."""
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="blocking")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        with pytest.raises(ValidationError) as excinfo:
+            await svc.create_quote(ws.id, _roof_only(roof))
+
+        # The structured warning rides along so the builder can render the same
+        # "Add gutters" affordance it would for an advisory prompt.
+        assert excinfo.value.details["suggested_categories"] == ["gutters"]
+        assert (await _count_quotes(db, ws.id)) == 0
+
+
+async def test_blocking_rule_saves_once_a_dismissal_reason_is_supplied() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="blocking")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            _roof_only(roof, attach_dismissal=AttachDismissalRequest(reason="Already has")),
+        )
+
+        assert quote.attach_warning is None
+        # Recorded, so "asked and declined" is distinguishable from "never asked".
+        assert len(quote.attach_dismissals) == 1
+        dismissal = quote.attach_dismissals[0]
+        assert dismissal.primary_service == "roof"
+        assert dismissal.categories == ["gutters"]
+        assert dismissal.reason == "Already has"
+        assert dismissal.dismissed_at is not None
+
+
+async def test_dismissal_without_a_reason_is_rejected_when_required() -> None:
+    """An unreportable dismissal is the exact thing this feature exists to fix."""
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="advisory")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        with pytest.raises(ValidationError):
+            await svc.create_quote(
+                ws.id, _roof_only(roof, attach_dismissal=AttachDismissalRequest(reason="  "))
+            )
+
+        assert (await _count_quotes(db, ws.id)) == 0
+
+
+async def test_reasonless_dismissal_allowed_when_workspace_does_not_require_one() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {
+            ATTACH_RULES_KEY: AttachRulesSettings(
+                rules=[AttachRule(primary_category="roof", suggested_categories=["gutters"])],
+                require_dismissal_reason=False,
+            ).model_dump(mode="json")
+        }
+        await db.flush()
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id, _roof_only(roof, attach_dismissal=AttachDismissalRequest())
+        )
+
+        assert len(quote.attach_dismissals) == 1
+        assert quote.attach_dismissals[0].reason is None
+
+
+async def test_dismissal_is_ignored_when_nothing_was_suggested() -> None:
+    """Never invent a "they declined" event for a quote that has the attach."""
+    async with AsyncSessionLocal() as db:
+        ws = await _attach_workspace(db, mode="advisory")
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        gutters = await _make_catalog_item(db, ws.id, "Gutter Guard", 1200.0, "gutters")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                line_items=[
+                    QuoteLineItemCreate(
+                        name="Roof Replacement", unit_price=9000.0, catalog_item_id=roof.id
+                    ),
+                    QuoteLineItemCreate(
+                        name="Gutter Guard", unit_price=1200.0, catalog_item_id=gutters.id
+                    ),
+                ],
+                attach_dismissal=AttachDismissalRequest(reason="Customer declined"),
+            ),
+        )
+
+        assert quote.attach_dismissals == []
+
+
+async def test_corrupt_attach_rules_blob_never_blocks_a_save() -> None:
+    """A broken settings row must not stand between a rep and a sold job."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {ATTACH_RULES_KEY: {"rules": "not-a-list", "enabled": {"nope": True}}}
+        await db.flush()
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(ws.id, _roof_only(roof))
+
+        # Defaults applied: advisory, so it prompts without ever failing a save.
+        assert quote.status == "draft"
+        assert quote.attach_warning is not None
+        assert quote.attach_warning.mode == "advisory"
 
 
 async def test_send_sets_status_and_timestamp() -> None:

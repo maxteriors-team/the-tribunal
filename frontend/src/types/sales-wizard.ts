@@ -40,3 +40,12 @@ export type BistroPricing = Schemas["BistroPricing"];
 export type FulfillmentPart = Schemas["FulfillmentPart"];
 
 export type QuoteDetail = Schemas["QuoteDetailResponse"];
+
+// Attach rules — the operator-configured cross-sell prompt the quote builder
+// enforces at save time (`app/schemas/attach_rules.py`).
+export type AttachRulesSettings = Schemas["AttachRulesSettings"];
+export type AttachRulesSettingsUpdate = Schemas["AttachRulesSettingsUpdate"];
+export type AttachRule = Schemas["AttachRule"];
+export type AttachRuleMode = AttachRule["mode"];
+export type AttachWarning = Schemas["AttachWarning"];
+export type AttachDismissal = Schemas["AttachDismissal"];

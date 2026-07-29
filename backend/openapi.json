@@ -4044,6 +4044,250 @@
         "title": "AtRiskDealsResponse",
         "type": "object"
       },
+      "AttachDismissal": {
+        "description": "A recorded \"we asked and they said no\", stored on the quote.\n\nThis is the half of attach reporting that a bare attach *rate* cannot give\nyou: a workspace at 20% attach looks identical whether the other 80% were\nnever asked or were asked and declined, and those two problems have opposite\nfixes (coaching vs pricing). Persisted as JSONB on\n:attr:`app.models.quote.Quote.attach_dismissals`.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "dismissed_at": {
+            "format": "date-time",
+            "title": "Dismissed At",
+            "type": "string"
+          },
+          "primary_service": {
+            "title": "Primary Service",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "primary_service",
+          "dismissed_at"
+        ],
+        "title": "AttachDismissal",
+        "type": "object"
+      },
+      "AttachDismissalRequest": {
+        "description": "A rep dismissing the attach prompt for the quote being saved.\n\nOnly the reason crosses the wire. The categories are resolved server-side\nfrom the rule that actually fired, so a client cannot record a dismissal for\nan attach that was never suggested (which would corrupt attach reporting the\nsame way a client-set ``service_category`` would corrupt attach rate).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "AttachDismissalRequest",
+        "type": "object"
+      },
+      "AttachRule": {
+        "description": "One rule: when a quote is *this* job, prompt for *these* add-ons.\n\n``suggested_categories`` is an any-of test, not an all-of one: a roof quote\nthat already carries gutters satisfies a ``roof -> [gutters, trim]`` rule.\nThe rep is being reminded to have the conversation, not forced to sell every\nline on the list.",
+        "properties": {
+          "mode": {
+            "default": "advisory",
+            "enum": [
+              "off",
+              "advisory",
+              "blocking"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "primary_category": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Primary Category",
+            "type": "string"
+          },
+          "suggested_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "primary_category"
+        ],
+        "title": "AttachRule",
+        "type": "object"
+      },
+      "AttachRulesSettings": {
+        "description": "The full attach-rule config for a workspace (read view, lenient).",
+        "properties": {
+          "dismissal_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissal Reasons",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "prompt_template": {
+            "default": "This is a {primary} job with no add-on attached. Ask about the services below before sending it.",
+            "maxLength": 500,
+            "title": "Prompt Template",
+            "type": "string"
+          },
+          "require_dismissal_reason": {
+            "default": true,
+            "title": "Require Dismissal Reason",
+            "type": "boolean"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AttachRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "AttachRulesSettings",
+        "type": "object"
+      },
+      "AttachRulesSettingsUpdate": {
+        "description": "Partial update of the attach-rule config (shallow top-level merge).\n\nEvery block is optional; only provided keys are written, so editing the\nprompt copy never clobbers the rules. Mirrors\n:class:`app.schemas.pricing.PricingSettingsUpdate`.",
+        "properties": {
+          "dismissal_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismissal Reasons"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "prompt_template": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Template"
+          },
+          "require_dismissal_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Dismissal Reason"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AttachRule"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          }
+        },
+        "title": "AttachRulesSettingsUpdate",
+        "type": "object"
+      },
+      "AttachWarning": {
+        "description": "A missing attach, returned on the quote that triggered it.\n\nStructured rather than a rendered string so the builder can offer the exact\nnext action (\"Add gutters\") instead of only telling the rep off. ``mode`` is\nnever ``off`` here — an off rule produces no warning at all.",
+        "properties": {
+          "dismissal_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissal Reasons",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "advisory",
+              "blocking"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "primary_service": {
+            "title": "Primary Service",
+            "type": "string"
+          },
+          "require_dismissal_reason": {
+            "default": true,
+            "title": "Require Dismissal Reason",
+            "type": "boolean"
+          },
+          "suggested_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "primary_service",
+          "suggested_categories",
+          "mode",
+          "message"
+        ],
+        "title": "AttachWarning",
+        "type": "object"
+      },
       "AttributionConfidenceLevel": {
         "description": "Human-readable confidence bucket for lead-source attribution.",
         "enum": [
@@ -28946,6 +29190,18 @@
             "title": "Amount",
             "type": "number"
           },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -28967,6 +29223,16 @@
             },
             "title": "Additional Charges",
             "type": "array"
+          },
+          "attach_warning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachWarning"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bistro": {
             "anyOf": [
@@ -29659,6 +29925,16 @@
             },
             "title": "Additional Charges",
             "type": "array"
+          },
+          "attach_dismissal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachDismissalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bistro": {
             "anyOf": [
@@ -31836,6 +32112,16 @@
       "QuoteCreate": {
         "description": "Create a quote with its initial line items.",
         "properties": {
+          "attach_dismissal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachDismissalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -32079,10 +32365,27 @@
             "title": "Attach Count",
             "type": "integer"
           },
+          "attach_dismissals": {
+            "items": {
+              "$ref": "#/components/schemas/AttachDismissal"
+            },
+            "title": "Attach Dismissals",
+            "type": "array"
+          },
           "attach_value": {
             "default": 0.0,
             "title": "Attach Value",
             "type": "number"
+          },
+          "attach_warning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachWarning"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "contact_id": {
             "anyOf": [
@@ -32625,6 +32928,13 @@
             "default": 0,
             "title": "Attach Count",
             "type": "integer"
+          },
+          "attach_dismissals": {
+            "items": {
+              "$ref": "#/components/schemas/AttachDismissal"
+            },
+            "title": "Attach Dismissals",
+            "type": "array"
           },
           "attach_value": {
             "default": 0.0,
@@ -40897,6 +41207,18 @@
       "WizardCharge": {
         "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.",
         "properties": {
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
           "description": {
             "anyOf": [
               {
@@ -44165,6 +44487,112 @@
           }
         ],
         "summary": "Update Profile",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/attach-rules": {
+      "get": {
+        "description": "Get the workspace's attach-rule config (the cross-sell prompt).",
+        "operationId": "get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachRulesSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Attach Rules Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the attach-rule config (shallow top-level merge into ``settings``).\n\nOnly provided keys are written, so editing the prompt copy never clobbers the\nrules. A provided ``rules`` list replaces the whole list (validated at the\nedge), matching how the pricing config writes blocks wholesale.",
+        "operationId": "update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachRulesSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachRulesSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Attach Rules Settings",
         "tags": [
           "Settings"
         ]
