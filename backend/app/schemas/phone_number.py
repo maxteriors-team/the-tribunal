@@ -2,7 +2,28 @@
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.lead_source import LeadSourceType
+
+
+class PhoneNumberLeadSourceResponse(BaseModel):
+    """Lead-source identity displayed beside a tracking number."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    source_type: LeadSourceType
+
+
+class PhoneNumberLeadSourceCampaignResponse(BaseModel):
+    """Campaign identity displayed beside a tracking number."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
 
 
 class PhoneNumberResponse(BaseModel):
@@ -22,6 +43,11 @@ class PhoneNumberResponse(BaseModel):
     mac_relay_sender_id: str | None
     mac_relay_service: str
     assigned_agent_id: uuid.UUID | None
+    lead_source_id: uuid.UUID | None
+    lead_source_campaign_id: uuid.UUID | None
+    tracking_label: str | None
+    lead_source: PhoneNumberLeadSourceResponse | None
+    lead_source_campaign: PhoneNumberLeadSourceCampaignResponse | None
     is_active: bool
 
 
@@ -40,6 +66,9 @@ class PhoneNumberUpdate(BaseModel):
 
     friendly_name: str | None = None
     assigned_agent_id: uuid.UUID | None = None
+    lead_source_id: uuid.UUID | None = None
+    lead_source_campaign_id: uuid.UUID | None = None
+    tracking_label: str | None = Field(default=None, max_length=120)
     is_active: bool | None = None
 
 

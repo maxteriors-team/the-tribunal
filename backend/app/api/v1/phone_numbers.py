@@ -4,11 +4,14 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CanManageComms, CanReadCRM, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
-from app.db.scope import apply_workspace_scope, assert_workspace_owned
+from app.db.scope import apply_workspace_scope
+from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.phone_number import PhoneNumber
 from app.schemas.phone_number import (
     PaginatedPhoneNumbers,
@@ -23,6 +26,49 @@ from app.services.telephony.telnyx import TelnyxSMSService
 router = APIRouter()
 
 
+async def _validate_tracking_mapping(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    lead_source_id: uuid.UUID | None,
+    lead_source_campaign_id: uuid.UUID | None,
+) -> None:
+    """Reject cross-workspace or mismatched source/campaign mappings."""
+    if lead_source_id is None:
+        if lead_source_campaign_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="A campaign requires a lead source",
+            )
+        return
+
+    source_result = await db.execute(
+        select(LeadSource.id).where(
+            LeadSource.id == lead_source_id,
+            LeadSource.workspace_id == workspace_id,
+        )
+    )
+    if source_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead source not found",
+        )
+
+    if lead_source_campaign_id is None:
+        return
+
+    campaign_result = await db.execute(
+        select(LeadSourceCampaign.id).where(
+            LeadSourceCampaign.id == lead_source_campaign_id,
+            LeadSourceCampaign.workspace_id == workspace_id,
+            LeadSourceCampaign.lead_source_id == lead_source_id,
+        )
+    )
+    if campaign_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found for this lead source",
+        )
+
 @router.get("", response_model=PaginatedPhoneNumbers)
 async def list_phone_numbers(
     workspace_id: uuid.UUID,
@@ -35,7 +81,14 @@ async def list_phone_numbers(
     active_only: bool = True,
 ) -> PaginatedPhoneNumbers:
     """List the workspace's phone numbers."""
-    query = apply_workspace_scope(select(PhoneNumber), PhoneNumber, workspace_id)
+    query = apply_workspace_scope(
+        select(PhoneNumber).options(
+            selectinload(PhoneNumber.lead_source),
+            selectinload(PhoneNumber.lead_source_campaign),
+        ),
+        PhoneNumber,
+        workspace_id,
+    )
 
     if active_only:
         query = query.where(PhoneNumber.is_active.is_(True))
@@ -58,13 +111,24 @@ async def get_phone_number(
     membership: CanReadCRM,
 ) -> PhoneNumber:
     """Get one of the workspace's phone numbers by ID."""
-    return await assert_workspace_owned(
-        db,
-        PhoneNumber,
-        phone_number_id,
-        workspace_id,
-        detail="Phone number not found",
+    result = await db.execute(
+        select(PhoneNumber)
+        .options(
+            selectinload(PhoneNumber.lead_source),
+            selectinload(PhoneNumber.lead_source_campaign),
+        )
+        .where(
+            PhoneNumber.id == phone_number_id,
+            PhoneNumber.workspace_id == workspace_id,
+        )
     )
+    phone_number = result.scalar_one_or_none()
+    if phone_number is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found",
+        )
+    return phone_number
 
 
 @router.put("/{phone_number_id}", response_model=PhoneNumberResponse)
@@ -78,7 +142,12 @@ async def update_phone_number(
 ) -> PhoneNumber:
     """Update a phone number."""
     result = await db.execute(
-        select(PhoneNumber).where(
+        select(PhoneNumber)
+        .options(
+            selectinload(PhoneNumber.lead_source),
+            selectinload(PhoneNumber.lead_source_campaign),
+        )
+        .where(
             PhoneNumber.id == phone_number_id,
             PhoneNumber.workspace_id == workspace_id,
         )
@@ -92,11 +161,39 @@ async def update_phone_number(
         )
 
     update_data = phone_number_in.model_dump(exclude_unset=True)
+    source_supplied = "lead_source_id" in update_data
+    campaign_supplied = "lead_source_campaign_id" in update_data
+
+    if source_supplied or campaign_supplied:
+        target_source_id = update_data.get("lead_source_id", phone_number.lead_source_id)
+        if (
+            source_supplied
+            and target_source_id != phone_number.lead_source_id
+            and not campaign_supplied
+        ):
+            update_data["lead_source_campaign_id"] = None
+
+        target_campaign_id = update_data.get(
+            "lead_source_campaign_id", phone_number.lead_source_campaign_id
+        )
+        if target_source_id is None:
+            update_data["lead_source_campaign_id"] = None
+            target_campaign_id = None
+
+        await _validate_tracking_mapping(
+            db, workspace_id, target_source_id, target_campaign_id
+        )
+
+    if "tracking_label" in update_data and update_data["tracking_label"] is not None:
+        update_data["tracking_label"] = update_data["tracking_label"].strip() or None
+
     for field, value in update_data.items():
         setattr(phone_number, field, value)
 
     await db.commit()
-    await db.refresh(phone_number)
+    await db.refresh(
+        phone_number, attribute_names=["lead_source", "lead_source_campaign"]
+    )
 
     return phone_number
 
