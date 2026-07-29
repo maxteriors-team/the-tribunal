@@ -38,6 +38,8 @@ def _quote(document: dict[str, Any] | None) -> Quote:
         tax_amount=0,
         discount_amount=0,
         total=5200,
+        attach_count=0,
+        attach_value=0,
         created_at=now,
         updated_at=now,
         proposal_document=document,

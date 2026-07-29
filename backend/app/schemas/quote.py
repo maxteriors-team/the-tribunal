@@ -29,7 +29,18 @@ class QuoteLineItemBase(BaseModel):
 
 
 class QuoteLineItemCreate(QuoteLineItemBase):
-    """Create a line item."""
+    """Create a line item, optionally sourced from the price book.
+
+    ``catalog_item_id`` is a *request-only* hint from the catalog picker: the
+    server looks the item up within the workspace and snapshots its
+    ``service_category`` onto the line. Nothing links back to the catalog row,
+    so the metric survives the item later being re-categorized or deleted, and
+    the category can't be forged by a client since it is never read from the
+    request body. An id that no longer resolves simply leaves the line
+    uncategorized.
+    """
+
+    catalog_item_id: uuid.UUID | None = None
 
 
 class QuoteLineItemUpdate(BaseModel):
@@ -48,6 +59,8 @@ class QuoteLineItemResponse(QuoteLineItemBase):
     id: uuid.UUID
     quote_id: uuid.UUID
     total: float  # server-computed: quantity * unit_price - discount
+    # Server-snapshotted from the picked catalog item; drives attach metrics.
+    service_category: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -191,6 +204,12 @@ class QuoteResponse(BaseModel):
     terms: str | None = None
     converted_job_id: uuid.UUID | None = None
     converted_invoice_id: uuid.UUID | None = None
+    # Denormalized attach metrics, re-derived from the line items on every save.
+    # Read-only: setting them from a request would let a client rewrite its own
+    # attach rate. ``primary_service`` is null on an uncategorized quote.
+    primary_service: str | None = None
+    attach_count: int = 0
+    attach_value: float = 0.0
     # Public client-proposal token (staff-only field; null until first sent). The
     # dashboard uses it to build/copy the client-facing proposal link.
     public_token: str | None = None

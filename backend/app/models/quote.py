@@ -128,6 +128,30 @@ class Quote(Base):
         index=True,
     )
 
+    # --- Denormalized attach metrics -------------------------------------
+    # Derived from the line items' ``service_category`` on every save (see
+    # ``app.services.quotes.attach_metrics``) so "average job value" and
+    # "attach rate" are a single indexed scan over ``quotes`` instead of a
+    # join + group-by over ``quote_line_items`` per row. Never client-settable.
+    #
+    # The service category of the highest-value line group — the job this quote
+    # is "really" for. NULL when the quote has no categorized lines (empty, or
+    # every line came from an uncategorized/free-typed item), which reporting
+    # reads as unknown rather than as a category.
+    primary_service: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    # How many *distinct* service categories ride along besides
+    # ``primary_service`` — the attach-rate numerator. 0 for a single-service
+    # quote; a category with three lines still counts once.
+    attach_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Summed line totals of those non-primary categories (major units), so
+    # attach *revenue* is reportable without re-reading the lines. Uncategorized
+    # lines are excluded here even though they still count toward ``total``.
+    attach_value: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, default=0, server_default="0"
+    )
+
     # Dates / lifecycle timestamps.
     issue_date: Mapped[date | None] = mapped_column(DATE, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(DATE, nullable=True)
@@ -216,6 +240,15 @@ class QuoteLineItem(Base):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Service line this line belongs to, snapshotted from the picked
+    # ``CatalogItem.service_category``. Deliberately a copied string and *not* a
+    # FK to ``catalog_items``: price-book items get renamed, re-categorized and
+    # deleted, while a quote is a historical record of what was sold — a FK
+    # would either block those deletes or NULL out settled history. Nullable:
+    # hand-typed lines and lines from uncategorized items stay uncategorized,
+    # and attach metrics skip them rather than inventing a category.
+    service_category: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     # Pricing (major units). ``total`` is computed server-side as
     # ``quantity * unit_price - discount``; never trusted from the client.

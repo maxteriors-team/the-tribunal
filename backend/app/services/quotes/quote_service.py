@@ -14,6 +14,7 @@ recorded on the quote so the sales -> work -> billing chain stays auditable.
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -88,6 +89,7 @@ from app.services.automations.events import (
 )
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import notify_workspace_event
+from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import (
     CatalogEntry,
@@ -292,7 +294,13 @@ class QuoteService:
         )
 
     def _recompute_totals(self, quote: Quote) -> None:
-        """Recompute subtotal/total from line items in place.
+        """Recompute every line-item-derived field on the quote, in place.
+
+        Totals *and* the denormalized attach metrics, because both are functions
+        of the same line items. Keeping them in one method is deliberate: this is
+        already called by every path that adds, edits, replaces or removes a line,
+        so the metrics cannot drift by someone adding a mutation path and
+        forgetting a second call.
 
         Requires ``quote.line_items`` to be loaded.
         """
@@ -301,10 +309,64 @@ class QuoteService:
         quote.total = round(
             subtotal + float(quote.tax_amount or 0) - float(quote.discount_amount or 0), 2
         )
+        primary, attach_count, attach_value = compute_attach_metrics(quote.line_items)
+        quote.primary_service = primary
+        quote.attach_count = attach_count
+        quote.attach_value = attach_value
 
     @staticmethod
     def _line_total(quantity: float, unit_price: float, discount: float) -> float:
         return round(quantity * unit_price - discount, 2)
+
+    async def _catalog_categories(
+        self,
+        workspace_id: uuid.UUID,
+        items: Sequence[QuoteLineItemCreate],
+    ) -> Mapping[uuid.UUID, str | None]:
+        """Look up the service category of every price-book item being copied.
+
+        One scoped query for the whole payload rather than per line. Scoped to
+        the workspace on purpose: a ``catalog_item_id`` from another tenant
+        resolves to nothing instead of leaking that workspace's categories.
+        Returns an empty map when no line came from the picker.
+        """
+        ids = {item.catalog_item_id for item in items if item.catalog_item_id is not None}
+        if not ids:
+            return {}
+        result = await self.db.execute(
+            select(CatalogItem.id, CatalogItem.service_category).where(
+                CatalogItem.workspace_id == workspace_id,
+                CatalogItem.id.in_(ids),
+            )
+        )
+        return {row.id: row.service_category for row in result}
+
+    def _build_line_item(
+        self,
+        item: QuoteLineItemCreate,
+        categories: Mapping[uuid.UUID, str | None] | None = None,
+    ) -> QuoteLineItem:
+        """Build a line item with its server-computed total and category snapshot.
+
+        The category is copied from the picked catalog item (via ``categories``,
+        as resolved by :meth:`_catalog_categories`) and never read from the
+        request body. A line typed by hand, built by the wizard, or pointing at a
+        catalog item that has since been deleted stays uncategorized — that is a
+        normal outcome, not an error, and attach metrics simply skip it.
+        """
+        source_id = item.catalog_item_id
+        service_category = (
+            categories.get(source_id) if categories is not None and source_id is not None else None
+        )
+        return QuoteLineItem(
+            name=item.name,
+            description=item.description,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            discount=item.discount,
+            total=self._line_total(item.quantity, item.unit_price, item.discount),
+            service_category=service_category,
+        )
 
     @staticmethod
     def _wizard_deposit_selection(
@@ -541,17 +603,9 @@ class QuoteService:
         if quote.deposit_percentage is None and quote.deposit_amount_fixed is None:
             workspace = await get_or_404(self.db, Workspace, workspace_id)
             self._apply_default_deposit(quote, workspace)
+        categories = await self._catalog_categories(workspace_id, quote_in.line_items)
         for item in quote_in.line_items:
-            quote.line_items.append(
-                QuoteLineItem(
-                    name=item.name,
-                    description=item.description,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    discount=item.discount,
-                    total=self._line_total(item.quantity, item.unit_price, item.discount),
-                )
-            )
+            quote.line_items.append(self._build_line_item(item, categories))
 
         self._recompute_totals(quote)
         self.db.add(quote)
@@ -1166,16 +1220,7 @@ class QuoteService:
 
         quote.line_items.clear()
         for item in line_items:
-            quote.line_items.append(
-                QuoteLineItem(
-                    name=item.name,
-                    description=item.description,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    discount=item.discount,
-                    total=self._line_total(item.quantity, item.unit_price, item.discount),
-                )
-            )
+            quote.line_items.append(self._build_line_item(item))
         quote.proposal_document = updated.model_dump(mode="json")
         self._recompute_totals(quote)
         await self.db.commit()
@@ -1331,16 +1376,7 @@ class QuoteService:
             created_by_id=created_by_id,
         )
         for item in line_items:
-            quote.line_items.append(
-                QuoteLineItem(
-                    name=item.name,
-                    description=item.description,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    discount=item.discount,
-                    total=self._line_total(item.quantity, item.unit_price, item.discount),
-                )
-            )
+            quote.line_items.append(self._build_line_item(item))
         self._recompute_totals(quote)
         # Persist the resolved deposit selection onto the quote (one column only).
         selection = self._wizard_deposit_selection(payload, config)
@@ -1993,18 +2029,10 @@ class QuoteService:
         quote_id: uuid.UUID,
         item_in: QuoteLineItemCreate,
     ) -> QuoteDetailResponse:
-        """Add a line item and recompute quote totals."""
+        """Add a line item and recompute quote totals + attach metrics."""
         quote = await self._get_mutable_quote(workspace_id, quote_id)
-        quote.line_items.append(
-            QuoteLineItem(
-                name=item_in.name,
-                description=item_in.description,
-                quantity=item_in.quantity,
-                unit_price=item_in.unit_price,
-                discount=item_in.discount,
-                total=self._line_total(item_in.quantity, item_in.unit_price, item_in.discount),
-            )
-        )
+        categories = await self._catalog_categories(workspace_id, [item_in])
+        quote.line_items.append(self._build_line_item(item_in, categories))
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])

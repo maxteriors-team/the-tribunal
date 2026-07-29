@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
+from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.field_service import Job, ServiceLocation
 from app.models.invoice import Invoice
@@ -82,6 +83,24 @@ async def _make_location(
     db.add(loc)
     await db.flush()
     return loc
+
+
+async def _make_catalog_item(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    name: str,
+    unit_price: float,
+    service_category: str | None,
+) -> CatalogItem:
+    item = CatalogItem(
+        workspace_id=workspace_id,
+        name=name,
+        unit_price=unit_price,
+        service_category=service_category,
+    )
+    db.add(item)
+    await db.flush()
+    return item
 
 
 async def test_create_computes_totals_and_allocates_number() -> None:
@@ -157,6 +176,88 @@ async def test_line_item_edits_recompute_totals() -> None:
         quote = await svc.remove_line_item(ws.id, quote.id, base.id)
         assert len(quote.line_items) == 1
         assert quote.total == 50.0
+
+
+async def test_catalog_lines_denormalize_attach_metrics_on_every_save() -> None:
+    """Picking price-book items snapshots their category and keeps the quote's
+    attach metrics current across create, add, update and remove."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        roof = await _make_catalog_item(db, ws.id, "Roof Replacement", 9000.0, "roof")
+        gutters = await _make_catalog_item(db, ws.id, "Gutter Guard", 1200.0, "gutters")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                line_items=[
+                    QuoteLineItemCreate(
+                        name="Roof Replacement", unit_price=9000.0, catalog_item_id=roof.id
+                    )
+                ]
+            ),
+        )
+        # One service on the quote: it's a roof job with nothing attached.
+        assert quote.primary_service == "roof"
+        assert quote.attach_count == 0
+        assert quote.attach_value == 0.0
+        assert quote.line_items[0].service_category == "roof"
+
+        quote = await svc.add_line_item(
+            ws.id,
+            quote.id,
+            QuoteLineItemCreate(name="Gutter Guard", unit_price=1200.0, catalog_item_id=gutters.id),
+        )
+        assert quote.primary_service == "roof"
+        assert quote.attach_count == 1
+        assert quote.attach_value == 1200.0
+
+        # A hand-typed line has no category: it lifts the total but is not an
+        # attachment, so attach_value is never just "total minus primary".
+        quote = await svc.add_line_item(
+            ws.id, quote.id, QuoteLineItemCreate(name="Custom fascia", unit_price=400.0)
+        )
+        assert quote.total == 10600.0
+        assert quote.attach_count == 1
+        assert quote.attach_value == 1200.0
+
+        # Repricing a line re-derives the metrics rather than leaving them stale.
+        gutter_line = next(li for li in quote.line_items if li.name == "Gutter Guard")
+        quote = await svc.update_line_item(
+            ws.id, quote.id, gutter_line.id, QuoteLineItemUpdate(quantity=2)
+        )
+        assert quote.attach_value == 2400.0
+
+        quote = await svc.remove_line_item(ws.id, quote.id, gutter_line.id)
+        assert quote.primary_service == "roof"
+        assert quote.attach_count == 0
+        assert quote.attach_value == 0.0
+
+
+async def test_catalog_item_from_another_workspace_leaves_line_uncategorized() -> None:
+    """A tenant must not be able to read (or borrow) another workspace's
+    categories by guessing a catalog item id."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other = await _make_workspace(db)
+        foreign = await _make_catalog_item(db, other.id, "Roof Replacement", 9000.0, "roof")
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                line_items=[
+                    QuoteLineItemCreate(
+                        name="Roof Replacement", unit_price=9000.0, catalog_item_id=foreign.id
+                    )
+                ]
+            ),
+        )
+
+        assert quote.line_items[0].service_category is None
+        assert quote.primary_service is None
+        assert quote.attach_count == 0
+        assert quote.attach_value == 0.0
 
 
 async def test_send_sets_status_and_timestamp() -> None:
