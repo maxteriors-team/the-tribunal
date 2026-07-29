@@ -37,6 +37,12 @@ import logging
 import sys
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # imports are deferred at runtime (see _run) to keep startup cheap
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models.phone_number import PhoneNumber
 
 # --- harness bootstrap: locate ``backend/`` so ``app`` + ``scripts`` import ----
 _BACKEND_DIR = next(
@@ -78,10 +84,21 @@ def _configure(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Replace an existing token. The current one stops working immediately.",
     )
+    parser.add_argument(
+        "--revoke",
+        action="store_true",
+        help=(
+            "Clear the stored digest WITHOUT issuing a replacement. Use when a "
+            "relay host is compromised and inbound should stop immediately."
+        ),
+    )
 
 
-async def _run(ctx: ExecutionContext, args: argparse.Namespace) -> int:
-    """Issue the token and print the plaintext once."""
+# Each early return is a distinct refusal an operator needs told apart (not
+# found, inactive, already provisioned, revoked, dry-run), so they read better
+# flat than folded behind a result object.
+async def _run(ctx: ExecutionContext, args: argparse.Namespace) -> int:  # noqa: PLR0911
+    """Issue, rotate, or revoke the relay token for one phone number."""
     from sqlalchemy import or_, select
 
     from app.db.session import AsyncSessionLocal
@@ -124,6 +141,9 @@ async def _run(ctx: ExecutionContext, args: argparse.Namespace) -> int:
         if phone is None:
             log_event(logger, logging.ERROR, "phone number not found", target=selector)
             return EXIT_FAILURE
+
+        if args.revoke:
+            return await _revoke(ctx, db, phone)
 
         if phone.mac_relay_token_hash and not args.rotate:
             log_event(
@@ -172,6 +192,50 @@ async def _run(ctx: ExecutionContext, args: argparse.Namespace) -> int:
         )
         _print_token(phone.phone_number, token)
 
+    return EXIT_OK
+
+
+async def _revoke(ctx: ExecutionContext, db: AsyncSession, phone: PhoneNumber) -> int:
+    """Clear the digest so the relay host's token stops authenticating.
+
+    Deliberately separate from ``--rotate``: rotation keeps the line working
+    under a new credential, revocation takes it offline. During an incident you
+    want the second one, without having to hand a fresh secret to a host you no
+    longer trust.
+    """
+    logger = ctx.logger
+
+    if not phone.mac_relay_token_hash:
+        log_event(
+            logger,
+            logging.INFO,
+            "nothing to revoke: this number has no relay token",
+            phone_number_id=str(phone.id),
+        )
+        return EXIT_OK
+
+    if ctx.dry_run:
+        log_event(
+            logger,
+            logging.INFO,
+            "dry-run: would revoke the relay token",
+            phone_number_id=str(phone.id),
+            workspace_id=str(phone.workspace_id),
+        )
+        return EXIT_OK
+
+    ctx.confirm(f"revoke the Mac relay token for {phone.phone_number}")
+
+    phone.mac_relay_token_hash = None
+    await db.commit()
+
+    log_event(
+        logger,
+        logging.INFO,
+        "relay token revoked; that host can no longer deliver inbound messages",
+        phone_number_id=str(phone.id),
+        workspace_id=str(phone.workspace_id),
+    )
     return EXIT_OK
 
 
