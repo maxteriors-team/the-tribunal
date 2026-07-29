@@ -341,6 +341,13 @@ export const queryKeys = {
       ["reports", workspaceId, "ar-aging", asOf ?? null] as const,
     jobPnl: (workspaceId: string, params?: QueryKeyParams | null) =>
       ["reports", workspaceId, "job-pnl", normalizeQueryKeyParams(params)] as const,
+    salesPerformance: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [
+        "reports",
+        workspaceId,
+        "sales-performance",
+        normalizeQueryKeyParams(params),
+      ] as const,
   },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
