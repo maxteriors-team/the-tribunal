@@ -197,20 +197,25 @@ class EstimateQuoteRequest(ComparisonShareRequest):
 
 
 class ComparisonDeliverRequest(BaseModel):
-    """Email a saved estimate's client link to the customer.
+    """Send a saved estimate's client link to the customer by email or SMS.
 
-    ``to`` overrides the destination; otherwise the linked contact's email is
-    used. Contacts are phone-keyed, so an estimate saved without a phone has no
-    contact email — pass ``to`` explicitly in that case.
+    ``to`` overrides the destination; otherwise the linked contact's email or
+    phone is used. Contacts are phone-keyed, so an estimate saved without a
+    phone has no contact at all — pass ``to`` explicitly in that case.
+
+    ``channel`` defaults to ``email`` so callers that predate SMS delivery keep
+    working unchanged.
     """
 
+    channel: Literal["email", "sms"] = "email"
     to: str | None = Field(default=None, max_length=320)
 
 
 class ComparisonDeliverResult(BaseModel):
-    """Outcome of emailing an estimate to the customer."""
+    """Outcome of sending an estimate to the customer."""
 
     ok: bool
+    channel: Literal["email", "sms"] = "email"
     to: str
 
 

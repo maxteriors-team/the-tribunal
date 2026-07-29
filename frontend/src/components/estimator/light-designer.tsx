@@ -55,6 +55,7 @@ import {
 } from "@/lib/estimator/services";
 import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import type {
   EstimateRenderRequest,
   LinearFeetEstimateRequest,
@@ -71,6 +72,9 @@ import { ToolPalette } from "./tool-palette";
 import "./estimator.css";
 
 type ViewMode = "rep" | "client";
+
+/** How the client's estimate link reaches them. */
+type SendChannel = "email" | "sms";
 
 interface LightDesignerProps {
   workspaceId: string;
@@ -149,6 +153,13 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  // Which rail carried it. A bare "Sent to +15551234567" doesn't say whether the
+  // homeowner got a text or an email, which is the one thing the rep needs to
+  // know before following up.
+  const [sentVia, setSentVia] = useState<SendChannel | null>(null);
+  // Which rail is mid-send, so only the pressed button shows "Sending…" while
+  // both stay disabled — a rep can't fire the text and the email at once.
+  const [sendingChannel, setSendingChannel] = useState<SendChannel | null>(null);
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -333,6 +344,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
     setShareUrl(null);
     setShareToken(null);
     setSentTo(null);
+    setSentVia(null);
     setSavedToCustomer(false);
     setQuoteResult(null);
   }, []);
@@ -410,13 +422,22 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
       setShareToken(result.token);
       setSavedToCustomer(result.saved_to_customer);
       setSentTo(null);
+      setSentVia(null);
     },
   });
 
   const deliverMutation = useMutation({
-    mutationFn: (token: string) =>
-      estimatorApi.deliver(workspaceId, token, clientEmail.trim() || null),
-    onSuccess: (result) => setSentTo(result.to),
+    mutationFn: ({ token, channel }: { token: string; channel: SendChannel }) =>
+      estimatorApi.deliver(
+        workspaceId,
+        token,
+        (channel === "email" ? clientEmail : clientPhone).trim() || null,
+        channel,
+      ),
+    onSuccess: (result) => {
+      setSentTo(result.to);
+      setSentVia(result.channel);
+    },
   });
 
   // Convert the drawn design into a real draft quote. ``side`` picks which
@@ -429,23 +450,36 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   });
   const quotePending = createQuoteMutation.isPending;
 
-  // One-click "email the estimate": the button is always visible on every
-  // estimate. If the rep hasn't saved a share link yet we mint one first, then
-  // deliver it to the customer — so emailing never depends on remembering to
+  // One-click "send the estimate", by email or text. Both buttons are always
+  // visible on every estimate. If the rep hasn't saved a share link yet we mint
+  // one first, then deliver it — so sending never depends on remembering to
   // press "Save & share" beforehand.
-  const emailPending = shareMutation.isPending || deliverMutation.isPending;
-  const canEmail = hasHolidayDesign && clientEmail.trim().length > 0;
-  const emailEstimate = async () => {
-    if (!canEmail || emailPending) return;
+  const sendPending = shareMutation.isPending || deliverMutation.isPending;
+  // The server's own words, not a generic retry line: a failed text usually
+  // means something the rep can fix right now ("add a number under Settings",
+  // "this number has opted out"), and that is exactly what gets swallowed by a
+  // hardcoded "couldn't send".
+  const sendFailure = deliverMutation.error ?? shareMutation.error;
+  const sendError = sendFailure
+    ? getApiErrorMessage(sendFailure, "Couldn’t send the estimate — try again.")
+    : null;
+  const canSend = (channel: SendChannel) =>
+    hasHolidayDesign &&
+    (channel === "email" ? clientEmail : clientPhone).trim().length > 0;
+  const sendEstimate = async (channel: SendChannel) => {
+    if (!canSend(channel) || sendPending) return;
+    setSendingChannel(channel);
     try {
       let token = shareToken;
       if (!token) {
         const shared = await shareMutation.mutateAsync();
         token = shared.token;
       }
-      if (token) await deliverMutation.mutateAsync(token);
+      if (token) await deliverMutation.mutateAsync({ token, channel });
     } catch {
       // Surfaced to the rep via shareMutation/deliverMutation isError below.
+    } finally {
+      setSendingChannel(null);
     }
   };
 
@@ -798,19 +832,38 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
                       Add a phone number to save this estimate to a customer
                       record. Without one you can still share the link.
                     </div>
-                    <button
-                      className="est-btn primary est-save-btn"
-                      type="button"
-                      disabled={!canEmail || emailPending}
-                      title={
-                        canEmail
-                          ? undefined
-                          : "Draw the holiday design and add a customer email to send the estimate"
-                      }
-                      onClick={() => void emailEstimate()}
-                    >
-                      {emailPending ? "Sending…" : "Email estimate"}
-                    </button>
+                    <div className="est-send-actions">
+                      <button
+                        className="est-btn primary est-save-btn"
+                        type="button"
+                        disabled={!canSend("email") || sendPending}
+                        title={
+                          canSend("email")
+                            ? `Email the estimate to ${clientEmail.trim()}`
+                            : "Draw the holiday design and add a customer email to send the estimate"
+                        }
+                        onClick={() => void sendEstimate("email")}
+                      >
+                        {sendingChannel === "email"
+                          ? "Sending…"
+                          : "\u2709 Email estimate"}
+                      </button>
+                      <button
+                        className="est-btn primary est-save-btn"
+                        type="button"
+                        disabled={!canSend("sms") || sendPending}
+                        title={
+                          canSend("sms")
+                            ? `Text the estimate to ${clientPhone.trim()}`
+                            : "Draw the holiday design and add a customer phone to text the estimate"
+                        }
+                        onClick={() => void sendEstimate("sms")}
+                      >
+                        {sendingChannel === "sms"
+                          ? "Sending…"
+                          : "\u260e Text estimate"}
+                      </button>
+                    </div>
                     <button
                       className="est-btn est-save-btn"
                       type="button"
@@ -821,11 +874,9 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
                         ? "Saving…"
                         : "Save & share link only"}
                     </button>
-                    {deliverMutation.isError || shareMutation.isError ? (
+                    {sendError ? (
                       <div className="est-send-row">
-                        <span className="est-send-error">
-                          Couldn’t send — check the email and try again.
-                        </span>
+                        <span className="est-send-error">{sendError}</span>
                       </div>
                     ) : null}
 
@@ -916,7 +967,10 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
                       </div>
                       {sentTo ? (
                         <div className="est-send-row">
-                          <span className="est-sent-note">Sent to {sentTo}</span>
+                          <span className="est-sent-note">
+                            {sentVia === "sms" ? "Texted to" : "Emailed to"}{" "}
+                            {sentTo}
+                          </span>
                         </div>
                       ) : null}
                     </div>

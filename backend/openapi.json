@@ -9542,8 +9542,17 @@
         "type": "object"
       },
       "ComparisonDeliverRequest": {
-        "description": "Email a saved estimate's client link to the customer.\n\n``to`` overrides the destination; otherwise the linked contact's email is\nused. Contacts are phone-keyed, so an estimate saved without a phone has no\ncontact email — pass ``to`` explicitly in that case.",
+        "description": "Send a saved estimate's client link to the customer by email or SMS.\n\n``to`` overrides the destination; otherwise the linked contact's email or\nphone is used. Contacts are phone-keyed, so an estimate saved without a\nphone has no contact at all — pass ``to`` explicitly in that case.\n\n``channel`` defaults to ``email`` so callers that predate SMS delivery keep\nworking unchanged.",
         "properties": {
+          "channel": {
+            "default": "email",
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
           "to": {
             "anyOf": [
               {
@@ -9561,8 +9570,17 @@
         "type": "object"
       },
       "ComparisonDeliverResult": {
-        "description": "Outcome of emailing an estimate to the customer.",
+        "description": "Outcome of sending an estimate to the customer.",
         "properties": {
+          "channel": {
+            "default": "email",
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
           "ok": {
             "title": "Ok",
             "type": "boolean"
@@ -67109,7 +67127,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/estimate/comparison/{token}/send": {
       "post": {
-        "description": "Email a saved estimate's client link to the customer.",
+        "description": "Send a saved estimate's client link to the customer by email or SMS.",
         "operationId": "deliver_comparison_api_v1_workspaces__workspace_id__quotes_estimate_comparison__token__send_post",
         "parameters": [
           {

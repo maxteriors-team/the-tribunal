@@ -56,15 +56,21 @@ export const estimatorApi = {
       payload,
     ),
 
-  /** Email a saved estimate's client link to the customer. */
+  /**
+   * Send a saved estimate's client link to the customer by email or SMS.
+   *
+   * `to` overrides the destination; omitted, the server falls back to the
+   * linked contact's email or phone.
+   */
   deliver: (
     workspaceId: string,
     token: string,
     to?: string | null,
+    channel: "email" | "sms" = "email",
   ): Promise<ComparisonDeliverResult> =>
     apiPost<ComparisonDeliverResult>(
       `${base(workspaceId)}/quotes/estimate/comparison/${token}/send`,
-      { to: to ?? null },
+      { channel, to: to ?? null },
     ),
 
   /**

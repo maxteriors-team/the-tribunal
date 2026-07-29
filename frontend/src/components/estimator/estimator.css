@@ -30,6 +30,20 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Embedded preview (Settings → Pricing): the same cards and tokens, dropped
+ * into a settings card instead of owning the viewport. Two classes so it beats
+ * the page-level rules above without touching them.
+ */
+.cmp-view.cmp-embedded {
+  min-height: 0;
+  background: transparent;
+}
+
+.cmp-view.cmp-embedded .cmp-pkg-section {
+  margin-top: 0;
+}
+
 .cmp-view *,
 .cmp-view *::before,
 .cmp-view *::after {
@@ -1442,6 +1456,15 @@
 .est-save-btn {
   width: 100%;
   margin-top: 12px;
+}
+
+/* Email and Text stack full-width like every other button in this panel. A
+   side-by-side row was tried first and rejected: the side panel leaves each
+   button ~118px, which clips "Text estimate" — a row buys nothing but a
+   truncated label. `display: contents` keeps the grouping in the markup
+   without putting a box between the buttons and the panel's own rhythm. */
+.est-send-actions {
+  display: contents;
 }
 
 /* "Turn this design into a quote" — the design->quote conversion block. */
