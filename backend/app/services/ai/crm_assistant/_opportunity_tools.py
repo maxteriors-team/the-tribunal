@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.db.scope import select_workspace_owned
 from app.models.opportunity import Opportunity
+from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 
 
@@ -18,25 +19,25 @@ class OpportunityAssistantTools:
 
     async def list_opportunities(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
-        stmt = (
-            select_workspace_owned(Opportunity, self.context.workspace_id)
-            .order_by(Opportunity.created_at.desc())
-            .limit(limit)
+        stmt = select_workspace_owned(Opportunity, self.context.workspace_id)
+
+        total = await count_matching(self.context.db, Opportunity, stmt)
+        result = await self.context.db.execute(
+            stmt.order_by(Opportunity.created_at.desc()).limit(limit)
         )
-        result = await self.context.db.execute(stmt)
         opportunities = result.scalars().all()
 
-        return {
-            "success": True,
-            "data": [
+        return listing(
+            [
                 {
                     "id": str(opportunity.id),
                     "name": opportunity.name,
                     "status": opportunity.status,
                     "amount": float(opportunity.amount) if opportunity.amount else None,
                     "probability": opportunity.probability,
+                    "primary_contact_id": opportunity.primary_contact_id,
                 }
                 for opportunity in opportunities
             ],
-            "count": len(opportunities),
-        }
+            total=total,
+        )

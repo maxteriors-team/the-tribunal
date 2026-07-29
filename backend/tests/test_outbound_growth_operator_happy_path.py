@@ -206,7 +206,8 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     )
     start_result = await executor.execute(
         "start_campaign",
-        {"campaign_id": str(campaign.id), "confirmed": True},
+        {"campaign_id": str(campaign.id)},
+        approval_granted=True,
     )
 
     assert start_result["success"] is True

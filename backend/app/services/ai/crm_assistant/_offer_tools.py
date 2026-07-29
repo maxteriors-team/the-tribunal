@@ -8,11 +8,18 @@ from typing import Any
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.offer import Offer
 from app.schemas.offer import OfferCreate, OfferUpdate
+from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import (
     CRMToolContext,
     ToolArguments,
     ToolHandler,
     parse_uuid,
+)
+from app.services.ai.crm_assistant._tool_errors import (
+    invalid_argument,
+    invalid_id,
+    not_found,
+    validation_failed,
 )
 
 
@@ -83,31 +90,27 @@ class OfferAssistantTools:
 
     async def list_offers(self, args: ToolArguments) -> dict[str, object]:
         limit = min(args.get("limit", 10), 50)
-        stmt = (
-            select_workspace_owned(Offer, self.context.workspace_id)
-            .order_by(Offer.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select_workspace_owned(Offer, self.context.workspace_id)
         if args.get("active_only"):
             stmt = stmt.where(Offer.is_active.is_(True))
 
-        result = await self.context.db.execute(stmt)
+        total = await count_matching(self.context.db, Offer, stmt)
+        result = await self.context.db.execute(stmt.order_by(Offer.created_at.desc()).limit(limit))
         offers = result.scalars().all()
 
-        return {
-            "success": True,
-            "data": [self.serialize_offer_summary(offer) for offer in offers],
-            "count": len(offers),
-        }
+        return listing(
+            [self.serialize_offer_summary(offer) for offer in offers],
+            total=total,
+        )
 
     async def get_offer_details(self, args: ToolArguments) -> dict[str, object]:
         offer_id = parse_uuid(args.get("offer_id"))
         if offer_id is None:
-            return {"success": False, "error": "Invalid offer_id"}
+            return invalid_id("offer_id", "Call list_offers to get a valid offer id.")
 
         offer = await self.get_offer_for_workspace(offer_id)
         if offer is None:
-            return {"success": False, "error": "Offer not found"}
+            return not_found("Offer", "Call list_offers to get a valid offer id.")
 
         return {"success": True, "data": self.serialize_offer_details(offer)}
 
@@ -115,7 +118,7 @@ class OfferAssistantTools:
         try:
             offer_in = OfferCreate(**{**args, "is_active": False})
         except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+            return validation_failed("Offer", str(exc))
 
         offer = Offer(
             workspace_id=self.context.workspace_id,
@@ -129,21 +132,24 @@ class OfferAssistantTools:
     async def update_offer_draft(self, args: ToolArguments) -> dict[str, object]:
         offer_id = parse_uuid(args.get("offer_id"))
         if offer_id is None:
-            return {"success": False, "error": "Invalid offer_id"}
+            return invalid_id("offer_id", "Call list_offers to get a valid offer id.")
 
         offer = await self.get_offer_for_workspace(offer_id)
         if offer is None:
-            return {"success": False, "error": "Offer not found"}
+            return not_found("Offer", "Call list_offers to get a valid offer id.")
 
         update_args = {key: value for key, value in args.items() if key != "offer_id"}
         try:
             offer_in = OfferUpdate(**update_args)
         except ValueError as exc:
-            return {"success": False, "error": str(exc)}
+            return validation_failed("Offer", str(exc))
 
         update_data = offer_in.model_dump(exclude_unset=True, mode="json")
         if not update_data:
-            return {"success": False, "error": "No offer fields provided"}
+            return invalid_argument(
+                "No offer fields were provided to update.",
+                "Include at least one field to change alongside offer_id.",
+            )
 
         for field, value in update_data.items():
             setattr(offer, field, value)

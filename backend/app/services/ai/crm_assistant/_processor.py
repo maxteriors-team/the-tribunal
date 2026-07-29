@@ -29,7 +29,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
+from app.services.ai.crm_assistant._context_builder import build_context_message
 from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tools import get_crm_tools
@@ -39,11 +41,19 @@ from app.services.ai.openai_credentials import create_workspace_openai_client
 logger = structlog.get_logger()
 
 # ── Configuration ────────────────────────────────────────────────────
-MODEL = "gpt-5.4-nano"
+# The tool loop reasons over ~30 tools and chains multi-step actions — not a
+# lightweight task, so it runs on the balanced tier rather than the cheapest
+# one. Configured in settings so the id can be corrected without a deploy.
+MODEL = settings.openai_assistant_model
+# Prompt rewriting is a single short generation with no tools, so it stays on
+# the cheap tier alongside summarisation.
+ENHANCE_MODEL = settings.openai_assistant_summary_model
 MAX_TOOL_TURNS = 8  # bounded, while allowing search + five detail lookups + synthesis
 HISTORY_LOAD_LIMIT = 60  # rows pulled from DB before summarization
 LLM_TIMEOUT_SECONDS = 45.0
-MAX_COMPLETION_TOKENS = 800
+# 800 truncated multi-record answers mid-table: a 20-contact list plus the
+# lead-in does not fit. Raised so list answers complete.
+MAX_COMPLETION_TOKENS = 2000
 ENHANCE_PROMPT_MAX_TOKENS = 300
 TEMPERATURE = 0.3
 
@@ -118,6 +128,10 @@ You are the CRM operator assistant. Help the user run their CRM by calling tools
 ## Accuracy
 - Ground every factual claim in tool results. Never invent or fill gaps from
   assumptions.
+- List tools return `returned` (rows in this payload), `total` (all matching
+  rows) and `has_more`. Answer "how many" from `total`, never from the number
+  of rows you can see. When `has_more` is true, say the list is partial or
+  re-call with a higher `limit`.
 - If the data can't answer the question, say so in one line and offer the next
   step. Mention a date or source only when it changes the answer — don't
   attach evidence to everything.
@@ -318,8 +332,16 @@ def _attach_image_to_last_user_message(
 async def _build_api_messages(
     db: AsyncSession,
     conversation_id: uuid.UUID,
+    workspace_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
-    """Load recent conversation history and build OpenAI chat messages."""
+    """Load recent history and build OpenAI chat messages.
+
+    The live workspace context is appended as a **second** system message. It
+    must never be merged into ``SYSTEM_PROMPT``: the summarizer preserves
+    ``messages[0]`` byte-identically so OpenAI's prompt-prefix cache keeps
+    hitting, and folding a changing date/count block into it would bust the
+    cache on every single turn.
+    """
     history_result = await db.execute(
         select(AssistantMessage)
         .where(AssistantMessage.conversation_id == conversation_id)
@@ -327,12 +349,13 @@ async def _build_api_messages(
         .limit(HISTORY_LOAD_LIMIT)
     )
     history_rows = list(reversed(history_result.scalars().all()))
-    return _repair_pairing(
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            *_serialize_history(history_rows),
-        ]
-    )
+
+    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    context_message = await build_context_message(db, workspace_id)
+    if context_message is not None:
+        messages.append(context_message)
+    messages.extend(_serialize_history(history_rows))
+    return _repair_pairing(messages)
 
 
 async def _execute_tool_calls_sequential(
@@ -387,7 +410,7 @@ async def enhance_assistant_prompt(
     enhancement_instructions = f"{ENHANCE_PROMPT_SYSTEM}\n\nAvailable tools: {available_tools}"
     response = await asyncio.wait_for(
         client.chat.completions.create(
-            model=MODEL,
+            model=ENHANCE_MODEL,
             messages=[
                 {"role": "system", "content": enhancement_instructions},
                 {"role": "user", "content": prompt.strip()},
@@ -481,7 +504,7 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
         conversation_id=conversation_id,
     )
     await _append_assistant_message(db, conversation, "user", message)
-    api_messages = await _build_api_messages(db, conversation.id)
+    api_messages = await _build_api_messages(db, conversation.id, workspace_id)
 
     client = await create_workspace_openai_client(db, workspace_id)
     cache_key = _cache_key(workspace_id, user_id)
@@ -649,7 +672,7 @@ async def process_assistant_message(  # noqa: PLR0915
     await _append_assistant_message(db, conversation, "user", message)
 
     # ── 3. Load history (most recent N), oldest first ──────────────────
-    api_messages = await _build_api_messages(db, conversation.id)
+    api_messages = await _build_api_messages(db, conversation.id, workspace_id)
 
     client = await create_workspace_openai_client(db, workspace_id)
     cache_key = _cache_key(workspace_id, user_id)
