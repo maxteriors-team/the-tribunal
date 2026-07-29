@@ -5,15 +5,18 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import {
+  useContactAppointments,
+  useContactQuotes,
+} from "@/hooks/useContactRecords";
+import {
   useContactTimeline,
   useToggleContactAI,
   useDeleteContact,
 } from "@/hooks/useContacts";
-import { appointmentsApi } from "@/lib/api/appointments";
 import { callsApi, type InitiateCallRequest } from "@/lib/api/calls";
 import { conversationsApi } from "@/lib/api/conversations";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
-import { quotesApi } from "@/lib/api/quotes";
+import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Contact } from "@/types";
@@ -37,27 +40,13 @@ export function useContactSidebarData({
   );
   const timeline = timelineData ?? [];
 
-  const { data: appointmentsData, isPending: appointmentsLoading } = useQuery({
-    queryKey: queryKeys.appointments.byContact(workspaceId ?? "", contact?.id),
-    queryFn: () =>
-      appointmentsApi.list(workspaceId!, {
-        page: 1,
-        page_size: 50,
-        contact_id: contact!.id,
-      }),
-    enabled: !!workspaceId && !!contact,
-  });
+  const { data: appointmentsData, isPending: appointmentsLoading } =
+    useContactAppointments(workspaceId, contact?.id);
 
-  const { data: quotesData, isPending: quotesLoading } = useQuery({
-    queryKey: queryKeys.quotes.byContact(workspaceId ?? "", contact?.id),
-    queryFn: () =>
-      quotesApi.list(workspaceId!, {
-        page: 1,
-        page_size: 50,
-        contact_id: contact!.id,
-      }),
-    enabled: !!workspaceId && !!contact,
-  });
+  const { data: quotesData, isPending: quotesLoading } = useContactQuotes(
+    workspaceId,
+    contact?.id,
+  );
 
   const { data: phoneNumbersData } = useQuery({
     queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
@@ -128,15 +117,42 @@ export function useContactSidebarData({
   const toggleAIMutation = useToggleContactAI(workspaceId ?? "");
   const deleteContactMutation = useDeleteContact(workspaceId ?? "");
 
+  const phoneNumbers = phoneNumbersData?.items ?? [];
+
+  /**
+   * Dial this contact from the first voice-enabled workspace number. Shared by
+   * the contact rail and the contact detail page so both fail the same way
+   * when the contact or the workspace has no usable number.
+   */
+  const callContact = () => {
+    if (!contact?.phone_number) {
+      toast.error(messages.contacts.noPhoneNumber);
+      return;
+    }
+
+    const voiceEnabledNumbers = phoneNumbers.filter((p) => p.voice_enabled);
+    if (voiceEnabledNumbers.length === 0) {
+      toast.error(messages.phoneNumbers.noneVoiceEnabled);
+      return;
+    }
+
+    initiateCallMutation.mutate({
+      to_number: contact.phone_number,
+      from_phone_number: voiceEnabledNumbers[0].phone_number,
+      contact_phone: contact.phone_number,
+    });
+  };
+
   return {
     timeline,
     appointments: appointmentsData?.items ?? [],
     appointmentsLoading,
     quotes: quotesData?.items ?? [],
     quotesLoading,
-    phoneNumbers: phoneNumbersData?.items ?? [],
+    phoneNumbers,
     aiEnabled,
     setAiEnabled,
+    callContact,
     initiateCallMutation,
     toggleAIMutation,
     deleteContactMutation,

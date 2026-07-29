@@ -1,6 +1,8 @@
 "use client";
 
+import { History } from "lucide-react";
 import { motion } from "motion/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -17,12 +19,12 @@ import { ContactTimeline } from "@/components/contacts/contact-sidebar/contact-t
 import { DeleteContactDialog } from "@/components/contacts/contact-sidebar/delete-contact-dialog";
 import { EngagementSummary } from "@/components/contacts/contact-sidebar/engagement-summary";
 import { ImportantDatesSection } from "@/components/contacts/contact-sidebar/important-dates";
-import { MobileOverlayHeader } from "@/components/contacts/contact-sidebar/mobile-overlay-header";
+import { OverlayHeader } from "@/components/contacts/contact-sidebar/overlay-header";
 import { useContactSidebarData } from "@/components/contacts/contact-sidebar/use-contact-sidebar-data";
 import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appointment-dialog";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { useIsMobile } from "@/hooks/useMobile";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { useContactStore } from "@/lib/contact-store";
 import { messages } from "@/lib/messages";
@@ -37,7 +39,6 @@ interface ContactSidebarProps {
 export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
   const router = useRouter();
   const { selectedContact, setSelectedContact } = useContactStore();
-  const isMobile = useIsMobile();
   const workspaceId = useWorkspaceId();
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
@@ -77,32 +78,13 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
     appointmentsLoading,
     quotes,
     quotesLoading,
-    phoneNumbers,
     aiEnabled,
     setAiEnabled,
+    callContact,
     initiateCallMutation,
     toggleAIMutation,
     deleteContactMutation,
   } = useContactSidebarData({ workspaceId, contact: selectedContact });
-
-  const handleCall = () => {
-    if (!selectedContact?.phone_number) {
-      toast.error(messages.contacts.noPhoneNumber);
-      return;
-    }
-
-    const voiceEnabledNumbers = phoneNumbers.filter((p) => p.voice_enabled);
-    if (voiceEnabledNumbers.length === 0) {
-      toast.error(messages.phoneNumbers.noneVoiceEnabled);
-      return;
-    }
-
-    initiateCallMutation.mutate({
-      to_number: selectedContact.phone_number,
-      from_phone_number: voiceEnabledNumbers[0].phone_number,
-      contact_phone: selectedContact.phone_number,
-    });
-  };
 
   const handleAIEngage = () => {
     if (!selectedContact) return;
@@ -174,11 +156,18 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
       className={cn("flex flex-col h-full bg-background", className)}
       {...(onClose ? { role: "dialog", "aria-modal": true } : {})}
     >
-      {isMobile && onClose && <MobileOverlayHeader onClose={onClose} />}
+      {onClose && <OverlayHeader />}
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-4 space-y-6">
           <ContactHeader contact={selectedContact} />
+
+          <Button variant="outline" size="sm" className="w-full" asChild>
+            <Link href={`/contacts/${selectedContact.id}/details`}>
+              <History className="h-4 w-4" />
+              Details &amp; history
+            </Link>
+          </Button>
 
           <Separator />
           <ContactActions
@@ -186,7 +175,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
             aiEnabled={aiEnabled}
             isCalling={initiateCallMutation.isPending}
             isTogglingAi={toggleAIMutation.isPending}
-            onCall={handleCall}
+            onCall={callContact}
             onSchedule={() => setScheduleDialogOpen(true)}
             onEdit={() => setEditDialogOpen(true)}
             onToggleAi={handleAIEngage}
