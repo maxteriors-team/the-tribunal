@@ -1,5 +1,24 @@
 // Operational reporting types. Mirrors the backend `app/schemas/reporting.py`.
 
+import type { components } from "@/lib/api/_generated";
+
+type Schemas = components["schemas"];
+
+/**
+ * Sales performance (average job value, attach rate, close rate) over a quote
+ * cohort. Sourced from the generated OpenAPI schema rather than hand-written so
+ * the null-vs-zero contract on every rate stays in lockstep with the backend:
+ * a rate is `null` when its denominator is empty, never `0`.
+ */
+export type SalesPerformanceReport = Schemas["SalesPerformanceReport"];
+
+/**
+ * One grouped slice of sales performance. The backend reuses this exact shape
+ * for closer, lead-source, and primary-service breakdowns, so the UI renders
+ * all three with one table component.
+ */
+export type SalesPerformanceBreakdownRow = Schemas["SalesPerformanceBreakdownRow"];
+
 export interface ARAgingBucket {
   label: string;
   amount: number;

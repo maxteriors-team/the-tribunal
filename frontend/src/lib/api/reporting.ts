@@ -1,5 +1,6 @@
 import api from "@/lib/api";
-import type { ARAgingReport, JobPnLSummary } from "@/types";
+import { apiClient } from "@/lib/api/_client";
+import type { ARAgingReport, JobPnLSummary, SalesPerformanceReport } from "@/types";
 
 // Read-only reporting roll-ups (not CRUD), so a small hand-written client.
 export const reportingApi = {
@@ -24,4 +25,15 @@ export const reportingApi = {
     );
     return response.data as JobPnLSummary;
   },
+
+  // Goes through the spec-typed client so the params and the response are both
+  // checked against `_generated.ts` instead of re-declared by hand here.
+  salesPerformance: (
+    workspaceId: string,
+    params: { date_from?: string; date_to?: string } = {}
+  ): Promise<SalesPerformanceReport> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/reports/sales-performance", {
+      path: { workspace_id: workspaceId },
+      query: params,
+    }),
 };

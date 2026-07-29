@@ -32,6 +32,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  Target,
   TreePine,
   UserSearch,
   Users,
@@ -230,6 +231,14 @@ export const workspaceNavItems: AppNavItem[] = [
     commandPalette: true,
     requires: "reports:view",
   },
+  {
+    title: "Sales Performance",
+    url: "/reports/sales",
+    icon: Target,
+    sidebar: true,
+    commandPalette: true,
+    requires: "reports:view",
+  },
 ];
 
 export const leadDiscoveryNavItems: AppNavItem[] = [
@@ -421,6 +430,7 @@ export const breadcrumbLabels: Record<string, string> = {
   calls: "Calls",
   scorecard: "Receptionist Scorecard",
   reports: "Reports",
+  sales: "Sales Performance",
   dashboard: "Dashboard",
   assistant: "Assistant",
   agents: "AI Agents",
