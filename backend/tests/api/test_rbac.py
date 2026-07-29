@@ -252,6 +252,34 @@ async def test_reports_are_denied_to_manager_allowed_to_admin() -> None:
         _clear_overrides()
 
 
+async def test_revenue_targets_are_denied_to_manager_allowed_to_admin() -> None:
+    """A month's goal, and the pace against it, read like the P&L: reports:view."""
+    try:
+        async with _client_as("manager") as client:
+            assert (await client.get(_url("/revenue-targets"))).status_code == 403
+            assert (await client.get(_url("/revenue-targets/pace"))).status_code == 403
+        async with _client_as("admin") as client:
+            assert (await client.get(_url("/revenue-targets"))).status_code != 403
+            assert (await client.get(_url("/revenue-targets/pace"))).status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_setting_a_revenue_target_is_owner_admin_only() -> None:
+    """The goal is the owner's commitment, not an operational setting to move."""
+    body = {"period_month": "2026-06-01", "revenue_goal": 130000}
+    try:
+        for role in ("manager", "dispatcher", "sales_rep", "member", "technician"):
+            async with _client_as(role) as client:
+                resp = await client.put(_url("/revenue-targets"), json=body)
+                assert resp.status_code == 403, role
+        async with _client_as("admin") as client:
+            resp = await client.put(_url("/revenue-targets"), json=body)
+            assert resp.status_code != 403
+    finally:
+        _clear_overrides()
+
+
 async def test_invoice_create_denied_to_tech_and_sales_allowed_to_manager() -> None:
     try:
         for role in ("technician", "sales_rep"):

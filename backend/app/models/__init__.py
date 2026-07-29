@@ -112,6 +112,7 @@ from app.models.prospect_signal import (
 from app.models.quote import Quote, QuoteLineItem
 from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
 from app.models.refresh_token import RefreshToken
+from app.models.revenue_target import RevenueTarget
 from app.models.review import (
     Review,
     ReviewSentiment,
@@ -211,6 +212,7 @@ __all__ = [
     "QuoteLineItem",
     "RecurringJobTemplate",
     "RecurrenceFrequency",
+    "RevenueTarget",
     "MessageTemplate",
     "MessageTest",
     "MessageTestStatus",
