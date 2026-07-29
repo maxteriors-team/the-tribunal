@@ -19,6 +19,20 @@ export const TIMEZONE_OPTIONS = [
 // Simple timezone list (for forms that just need values)
 export const TIMEZONES = TIMEZONE_OPTIONS.map((tz) => tz.value);
 
+// Service lines a catalog item can belong to, mirroring
+// `DEFAULT_SERVICE_CATEGORIES` in `backend/app/models/catalog.py`. Only a
+// suggestion list: the column is a plain string, so a workspace can save any
+// category it runs (decks, holiday lighting) without a migration. Keep this
+// array and the backend tuple in sync.
+export const SERVICE_CATEGORY_OPTIONS = [
+  { value: "roof", label: "Roof" },
+  { value: "siding", label: "Siding" },
+  { value: "gutters", label: "Gutters" },
+  { value: "windows", label: "Windows" },
+  { value: "trim", label: "Trim" },
+  { value: "other", label: "Other" },
+] as const;
+
 // Days of the week options
 export const DAYS_OF_WEEK = [
   { value: 0, label: "Sun" },
