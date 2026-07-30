@@ -7,9 +7,13 @@
  */
 
 import type {
+  AssistantActionSummary,
   AssistantMessageResponse,
   AssistantStreamEvent,
 } from "@/lib/api/assistant";
+import type { PendingAction } from "@/types/pending-action";
+
+export type PendingActionReviewState = "approving" | "rejecting";
 
 export interface RuntimeTool {
   name: string;
@@ -17,23 +21,28 @@ export interface RuntimeTool {
   success?: boolean | null;
 }
 
+export interface RetryRequest {
+  message: string;
+  image: string | null;
+}
+
 export interface ConversationRuntime {
   messages: AssistantMessageResponse[];
   streamingText: string;
-  reasoningText: string;
   activeTools: RuntimeTool[];
   completedTools: RuntimeTool[];
+  pendingApprovals: PendingAction[];
   isStreaming: boolean;
   error: string | null;
-  retryNotice: string | null;
   requestId: string | null;
+  retryRequest: RetryRequest | null;
 }
 
 export interface StreamAccumulator {
   text: string;
-  reasoning: string;
   activeTools: RuntimeTool[];
   completedTools: RuntimeTool[];
+  pendingApprovals: PendingAction[];
 }
 
 /**
@@ -54,18 +63,23 @@ export function emptyRuntime(): ConversationRuntime {
   return {
     messages: [],
     streamingText: "",
-    reasoningText: "",
     activeTools: [],
     completedTools: [],
+    pendingApprovals: [],
     isStreaming: false,
     error: null,
-    retryNotice: null,
     requestId: null,
+    retryRequest: null,
   };
 }
 
-export function emptyAccumulator(): StreamAccumulator {
-  return { text: "", reasoning: "", activeTools: [], completedTools: [] };
+export function emptyAccumulator(pendingApprovals: PendingAction[] = []): StreamAccumulator {
+  return {
+    text: "",
+    activeTools: [],
+    completedTools: [],
+    pendingApprovals,
+  };
 }
 
 export function createRuntimeId(): string {
@@ -107,13 +121,6 @@ export function resolveActiveRuntime(params: {
   return storedRuntime ?? emptyRuntime();
 }
 
-/** Messages shown in the transcript: tool-role messages are internal and hidden. */
-export function selectVisibleMessages(
-  messages: AssistantMessageResponse[],
-): AssistantMessageResponse[] {
-  return messages.filter((message) => message.role !== "tool");
-}
-
 /** Shallow-merge a runtime patch onto an existing (or empty) runtime. */
 export function mergeRuntimePatch(
   runtime: ConversationRuntime | undefined,
@@ -130,18 +137,21 @@ export function startUserTurn(
   runtime: ConversationRuntime,
   userMessage: AssistantMessageResponse,
   requestId: string,
+  appendUserMessage = true,
 ): ConversationRuntime {
   return {
     ...runtime,
-    messages: [...runtime.messages, userMessage],
+    messages: appendUserMessage ? [...runtime.messages, userMessage] : runtime.messages,
     streamingText: "",
-    reasoningText: "",
     activeTools: [],
     completedTools: [],
     isStreaming: true,
     error: null,
-    retryNotice: null,
     requestId,
+    retryRequest: {
+      message: userMessage.content,
+      image: userMessage.image ?? null,
+    },
   };
 }
 
@@ -156,9 +166,7 @@ export function applyStreamResult(
   return {
     ...runtime,
     ...result.patch,
-    messages: result.appendMessage
-      ? [...runtime.messages, result.appendMessage]
-      : runtime.messages,
+    messages: result.appendMessage ? [...runtime.messages, result.appendMessage] : runtime.messages,
   };
 }
 
@@ -185,19 +193,6 @@ export function reduceStreamEvent(
       };
     }
 
-    case "reasoning": {
-      const nextAccumulator = {
-        ...accumulator,
-        reasoning: accumulator.reasoning + event.text,
-      };
-      return {
-        accumulator: nextAccumulator,
-        patch: { reasoningText: nextAccumulator.reasoning },
-        appendMessage: null,
-        finished: false,
-      };
-    }
-
     case "tool_start": {
       const activeTools: RuntimeTool[] = [
         ...accumulator.activeTools.filter((tool) => tool.name !== event.name),
@@ -213,9 +208,7 @@ export function reduceStreamEvent(
     }
 
     case "tool_end": {
-      const activeTools = accumulator.activeTools.filter(
-        (tool) => tool.name !== event.name,
-      );
+      const activeTools = accumulator.activeTools.filter((tool) => tool.name !== event.name);
       const completedTools: RuntimeTool[] = [
         ...accumulator.completedTools,
         { name: event.name, status: "complete", success: event.success },
@@ -229,37 +222,40 @@ export function reduceStreamEvent(
       };
     }
 
-    case "retry":
+    case "pending_approval": {
+      const pendingApprovals = [
+        ...accumulator.pendingApprovals.filter((action) => action.id !== event.action.id),
+        event.action,
+      ];
+      const nextAccumulator = { ...accumulator, pendingApprovals };
       return {
-        accumulator,
-        patch: {
-          retryNotice: `Retrying ${event.reason.replaceAll("_", " ")} (${event.attempt})`,
-        },
+        accumulator: nextAccumulator,
+        patch: { pendingApprovals },
         appendMessage: null,
         finished: false,
       };
+    }
 
     case "error":
       return {
         accumulator,
         patch: { isStreaming: false, error: event.message, requestId: null },
         appendMessage: null,
-        finished: false,
+        finished: true,
       };
 
     case "done": {
       const timestamp = now();
       const appendMessage: AssistantMessageResponse | null = accumulator.text
         ? {
-            id:
-              event.message_id ??
-              `assistant-${event.conversation_id}-${timestamp.getTime()}`,
+            id: event.message_id ?? `assistant-${event.conversation_id}-${timestamp.getTime()}`,
             role: "assistant",
             content: accumulator.text,
             tool_calls: accumulator.completedTools.map((tool, index) => ({
               id: `tool-${index}`,
               function: { name: tool.name, arguments: "{}" },
             })),
+            actions_taken: event.actions_taken,
             created_at: timestamp.toISOString(),
           }
         : null;
@@ -267,13 +263,12 @@ export function reduceStreamEvent(
         accumulator,
         patch: {
           streamingText: "",
-          reasoningText: "",
           activeTools: [],
           completedTools: accumulator.completedTools,
           isStreaming: false,
           error: null,
-          retryNotice: null,
           requestId: null,
+          retryRequest: null,
         },
         appendMessage,
         finished: true,
@@ -284,13 +279,52 @@ export function reduceStreamEvent(
 
 export function toolNamesFromMessage(message: AssistantMessageResponse): string[] {
   return (message.tool_calls ?? [])
-    .map((toolCall) => toolCall.function?.name)
+    .map((toolCall) => toolCall.function.name)
     .filter((name): name is string => Boolean(name));
 }
 
-export function parseWorkflowPayload(
-  content: string,
-): Record<string, unknown> | null {
+/** Attach persisted tool results to their originating assistant tool calls. */
+export function selectVisibleMessages(
+  messages: AssistantMessageResponse[],
+): AssistantMessageResponse[] {
+  const toolResults = new Map(
+    messages
+      .filter((message) => message.role === "tool" && message.tool_call_id)
+      .map((message) => [message.tool_call_id as string, parseJsonRecord(message.content)]),
+  );
+
+  return messages
+    .filter((message) => message.role !== "tool")
+    .map((message) => {
+      if (message.actions_taken?.length || !message.tool_calls?.length) return message;
+
+      const actionsTaken: AssistantActionSummary[] = message.tool_calls.map((toolCall) => {
+        const result = toolResults.get(toolCall.id) ?? {};
+        return {
+          tool_name: toolCall.function.name,
+          success: typeof result.success === "boolean" ? result.success : false,
+          summary: JSON.stringify(result).slice(0, 200),
+          arguments: parseJsonRecord(toolCall.function.arguments),
+          result,
+        };
+      });
+      return { ...message, actions_taken: actionsTaken };
+    });
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return { value: parsed };
+  } catch {
+    return { value };
+  }
+}
+
+export function parseWorkflowPayload(content: string): Record<string, unknown> | null {
   if (!content.trim().startsWith("{")) return null;
 
   try {

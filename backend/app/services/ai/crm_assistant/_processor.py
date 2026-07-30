@@ -31,6 +31,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
+from app.models.pending_action import PendingAction
+from app.schemas.pending_action import pending_action_response
 from app.services.ai.crm_assistant._context_builder import build_context_message
 from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
@@ -137,6 +139,13 @@ You are the CRM operator assistant. Help the user run their CRM by calling tools
   attach evidence to everything.
 - Keep facts and your recommendation distinct, but state the recommendation
   plainly without a criteria breakdown unless the user asks how you ranked.
+
+## Product questions
+- For "how do I", "where do I", "what's the difference", or "does the system"
+  questions about this CRM, call search_help first and answer from the passages
+  it returns. Your own memory of how CRMs work is not evidence about this one.
+- Never demonstrate a how-to by creating a record. Explaining and doing are
+  separate requests.
 
 ## How to work
 - Prefer tools over guessing. If you need data, call a tool.
@@ -399,6 +408,36 @@ def _api_params(api_messages: list[dict[str, Any]], cache_key: str) -> dict[str,
     }
 
 
+async def _pending_approval_event(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    tool_result: dict[str, Any],
+) -> AssistantStreamEvent | None:
+    """Load and serialize the queued action referenced by a tool result."""
+    if not tool_result.get("pending_approval"):
+        return None
+
+    raw_action_id = tool_result.get("pending_action_id")
+    try:
+        action_id = uuid.UUID(str(raw_action_id))
+    except (TypeError, ValueError):
+        return None
+
+    result = await db.execute(
+        select(PendingAction).where(
+            PendingAction.id == action_id,
+            PendingAction.workspace_id == workspace_id,
+        )
+    )
+    action = result.scalar_one_or_none()
+    if action is None:
+        return None
+    return {
+        "type": "pending_approval",
+        "action": pending_action_response(action).model_dump(mode="json"),
+    }
+
+
 async def enhance_assistant_prompt(
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -576,7 +615,22 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
                 executions.append(
                     {"id": tool_call.id, "name": name, "arguments": args, "result": result}
                 )
-                yield {"type": "tool_end", "name": name, "success": result.get("success", False)}
+                yield {
+                    "type": "tool_end",
+                    "name": name,
+                    "success": None
+                    if result.get("pending_approval")
+                    else result.get("success", False),
+                }
+                if result.get("pending_approval"):
+                    pending_event = await _pending_approval_event(db, workspace_id, result)
+                    if pending_event is not None:
+                        yield pending_event
+                    else:
+                        log.error(
+                            "assistant_pending_approval_event_missing",
+                            pending_action_id=result.get("pending_action_id"),
+                        )
 
             for ex in executions:
                 result_json = json.dumps(ex["result"])
@@ -595,6 +649,8 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
                         "tool_name": ex["name"],
                         "success": ex["result"].get("success", False),
                         "summary": result_json[:200],
+                        "arguments": ex["arguments"],
+                        "result": ex["result"],
                     }
                 )
         else:
@@ -650,7 +706,7 @@ async def process_assistant_message(  # noqa: PLR0915
 
     Returns a dict with:
         response: str — final assistant text
-        actions_taken: list[{tool_name, success, summary}]
+        actions_taken: list[{tool_name, success, summary, arguments, result}]
     """
     log = logger.bind(
         workspace_id=str(workspace_id),
@@ -759,6 +815,8 @@ async def process_assistant_message(  # noqa: PLR0915
                         "tool_name": ex["name"],
                         "success": ex["result"].get("success", False),
                         "summary": result_json[:200],
+                        "arguments": ex["arguments"],
+                        "result": ex["result"],
                     }
                 )
             await db.flush()

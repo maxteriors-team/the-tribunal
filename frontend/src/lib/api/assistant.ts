@@ -1,6 +1,7 @@
 /** CRM Assistant API client. */
 
 import api from "@/lib/api";
+import type { PendingAction } from "@/types/pending-action";
 
 export type AssistantRole = "user" | "assistant" | "tool";
 
@@ -8,6 +9,8 @@ export interface AssistantActionSummary {
   tool_name: string;
   success: boolean;
   summary: string;
+  arguments?: Record<string, unknown>;
+  result?: Record<string, unknown>;
 }
 
 export interface AssistantChatResponse {
@@ -28,6 +31,7 @@ export interface AssistantMessageResponse {
   image?: string | null;
   tool_calls?: { id: string; function: { name: string; arguments: string } }[] | null;
   tool_call_id?: string | null;
+  actions_taken?: AssistantActionSummary[];
   created_at: string;
 }
 
@@ -48,10 +52,9 @@ export interface AssistantConversationMetaResponse {
 
 export type AssistantStreamEvent =
   | { type: "delta"; text: string }
-  | { type: "reasoning"; text: string }
   | { type: "tool_start"; name: string }
   | { type: "tool_end"; name: string; success?: boolean | null }
-  | { type: "retry"; reason: string; attempt: number }
+  | { type: "pending_approval"; action: PendingAction }
   | { type: "error"; message: string }
   | {
       type: "done";
@@ -69,8 +72,7 @@ interface StreamChatParams {
   onEvent: (event: AssistantStreamEvent) => void;
 }
 
-const basePath = (workspaceId: string) =>
-  `/api/v1/workspaces/${workspaceId}/assistant`;
+const basePath = (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/assistant`;
 
 function parseSseFrames(buffer: string): { frames: string[]; remainder: string } {
   const frames: string[] = [];
@@ -115,25 +117,22 @@ export const assistantApi = {
     conversationId?: string | null,
     image?: string | null,
   ): Promise<AssistantChatResponse> => {
-    const { data } = await api.post<AssistantChatResponse>(
-      `${basePath(workspaceId)}/chat`,
-      { message, conversation_id: conversationId ?? null, image: image ?? null },
-    );
+    const { data } = await api.post<AssistantChatResponse>(`${basePath(workspaceId)}/chat`, {
+      message,
+      conversation_id: conversationId ?? null,
+      image: image ?? null,
+    });
     return data;
   },
 
-  getHistory: async (
-    workspaceId: string,
-  ): Promise<AssistantConversationResponse | null> => {
+  getHistory: async (workspaceId: string): Promise<AssistantConversationResponse | null> => {
     const { data } = await api.get<AssistantConversationResponse | null>(
       `${basePath(workspaceId)}/history`,
     );
     return data;
   },
 
-  listConversations: async (
-    workspaceId: string,
-  ): Promise<AssistantConversationMetaResponse[]> => {
+  listConversations: async (workspaceId: string): Promise<AssistantConversationMetaResponse[]> => {
     const { data } = await api.get<AssistantConversationMetaResponse[]>(
       `${basePath(workspaceId)}/conversations`,
     );
@@ -150,10 +149,7 @@ export const assistantApi = {
     return data;
   },
 
-  deleteConversation: async (
-    workspaceId: string,
-    conversationId: string,
-  ): Promise<void> => {
+  deleteConversation: async (workspaceId: string, conversationId: string): Promise<void> => {
     await api.delete(`${basePath(workspaceId)}/conversations/${conversationId}`);
   },
 
@@ -165,26 +161,28 @@ export const assistantApi = {
     signal,
     onEvent,
   }: StreamChatParams): Promise<void> => {
-    const response = await fetch(`${basePath(workspaceId)}/chat/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      signal,
-      body: JSON.stringify({
+    const { data: body } = await api.post<ReadableStream<Uint8Array> | null>(
+      `${basePath(workspaceId)}/chat/stream`,
+      {
         message,
         conversation_id: conversationId ?? null,
         image: image ?? null,
-      }),
-    });
+      },
+      {
+        // Axios's fetch adapter exposes the ReadableStream while preserving the
+        // shared 401 refresh interceptor. XHR buffers this response instead.
+        adapter: "fetch",
+        responseType: "stream",
+        signal,
+        timeout: 0,
+      },
+    );
 
-    if (!response.ok) {
-      throw new Error(`Assistant stream failed with status ${response.status}`);
-    }
-    if (!response.body) {
+    if (!body) {
       throw new Error("Assistant stream response did not include a body");
     }
 
-    const reader = response.body.getReader();
+    const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
 
