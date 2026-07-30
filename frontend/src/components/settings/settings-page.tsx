@@ -1,11 +1,12 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign, CalendarClock, History } from "lucide-react";
+import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign, CalendarClock, History, Home } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
+import { NeighborOutreachSettingsTab } from "@/components/settings/neighbor-outreach-settings-tab";
 import { NotificationsSettingsTab } from "@/components/settings/notifications-settings-tab";
 import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
 import { PermanentPricingSettingsCard } from "@/components/settings/permanent-pricing-settings-card";
@@ -32,6 +33,7 @@ const settingsTabs = [
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
   { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
   { value: "quote-revival", label: "Quote Revival", icon: History },
+  { value: "neighbors", label: "Neighbors", icon: Home },
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
   { value: "team", label: "Team", icon: Building2 },
@@ -133,6 +135,12 @@ export function SettingsPage() {
         <TabsContent value="quote-revival">
           <QueryErrorBoundary message="Failed to load quote revival settings. Please try again.">
             <QuoteRevivalSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="neighbors">
+          <QueryErrorBoundary message="Failed to load neighbor outreach settings. Please try again.">
+            <NeighborOutreachSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

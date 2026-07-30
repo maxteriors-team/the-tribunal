@@ -24,6 +24,18 @@ export type JobExpense = Schemas["JobExpenseResponse"];
 export type JobExpenseCreate = Schemas["JobExpenseCreate"];
 export type JobProfitability = Schemas["JobProfitability"];
 
+// Neighbor outreach: the street around a finished job.
+export type NeighborBatch = Schemas["NeighborOutreachBatchResponse"];
+export type NeighborEntry = Schemas["NeighborOutreachEntryResponse"];
+export type NeighborStatus = Schemas["NeighborOutreachStatus"];
+export type NeighborChannel = Schemas["NeighborOutreachChannel"];
+export type NeighborGenerateRequest = Schemas["NeighborOutreachGenerateRequest"];
+export type NeighborEntryUpdate = Schemas["NeighborOutreachEntryUpdate"];
+export type NeighborExport = Schemas["NeighborOutreachExportResponse"];
+export type NeighborExportRow = Schemas["NeighborOutreachExportRow"];
+export type NeighborCampaignRequest = Schemas["NeighborOutreachCampaignRequest"];
+export type NeighborCampaignResult = Schemas["NeighborOutreachCampaignResponse"];
+
 export interface JobListParams {
   status?: JobStatus;
   crew_id?: string;
@@ -136,5 +148,54 @@ export const jobsApi = {
   profitability: (workspaceId: string, jobId: string): Promise<JobProfitability> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability", {
       path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  // ----- Neighbor outreach ----- //
+  /** The generated neighbour list for a job. Rejects with 404 until generated. */
+  neighbors: (workspaceId: string, jobId: string): Promise<NeighborBatch> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  /** Generate or top up the list. Idempotent — existing statuses are preserved. */
+  generateNeighbors: (
+    workspaceId: string,
+    jobId: string,
+    body: NeighborGenerateRequest = {},
+  ): Promise<NeighborBatch> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  /** Door-hanger / direct-mail rows, including each neighbour's postal address. */
+  neighborsExport: (workspaceId: string, jobId: string): Promise<NeighborExport> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/export", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  updateNeighborEntry: (
+    workspaceId: string,
+    jobId: string,
+    entryId: string,
+    body: NeighborEntryUpdate,
+  ): Promise<NeighborEntry> =>
+    apiClient.patch(
+      "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/entries/{entry_id}",
+      {
+        path: { workspace_id: workspaceId, job_id: jobId, entry_id: entryId },
+        body,
+      },
+    ),
+
+  /** Enroll the consented subset of the batch into an existing campaign. */
+  enrollNeighbors: (
+    workspaceId: string,
+    jobId: string,
+    body: NeighborCampaignRequest,
+  ): Promise<NeighborCampaignResult> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/campaign", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
     }),
 };

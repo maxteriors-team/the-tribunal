@@ -43,3 +43,20 @@ export function getApiErrorCode(err: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Extracts the HTTP status code from an Axios-style error, or `null` for a
+ * network/transport failure that never reached the server.
+ *
+ * Use it to distinguish an *expected* status from a real fault — e.g. a 404 that
+ * simply means "this resource has not been created yet" should render an empty
+ * state and must not be retried.
+ */
+export function getApiErrorStatus(err: unknown): number | null {
+  if (typeof err === "object" && err !== null && "response" in err) {
+    const axErr = err as { response?: { status?: unknown } };
+    const status = axErr.response?.status;
+    if (typeof status === "number") return status;
+  }
+  return null;
+}
