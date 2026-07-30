@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useGenerateNeighbors,
   useJobNeighbors,
@@ -75,6 +76,12 @@ export function JobNeighborsPanel({
   jobId,
   readOnly = false,
 }: JobNeighborsPanelProps) {
+  // Mirror the server: generate, export, and status changes are all dispatcher
+  // writes (`jobs:write`). Without this a technician would be shown an "Export
+  // list" button that only ever returns a 403 — and the export is a page of
+  // neighbours' home addresses, so it is not a button to offer speculatively.
+  const { can } = useCapabilities();
+  const canWrite = !readOnly && can("jobs:write");
   const neighbors = useJobNeighbors(workspaceId, jobId);
   const generate = useGenerateNeighbors(workspaceId, jobId);
   const updateEntry = useUpdateNeighborEntry(workspaceId, jobId);
@@ -189,7 +196,7 @@ export function JobNeighborsPanel({
               : "Nothing else is mapped inside the search radius. Widen it in Settings → Neighbors."}
           </p>
         </div>
-        {!readOnly && (
+        {canWrite && (
           <Button size="sm" onClick={handleGenerate} disabled={generate.isPending}>
             {generate.isPending ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
@@ -212,7 +219,7 @@ export function JobNeighborsPanel({
           {entries.length} within {metersLabel(batch?.radius_meters ?? 0)} ·{" "}
           {batch?.pending_count ?? 0} to work
         </p>
-        {!readOnly && (
+        {canWrite && (
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -262,7 +269,7 @@ export function JobNeighborsPanel({
             <Select
               value={entry.status}
               onValueChange={(value) => handleStatus(entry, value as NeighborStatus)}
-              disabled={readOnly || updateEntry.isPending}
+              disabled={!canWrite || updateEntry.isPending}
             >
               <SelectTrigger
                 className="h-8 w-32"
