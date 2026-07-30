@@ -52,6 +52,7 @@ from app.api.v1 import (
     quotes,
     realtime,
     recurring_jobs,
+    referral_partners,
     reporting,
     revenue_targets,
     reviews,
@@ -333,6 +334,13 @@ api_router.include_router(
     lead_sources.spend_router,
     prefix="/workspaces/{workspace_id}/lead-source-spend",
     tags=["Lead Sources"],
+)
+# Referral partners: the named people/companies behind the referral channel,
+# plus the per-partner production scoreboard and gone-quiet call list.
+api_router.include_router(
+    referral_partners.router,
+    prefix="/workspaces/{workspace_id}/referral-partners",
+    tags=["Referral Partners"],
 )
 # Field service: locations, crews, technicians (ServiceTitan/Jobber-style)
 api_router.include_router(

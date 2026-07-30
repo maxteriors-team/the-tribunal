@@ -16,6 +16,7 @@ import {
   FileText,
   FlaskConical,
   Gift,
+  Handshake,
   KanbanSquare,
   LayoutDashboard,
   Layers,
@@ -316,6 +317,18 @@ export const toolsNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    // The named people behind the referral channel. Visibility mirrors the
+    // backend read gate (any workspace member); the write affordances inside the
+    // page are gated separately on `crm:write`, which matches the manager-and-up
+    // role required by the write routes.
+    title: "Referral Partners",
+    url: "/referral-partners",
+    icon: Handshake,
+    sidebar: true,
+    commandPalette: true,
+    requires: "crm:read",
+  },
+  {
     title: "Lead Magnets",
     url: "/lead-magnets",
     icon: Magnet,
@@ -440,6 +453,8 @@ export const breadcrumbLabels: Record<string, string> = {
   suggestions: "AI Suggestions",
   offers: "Offers",
   reviews: "Reviews",
+  "referral-partners": "Referral Partners",
+  partner: "Partner",
   "lead-magnets": "Lead Magnets",
   "phone-numbers": "Phone Numbers",
   automations: "Automations",

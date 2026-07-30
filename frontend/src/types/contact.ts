@@ -84,6 +84,8 @@ export interface Contact {
   latest_touch_lead_source_campaign_id?: string | null;
   latest_touch_at?: string | null;
   attribution_confidence?: number | null;
+  /** Named referral partner who sent this lead, when the channel was a referral. */
+  referral_partner_id?: string | null;
   lead_source_raw_answer?: string | null;
   created_at: string;
   updated_at: string;

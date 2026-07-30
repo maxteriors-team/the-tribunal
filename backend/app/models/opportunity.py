@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.lead_source import LeadSource, LeadSourceCampaign
     from app.models.pipeline import Pipeline, PipelineStage
+    from app.models.referral_partner import ReferralPartner
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -131,6 +132,15 @@ class Opportunity(Base):
         index=True,
     )
     attribution_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Part of the same snapshot: the named referral partner credited with this
+    # job. Lives here — not in a separate attribution table — so closed-won
+    # revenue per partner is one join off the rows ROI reporting already scans.
+    referral_partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("referral_partners.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     status: Mapped[str] = mapped_column(
         Enum("open", "won", "lost", "abandoned", name="opportunity_status"),
@@ -164,6 +174,9 @@ class Opportunity(Base):
     )
     lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
         "LeadSourceCampaign", foreign_keys=[lead_source_campaign_id]
+    )
+    referral_partner: Mapped["ReferralPartner | None"] = relationship(
+        "ReferralPartner", foreign_keys=[referral_partner_id]
     )
     assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     closed_by_user: Mapped["User | None"] = relationship("User", foreign_keys=[closed_by_id])

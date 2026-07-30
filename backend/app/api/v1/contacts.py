@@ -27,6 +27,7 @@ from app.api.deps import (
 from app.api.service_errors import ServiceErrorRoute
 from app.models.contact import Contact
 from app.models.lead_source import LeadSource
+from app.models.referral_partner import ReferralPartner
 from app.schemas.contact import (
     AIToggleRequest,
     AIToggleResponse,
@@ -294,6 +295,19 @@ async def create_contact_manually(
             "latest_touch_at": captured_at,
             "attribution_confidence": MANUAL_ASSIGNMENT_CONFIDENCE,
         }
+
+    # Who referred this lead is recorded whether or not a lead source was picked,
+    # so a workspace that never configured lead sources still builds a partner
+    # scoreboard. Validated in-tenant and active: crediting a retired or another
+    # tenant's partner would silently corrupt the scoreboard.
+    if contact_in.referral_partner_id is not None:
+        partner = await db.get(ReferralPartner, contact_in.referral_partner_id)
+        if partner is None or partner.workspace_id != workspace_id or not partner.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Select an active referral partner from this workspace",
+            )
+        attribution_fields["referral_partner_id"] = contact_in.referral_partner_id
 
     return await _create_contact_record(
         workspace_id=workspace_id,
