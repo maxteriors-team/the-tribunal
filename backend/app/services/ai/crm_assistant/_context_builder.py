@@ -39,6 +39,13 @@ from app.models.workspace import Workspace
 
 logger = structlog.get_logger()
 
+# Framing for the live-context block: these facts are fresh, but they are a
+# summary — a claim about one specific record still needs a tool call.
+_CONTEXT_PREAMBLE = (
+    "Live facts about this workspace. Prefer these over assumptions, but "
+    "still call a tool before making a claim about a specific record."
+)
+
 # Per-list cap. Enough to be useful for name resolution, small enough that the
 # block stays a few hundred tokens on a busy workspace.
 _MAX_ITEMS = 15
@@ -71,8 +78,7 @@ class WorkspaceContext:
         local_now = self.now.astimezone(resolve_timezone(self.timezone_name))
         lines = [
             "## Current workspace context",
-            "Live facts about this workspace. Prefer these over assumptions, but "
-            "still call a tool before making a claim about a specific record.",
+            _CONTEXT_PREAMBLE,
             "",
             f"- Now: {local_now.strftime('%A %d %B %Y, %H:%M')} ({self.timezone_name})",
             f"- Today's date: {local_now.date().isoformat()}",

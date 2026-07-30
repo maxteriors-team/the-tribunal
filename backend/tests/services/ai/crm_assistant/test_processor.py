@@ -35,8 +35,6 @@ def _make_response(
 
 
 def _tool_call(call_id: str, name: str, args: dict[str, Any]) -> SimpleNamespace:
-    import json
-
     return SimpleNamespace(
         id=call_id,
         function=SimpleNamespace(name=name, arguments=json.dumps(args)),
