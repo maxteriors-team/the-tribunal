@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
 import type { NeighborBatch, NeighborEntry } from "@/lib/api/jobs";
+import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
 
 /**
  * The "Neighbors" tab on a completed job.
@@ -15,12 +16,14 @@ import type { NeighborBatch, NeighborEntry } from "@/lib/api/jobs";
  * error. The export is built in the browser because the rows are customer PII.
  */
 
-const { neighborsMock, generateMock, updateEntryMock, exportMock } = vi.hoisted(() => ({
-  neighborsMock: vi.fn(),
-  generateMock: vi.fn(),
-  updateEntryMock: vi.fn(),
-  exportMock: vi.fn(),
-}));
+const { neighborsMock, generateMock, updateEntryMock, exportMock, capabilitiesMock } =
+  vi.hoisted(() => ({
+    neighborsMock: vi.fn(),
+    generateMock: vi.fn(),
+    updateEntryMock: vi.fn(),
+    exportMock: vi.fn(),
+    capabilitiesMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/api/jobs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/jobs")>("@/lib/api/jobs");
@@ -35,6 +38,19 @@ vi.mock("@/lib/api/jobs", async () => {
     },
   };
 });
+
+// Capabilities need a workspace provider; drive them from a role string through
+// the real permission matrix instead, so the matrix and this gate stay in sync.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => capabilitiesMock(),
+}));
+
+function signedInAs(role: string) {
+  capabilitiesMock.mockReturnValue({
+    tier: roleTier(role),
+    can: (capability: Capability) => roleCan(role, capability),
+  });
+}
 
 function notFound() {
   return Object.assign(new Error("Not found"), { response: { status: 404 } });
@@ -89,6 +105,7 @@ function renderPanel(props: { readOnly?: boolean } = {}) {
 describe("JobNeighborsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    signedInAs("dispatcher");
   });
 
   it("treats a 404 as 'not generated yet', not a failure", async () => {
@@ -188,6 +205,16 @@ describe("JobNeighborsPanel", () => {
     expect(await screen.findByText("Dana Ruiz")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Export list/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Refresh/i })).not.toBeInTheDocument();
+  });
+
+  it("never offers the address export to a technician", async () => {
+    signedInAs("technician");
+    neighborsMock.mockResolvedValue(batch([entry()]));
+    renderPanel();
+
+    expect(await screen.findByText("Dana Ruiz")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export list/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status for Dana Ruiz")).toBeDisabled();
   });
 
   it("builds the print export in the browser rather than fetching a server file", async () => {
