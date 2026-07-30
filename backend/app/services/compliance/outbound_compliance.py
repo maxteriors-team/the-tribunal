@@ -2,7 +2,7 @@
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
@@ -31,6 +31,23 @@ class OutboundComplianceRequest:
 
 
 @dataclass(slots=True, frozen=True)
+class DirectOutboundComplianceRequest:
+    """Compliance input for transactional sends outside a Campaign row."""
+
+    workspace_id: uuid.UUID
+    channel: str
+    action_type: str
+    now: datetime
+    phone_number: str | None = None
+    sms_consent_status: str | None = None
+    contact_id: int | None = None
+    quiet_hours_start: time | None = None
+    quiet_hours_end: time | None = None
+    timezone: str = "UTC"
+    require_sms_consent: bool = True
+
+
+@dataclass(slots=True, frozen=True)
 class OutboundComplianceResult:
     """Result of outbound compliance evaluation."""
 
@@ -49,6 +66,55 @@ class OutboundComplianceResult:
         if self.next_allowed_at is not None:
             payload["next_allowed_at"] = self.next_allowed_at.isoformat()
         return payload
+
+
+def evaluate_quiet_hours(
+    *,
+    now: datetime,
+    start: time | None,
+    end: time | None,
+    timezone_name: str,
+    log_context: dict[str, object] | None = None,
+) -> OutboundComplianceResult:
+    """Evaluate a local quiet-hours window for every outbound workflow.
+
+    Keeping timezone/window math here gives campaign sends, post-estimate
+    follow-up, and future transactional workers one tested implementation.
+    """
+    if start is None or end is None:
+        return OutboundComplianceResult(allowed=True)
+
+    resolved_timezone = timezone_name or "UTC"
+    try:
+        local_now = now.astimezone(ZoneInfo(resolved_timezone))
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "invalid_quiet_hours_timezone",
+            timezone=resolved_timezone,
+            **(log_context or {}),
+        )
+        resolved_timezone = "UTC"
+        local_now = now.astimezone(ZoneInfo(resolved_timezone))
+
+    local_time = local_now.time()
+    if start <= end:
+        in_quiet_hours = start <= local_time < end
+    else:
+        in_quiet_hours = local_time >= start or local_time < end
+
+    if not in_quiet_hours:
+        return OutboundComplianceResult(allowed=True)
+
+    return OutboundComplianceResult(
+        allowed=False,
+        reason="quiet_hours",
+        details={
+            "quiet_hours_start": start.isoformat(),
+            "quiet_hours_end": end.isoformat(),
+            "timezone": resolved_timezone,
+            "local_time": local_time.isoformat(),
+        },
+    )
 
 
 class OutboundComplianceService:
@@ -123,6 +189,54 @@ class OutboundComplianceService:
             },
         )
 
+    async def evaluate_direct(
+        self,
+        request: DirectOutboundComplianceRequest,
+        db: AsyncSession,
+    ) -> OutboundComplianceResult:
+        """Evaluate opt-out, consent, and quiet hours without a Campaign row."""
+        details: dict[str, object] = {
+            "action_type": request.action_type,
+            "channel": request.channel,
+        }
+        if request.contact_id is not None:
+            details["contact_id"] = request.contact_id
+
+        if request.phone_number and await self.opt_out_manager.check_opt_out(
+            request.workspace_id, request.phone_number, db
+        ):
+            return OutboundComplianceResult(
+                allowed=False,
+                reason="global_opt_out",
+                details=details,
+            )
+
+        if request.channel == "sms" and request.require_sms_consent:
+            consent_status = request.sms_consent_status or "unknown"
+            if consent_status != self.OPTED_IN:
+                return OutboundComplianceResult(
+                    allowed=False,
+                    reason="missing_sms_consent",
+                    details={**details, "sms_consent_status": consent_status},
+                )
+
+        quiet_hours_result = evaluate_quiet_hours(
+            now=request.now,
+            start=request.quiet_hours_start,
+            end=request.quiet_hours_end,
+            timezone_name=request.timezone,
+            log_context={"action_type": request.action_type},
+        )
+        if not quiet_hours_result.allowed:
+            return OutboundComplianceResult(
+                allowed=False,
+                reason=quiet_hours_result.reason,
+                details={**details, **quiet_hours_result.details},
+                next_allowed_at=quiet_hours_result.next_allowed_at,
+            )
+
+        return OutboundComplianceResult(allowed=True, details=details)
+
     def apply_suppression(
         self,
         campaign_contact: CampaignContact,
@@ -176,41 +290,21 @@ class OutboundComplianceService:
         return bool(duplicate_result.scalar())
 
     def _evaluate_quiet_hours(self, request: OutboundComplianceRequest) -> OutboundComplianceResult:
-        start = request.campaign.quiet_hours_start
-        end = request.campaign.quiet_hours_end
-        if start is None or end is None:
-            return OutboundComplianceResult(allowed=True)
-
-        timezone_name = request.campaign.quiet_hours_timezone or request.campaign.timezone or "UTC"
-        try:
-            local_now = request.now.astimezone(ZoneInfo(timezone_name))
-        except ZoneInfoNotFoundError:
-            self.logger.warning(
-                "invalid_quiet_hours_timezone",
-                timezone=timezone_name,
-                campaign_id=str(request.campaign.id),
-            )
-            local_now = request.now.astimezone(ZoneInfo("UTC"))
-            timezone_name = "UTC"
-
-        local_time = local_now.time()
-        if start <= end:
-            in_quiet_hours = start <= local_time < end
-        else:
-            in_quiet_hours = local_time >= start or local_time < end
-
-        if not in_quiet_hours:
-            return OutboundComplianceResult(allowed=True)
-
+        result = evaluate_quiet_hours(
+            now=request.now,
+            start=request.campaign.quiet_hours_start,
+            end=request.campaign.quiet_hours_end,
+            timezone_name=(
+                request.campaign.quiet_hours_timezone or request.campaign.timezone or "UTC"
+            ),
+            log_context={"campaign_id": str(request.campaign.id)},
+        )
+        if result.allowed:
+            return result
         return self._blocked(
-            "quiet_hours",
+            result.reason or "quiet_hours",
             request,
-            {
-                "quiet_hours_start": start.isoformat(),
-                "quiet_hours_end": end.isoformat(),
-                "timezone": timezone_name,
-                "local_time": local_time.isoformat(),
-            },
+            result.details,
         )
 
     def _blocked(

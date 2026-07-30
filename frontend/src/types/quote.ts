@@ -1,5 +1,7 @@
 // Quote (estimate) types. Mirrors the backend `app/schemas/quote.py` contract.
 
+import type { FinancingEstimate } from "./financing";
+
 export type QuoteStatus =
   | "draft"
   | "sent"
@@ -34,6 +36,8 @@ export interface Quote {
   discount_amount: number;
   total: number;
   currency: string;
+  /** Server-computed estimate for category-qualified quotes; never an offer. */
+  financing?: FinancingEstimate | null;
   /** Optional upfront deposit as a percentage of the total (0–100); null = none. */
   deposit_percentage?: number | null;
   deposit_amount_fixed?: number | null;

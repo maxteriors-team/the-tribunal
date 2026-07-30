@@ -341,6 +341,13 @@ export const queryKeys = {
       ["reports", workspaceId, "ar-aging", asOf ?? null] as const,
     jobPnl: (workspaceId: string, params?: QueryKeyParams | null) =>
       ["reports", workspaceId, "job-pnl", normalizeQueryKeyParams(params)] as const,
+    attributionGap: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [
+        "reports",
+        workspaceId,
+        "attribution-gap",
+        normalizeQueryKeyParams(params),
+      ] as const,
     salesPerformance: (workspaceId: string, params?: QueryKeyParams | null) =>
       [
         "reports",
@@ -359,6 +366,8 @@ export const queryKeys = {
       [...leadSources.all(workspaceId), "spend", normalizeQueryKeyParams(params)] as const,
     unattributed: (workspaceId: string) =>
       [...leadSources.all(workspaceId), "unattributed"] as const,
+    captureSettings: (workspaceId: string) =>
+      [...leadSources.all(workspaceId), "capture-settings"] as const,
   },
   messageTemplates,
   messageTests: {
@@ -470,6 +479,10 @@ export const queryKeys = {
       ["settings", "speed-to-lead-metrics", workspaceId] as const,
     missedCallTextback: (workspaceId: string) =>
       ["settings", "missed-call-textback", workspaceId] as const,
+    quoteFollowup: (workspaceId: string) =>
+      ["settings", "post-estimate-followup", workspaceId] as const,
+    quoteRevival: (workspaceId: string) =>
+      ["settings", "unsold-quote-revival", workspaceId] as const,
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),

@@ -1,11 +1,16 @@
 """Settings endpoints for user profile, notifications, and workspace integrations."""
 
-from fastapi import APIRouter
+import uuid
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.models.message_template import MessageTemplate
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.lead_source import LeadSourceCaptureSettings
 from app.schemas.pricing import (
     PricingSettings,
     PricingSettingsUpdate,
@@ -13,6 +18,14 @@ from app.schemas.pricing import (
 from app.schemas.proposal import (
     ProposalTemplateSettings,
     ProposalTemplateUpdate,
+)
+from app.schemas.quote_followup import (
+    QuoteFollowupSettings,
+    QuoteFollowupSettingsUpdate,
+)
+from app.schemas.quote_revival import (
+    QuoteRevivalSettings,
+    QuoteRevivalSettingsUpdate,
 )
 from app.schemas.speed_to_lead import (
     MissedCallTextbackSettingsResponse,
@@ -34,6 +47,14 @@ from app.schemas.user import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.lead_sources.capture_settings import (
+    SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
+)
+from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
+from app.services.quotes.followup_config import (
+    SETTINGS_KEY as QUOTE_FOLLOWUP_KEY,
+)
+from app.services.quotes.followup_config import get_quote_followup_config
 from app.services.quotes.pricing_config import (
     SETTINGS_KEY as PRICING_KEY,
 )
@@ -46,6 +67,10 @@ from app.services.quotes.proposal_template import (
 from app.services.quotes.proposal_template import (
     get_proposal_template,
 )
+from app.services.quotes.revival_config import (
+    SETTINGS_KEY as QUOTE_REVIVAL_KEY,
+)
+from app.services.quotes.revival_config import get_quote_revival_config
 from app.services.sla.speed_to_lead import (
     SETTINGS_KEY as SPEED_TO_LEAD_KEY,
 )
@@ -353,6 +378,190 @@ async def update_pricing_settings(
     await db.refresh(workspace)
 
     return get_pricing_config(workspace)
+
+
+async def _assert_templates_owned(
+    template_ids: set[uuid.UUID],
+    *,
+    workspace_id: uuid.UUID,
+    db: DB,
+) -> None:
+    """Reject templates from another workspace before they are ever rendered.
+
+    Template ids arrive as opaque UUIDs, so without this an operator could point
+    a cadence at another tenant's copy and leak it to their own customers.
+    """
+    if not template_ids:
+        return
+    result = await db.execute(
+        select(MessageTemplate.id).where(
+            MessageTemplate.workspace_id == workspace_id,
+            MessageTemplate.id.in_(template_ids),
+        )
+    )
+    if set(result.scalars().all()) != template_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Every message template must belong to this workspace",
+        )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/post-estimate-followup",
+    response_model=QuoteFollowupSettings,
+)
+async def get_quote_followup_settings(
+    workspace: WorkspaceAccess,
+) -> QuoteFollowupSettings:
+    """Get the workspace's first-14-days quote follow-up cadence."""
+    return get_quote_followup_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/post-estimate-followup",
+    response_model=QuoteFollowupSettings,
+)
+async def update_quote_followup_settings(
+    update: QuoteFollowupSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> QuoteFollowupSettings:
+    """Merge and validate the quote cadence inside ``workspace.settings``."""
+    current_settings = dict(workspace.settings or {})
+    raw_config = current_settings.get(QUOTE_FOLLOWUP_KEY, {})
+    config_data = dict(raw_config) if isinstance(raw_config, dict) else {}
+    config_data.update(update.model_dump(exclude_unset=True, mode="json"))
+    try:
+        config = QuoteFollowupSettings(**config_data)
+    except PydanticValidationError as exc:
+        # The merged cadence — not the raw request body — is what must stay valid,
+        # so this validation runs after FastAPI's own and needs its own 422.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="; ".join(error["msg"] for error in exc.errors()),
+        ) from exc
+
+    automated_without_templates = [
+        touch.offset_days
+        for touch in config.touches
+        if touch.channel in {"sms", "email"} and touch.template_id is None
+    ]
+    if config.enabled and automated_without_templates:
+        offsets = ", ".join(str(offset) for offset in automated_without_templates)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Automated touches on day(s) {offsets} need saved message templates",
+        )
+
+    await _assert_templates_owned(
+        {touch.template_id for touch in config.touches if touch.template_id is not None},
+        workspace_id=workspace.id,
+        db=db,
+    )
+
+    current_settings[QUOTE_FOLLOWUP_KEY] = config.model_dump(mode="json")
+    workspace.settings = current_settings
+    await db.commit()
+    await db.refresh(workspace)
+    return get_quote_followup_config(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/unsold-quote-revival",
+    response_model=QuoteRevivalSettings,
+)
+async def get_quote_revival_settings(
+    workspace: WorkspaceAccess,
+) -> QuoteRevivalSettings:
+    """Get the workspace's 30/60/90-day unsold-quote revival ladder."""
+    return get_quote_revival_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/unsold-quote-revival",
+    response_model=QuoteRevivalSettings,
+)
+async def update_quote_revival_settings(
+    update: QuoteRevivalSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> QuoteRevivalSettings:
+    """Merge and validate the revival ladder inside ``workspace.settings``."""
+    current_settings = dict(workspace.settings or {})
+    raw_config = current_settings.get(QUOTE_REVIVAL_KEY, {})
+    config_data = dict(raw_config) if isinstance(raw_config, dict) else {}
+    config_data.update(update.model_dump(exclude_unset=True, mode="json"))
+    try:
+        config = QuoteRevivalSettings(**config_data)
+    except PydanticValidationError as exc:
+        # The merged ladder — not the raw request body — is what must stay
+        # valid, so this validation runs after FastAPI's own and needs its 422.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="; ".join(error["msg"] for error in exc.errors()),
+        ) from exc
+
+    # Only the touches that can actually run need copy: capping ``max_touches``
+    # at 2 must not force an operator to configure a third template first.
+    executable = config.touches[: config.max_touches]
+    automated_without_templates = [
+        touch.offset_days
+        for touch in executable
+        if touch.channel in {"sms", "email"} and touch.template_id is None
+    ]
+    if config.enabled and automated_without_templates:
+        offsets = ", ".join(str(offset) for offset in automated_without_templates)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Automated touches on day(s) {offsets} need saved message templates",
+        )
+
+    await _assert_templates_owned(
+        {
+            template_id
+            for touch in config.touches
+            for template_id in (touch.template_id, touch.high_value_template_id)
+            if template_id is not None
+        },
+        workspace_id=workspace.id,
+        db=db,
+    )
+
+    current_settings[QUOTE_REVIVAL_KEY] = config.model_dump(mode="json")
+    workspace.settings = current_settings
+    await db.commit()
+    await db.refresh(workspace)
+    return get_quote_revival_config(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/lead-source-capture",
+    response_model=LeadSourceCaptureSettings,
+)
+async def get_lead_source_capture_policy(
+    workspace: WorkspaceAccess,
+) -> LeadSourceCaptureSettings:
+    """Get the operator-only lead-source requirement for manual intake."""
+    return get_lead_source_capture_settings(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/lead-source-capture",
+    response_model=LeadSourceCaptureSettings,
+)
+async def update_lead_source_capture_policy(
+    update: LeadSourceCaptureSettings,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> LeadSourceCaptureSettings:
+    """Replace the namespaced manual-intake policy without touching other settings."""
+    current_settings = dict(workspace.settings or {})
+    current_settings[LEAD_SOURCE_CAPTURE_KEY] = update.model_dump()
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+    return get_lead_source_capture_settings(workspace)
 
 
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)

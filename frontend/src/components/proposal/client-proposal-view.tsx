@@ -20,6 +20,10 @@ import type { PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
 import { fmt, type ProposalDoc } from "./document";
+import {
+  FinancingEstimate,
+  financingFromSnapshot,
+} from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
 
@@ -111,12 +115,25 @@ export function ClientProposalView({
       : "Your Project";
 
   const hasTiers = doc.tiers.some((t) => t.pricing.base > 0);
+  const lowestTier = useMemo(() => {
+    const priced = doc.tiers.filter((tier) => tier.pricing.base > 0);
+    return priced.reduce<(typeof priced)[number] | null>(
+      (lowest, tier) =>
+        !lowest || tier.pricing.financed_total < lowest.pricing.financed_total
+          ? tier
+          : lowest,
+      null,
+    );
+  }, [doc.tiers]);
+  const financingEstimate = financingFromSnapshot(
+    doc.financing,
+    lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
+    lowestTier?.pricing.monthly_by_term ?? {},
+  );
 
-  // The client proposal shows one number per package: the all-inclusive price.
-  // Cash/check figures are internal, and financing is not offered — no monthly
-  // estimates, term pickers, or lender copy reach the client. The snapshot may
-  // still carry monthly figures from the pricing model; they are deliberately
-  // not rendered.
+  // The client proposal shows one all-inclusive package price. Cash/check
+  // figures remain internal; estimated financing uses the shared compliance
+  // block so its disclaimer always travels with every monthly figure.
   const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc.care_plan;
@@ -306,6 +323,14 @@ export function ClientProposalView({
                           {`${fmt(dueToday)} due today to start`}
                         </div>
                       ) : null}
+                      {/* Independent of the deposit: this line is the only
+                          thing pointing at the financing block below, so a
+                          package that takes a deposit must not silence it. */}
+                      {financingEstimate && tier.pricing.monthly_payment > 0 ? (
+                        <div className="pkg-monthly">
+                          Estimated payment options below
+                        </div>
+                      ) : null}
                     </div>
                     {tier.warranty ? (
                       <div className="pkg-warranty">
@@ -340,6 +365,8 @@ export function ClientProposalView({
             you accept.
           </p>
         ) : null}
+
+        <FinancingEstimate financing={financingEstimate} />
 
         {doc.additional_charges.length ? (
           <div className="addon-bar">

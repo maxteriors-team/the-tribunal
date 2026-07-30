@@ -54,6 +54,7 @@ from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
     ChristmasPackagePricing,
     ChristmasPricing,
+    FinancingEstimate,
     PermanentPricing,
     PricingSettings,
 )
@@ -97,6 +98,9 @@ from app.services.quotes.proposal_builder import (
     reselect_tier,
     select_tier,
     sellable_tier_keys,
+)
+from app.services.quotes.proposal_pricing import (
+    financing_estimate as build_financing_estimate,
 )
 from app.services.quotes.proposal_pricing import (
     price_christmas,
@@ -313,6 +317,121 @@ class QuoteService:
         quote.primary_service = primary
         quote.attach_count = attach_count
         quote.attach_value = attach_value
+
+    @staticmethod
+    def _quote_category_totals(  # noqa: PLR0912 - handles three persisted quote shapes
+        quote: Quote,
+    ) -> dict[str, float]:
+        """Return positive service subtotals used only for financing eligibility.
+
+        Core quotes carry categories on their line items. Wizard quotes predate
+        that snapshot and instead carry product-line keys in ``proposal_document``;
+        list reads may have neither relationship loaded, so ``primary_service`` is
+        the final (single-category) fallback. No branch changes the quote's price.
+        """
+
+        def amount(raw: object) -> float:
+            try:
+                return max(0.0, float(raw or 0))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return 0.0
+
+        totals: dict[str, float] = {}
+        loaded_lines = quote.__dict__.get("line_items")
+        if loaded_lines is not None:
+            for line in loaded_lines:
+                category = str(line.service_category or "").strip().lower()
+                line_amount = amount(line.total)
+                if category and line_amount > 0:
+                    totals[category] = totals.get(category, 0.0) + line_amount
+        if totals:
+            return totals
+
+        document = quote.proposal_document if isinstance(quote.proposal_document, dict) else {}
+        raw_categories = document.get("categories", [])
+        categories = (
+            [str(category).strip().lower() for category in raw_categories if str(category).strip()]
+            if isinstance(raw_categories, list)
+            else []
+        )
+        raw_sections = document.get("category_sections", [])
+        for section in raw_sections if isinstance(raw_sections, list) else []:
+            if not isinstance(section, dict):
+                continue
+            category = str(section.get("key") or "").strip().lower()
+            section_amount = amount(section.get("financed_total"))
+            if category and section_amount > 0:
+                totals[category] = section_amount
+
+        if "landscape" in categories:
+            selected = document.get("selected_tier")
+            raw_tiers = document.get("tiers", [])
+            for tier in raw_tiers if isinstance(raw_tiers, list) else []:
+                if not isinstance(tier, dict) or tier.get("key") != selected:
+                    continue
+                pricing = tier.get("pricing")
+                tier_amount = amount(pricing.get("base")) if isinstance(pricing, dict) else 0
+                if tier_amount > 0:
+                    totals["landscape"] = tier_amount
+                break
+        bistro = document.get("bistro")
+        if "bistro" in categories and isinstance(bistro, dict):
+            bistro_amount = amount(bistro.get("total"))
+            if bistro_amount > 0:
+                totals["bistro"] = bistro_amount
+        if totals:
+            return totals
+
+        total = amount(quote.total)
+        if categories and total > 0:
+            return dict.fromkeys(categories, total)
+        primary = str(quote.primary_service or "").strip().lower()
+        return {primary: total} if primary and total > 0 else {}
+
+    @classmethod
+    def _financing_for_quote(
+        cls, quote: Quote, config: PricingSettings
+    ) -> FinancingEstimate | None:
+        """Build the non-contractual payment estimate exposed by quote APIs."""
+        return build_financing_estimate(
+            float(quote.total or 0), cls._quote_category_totals(quote), config
+        )
+
+    async def _pricing_config_for_quote(self, quote: Quote) -> PricingSettings:
+        """Return the pricing config behind this quote's financing block.
+
+        Prefers an already-loaded ``workspace`` relationship, then reads through
+        the session's identity map, so decorating a response never costs a
+        second round trip for a workspace the caller already holds.
+
+        A missing workspace falls back to defaults rather than raising. This
+        runs *after* writes like ``approve_quote`` have committed, so turning a
+        settled approval into a 404 would report a failure that did not happen
+        — and it matches ``get_pricing_config``'s own never-500-a-read contract.
+        """
+        workspace = quote.__dict__.get("workspace")
+        if not isinstance(workspace, Workspace):
+            workspace = await self.db.get(Workspace, quote.workspace_id)
+        if not isinstance(workspace, Workspace):
+            logger.warning(
+                "quote_pricing_config_workspace_missing",
+                quote_id=str(quote.id),
+                workspace_id=str(quote.workspace_id),
+            )
+            return PricingSettings()
+        return get_pricing_config(workspace)
+
+    async def _detail_response(self, quote: Quote) -> QuoteDetailResponse:
+        response = QuoteDetailResponse.model_validate(quote)
+        config = await self._pricing_config_for_quote(quote)
+        response.financing = self._financing_for_quote(quote, config)
+        return response
+
+    @classmethod
+    def _summary_response(cls, quote: Quote, config: PricingSettings) -> QuoteResponse:
+        response = QuoteResponse.model_validate(quote)
+        response.financing = cls._financing_for_quote(quote, config)
+        return response
 
     @staticmethod
     def _line_total(quantity: float, unit_price: float, discount: float) -> float:
@@ -561,10 +680,10 @@ class QuoteService:
         query = query.order_by(Quote.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        return result.build_response(
-            item_model=QuoteResponse,
-            response_builder=PaginatedQuotes,
-        )
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+        items = [self._summary_response(quote, config) for quote in result.items]
+        return PaginatedQuotes(**result.to_dict(items))
 
     async def create_quote(
         self,
@@ -619,7 +738,7 @@ class QuoteService:
             number=quote.number,
             total=float(quote.total),
         )
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def get_quote(
         self,
@@ -635,7 +754,7 @@ class QuoteService:
             workspace_id=workspace_id,
             options=[selectinload(Quote.line_items)],
         )
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def update_quote(
         self,
@@ -690,7 +809,7 @@ class QuoteService:
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def delete_quote(
         self,
@@ -719,7 +838,7 @@ class QuoteService:
         await self._ensure_sent_state(quote)
 
         await self._email_quote(quote)
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def _load_for_send(self, workspace_id: uuid.UUID, quote_id: uuid.UUID) -> Quote:
         return await get_or_404(
@@ -919,7 +1038,7 @@ class QuoteService:
             options=[selectinload(Quote.line_items)],
         )
         if quote.status == "approved":
-            return QuoteDetailResponse.model_validate(quote)
+            return await self._detail_response(quote)
         if quote.status not in {"draft", "sent"}:
             raise ConflictError(f"Cannot approve a {quote.status} quote")
         quote.status = "approved"
@@ -935,7 +1054,7 @@ class QuoteService:
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))
         await self._notify_fulfillment_parts(quote)
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def _notify_fulfillment_parts(self, quote: Quote) -> None:
         """Email the workspace the distributor parts list for an approved quote.
@@ -1012,7 +1131,7 @@ class QuoteService:
             options=[selectinload(Quote.line_items)],
         )
         if quote.status == "declined":
-            return QuoteDetailResponse.model_validate(quote)
+            return await self._detail_response(quote)
         if quote.status not in {"draft", "sent"}:
             raise ConflictError(f"Cannot decline a {quote.status} quote")
         quote.status = "declined"
@@ -1022,7 +1141,7 @@ class QuoteService:
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def _email_quote(self, quote: Quote, *, override_email: str | None = None) -> None:
         """Email the quote's proposal link (best-effort; never raises).
@@ -1107,6 +1226,7 @@ class QuoteService:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
         template = get_proposal_template(quote.workspace)
+        pricing_config = get_pricing_config(quote.workspace)
         business_name = template.business_name or (quote.workspace.name if quote.workspace else "")
         client_name: str | None = None
         if quote.contact is not None:
@@ -1134,6 +1254,7 @@ class QuoteService:
             tax_amount=float(quote.tax_amount or 0),
             discount_amount=float(quote.discount_amount or 0),
             total=total,
+            financing=self._financing_for_quote(quote, pricing_config),
             issue_date=quote.issue_date,
             expiry_date=quote.expiry_date,
             is_expired=quote.status == "expired",
@@ -1430,7 +1551,7 @@ class QuoteService:
             total=float(quote.total),
             selected_tier=document.selected_tier,
         )
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     # ------------------------------------------------------------------
     # Roofline estimator + permanent-vs-temporary comparison
@@ -2084,7 +2205,7 @@ class QuoteService:
             invoice_id=str(invoice_id) if invoice_id else None,
         )
         return QuoteConvertResponse(
-            quote=QuoteDetailResponse.model_validate(quote),
+            quote=await self._detail_response(quote),
             job_id=job_id,
             invoice_id=invoice_id,
         )
@@ -2106,7 +2227,7 @@ class QuoteService:
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def update_line_item(
         self,
@@ -2143,7 +2264,7 @@ class QuoteService:
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def remove_line_item(
         self,
@@ -2166,7 +2287,7 @@ class QuoteService:
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-        return QuoteDetailResponse.model_validate(quote)
+        return await self._detail_response(quote)
 
     async def _get_mutable_quote(
         self,

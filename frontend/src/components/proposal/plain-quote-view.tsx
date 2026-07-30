@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils/number";
 import type { PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
+import { FinancingEstimate } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
 
@@ -179,6 +180,8 @@ export function PlainQuoteView({
             </div>
           </div>
         </div>
+
+        <FinancingEstimate financing={data.financing} />
 
         {/* Deposit (pay online) */}
         <DepositPanel data={data} />

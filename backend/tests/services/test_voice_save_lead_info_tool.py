@@ -13,6 +13,7 @@ is patched with a sequenced stub session, so these never touch a real database.
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -20,6 +21,7 @@ import app.db.session as db_session_module
 from app.models.contact import Contact
 from app.services.ai.tool_executor import GATE_EXEMPT_TOOLS, VoiceToolExecutor
 from app.services.ai.voice_tools import build_tools_list, is_save_lead_info_enabled
+from app.services.lead_sources.attribution_service import map_ai_lead_source_answer
 
 
 class _Agent:
@@ -35,6 +37,11 @@ class _ScalarsResult:
 
     def first(self) -> Any | None:
         return self._row
+
+    def all(self) -> list[Any]:
+        if self._row is None:
+            return []
+        return self._row if isinstance(self._row, list) else [self._row]
 
 
 class _ExecuteResult:
@@ -81,6 +88,7 @@ class _Conversation:
     def __init__(self, contact_id: int | None, contact_phone: str) -> None:
         self.contact_id = contact_id
         self.contact_phone = contact_phone
+        self.workspace_phone = "+12125550100"
         self.workspace_id = uuid.uuid4()
 
 
@@ -120,6 +128,17 @@ def test_save_lead_info_is_gate_exempt() -> None:
     assert "save_lead_info" in GATE_EXEMPT_TOOLS
 
 
+def test_clear_spoken_sources_map_to_supported_channels() -> None:
+    assert map_ai_lead_source_answer("I saw your truck") is not None
+    assert map_ai_lead_source_answer("My neighbor recommended you") is not None
+    assert map_ai_lead_source_answer("Google") is not None
+
+
+def test_ambiguous_spoken_source_is_not_structured() -> None:
+    assert map_ai_lead_source_answer("I think I heard about you somewhere") is None
+    assert map_ai_lead_source_answer("Google or maybe Facebook") is None
+
+
 # --------------------------------------------------------------------------- #
 # Execution
 # --------------------------------------------------------------------------- #
@@ -150,6 +169,82 @@ async def test_creates_contact_for_new_caller_and_links_conversation() -> None:
     assert contact.address_state == "TX"
     assert "kitchen remodel" in (contact.notes or "")
     assert contact.source == "inbound_call"
+    session.commit.assert_awaited_once()
+
+
+async def test_new_caller_receives_tracking_number_attribution() -> None:
+    conversation = _Conversation(contact_id=None, contact_phone="+15125557005")
+    source_id = uuid.uuid4()
+    tracking_number = SimpleNamespace(
+        lead_source_id=source_id,
+        lead_source_campaign_id=None,
+    )
+    session = _SequencedSession([_CallMessage(conversation), None, tracking_number])
+    attribution = AsyncMock(return_value=True)
+
+    with (
+        patch.object(db_session_module, "AsyncSessionLocal", lambda: session),
+        patch(
+            "app.services.lead_sources.attribution_service.apply_tracking_number_attribution",
+            attribution,
+        ),
+    ):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            first_name="Taylor",
+        )
+
+    assert result["success"] is True
+    created = [obj for obj in session.added if isinstance(obj, Contact)]
+    assert len(created) == 1
+    attribution.assert_awaited_once_with(session, created[0], tracking_number)
+
+
+async def test_clear_source_answer_sets_structured_attribution() -> None:
+    conversation = _Conversation(contact_id=44, contact_phone="+15125557007")
+    existing = Contact(
+        id=44,
+        workspace_id=conversation.workspace_id,
+        first_name="Morgan",
+        phone_number="+15125557007",
+        phone_hash="hash",
+    )
+    source = SimpleNamespace(
+        id=uuid.uuid4(),
+        name="Truck Wrap",
+        source_type="truck_wrap",
+    )
+    # Message, contact, no tracking-number row, source candidates, no opportunities.
+    session = _SequencedSession([_CallMessage(conversation), existing, None, [source], []])
+
+    with patch.object(db_session_module, "AsyncSessionLocal", lambda: session):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            lead_source_answer="I saw your truck",
+        )
+
+    assert result["success"] is True
+    assert existing.lead_source_raw_answer == "I saw your truck"
+    assert existing.first_touch_lead_source_id == source.id
+
+
+async def test_low_confidence_source_answer_stays_raw_and_unattributed() -> None:
+    conversation = _Conversation(contact_id=43, contact_phone="+15125557006")
+    existing = Contact(
+        id=43,
+        workspace_id=conversation.workspace_id,
+        first_name="Casey",
+        phone_number="+15125557006",
+        phone_hash="hash",
+    )
+    session = _SequencedSession([_CallMessage(conversation), existing])
+
+    with patch.object(db_session_module, "AsyncSessionLocal", lambda: session):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            lead_source_answer="I think I heard about you somewhere",
+        )
+
+    assert result["success"] is True
+    assert existing.lead_source_raw_answer == "I think I heard about you somewhere"
+    assert existing.first_touch_lead_source_id is None
     session.commit.assert_awaited_once()
 
 

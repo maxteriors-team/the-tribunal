@@ -1,6 +1,6 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign } from "lucide-react";
+import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign, CalendarClock, History } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
@@ -11,6 +11,8 @@ import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
 import { PermanentPricingSettingsCard } from "@/components/settings/permanent-pricing-settings-card";
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
 import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab";
+import { QuoteFollowupSettingsTab } from "@/components/settings/quote-followup-settings-tab";
+import { QuoteRevivalSettingsTab } from "@/components/settings/quote-revival-settings-tab";
 import { ReviewSettingsTab } from "@/components/settings/review-settings-tab";
 import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
 import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-settings-tab";
@@ -28,6 +30,8 @@ const settingsTabs = [
   { value: "proposals", label: "Proposals", icon: FileText },
   { value: "pricing", label: "Pricing", icon: DollarSign },
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
+  { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
+  { value: "quote-revival", label: "Quote Revival", icon: History },
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
   { value: "team", label: "Team", icon: Building2 },
@@ -117,6 +121,18 @@ export function SettingsPage() {
         <TabsContent value="speed-to-lead">
           <QueryErrorBoundary message="Failed to load speed-to-lead settings. Please try again.">
             <SpeedToLeadSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="estimate-followup">
+          <QueryErrorBoundary message="Failed to load estimate follow-up settings. Please try again.">
+            <QuoteFollowupSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="quote-revival">
+          <QueryErrorBoundary message="Failed to load quote revival settings. Please try again.">
+            <QuoteRevivalSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

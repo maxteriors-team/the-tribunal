@@ -23,6 +23,7 @@ from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.schemas.pricing import (
+    DEFAULT_FINANCING_DISCLAIMER,
     BistroConfig,
     BistroLine,
     BistroPricing,
@@ -32,6 +33,7 @@ from app.schemas.pricing import (
     ChristmasPackage,
     ChristmasPackagePricing,
     ChristmasPricing,
+    FinancingEstimate,
     PermanentPricing,
     PricingSettings,
     SeasonalItem,
@@ -155,7 +157,7 @@ def monthly_payment(
     config: PricingSettings,
     term: int | None = None,
 ) -> Decimal:
-    """Estimated 0% APR monthly payment; 0 when disabled or over the cap."""
+    """Estimated monthly payment; 0 when financing is disabled or over the cap."""
     f = config.financing
     t = _d(total)
     if not f.enabled or t <= 0:
@@ -170,6 +172,70 @@ def monthly_payment(
             return _ZERO
         return _round_cent(t * r / denom)
     return _round_cent(t / _d(n))
+
+
+def financing_is_eligible(
+    total: float | Decimal,
+    category_totals: Mapping[str, float | Decimal],
+    config: PricingSettings,
+) -> bool:
+    """Whether a quote qualifies for an estimated financing presentation.
+
+    A category qualifies only when its own positive subtotal reaches that
+    category's configured minimum. The overall total must also fit beneath the
+    provider cap. This presentation gate is intentionally separate from
+    :func:`price_buffer`: category settings can hide a noisy payment estimate,
+    but can never silently remove the margin-protecting fee gross-up.
+    """
+    financing = config.financing
+    total_d = _d(total)
+    if not financing.enabled or total_d <= 0 or total_d > _d(financing.max_amount):
+        return False
+
+    minimums = financing.category_minimums
+    for raw_category, raw_subtotal in category_totals.items():
+        category = str(raw_category).strip().lower()
+        minimum = minimums.get(category)
+        subtotal = _d(raw_subtotal)
+        minimum_d = _d(minimum) if minimum is not None else None
+        if (
+            minimum_d is not None
+            and subtotal > 0
+            and subtotal >= minimum_d
+            and total_d >= minimum_d
+        ):
+            return True
+    return False
+
+
+def financing_estimate(
+    total: float | Decimal,
+    category_totals: Mapping[str, float | Decimal],
+    config: PricingSettings,
+) -> FinancingEstimate | None:
+    """Build client-safe, server-computed payment estimates when eligible."""
+    if not financing_is_eligible(total, category_totals, config):
+        return None
+
+    financing = config.financing
+    terms = finance_terms(config)
+    monthly_by_term = {term: float(monthly_payment(total, config, term=term)) for term in terms}
+    default_payment = float(monthly_payment(total, config, term=financing.default_term))
+    if default_payment <= 0:
+        return None
+
+    return FinancingEstimate(
+        provider=financing.provider,
+        terms=terms,
+        default_term=financing.default_term,
+        apr=financing.apr,
+        monthly_payment=default_payment,
+        monthly_by_term=monthly_by_term,
+        headline=financing.headline,
+        body=financing.body,
+        points=list(financing.points),
+        disclaimer=(financing.disclaimer or DEFAULT_FINANCING_DISCLAIMER),
+    )
 
 
 # --------------------------------------------------------------------------- #

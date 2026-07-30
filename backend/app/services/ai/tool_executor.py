@@ -242,6 +242,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                 company_name=arguments.get("company_name"),
                 address=arguments.get("address"),
                 interest=arguments.get("interest"),
+                lead_source_answer=arguments.get("lead_source_answer"),
             )
 
         if function_name == "end_call":
@@ -1264,6 +1265,7 @@ class VoiceToolExecutor(BaseToolExecutor):
         company_name: str | None = None,
         address: str | None = None,
         interest: str | None = None,
+        lead_source_answer: str | None = None,
     ) -> dict[str, Any]:
         """Write caller-provided details onto their CRM contact record.
 
@@ -1280,7 +1282,12 @@ class VoiceToolExecutor(BaseToolExecutor):
         from app.db.session import AsyncSessionLocal
         from app.models.contact import Contact
         from app.models.conversation import Message as MessageModel
+        from app.models.phone_number import PhoneNumber
         from app.services.contacts.address_parsing import parse_us_address
+        from app.services.lead_sources.attribution_service import (
+            apply_ai_receptionist_attribution,
+            apply_tracking_number_attribution,
+        )
 
         def _clean(value: str | None, limit: int) -> str | None:
             if value is None:
@@ -1294,8 +1301,19 @@ class VoiceToolExecutor(BaseToolExecutor):
         company_name = _clean(company_name, 255)
         address = _clean(address, 500)
         interest = _clean(interest, 1000)
+        lead_source_answer = _clean(lead_source_answer, 500)
 
-        if not any([first_name, last_name, email, company_name, address, interest]):
+        if not any(
+            [
+                first_name,
+                last_name,
+                email,
+                company_name,
+                address,
+                interest,
+                lead_source_answer,
+            ]
+        ):
             return {
                 "success": False,
                 "error": "No caller details were provided to save.",
@@ -1390,6 +1408,19 @@ class VoiceToolExecutor(BaseToolExecutor):
                 await db.flush()
                 conversation.contact_id = contact.id
 
+            tracking_number_result = await db.execute(
+                select(PhoneNumber).where(
+                    PhoneNumber.workspace_id == workspace_id,
+                    PhoneNumber.phone_number == conversation.workspace_phone,
+                )
+            )
+            tracking_number = tracking_number_result.scalar_one_or_none()
+            if tracking_number is not None and tracking_number.lead_source_id is not None:
+                await apply_tracking_number_attribution(db, contact, tracking_number)
+
+            if lead_source_answer:
+                await apply_ai_receptionist_attribution(db, contact, lead_source_answer)
+
             # Auto-open a pipeline card so the caller lands on the Opportunities
             # board. Deduped + workspace-gated inside the helper; never break the
             # call's lead capture if pipeline provisioning fails.
@@ -1416,6 +1447,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                         ("company_name", company_name),
                         ("address", address),
                         ("interest", interest),
+                        ("lead_source_answer", lead_source_answer),
                     )
                     if value
                 ],

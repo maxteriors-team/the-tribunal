@@ -2,13 +2,12 @@
 
 /**
  * Screen 2 — the client-facing presentation, rendered entirely from the
- * server-computed ProposalDocument (all-inclusive package cards, Care Plan +
- * bistro upsells, the lit design preview).
+ * server-computed ProposalDocument (all-inclusive package cards, compliant
+ * payment estimates, Care Plan + bistro upsells, the lit design preview).
  *
- * Cash/check figures stay internal to the builder, and financing is not offered
- * — no monthly estimates, term pickers, or lender copy reach the client. Prices
- * still carry the pricing model's fee buffer; that is margin protection, not a
- * financing offer, and it is never described to the client.
+ * Cash/check figures stay internal to the builder. Financing remains an estimate
+ * only: the shared presentation always renders the workspace disclaimer beside
+ * every monthly-payment figure.
  *
  * Each service in the design argues for itself here: a quote covering landscape
  * and Christmas shows both value-prop blocks, not one blended list.
@@ -16,6 +15,10 @@
 import { toast } from "sonner";
 
 import { ServiceValueProps } from "@/components/estimator/service-value-props";
+import {
+  FinancingEstimate,
+  financingFromSnapshot,
+} from "@/components/proposal/financing-estimate";
 
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
 
@@ -31,6 +34,19 @@ export function PresentationScreen({
   onBack,
 }: PresentationScreenProps) {
   const doc = wizard.document;
+  const pricedTiers = (doc?.tiers ?? []).filter((tier) => tier.pricing.base > 0);
+  const lowestTier = pricedTiers.reduce<(typeof pricedTiers)[number] | null>(
+    (lowest, tier) =>
+      !lowest || tier.pricing.financed_total < lowest.pricing.financed_total
+        ? tier
+        : lowest,
+    null,
+  );
+  const financingEstimate = financingFromSnapshot(
+    doc?.financing,
+    lowestTier?.pricing.monthly_payment ?? doc?.grand_monthly_payment ?? 0,
+    lowestTier?.pricing.monthly_by_term ?? {},
+  );
 
   const client = doc?.client ?? null;
   const first = client?.first_name?.trim() || "";
@@ -236,6 +252,11 @@ export function PresentationScreen({
                   <div className="pkg-price-wrap">
                     <div className="pkg-price">{lead}</div>
                     <div className="pkg-price-label">{priceLabel}</div>
+                    {financingEstimate && tier.pricing.monthly_payment > 0 ? (
+                      <div className="pkg-monthly">
+                        Estimated payment options below
+                      </div>
+                    ) : null}
                   </div>
                   {cfg?.warranty ? (
                     <div className="pkg-warranty">
@@ -256,6 +277,8 @@ export function PresentationScreen({
             );
           })}
         </div>
+
+        <FinancingEstimate financing={financingEstimate} />
 
         {doc.additional_charges.length ? (
           <div className="addon-bar">

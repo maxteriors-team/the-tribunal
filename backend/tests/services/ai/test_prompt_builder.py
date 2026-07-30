@@ -98,6 +98,40 @@ class TestVoicePromptBuilder:
         assert "phone call" in guidance.lower()
         assert "YOU initiated" in guidance
 
+    def test_unknown_inbound_caller_gets_lead_source_capture_guidance(
+        self, mock_agent: MagicMock
+    ) -> None:
+        mock_agent.enabled_tools = ["save_lead_info"]
+        builder = VoicePromptBuilder(agent=mock_agent)
+
+        guidance = builder.get_lead_source_capture_guidance(None, is_outbound=False)
+
+        assert "how did you hear about us" in guidance.lower()
+        assert "lead_source_answer" in guidance
+        assert "verbatim" in guidance
+
+    def test_known_attribution_is_not_asked_again(self, mock_agent: MagicMock) -> None:
+        mock_agent.enabled_tools = ["save_lead_info"]
+        builder = VoicePromptBuilder(agent=mock_agent)
+
+        guidance = builder.get_lead_source_capture_guidance(
+            {"lead_source_known": True}, is_outbound=False
+        )
+
+        assert guidance == ""
+
+    def test_outbound_call_never_gets_lead_source_capture_question(
+        self, mock_agent: MagicMock
+    ) -> None:
+        mock_agent.enabled_tools = ["save_lead_info"]
+        builder = VoicePromptBuilder(agent=mock_agent)
+
+        guidance = builder.get_lead_source_capture_guidance(
+            {"lead_source_known": False}, is_outbound=True
+        )
+
+        assert guidance == ""
+
     def test_get_booking_instructions(self) -> None:
         """Test booking instructions generation."""
         builder = VoicePromptBuilder(timezone="America/New_York")

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { FinancingEstimate } from "@/components/proposal/financing-estimate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,8 +187,13 @@ export function QuotesList() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-right">
-                  {formatCurrency(quote.total, quote.currency)}
+                <TableCell className="min-w-[18rem] text-right">
+                  <div>{formatCurrency(quote.total, quote.currency)}</div>
+                  <FinancingEstimate
+                    financing={quote.financing}
+                    variant="compact"
+                    className="quote-financing-estimate"
+                  />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {quote.expiry_date ? formatDate(quote.expiry_date) : "—"}

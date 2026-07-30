@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.schemas.pricing import (
+    DEFAULT_FINANCING_DISCLAIMER,
     BistroPricing,
     ChristmasPackage,
     ChristmasPricing,
@@ -298,18 +299,6 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                 _category_section("christmas", config.christmas.label, christmas_pricing, config)
             )
 
-    financing = ProposalFinancing(
-        enabled=config.financing.enabled,
-        provider=config.financing.provider,
-        terms=pp.finance_terms(config),
-        default_term=config.financing.default_term,
-        max_amount=config.financing.max_amount,
-        headline=config.financing.headline,
-        body=config.financing.body,
-        points=list(config.financing.points),
-        disclaimer=config.financing.disclaimer,
-    )
-
     selection = select_tier(
         tier_views=tier_views,
         selected=selected,
@@ -318,6 +307,31 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         category_sections=category_sections,
         config=config,
         catalog=catalog,
+    )
+
+    # Financing eligibility is presentation-only. Keep the existing price buffer
+    # global so category configuration can never remove the fee gross-up or alter
+    # cash-price reversal. Each qualifying service contributes its own subtotal;
+    # uncategorized add-on charges cannot make an otherwise ineligible quote qualify.
+    category_totals: dict[str, float] = {
+        section.key: section.financed_total for section in category_sections
+    }
+    selected_view = next((view for view in tier_views if view.key == selected), None)
+    if has_landscape and selected_view is not None:
+        category_totals["landscape"] = selected_view.pricing.base
+    if bistro is not None and bistro.total > 0:
+        category_totals["bistro"] = bistro.total
+
+    financing = ProposalFinancing(
+        enabled=pp.financing_is_eligible(selection.grand_financed, category_totals, config),
+        provider=config.financing.provider,
+        terms=pp.finance_terms(config),
+        default_term=config.financing.default_term,
+        max_amount=config.financing.max_amount,
+        headline=config.financing.headline,
+        body=config.financing.body,
+        points=list(config.financing.points),
+        disclaimer=(config.financing.disclaimer or DEFAULT_FINANCING_DISCLAIMER),
     )
 
     document = ProposalDocument(

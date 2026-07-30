@@ -7,6 +7,10 @@
  * rep's raw inputs and render the server's numbers.
  */
 import {
+  FinancingEstimate,
+  financingFromSnapshot,
+} from "@/components/proposal/financing-estimate";
+import {
   seasonalIconForCategory,
   tintSurface,
 } from "@/lib/estimator/seasonal-icons";
@@ -415,21 +419,17 @@ export function GrandTotals({ wizard }: { wizard: UseSalesWizardReturn }) {
   const doc = wizard.document;
   const financed = doc?.grand_financed_total ?? 0;
   const monthly = doc?.grand_monthly_payment ?? 0;
+  const financingEstimate = financingFromSnapshot(doc?.financing, monthly);
   if (financed <= 0) return null;
   return (
     <div className="grand-panel">
       <div className="grand-panel-title">All-In Project Total</div>
       <div className="grand-rows">
         <div className="grand-row lead">
-          <span>Financed total</span>
+          <span>Project total</span>
           <strong>{fmt(financed)}</strong>
         </div>
-        {monthly > 0 ? (
-          <div className="grand-row muted">
-            <span>As low as</span>
-            <strong>{fmt(monthly)}/mo</strong>
-          </div>
-        ) : null}
+        <FinancingEstimate financing={financingEstimate} variant="compact" />
       </div>
     </div>
   );

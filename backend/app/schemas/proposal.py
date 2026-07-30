@@ -20,6 +20,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.pricing import FinancingEstimate
+
 # Accepts ``#rgb`` or ``#rrggbb`` (case-insensitive).
 _HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
 
@@ -136,6 +138,9 @@ class PublicProposal(BaseModel):
     tax_amount: float
     discount_amount: float
     total: float
+    # Estimated monthly payments for category-qualified flat/core quotes. Rich
+    # wizard proposals also retain their snapshotted financing presentation.
+    financing: FinancingEstimate | None = None
     issue_date: date | None = None
     expiry_date: date | None = None
     is_expired: bool = False
