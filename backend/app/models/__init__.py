@@ -78,6 +78,12 @@ from app.models.message_test import (
     TestContactStatus,
     TestVariant,
 )
+from app.models.neighbor_outreach import (
+    NeighborOutreachBatch,
+    NeighborOutreachChannel,
+    NeighborOutreachEntry,
+    NeighborOutreachStatus,
+)
 from app.models.offer import Offer
 from app.models.offer_lead_magnet import OfferLeadMagnet
 from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityLineItem
@@ -261,6 +267,10 @@ __all__ = [
     "Job",
     "JobAssignment",
     "JobStatus",
+    "NeighborOutreachBatch",
+    "NeighborOutreachEntry",
+    "NeighborOutreachStatus",
+    "NeighborOutreachChannel",
     "FAILED_JOB_STATUS_ABANDONED",
     "FAILED_JOB_STATUS_PENDING",
     "FAILED_JOB_STATUS_RETRIED",

@@ -56,6 +56,7 @@ from app.services.automations.events import (
     EVENT_JOB_SCHEDULED,
     emit_automation_event,
 )
+from app.services.field_service.neighbor_outreach import NeighborOutreachService
 
 # Job lifecycle states that drive an automation event when first entered.
 _STATUS_EVENTS: dict[JobStatus, str] = {
@@ -312,17 +313,26 @@ class JobService:
     # Automation events
     # ------------------------------------------------------------------ #
     async def _emit_status_event(self, job: Job, prior_status: JobStatus | str | None) -> None:
-        """Emit a lifecycle event when ``job`` first enters scheduled/completed.
+        """React to ``job`` first entering scheduled/completed.
 
-        No-op when the status did not change or the new status has no mapped
-        event. Shares the caller's transaction (the route's transactional
-        session, or the converting quote's), so the event is durable iff the
-        status change commits. ``emit_automation_event`` itself no-ops when no
-        automation listens for the trigger.
+        No-op when the status did not change. Shares the caller's transaction (the
+        route's transactional session, or the converting quote's), so the effects
+        are durable iff the status change commits. ``emit_automation_event`` itself
+        no-ops when no automation listens for the trigger.
+
+        Completion additionally kicks off neighbour-outreach generation, because a
+        finished job is the moment the surrounding street is warmest. That call
+        never sends anything, is workspace-config gated, and swallows its own
+        errors inside a ``SAVEPOINT`` — a marketing list must not be able to fail a
+        work-order update.
         """
         new_status = JobStatus(job.status)
         if prior_status is not None and JobStatus(prior_status) == new_status:
             return
+
+        if new_status == JobStatus.COMPLETED:
+            await NeighborOutreachService(self.db).maybe_generate_on_completion(job)
+
         event_type = _STATUS_EVENTS.get(new_status)
         if event_type is None:
             return

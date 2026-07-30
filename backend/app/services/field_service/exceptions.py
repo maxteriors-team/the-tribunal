@@ -52,3 +52,52 @@ class UserNotMemberError(ValidationError):
 
     def __init__(self, message: str = "User is not a member of this workspace") -> None:
         super().__init__(message)
+
+
+class JobNotFoundError(NotFoundError):
+    """A field-service job does not exist in the workspace. [404]"""
+
+    def __init__(self, message: str = "Job not found") -> None:
+        super().__init__(message)
+
+
+class NeighborOutreachBatchNotFoundError(NotFoundError):
+    """No neighbour list has been generated for this job yet. [404]"""
+
+    def __init__(self, message: str = "No neighbor outreach list for this job") -> None:
+        super().__init__(message)
+
+
+class NeighborOutreachEntryNotFoundError(NotFoundError):
+    """A neighbour entry does not exist in the workspace. [404]"""
+
+    def __init__(self, message: str = "Neighbor entry not found") -> None:
+        super().__init__(message)
+
+
+class JobSiteNotGeocodedError(ValidationError):
+    """The job has no site coordinates, so there is no circle to search. [400]
+
+    ``latitude``/``longitude`` are the only geographic predicate available (the
+    postal fields are encrypted and not SQL-queryable), so an ungeocoded site
+    cannot produce a neighbour list. Surfaced rather than silently returning an
+    empty list, because "no neighbours" and "we don't know where this is" are very
+    different answers for an operator.
+    """
+
+    def __init__(self, message: str = "Job site has no coordinates to search around") -> None:
+        super().__init__(message)
+
+
+class NeighborMessagingDisabledError(ValidationError):
+    """The workspace has not enabled the consent-gated messaging path. [400]"""
+
+    def __init__(self, message: str = "Neighbor messaging is disabled for this workspace") -> None:
+        super().__init__(message)
+
+
+class NeighborCampaignNotFoundError(NotFoundError):
+    """The campaign to enroll neighbours into is not in this workspace. [404]"""
+
+    def __init__(self, message: str = "Campaign not found") -> None:
+        super().__init__(message)

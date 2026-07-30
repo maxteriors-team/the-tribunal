@@ -11,6 +11,10 @@ from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.message_template import MessageTemplate
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
 from app.schemas.lead_source import LeadSourceCaptureSettings
+from app.schemas.neighbor_outreach import (
+    NeighborOutreachSettings,
+    NeighborOutreachSettingsUpdate,
+)
 from app.schemas.pricing import (
     PricingSettings,
     PricingSettingsUpdate,
@@ -46,6 +50,12 @@ from app.schemas.user import (
     TeamMemberResponse,
     UserProfileResponse,
     UserProfileUpdate,
+)
+from app.services.field_service.neighbor_outreach_config import (
+    SETTINGS_KEY as NEIGHBOR_OUTREACH_KEY,
+)
+from app.services.field_service.neighbor_outreach_config import (
+    get_neighbor_outreach_config,
 )
 from app.services.lead_sources.capture_settings import (
     SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
@@ -378,6 +388,63 @@ async def update_pricing_settings(
     await db.refresh(workspace)
 
     return get_pricing_config(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/neighbor-outreach",
+    response_model=NeighborOutreachSettings,
+)
+async def get_neighbor_outreach_settings(
+    workspace: WorkspaceAccess,
+) -> NeighborOutreachSettings:
+    """Get the workspace's job-site neighbour-outreach config."""
+    return get_neighbor_outreach_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/neighbor-outreach",
+    response_model=NeighborOutreachSettings,
+)
+async def update_neighbor_outreach_settings(
+    update: NeighborOutreachSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> NeighborOutreachSettings:
+    """Update the neighbour-outreach config (partial merge into ``settings``).
+
+    Only provided keys are written, so changing ``radius_meters`` never clobbers
+    ``message_template_id``. The merged blob is validated before it is persisted — a
+    stored config that no longer parses would silently fall back to "disabled", so
+    a bad radius must fail loudly at the edit instead.
+
+    ``message_template_id`` is checked to belong to this workspace: a template id is
+    an opaque UUID, and pointing neighbour messaging at another tenant's copy would
+    leak their copy to your customers.
+    """
+    current_settings = dict(workspace.settings or {})
+    raw_config = current_settings.get(NEIGHBOR_OUTREACH_KEY, {})
+    config_data = dict(raw_config) if isinstance(raw_config, dict) else {}
+    config_data.update(update.model_dump(exclude_unset=True, mode="json"))
+    try:
+        config = NeighborOutreachSettings(**config_data)
+    except PydanticValidationError as exc:
+        # The merged config — not the raw request body — is what must stay valid, so
+        # this validation runs after FastAPI's own and needs its own 422.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="; ".join(error["msg"] for error in exc.errors()),
+        ) from exc
+
+    if config.message_template_id is not None:
+        await _assert_templates_owned(
+            {config.message_template_id}, workspace_id=workspace.id, db=db
+        )
+
+    current_settings[NEIGHBOR_OUTREACH_KEY] = config.model_dump(mode="json")
+    workspace.settings = current_settings
+    await db.commit()
+    await db.refresh(workspace)
+    return get_neighbor_outreach_config(workspace)
 
 
 async def _assert_templates_owned(
