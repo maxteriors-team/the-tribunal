@@ -58,6 +58,15 @@ LLM_TIMEOUT_SECONDS = 45.0
 MAX_COMPLETION_TOKENS = 2000
 ENHANCE_PROMPT_MAX_TOKENS = 300
 TEMPERATURE = 0.3
+# Reasoning-tier models reject function tools on /v1/chat/completions unless
+# reasoning effort is explicitly disabled:
+#   "Function tools with reasoning_effort are not supported for <model> in
+#    /v1/chat/completions. To use function tools, use /v1/responses or set
+#    reasoning_effort to 'none'."
+# Every assistant turn sends tools, so without this the whole feature 400s. The
+# alternative is porting the tool loop to /v1/responses, which is a larger
+# change than this release warrants.
+REASONING_EFFORT = "none"
 
 AssistantStreamEvent = dict[str, Any]
 
@@ -404,6 +413,7 @@ def _api_params(api_messages: list[dict[str, Any]], cache_key: str) -> dict[str,
         "tool_choice": "auto",
         "temperature": TEMPERATURE,
         "max_completion_tokens": MAX_COMPLETION_TOKENS,
+        "reasoning_effort": REASONING_EFFORT,
         "prompt_cache_key": cache_key,
     }
 

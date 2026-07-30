@@ -34,6 +34,9 @@ class EvalConfig:
     """Knobs for one eval run."""
 
     model: str = _processor.MODEL
+    # Mirror the production call exactly: a harness that omits this would
+    # pass while the deployed assistant 400s on every turn.
+    reasoning_effort: str = _processor.REASONING_EFFORT
     temperature: float = _processor.TEMPERATURE
     max_completion_tokens: int = _processor.MAX_COMPLETION_TOKENS
     max_tool_turns: int = 3
@@ -233,6 +236,7 @@ class CRMAssistantEvalHarness:
                         tool_choice="auto",
                         temperature=self.config.temperature,
                         max_completion_tokens=self.config.max_completion_tokens,
+                        reasoning_effort=self.config.reasoning_effort,
                     ),
                     timeout=self.config.timeout_seconds,
                 )
