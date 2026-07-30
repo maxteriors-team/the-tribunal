@@ -359,6 +359,16 @@
       "ActionSummary": {
         "description": "Summary of a tool action taken by the assistant.",
         "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
           "success": {
             "title": "Success",
             "type": "boolean"
@@ -18181,9 +18191,16 @@
         "description": "Response schema for a single knowledge document.",
         "properties": {
           "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
           },
           "content": {
             "title": "Content",

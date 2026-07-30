@@ -8507,6 +8507,14 @@ export interface components {
          * @description Summary of a tool action taken by the assistant.
          */
         ActionSummary: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            };
             /** Success */
             success: boolean;
             /** Summary */
@@ -15509,11 +15517,8 @@ export interface components {
          * @description Response schema for a single knowledge document.
          */
         KnowledgeDocumentResponse: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
+            /** Agent Id */
+            agent_id: string | null;
             /** Content */
             content: string;
             /** Created At */
