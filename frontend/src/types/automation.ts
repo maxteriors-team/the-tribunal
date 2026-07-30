@@ -12,6 +12,8 @@ export type AutomationTriggerType =
   | "no_show"
   | "contact_tagged"
   | "never_booked"
+  // Condition triggers (workspace state, no contact matching)
+  | "backlog_below_threshold"
   // Event triggers (emitted by services)
   | "review_received"
   | "review_request_response"
@@ -30,6 +32,7 @@ export type AutomationActionType =
   | "send_email"
   | "make_call"
   | "enroll_campaign"
+  | "start_drip_campaign"
   | "apply_tag"
   | "add_tag"
   | "move_to_stage"

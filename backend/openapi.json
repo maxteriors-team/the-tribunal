@@ -4177,7 +4177,7 @@
             "type": "object"
           },
           "type": {
-            "description": "Action type: send_sms, send_email, make_call, enroll_campaign, apply_tag/add_tag, wait/delay",
+            "description": "Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay",
             "title": "Type",
             "type": "string"
           }
@@ -4227,7 +4227,7 @@
           },
           "trigger_type": {
             "default": "event",
-            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
             "title": "Trigger Type",
             "type": "string"
           }
@@ -4417,7 +4417,7 @@
           "trigger_type": {
             "anyOf": [
               {
-                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
                 "type": "string"
               },
               {

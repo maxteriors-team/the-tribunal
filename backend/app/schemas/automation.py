@@ -8,7 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Trigger identifiers accepted by the automation engine. Combines the legacy
 # generic kinds (event/schedule/condition), the polling triggers evaluated
-# against contacts, and the event triggers drained from ``automation_events``.
+# against contacts, the event triggers drained from ``automation_events``, and
+# the condition triggers evaluated against workspace state
+# (``app.services.automations.conditions``).
 AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     # Generic / legacy kinds
     "event",
@@ -20,6 +22,8 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "no_show",
     "contact_tagged",
     "never_booked",
+    # Condition triggers (workspace state, no contact matching)
+    "backlog_below_threshold",
     # Event triggers (emitted by services)
     "review_received",
     "review_request_response",
@@ -50,6 +54,7 @@ AUTOMATION_ACTION_TYPES: tuple[str, ...] = (
     "send_email",
     "make_call",
     "enroll_campaign",
+    "start_drip_campaign",
     "move_to_stage",
     "apply_tag",
     "add_tag",
@@ -67,7 +72,7 @@ class AutomationActionSchema(BaseModel):
         ...,
         description=(
             "Action type: send_sms, send_email, make_call, enroll_campaign, "
-            "apply_tag/add_tag, wait/delay"
+            "start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay"
         ),
     )
     config: dict[str, Any] = Field(

@@ -105,6 +105,7 @@ const campaigns = createResourceQueryKeys("campaigns");
 const catalogItems = createResourceQueryKeys("catalog-items");
 const contacts = createResourceQueryKeys("contacts");
 const conversations = createResourceQueryKeys("conversations");
+const dripCampaigns = createResourceQueryKeys("drip-campaigns");
 const improvementSuggestions = createResourceQueryKeys("suggestions");
 const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
@@ -293,6 +294,7 @@ export const queryKeys = {
     followupSettings: (workspaceId: string, conversationId: string) =>
       [...conversations.detail(workspaceId, conversationId), "followup-settings"] as const,
   },
+  dripCampaigns,
   dashboard: {
     all: (workspaceId: string) => ["dashboard", workspaceId] as const,
     stats: (workspaceId: string) => ["dashboard", workspaceId, "stats"] as const,

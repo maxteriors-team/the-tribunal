@@ -10138,7 +10138,7 @@ export interface components {
             };
             /**
              * Type
-             * @description Action type: send_sms, send_email, make_call, enroll_campaign, apply_tag/add_tag, wait/delay
+             * @description Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay
              */
             type: string;
         };
