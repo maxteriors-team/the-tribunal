@@ -122,6 +122,7 @@ const offers = createResourceQueryKeys("offers");
 const opportunities = createResourceQueryKeys("opportunities");
 const pendingActions = createResourceQueryKeys("pending-actions");
 const phoneNumbers = createResourceQueryKeys("phone-numbers");
+const referralPartners = createResourceQueryKeys("referral-partners");
 const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
 const technicians = createResourceQueryKeys("technicians");
@@ -376,6 +377,15 @@ export const queryKeys = {
     ...messageTests,
     analytics: (workspaceId: string, testId: string) =>
       [...messageTests.detail(workspaceId, testId), "analytics"] as const,
+  },
+  referralPartners: {
+    ...referralPartners,
+    scoreboard: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [
+        ...referralPartners.all(workspaceId),
+        "scoreboard",
+        normalizeQueryKeyParams(params),
+      ] as const,
   },
   nudges: {
     ...nudges,

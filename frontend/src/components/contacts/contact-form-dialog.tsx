@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { LeadSourcePicker } from "@/components/lead-sources/source-pickers";
+import { ReferralPartnerPicker } from "@/components/referral-partners/referral-partner-picker";
 import {
   FormControl,
   FormField,
@@ -71,6 +72,7 @@ function contactToFormValues(contact: Contact): ContactFormValues {
     tags: tagsString,
     notes: contact.notes || "",
     lead_source_id: contact.first_touch_lead_source_id || "",
+    referral_partner_id: contact.referral_partner_id || "",
     birthday: contact.important_dates?.birthday || "",
     anniversary: contact.important_dates?.anniversary || "",
     address_line1: contact.address_line1 || "",
@@ -92,6 +94,15 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
   const { data: captureSettings } = useQuery({
     queryKey: queryKeys.leadSources.captureSettings(workspaceId ?? ""),
     queryFn: () => leadSourcesApi.getCaptureSettings(workspaceId!),
+    enabled: mode === "create" && !!workspaceId,
+  });
+
+  // Same query the LeadSourcePicker runs, so React Query serves both from one
+  // fetch. Resolving the channel from the stored id (rather than remembering it
+  // from the last onChange) keeps the partner field correct after a form reset.
+  const { data: leadSources } = useQuery({
+    queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
+    queryFn: () => leadSourcesApi.list(workspaceId!),
     enabled: mode === "create" && !!workspaceId,
   });
 
@@ -147,6 +158,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           return;
         }
 
+        // Resolve the channel from the submitted id rather than from render
+        // state, so the payload can never disagree with what was selected.
+        const submittedSourceIsReferral =
+          leadSources?.find((source) => source.id === data.lead_source_id)
+            ?.source_type === "referral_partner";
+
         const request: ManualContactCreatePayload = {
           first_name: data.first_name,
           last_name: data.last_name || undefined,
@@ -157,6 +174,11 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           tags: tagsArray,
           notes: data.notes || undefined,
           lead_source_id: data.lead_source_id || undefined,
+          // Only sent for a referral-partner channel. Switching the channel away
+          // from referrals must not leave a stale partner credited with the lead.
+          referral_partner_id: submittedSourceIsReferral
+            ? data.referral_partner_id || undefined
+            : undefined,
           address_line1: data.address_line1 || undefined,
           address_line2: data.address_line2 || undefined,
           address_city: data.address_city || undefined,
@@ -201,6 +223,13 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
   });
 
   const { form } = dialog;
+
+  // The partner field only earns its space when the chosen channel is actually a
+  // referral; asking "who referred them?" under a Google Ads source is noise.
+  const selectedLeadSourceId = form.watch("lead_source_id");
+  const isReferralPartnerSource =
+    leadSources?.find((source) => source.id === selectedLeadSourceId)
+      ?.source_type === "referral_partner";
 
   const title = mode === "create" ? "Add New Contact" : "Edit Contact";
   const description =
@@ -335,6 +364,28 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
                   onClear={() => field.onChange("")}
                   allowClear={!captureSettings?.require_lead_source_on_manual_create}
                   aria-label="How did you hear about us?"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {mode === "create" && isReferralPartnerSource && (
+        <FormField
+          control={form.control}
+          name="referral_partner_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Which partner referred them?</FormLabel>
+              <FormControl>
+                <ReferralPartnerPicker
+                  workspaceId={workspaceId ?? ""}
+                  value={field.value || undefined}
+                  onChange={(partnerId) => field.onChange(partnerId)}
+                  onClear={() => field.onChange("")}
+                  aria-label="Which partner referred them?"
                 />
               </FormControl>
               <FormMessage />

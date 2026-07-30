@@ -10,6 +10,9 @@ export const contactFormSchema = z.object({
   tags: z.string().optional(),
   notes: z.string().optional(),
   lead_source_id: z.string().optional(),
+  // Which named partner sent this lead. Only collected when the chosen lead
+  // source is a referral-partner channel; ignored otherwise.
+  referral_partner_id: z.string().optional(),
   birthday: z.string().optional(),
   anniversary: z.string().optional(),
   address_line1: z.string().optional(),
@@ -31,6 +34,7 @@ export const emptyContactFormValues: ContactFormValues = {
   tags: "",
   notes: "",
   lead_source_id: "",
+  referral_partner_id: "",
   birthday: "",
   anniversary: "",
   address_line1: "",
