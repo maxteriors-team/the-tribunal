@@ -11,7 +11,7 @@ class KnowledgeDocumentResponse(BaseModel):
 
     id: uuid.UUID
     workspace_id: uuid.UUID
-    agent_id: uuid.UUID
+    agent_id: uuid.UUID | None
     title: str
     doc_type: str
     content: str

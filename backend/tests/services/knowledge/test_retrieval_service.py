@@ -4,8 +4,9 @@ Covers the three behaviours that lock the noledge port in place:
 
 * **Fusion** — min-max normalization + weighted fusion + minScore floor.
 * **MMR** — token-Jaccard diversity rerank suppresses near-duplicate chunks.
-* **Workspace scoping** — every arm's SQL filters by ``workspace_id`` AND
-  ``agent_id`` so one tenant can never read another's knowledge base.
+* **Workspace scoping** — every arm's SQL filters by ``workspace_id`` and either
+  one ``agent_id`` or ``agent_id IS NULL`` for product help, so one tenant can
+  never read another's knowledge base.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.knowledge_document import KnowledgeDocument
 from app.services.ai.embeddings import EmbeddingResult
 from app.services.knowledge.retrieval_service import (
     Candidate,
@@ -202,6 +205,20 @@ class TestScoping:
         assert "ts_rank" in sql
         assert "@@" in sql
 
+    def test_workspace_level_statements_require_null_agent(self) -> None:
+        ws = uuid.uuid4()
+        vector_sql = self._sql(_build_vector_stmt(ws, None, [0.0] * 1536, limit=10)).lower()
+        keyword_sql = self._sql(_build_keyword_stmt(ws, None, "pricing", limit=10)).lower()
+
+        assert "knowledge_chunks.workspace_id =" in vector_sql
+        assert "knowledge_chunks.agent_id is null" in vector_sql
+        assert "knowledge_chunks.workspace_id =" in keyword_sql
+        assert "knowledge_chunks.agent_id is null" in keyword_sql
+
+    def test_workspace_knowledge_agent_columns_are_nullable(self) -> None:
+        assert KnowledgeDocument.__table__.c.agent_id.nullable is True
+        assert KnowledgeChunk.__table__.c.agent_id.nullable is True
+
     def test_scoping_binds_actual_ids(self) -> None:
         ws = uuid.uuid4()
         agent = uuid.uuid4()
@@ -258,11 +275,12 @@ class TestRetrievePassages:
         out = await service.retrieve_passages(
             db,
             workspace_id=uuid.uuid4(),
-            agent_id=uuid.uuid4(),
+            agent_id=None,
             query="pricing",
         )
         assert out == []
         db.execute.assert_not_awaited()
+        assert service.retrieve.await_args.kwargs["agent_id"] is None
 
     @pytest.mark.asyncio
     async def test_enriches_chunks_with_document_titles(self) -> None:

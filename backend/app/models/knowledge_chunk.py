@@ -49,10 +49,10 @@ class KnowledgeChunk(Base):
         nullable=False,
         index=True,
     )
-    agent_id: Mapped[uuid.UUID] = mapped_column(
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agents.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     document_id: Mapped[uuid.UUID] = mapped_column(
@@ -105,7 +105,7 @@ class KnowledgeChunk(Base):
 
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
-    agent: Mapped["Agent"] = relationship("Agent")
+    agent: Mapped["Agent | None"] = relationship("Agent")
     document: Mapped["KnowledgeDocument"] = relationship("KnowledgeDocument")
 
     def __repr__(self) -> str:
