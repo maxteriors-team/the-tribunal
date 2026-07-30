@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Banknote,
   DollarSign,
   FileText,
@@ -33,7 +34,10 @@ import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S, STATIC } from "@/lib/query-options";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type { SalesPerformanceReport as SalesPerformanceReportData } from "@/types";
+import type {
+  AttributionGapReport as AttributionGapReportData,
+  SalesPerformanceReport as SalesPerformanceReportData,
+} from "@/types";
 
 import { ReportDateRangePicker } from "./report-date-range-picker";
 import {
@@ -173,6 +177,44 @@ function BreakdownCard({
             groupLabel={groupLabel}
             metrics={metrics}
           />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AttributionGapCard({ data }: { data: AttributionGapReportData }) {
+  const hasGap = data.unattributed_contacts > 0;
+  const rate = data.gap_rate == null ? "—" : formatRate(data.gap_rate);
+
+  return (
+    <Card className={cn(hasGap && "border-warning/50 bg-warning/5")}>
+      <CardHeader className="flex flex-row items-start justify-between gap-4 pb-2">
+        <div className="space-y-1">
+          <CardTitle className="text-base">Attribution blind spot</CardTitle>
+          <CardDescription>
+            Contacts created in this range without a structured first-touch source.
+          </CardDescription>
+        </div>
+        <AlertTriangle
+          className={cn(
+            "size-5 shrink-0",
+            hasGap ? "text-warning" : "text-muted-foreground",
+          )}
+          aria-hidden
+        />
+      </CardHeader>
+      <CardContent>
+        <p className="text-2xl font-bold tabular-nums">
+          {data.unattributed_contacts}
+          <span className="ml-2 text-sm font-normal text-muted-foreground">
+            of {data.total_contacts} contacts · {rate} missing
+          </span>
+        </p>
+        {hasGap && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            ROI by lead source excludes these contacts until attribution is corrected.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -332,6 +374,18 @@ function SalesPerformanceReportContent() {
   const [range, setRange] = useState<DateRange>(() => currentMonthRange());
   const comparisonRange = previousRange(range);
 
+  const attributionGapQuery = useQuery({
+    queryKey: queryKeys.reports.attributionGap(workspaceId ?? "", range),
+    queryFn: () =>
+      reportingApi.attributionGap(workspaceId ?? "", {
+        date_from: range.from,
+        date_to: range.to,
+      }),
+    enabled: Boolean(workspaceId) && mounted,
+    ...POLL_60S,
+    placeholderData: (previous) => previous,
+  });
+
   const currentQuery = useQuery({
     queryKey: queryKeys.reports.salesPerformance(workspaceId ?? "", range),
     queryFn: () =>
@@ -371,6 +425,10 @@ function SalesPerformanceReportContent() {
           <ReportDateRangePicker value={range} onChange={setRange} />
         ) : null}
       </div>
+
+      {attributionGapQuery.data ? (
+        <AttributionGapCard data={attributionGapQuery.data} />
+      ) : null}
 
       {!mounted || !workspaceId || currentQuery.isPending ? (
         <PageLoadingState message="Loading sales performance…" />

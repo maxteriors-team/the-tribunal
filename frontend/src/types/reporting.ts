@@ -12,6 +12,9 @@ type Schemas = components["schemas"];
  */
 export type SalesPerformanceReport = Schemas["SalesPerformanceReport"];
 
+/** Contact intake coverage for structured first-touch attribution. */
+export type AttributionGapReport = Schemas["AttributionGapReport"];
+
 /**
  * One grouped slice of sales performance. The backend reuses this exact shape
  * for closer, lead-source, and primary-service breakdowns, so the UI renders

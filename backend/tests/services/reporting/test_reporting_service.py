@@ -23,6 +23,7 @@ from app.models.contact import Contact
 from app.models.field_service import Job, JobStatus
 from app.models.invoice import Invoice
 from app.models.job_costing import JobExpense, TimeEntry
+from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.workspace import Workspace
 from app.services.reporting import ReportingService
 
@@ -96,6 +97,50 @@ async def _job(db, workspace_id: uuid.UUID, contact_id: int, *, invoice_id=None,
     db.add(job)
     await db.flush()
     return job
+
+
+# --------------------------------------------------------------------------- #
+# Attribution coverage
+# --------------------------------------------------------------------------- #
+async def test_attribution_gap_counts_missing_sources_in_range_and_workspace() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        other = await _workspace(db)
+        source = LeadSource(
+            workspace_id=ws.id,
+            name="Referral",
+            allowed_domains=[],
+            source_type=LeadSourceType.REFERRAL_PARTNER,
+        )
+        db.add(source)
+        await db.flush()
+
+        created_in_range = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
+        attributed = await _contact(db, ws.id)
+        attributed.created_at = created_in_range
+        attributed.first_touch_lead_source_id = source.id
+
+        missing_one = await _contact(db, ws.id)
+        missing_one.created_at = created_in_range
+        missing_two = await _contact(db, ws.id)
+        missing_two.created_at = datetime(2026, 7, 31, 23, 59, tzinfo=UTC)
+
+        outside = await _contact(db, ws.id)
+        outside.created_at = datetime(2026, 6, 30, 23, 59, tzinfo=UTC)
+        other_workspace = await _contact(db, other.id)
+        other_workspace.created_at = created_in_range
+        await db.flush()
+
+        report = await ReportingService(db).attribution_gap(
+            ws.id,
+            date_from=date(2026, 7, 1),
+            date_to=date(2026, 7, 31),
+        )
+
+        assert report.total_contacts == 3
+        assert report.unattributed_contacts == 2
+        assert report.attributed_contacts == 1
+        assert report.gap_rate == 0.6667
 
 
 # --------------------------------------------------------------------------- #

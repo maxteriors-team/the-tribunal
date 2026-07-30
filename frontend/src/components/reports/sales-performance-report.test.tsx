@@ -5,14 +5,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SalesPerformanceReport } from "@/components/reports/sales-performance-report";
 import type { SalesPerformanceBreakdownRow, SalesPerformanceReport as Report } from "@/types";
 
-const { salesPerformanceMock, useWorkspaceIdMock, canMock } = vi.hoisted(() => ({
+const { attributionGapMock, salesPerformanceMock, useWorkspaceIdMock, canMock } = vi.hoisted(
+  () => ({
+  attributionGapMock: vi.fn(),
   salesPerformanceMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
   canMock: vi.fn(),
-}));
+  }),
+);
 
 vi.mock("@/lib/api/reporting", () => ({
-  reportingApi: { salesPerformance: salesPerformanceMock },
+  reportingApi: {
+    attributionGap: attributionGapMock,
+    salesPerformance: salesPerformanceMock,
+  },
 }));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
@@ -102,10 +108,30 @@ beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
   canMock.mockReturnValue(true);
+  attributionGapMock.mockResolvedValue({
+    date_from: "2026-07-01",
+    date_to: "2026-07-31",
+    total_contacts: 10,
+    unattributed_contacts: 2,
+    attributed_contacts: 8,
+    gap_rate: 0.2,
+  });
   vi.setSystemTime(new Date(2026, 6, 15));
 });
 
 describe("SalesPerformanceReport", () => {
+  it("surfaces contacts missing structured attribution", async () => {
+    respondWith(report());
+
+    renderReport();
+
+    expect(await screen.findByText("Attribution blind spot")).toBeInTheDocument();
+    expect(screen.getByText(/of 10 contacts · 20% missing/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/ROI by lead source excludes these contacts/),
+    ).toBeInTheDocument();
+  });
+
   it("renders the three levers plus approved revenue", async () => {
     respondWith(report());
 
