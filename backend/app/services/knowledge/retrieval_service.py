@@ -13,8 +13,9 @@ Mirrors ``retrieve.ts`` + ``mmr.ts``:
    near-duplicate chunks crowding the top-k.
 6. A pluggable **reranker** seam runs last (identity no-op by default).
 
-Every query is scoped to a single ``workspace_id`` + ``agent_id`` so one tenant
-can never read another's knowledge base.
+Every query is scoped to one ``workspace_id`` and either one ``agent_id`` or
+workspace-level documents (``agent_id IS NULL``), so one tenant can never read
+another's knowledge base.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from dataclasses import dataclass, replace
 import structlog
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
@@ -256,10 +258,18 @@ def fuse_and_filter(
     return survivors
 
 
-# ── DB query builders (workspace + agent scoped) ────────────────────────────
+# ── DB query builders (workspace + optional agent scoped) ───────────────────
+def _chunk_agent_scope(agent_id: uuid.UUID | None) -> ColumnElement[bool]:
+    """Match one agent, or only workspace-level chunks when no agent is supplied."""
+
+    if agent_id is None:
+        return KnowledgeChunk.agent_id.is_(None)
+    return KnowledgeChunk.agent_id == agent_id
+
+
 def _build_vector_stmt(
     workspace_id: uuid.UUID,
-    agent_id: uuid.UUID,
+    agent_id: uuid.UUID | None,
     query_vector: list[float],
     limit: int,
 ) -> Select[tuple[uuid.UUID, uuid.UUID, str, int, int, int, float]]:
@@ -277,7 +287,7 @@ def _build_vector_stmt(
         )
         .where(
             KnowledgeChunk.workspace_id == workspace_id,
-            KnowledgeChunk.agent_id == agent_id,
+            _chunk_agent_scope(agent_id),
         )
         .order_by(distance.asc())
         .limit(limit)
@@ -286,7 +296,7 @@ def _build_vector_stmt(
 
 def _build_keyword_stmt(
     workspace_id: uuid.UUID,
-    agent_id: uuid.UUID,
+    agent_id: uuid.UUID | None,
     query: str,
     limit: int,
 ) -> Select[tuple[uuid.UUID, uuid.UUID, str, int, int, int, float]]:
@@ -305,7 +315,7 @@ def _build_keyword_stmt(
         )
         .where(
             KnowledgeChunk.workspace_id == workspace_id,
-            KnowledgeChunk.agent_id == agent_id,
+            _chunk_agent_scope(agent_id),
             KnowledgeChunk.search_vector.op("@@")(ts_query),
         )
         .order_by(rank.desc())
@@ -321,7 +331,7 @@ class KnowledgeRetrievalService:
         db: AsyncSession,
         *,
         workspace_id: uuid.UUID,
-        agent_id: uuid.UUID,
+        agent_id: uuid.UUID | None,
         query: str,
         options: RetrieveOptions | None = None,
     ) -> list[RetrievedChunk]:
@@ -329,7 +339,8 @@ class KnowledgeRetrievalService:
 
         Over-fetch per arm → min-max normalize each arm → weighted fuse → filter
         by ``min_score`` → MMR diversify → slice to ``top_k`` → rerank. Always
-        scoped to ``workspace_id`` + ``agent_id``.
+        scoped to ``workspace_id`` plus one agent, or workspace-level documents
+        when ``agent_id`` is ``None``.
         """
         opts = options or RetrieveOptions()
         embedder = opts.embedder or embed_texts
@@ -348,7 +359,7 @@ class KnowledgeRetrievalService:
             logger.warning(
                 "knowledge_retrieval_embed_failed",
                 workspace_id=str(workspace_id),
-                agent_id=str(agent_id),
+                agent_id=str(agent_id) if agent_id is not None else None,
                 error=embedded.error,
             )
             return []
@@ -433,7 +444,7 @@ class KnowledgeRetrievalService:
         db: AsyncSession,
         *,
         workspace_id: uuid.UUID,
-        agent_id: uuid.UUID,
+        agent_id: uuid.UUID | None,
         query: str,
         top_k: int | None = None,
         options: RetrieveOptions | None = None,
@@ -441,9 +452,10 @@ class KnowledgeRetrievalService:
         """Retrieve the top-k chunks and enrich them with document titles.
 
         Thin wrapper over :meth:`retrieve` for the on-demand ``search_knowledge``
-        tool: runs the hybrid pipeline (always scoped to ``workspace_id`` +
-        ``agent_id``), then resolves each surviving chunk's parent document title
-        in a single query so the model can cite sources. Order is preserved.
+        tool: runs the hybrid pipeline (scoped to ``workspace_id`` plus one agent,
+        or to workspace-level documents when ``agent_id`` is ``None``), then
+        resolves each surviving chunk's parent document title in a single query
+        so the model can cite sources. Order is preserved.
         """
         opts = options or RetrieveOptions()
         if top_k is not None:
@@ -460,10 +472,18 @@ class KnowledgeRetrievalService:
             return []
 
         document_ids = {chunk.document_id for chunk in chunks}
+        document_agent_scope = (
+            KnowledgeDocument.agent_id.is_(None)
+            if agent_id is None
+            else KnowledgeDocument.agent_id == agent_id
+        )
+
         title_rows = (
             await db.execute(
                 select(KnowledgeDocument.id, KnowledgeDocument.title).where(
-                    KnowledgeDocument.id.in_(document_ids)
+                    KnowledgeDocument.id.in_(document_ids),
+                    KnowledgeDocument.workspace_id == workspace_id,
+                    document_agent_scope,
                 )
             )
         ).all()
