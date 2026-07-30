@@ -39,10 +39,14 @@ import json
 import logging
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 ConfigureParser = Callable[[argparse.ArgumentParser], None]
 """A callback that adds script-specific arguments to a parser."""
@@ -127,6 +131,132 @@ def _promote_env_database_url(env: Env) -> None:
     override = os.environ.get(f"{env.name}_DATABASE_URL")
     if override:
         os.environ["DATABASE_URL"] = override
+
+
+# ─── Database targeting ──────────────────────────────────────────────────────
+# ``_promote_env_database_url`` only works if nothing has imported
+# ``app.core.config`` yet: ``settings`` is a module-level singleton, and
+# ``app.db.session`` builds ``engine``/``AsyncSessionLocal`` from it at import
+# time. A script that imports ``app.db.session`` at module scope — the natural
+# thing to write — therefore freezes the *local* URL before ``bootstrap()`` ever
+# runs, and ``--env production`` then reads and writes the developer's dev
+# database while every log line says "production".
+#
+# That failure is silent and total: it reports success, and the numbers it
+# reports are real, just from the wrong database.
+#
+# ``script_sessionmaker`` closes it by resolving the URL and creating the engine
+# *when called*, so import order cannot matter, and by refusing the two shapes
+# that mean "we are not actually pointed at the remote database".
+
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", ""})
+
+_ASYNC_DRIVER = "postgresql+asyncpg"
+
+
+def _normalise_async_driver(url: str) -> str:
+    """Coerce a plain ``postgres(ql)://`` URL onto the asyncpg driver.
+
+    Operators copy the URL from Railway / ``make db.backup.prod``, which hands
+    out ``postgresql://``. Passing that straight to ``create_async_engine``
+    fails with a driver error that reads like a bad password, so normalise it.
+    """
+    parsed = make_url(url)
+    if parsed.drivername in {"postgres", "postgresql"}:
+        parsed = parsed.set(drivername=_ASYNC_DRIVER)
+    return parsed.render_as_string(hide_password=False)
+
+
+def redact_database_url(url: str) -> str:
+    """Render ``url`` with the password masked, for logs and error messages."""
+    return make_url(url).render_as_string(hide_password=True)
+
+
+def script_database_url(env: Env) -> str:
+    """Resolve the database URL for ``env``, refusing a silent local fallback.
+
+    A non-local target *must* supply ``<ENV>_DATABASE_URL``. Falling back to the
+    ambient ``DATABASE_URL`` (which ``backend/.env`` points at the dev database)
+    is precisely the bug this guards: the run would succeed against the wrong
+    database and report the requested environment.
+
+    Raises :class:`ScriptAbortError` when the override is missing for a remote
+    environment, or when it resolves to a local host — which means the override
+    is set but still not pointing anywhere remote.
+    """
+    override = os.environ.get(f"{env.name}_DATABASE_URL")
+
+    if override:
+        url = _normalise_async_driver(override)
+    elif env.is_local:
+        # Local may legitimately rely on the ambient config. Import lazily so
+        # this function never itself freezes ``settings`` for a caller that
+        # promotes an override afterwards.
+        from app.core.config import settings
+
+        url = _normalise_async_driver(os.environ.get("DATABASE_URL") or settings.database_url)
+    else:
+        raise ScriptAbortError(
+            f"--env {env.value} requires {env.name}_DATABASE_URL to be set.\n"
+            f"  Refusing to fall back to the ambient DATABASE_URL: that would run "
+            f"against your local database while every log line claims {env.value}.\n"
+            f"  Fix: {env.name}_DATABASE_URL='postgresql://...' <command>"
+        )
+
+    host = (make_url(url).host or "").strip("[]")
+    if not env.is_local and host in _LOCAL_HOSTS:
+        raise ScriptAbortError(
+            f"--env {env.value} resolved to the local host {host!r} "
+            f"({redact_database_url(url)}).\n"
+            f"  A {env.value} run must target a remote database. Check "
+            f"{env.name}_DATABASE_URL."
+        )
+    return url
+
+
+@asynccontextmanager
+async def script_sessionmaker(
+    ctx: ExecutionContext,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """Yield a session factory bound to ``ctx.env``'s database.
+
+    The engine is created here rather than imported, so the resolved URL wins
+    regardless of what a caller imported first, and is disposed on exit so a
+    script never leaves connections open against production.
+
+    The target is logged with its password masked: a run against the wrong
+    database should be obvious in the first line of output, not inferred from
+    surprising row counts afterwards.
+    """
+    url = script_database_url(ctx.env)
+    log_event(
+        ctx.logger,
+        logging.INFO,
+        "database target resolved",
+        env=ctx.env.value,
+        target=redact_database_url(url),
+    )
+
+    engine = create_async_engine(
+        url,
+        pool_pre_ping=True,
+        connect_args={
+            # Fail fast on an unreachable host instead of hanging a release.
+            "timeout": 15,
+            # Tag the connection so this run is attributable in
+            # ``pg_stat_activity`` while it holds locks on a live database.
+            "server_settings": {"application_name": f"aicrm-script-{ctx.env.value}"},
+        },
+    )
+    try:
+        yield async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+    finally:
+        await engine.dispose()
 
 
 # ─── Structured logging ──────────────────────────────────────────────────────
@@ -440,6 +570,9 @@ __all__ = [
     "ensure_backend_on_path",
     "from_args",
     "log_event",
+    "redact_database_url",
     "run",
+    "script_database_url",
+    "script_sessionmaker",
     "setup_logging",
 ]

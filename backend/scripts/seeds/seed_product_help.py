@@ -50,7 +50,11 @@ if str(_BACKEND_DIR) not in sys.path:
 
 from sqlalchemy import select  # noqa: E402
 
-from app.db.session import AsyncSessionLocal, transaction_boundary  # noqa: E402
+# NOTE: deliberately *not* importing ``AsyncSessionLocal``. It is bound to
+# ``settings.database_url`` at import time, so using it here would silently run
+# against the local database even with ``--env production``. The session factory
+# comes from ``script_sessionmaker``, which resolves the URL when called.
+from app.db.session import transaction_boundary  # noqa: E402
 from app.models.workspace import Workspace  # noqa: E402
 from app.services.knowledge.ingestion_service import IngestionError  # noqa: E402
 from app.services.knowledge.product_help import (  # noqa: E402
@@ -62,9 +66,11 @@ from scripts._harness import (  # noqa: E402
     EXIT_FAILURE,
     EXIT_OK,
     ExecutionContext,
+    ScriptAbortError,
     bootstrap,
     log_event,
     run,
+    script_sessionmaker,
 )
 
 logger = logging.getLogger("seed")
@@ -104,7 +110,7 @@ async def _run(
     if workspace_id is not None:
         stmt = stmt.where(Workspace.id == workspace_id)
 
-    async with AsyncSessionLocal() as db:
+    async with script_sessionmaker(ctx) as session_factory, session_factory() as db:
         workspace_ids = list((await db.execute(stmt)).scalars().all())
 
         if ctx.dry_run:
@@ -177,6 +183,11 @@ def main() -> int:
     except ProductHelpError as exc:
         log_event(logger, logging.ERROR, "help corpus unavailable", error=str(exc))
         return EXIT_FAILURE
+    except ScriptAbortError as exc:
+        # A refused database target. Report it as an abort so it can never be
+        # mistaken for "seeded nothing because there was nothing to do".
+        log_event(logger, logging.ERROR, "refusing to run", reason=str(exc))
+        return exc.exit_code
 
 
 if __name__ == "__main__":
