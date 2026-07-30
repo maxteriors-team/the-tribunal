@@ -18,12 +18,25 @@ from app.services.field_service.exceptions import (
     ContactNotInWorkspaceError,
     CrewNameConflictError,
     CrewNotFoundError,
+    JobNotFoundError,
+    JobSiteNotGeocodedError,
+    NeighborCampaignNotFoundError,
+    NeighborMessagingDisabledError,
+    NeighborOutreachBatchNotFoundError,
+    NeighborOutreachEntryNotFoundError,
     ServiceLocationNotFoundError,
     TechnicianNotFoundError,
     UserNotMemberError,
 )
 from app.services.field_service.locations import ServiceLocationService
 from app.services.field_service.technicians import TechnicianService
+
+# NOTE: ``NeighborOutreachService`` is deliberately **not** re-exported here.
+# ``app.schemas.neighbor_outreach`` reads its radius bounds from
+# ``.jobsite_radius``, and importing any submodule of this package executes this
+# ``__init__``. Re-exporting the service would therefore make
+# schemas -> package init -> service -> schemas a hard circular import. Import it
+# from ``app.services.field_service.neighbor_outreach`` directly.
 
 __all__ = [
     "ServiceLocationService",
@@ -35,4 +48,10 @@ __all__ = [
     "TechnicianNotFoundError",
     "ContactNotInWorkspaceError",
     "UserNotMemberError",
+    "JobNotFoundError",
+    "JobSiteNotGeocodedError",
+    "NeighborOutreachBatchNotFoundError",
+    "NeighborOutreachEntryNotFoundError",
+    "NeighborMessagingDisabledError",
+    "NeighborCampaignNotFoundError",
 ]

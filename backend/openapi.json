@@ -22367,6 +22367,708 @@
         "title": "MissionStatus",
         "type": "string"
       },
+      "NeighborOutreachBatchResponse": {
+        "description": "A job's generated neighbour list, nearest first.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/NeighborOutreachEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "messageable_count": {
+            "default": 0,
+            "title": "Messageable Count",
+            "type": "integer"
+          },
+          "origin_latitude": {
+            "title": "Origin Latitude",
+            "type": "number"
+          },
+          "origin_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Location Id"
+          },
+          "origin_longitude": {
+            "title": "Origin Longitude",
+            "type": "number"
+          },
+          "pending_count": {
+            "default": 0,
+            "title": "Pending Count",
+            "type": "integer"
+          },
+          "radius_meters": {
+            "title": "Radius Meters",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "origin_location_id",
+          "origin_latitude",
+          "origin_longitude",
+          "radius_meters",
+          "generated_at",
+          "created_at"
+        ],
+        "title": "NeighborOutreachBatchResponse",
+        "type": "object"
+      },
+      "NeighborOutreachCampaignRequest": {
+        "additionalProperties": false,
+        "description": "Enroll the *consented* subset of a batch into an existing campaign.\n\nEnrollment, not a bespoke sender: the entries become\n:class:`app.models.campaign.CampaignContact` rows on a campaign the operator\nalready owns, so the send goes through the same pipeline — and the same\n:class:`app.services.compliance.OutboundComplianceService` gate at send time —\nas every other message the workspace sends. The eligibility filter here is an\nadditional pre-flight check, not a replacement for it.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/NeighborOutreachChannel",
+            "default": "sms"
+          }
+        },
+        "required": [
+          "campaign_id"
+        ],
+        "title": "NeighborOutreachCampaignRequest",
+        "type": "object"
+      },
+      "NeighborOutreachCampaignResponse": {
+        "description": "Outcome of an enrollment run over a batch.\n\n``blocked_by_reason`` is the compliance ledger for the run: every entry that\nwas *not* enrolled, grouped by why. An empty ``enrolled_entry_ids`` with a\npopulated ``blocked_by_reason`` is the normal, correct result for a street of\nstrangers — and the reason the default channel is print.",
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "blocked_by_reason": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Blocked By Reason",
+            "type": "object"
+          },
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/NeighborOutreachChannel"
+          },
+          "enrolled_count": {
+            "default": 0,
+            "title": "Enrolled Count",
+            "type": "integer"
+          },
+          "enrolled_entry_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Enrolled Entry Ids",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "skipped_count": {
+            "default": 0,
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "batch_id",
+          "campaign_id",
+          "channel"
+        ],
+        "title": "NeighborOutreachCampaignResponse",
+        "type": "object"
+      },
+      "NeighborOutreachChannel": {
+        "description": "How this neighbour is to be reached.\n\n``print`` is the default and the only channel available for a location with no\nconsented contact behind it: a door hanger or a mailer needs no prior\nrelationship. ``sms``/``email`` are assigned only after the compliance gate in\n:mod:`app.services.field_service.neighbor_outreach` clears the location's\ncontact. Same ``VARCHAR(50)`` treatment as :class:`NeighborOutreachStatus`.",
+        "enum": [
+          "print",
+          "sms",
+          "email"
+        ],
+        "title": "NeighborOutreachChannel",
+        "type": "string"
+      },
+      "NeighborOutreachEntryResponse": {
+        "description": "One neighbouring site in a job's outreach batch.",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/NeighborOutreachChannel"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "contacted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacted At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "distance_meters": {
+            "title": "Distance Meters",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "messageable": {
+            "default": false,
+            "title": "Messageable",
+            "type": "boolean"
+          },
+          "messaging_blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messaging Blocked Reason"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "service_location_id": {
+            "format": "uuid",
+            "title": "Service Location Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeighborOutreachStatus"
+          },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Changed At"
+          }
+        },
+        "required": [
+          "id",
+          "service_location_id",
+          "contact_id",
+          "distance_meters",
+          "status",
+          "channel",
+          "messaging_blocked_reason",
+          "contacted_at",
+          "status_changed_at",
+          "notes",
+          "created_at"
+        ],
+        "title": "NeighborOutreachEntryResponse",
+        "type": "object"
+      },
+      "NeighborOutreachEntryUpdate": {
+        "additionalProperties": false,
+        "description": "Operator update for a single entry (status, channel, notes).",
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeighborOutreachChannel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NeighborOutreachStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "NeighborOutreachEntryUpdate",
+        "type": "object"
+      },
+      "NeighborOutreachExportResponse": {
+        "description": "The exportable print/canvass list for a job's neighbour batch.",
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "radius_meters": {
+            "title": "Radius Meters",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/NeighborOutreachExportRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "batch_id",
+          "radius_meters",
+          "generated_at"
+        ],
+        "title": "NeighborOutreachExportResponse",
+        "type": "object"
+      },
+      "NeighborOutreachExportRow": {
+        "description": "One row of the door-hanger / direct-mail list.\n\nCarries the neighbour's postal address, which is customer PII decrypted out of\n:class:`app.models.field_service.ServiceLocation`. Dispatcher-gated, workspace\nscoped, and never persisted to a public path.",
+        "properties": {
+          "address_line1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line1"
+          },
+          "address_line2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line2"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/NeighborOutreachChannel"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "distance_meters": {
+            "title": "Distance Meters",
+            "type": "number"
+          },
+          "entry_id": {
+            "format": "uuid",
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "service_location_id": {
+            "format": "uuid",
+            "title": "Service Location Id",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NeighborOutreachStatus"
+          }
+        },
+        "required": [
+          "entry_id",
+          "service_location_id",
+          "label",
+          "customer_name",
+          "address_line1",
+          "address_line2",
+          "city",
+          "state",
+          "postal_code",
+          "country",
+          "latitude",
+          "longitude",
+          "distance_meters",
+          "status",
+          "channel"
+        ],
+        "title": "NeighborOutreachExportRow",
+        "type": "object"
+      },
+      "NeighborOutreachGenerateRequest": {
+        "additionalProperties": false,
+        "description": "Optional per-run overrides when generating a job's neighbour list.",
+        "properties": {
+          "max_neighbors": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Neighbors"
+          },
+          "radius_meters": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radius Meters"
+          }
+        },
+        "title": "NeighborOutreachGenerateRequest",
+        "type": "object"
+      },
+      "NeighborOutreachSettings": {
+        "additionalProperties": false,
+        "description": "Validated per-workspace configuration for job-site neighbour outreach.",
+        "properties": {
+          "allow_messaging": {
+            "default": false,
+            "title": "Allow Messaging",
+            "type": "boolean"
+          },
+          "auto_generate_on_completion": {
+            "default": true,
+            "title": "Auto Generate On Completion",
+            "type": "boolean"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_neighbors": {
+            "default": 50,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Max Neighbors",
+            "type": "integer"
+          },
+          "message_template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Template Id"
+          },
+          "radius_meters": {
+            "default": 150,
+            "maximum": 5000.0,
+            "minimum": 10.0,
+            "title": "Radius Meters",
+            "type": "integer"
+          }
+        },
+        "title": "NeighborOutreachSettings",
+        "type": "object"
+      },
+      "NeighborOutreachSettingsUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update payload for neighbour-outreach settings.",
+        "properties": {
+          "allow_messaging": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Messaging"
+          },
+          "auto_generate_on_completion": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Generate On Completion"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "max_neighbors": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Neighbors"
+          },
+          "message_template_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Template Id"
+          },
+          "radius_meters": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radius Meters"
+          }
+        },
+        "title": "NeighborOutreachSettingsUpdate",
+        "type": "object"
+      },
+      "NeighborOutreachStatus": {
+        "description": "Where one neighbour stands in the outreach for a given job.\n\n``pending``   — generated, not yet worked.\n``contacted`` — a door hanger was hung / a mailer went out / a message sent.\n``skipped``   — deliberately passed over (vacant, hostile, already a customer).\n``converted`` — turned into a lead or a booked job.\n\nPersisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``),\nnot a Postgres ``ENUM``, so a future status needs no ``ALTER TYPE`` migration —\nthe same treatment as :class:`app.models.referral_partner.ReferralPartnerType`.\nKeep values under 50 chars.",
+        "enum": [
+          "pending",
+          "contacted",
+          "skipped",
+          "converted"
+        ],
+        "title": "NeighborOutreachStatus",
+        "type": "string"
+      },
       "NextBestAction": {
         "description": "The single recommended next move for the operator.",
         "properties": {
@@ -46714,6 +47416,112 @@
         ]
       }
     },
+    "/api/v1/settings/workspaces/{workspace_id}/neighbor-outreach": {
+      "get": {
+        "description": "Get the workspace's job-site neighbour-outreach config.",
+        "operationId": "get_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Neighbor Outreach Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the neighbour-outreach config (partial merge into ``settings``).\n\nOnly provided keys are written, so changing ``radius_meters`` never clobbers\n``message_template_id``. The merged blob is validated before it is persisted — a\nstored config that no longer parses would silently fall back to \"disabled\", so\na bad radius must fail loudly at the edit instead.\n\n``message_template_id`` is checked to belong to this workspace: a template id is\nan opaque UUID, and pointing neighbour messaging at another tenant's copy would\nleak their copy to your customers.",
+        "operationId": "update_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeighborOutreachSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Neighbor Outreach Settings",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
     "/api/v1/settings/workspaces/{workspace_id}/post-estimate-followup": {
       "get": {
         "description": "Get the workspace's first-14-days quote follow-up cadence.",
@@ -60596,6 +61404,339 @@
           }
         ],
         "summary": "Delete Expense",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors": {
+      "get": {
+        "description": "The generated neighbour list for a job, nearest first (404 until generated).",
+        "operationId": "get_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Job Neighbors",
+        "tags": [
+          "Field Service"
+        ]
+      },
+      "post": {
+        "description": "Generate (or top up) the job's neighbour list.\n\nIdempotent: re-running reuses the job's existing batch and appends only newly\nin-radius sites, so statuses an operator already set are never reset and no\nhouse is worked twice for the same job.",
+        "operationId": "generate_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeighborOutreachGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Generate Job Neighbors",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/campaign": {
+      "post": {
+        "description": "Enroll the *consented* subset of the batch into an existing campaign.\n\nNeighbours with no contact record, no recorded consent, or a global opt-out are\nleft on the print channel and reported in ``blocked_by_reason``. Zero\nenrollments on a street of strangers is the correct result.",
+        "operationId": "enroll_job_neighbors_in_campaign_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_campaign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeighborOutreachCampaignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachCampaignResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enroll Job Neighbors In Campaign",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/entries/{entry_id}": {
+      "patch": {
+        "description": "Mark a neighbour contacted/skipped/converted, or add a note.",
+        "operationId": "update_job_neighbor_entry_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_entries__entry_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeighborOutreachEntryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Job Neighbor Entry",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/export": {
+      "get": {
+        "description": "Door-hanger / direct-mail list for the job's neighbours.\n\nDispatcher-gated because the rows carry neighbours' postal addresses decrypted\nout of ``service_locations`` — the default, always-legal output channel, but\ncustomer PII all the same.",
+        "operationId": "export_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NeighborOutreachExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Job Neighbors",
         "tags": [
           "Field Service"
         ]
