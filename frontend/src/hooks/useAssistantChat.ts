@@ -1,6 +1,8 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import {
   useAssistantConversation,
@@ -14,6 +16,7 @@ import {
   type AssistantMessageResponse,
   type AssistantStreamEvent,
 } from "@/lib/api/assistant";
+import { pendingActionsApi } from "@/lib/api/pending-actions";
 import {
   applyStreamResult,
   createRuntimeId,
@@ -27,7 +30,16 @@ import {
   startUserTurn,
   type ConversationRuntime,
   type StreamAccumulator,
+  type PendingActionReviewState,
 } from "@/lib/assistant/conversation-runtime";
+import { queryKeys } from "@/lib/query-keys";
+import { getApiErrorMessage } from "@/lib/utils/errors";
+import type { PendingAction } from "@/types/pending-action";
+
+interface SendMessageOptions {
+  image?: string | null;
+  isRetry?: boolean;
+}
 
 export interface UseAssistantChatResult {
   workspaceId: string | null;
@@ -44,6 +56,7 @@ export interface UseAssistantChatResult {
   setImageDataUrl: (value: string | null) => void;
   isEnhancing: boolean;
   enhancementError: string | null;
+  actionReviewStates: Record<string, PendingActionReviewState>;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   handleNewConversation: () => void;
   handleSelectConversation: (conversationId: string) => void;
@@ -53,6 +66,9 @@ export interface UseAssistantChatResult {
   handleSubmit: (event: React.FormEvent) => void;
   handleKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleStop: () => void;
+  handleRetry: () => Promise<void>;
+  handleApprovePendingAction: (actionId: string) => Promise<void>;
+  handleRejectPendingAction: (actionId: string) => Promise<void>;
 }
 
 /**
@@ -62,24 +78,19 @@ export interface UseAssistantChatResult {
  */
 export function useAssistantChat(): UseAssistantChatResult {
   const workspaceId = useWorkspaceId();
+  const queryClient = useQueryClient();
   const conversationsQuery = useAssistantConversations();
-  const conversations = useMemo(
-    () => conversationsQuery.data ?? [],
-    [conversationsQuery.data],
-  );
-  const [draftConversationId, setDraftConversationId] = useState(() =>
-    createRuntimeId(),
-  );
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
-  );
-  const [runtimes, setRuntimes] = useState<Record<string, ConversationRuntime>>(
-    {},
-  );
+  const conversations = useMemo(() => conversationsQuery.data ?? [], [conversationsQuery.data]);
+  const [draftConversationId, setDraftConversationId] = useState(() => createRuntimeId());
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [runtimes, setRuntimes] = useState<Record<string, ConversationRuntime>>({});
   const [input, setInput] = useState("");
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancementError, setEnhancementError] = useState<string | null>(null);
+  const [actionReviewStates, setActionReviewStates] = useState<
+    Record<string, PendingActionReviewState>
+  >({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortControllersRef = useRef<Record<string, AbortController>>({});
   const accumulatorsRef = useRef<Record<string, StreamAccumulator>>({});
@@ -93,9 +104,7 @@ export function useAssistantChat(): UseAssistantChatResult {
     () =>
       isDraftActive
         ? undefined
-        : conversations.find(
-            (conversation) => conversation.id === resolvedActiveConversationId,
-          ),
+        : conversations.find((conversation) => conversation.id === resolvedActiveConversationId),
     [isDraftActive, resolvedActiveConversationId, conversations],
   );
   const conversationQuery = useAssistantConversation(
@@ -155,6 +164,7 @@ export function useAssistantChat(): UseAssistantChatResult {
     activeRuntime.streamingText,
     activeRuntime.activeTools.length,
     activeRuntime.completedTools.length,
+    activeRuntime.pendingApprovals.length,
   ]);
 
   useEffect(() => {
@@ -183,10 +193,7 @@ export function useAssistantChat(): UseAssistantChatResult {
 
       setRuntimes((current) => ({
         ...current,
-        [conversationId]: applyStreamResult(
-          current[conversationId] ?? emptyRuntime(),
-          result,
-        ),
+        [conversationId]: applyStreamResult(current[conversationId] ?? emptyRuntime(), result),
       }));
       delete abortControllersRef.current[conversationId];
       delete accumulatorsRef.current[conversationId];
@@ -195,9 +202,9 @@ export function useAssistantChat(): UseAssistantChatResult {
   );
 
   const sendMessage = useCallback(
-    async (rawMessage: string) => {
+    async (rawMessage: string, options: SendMessageOptions = {}) => {
       const trimmed = rawMessage.trim();
-      const attachedImage = imageDataUrl;
+      const attachedImage = options.image === undefined ? imageDataUrl : options.image;
       if ((!trimmed && !attachedImage) || !workspaceId) return;
 
       const conversationId = resolvedActiveConversationId;
@@ -215,7 +222,9 @@ export function useAssistantChat(): UseAssistantChatResult {
       };
       const controller = new AbortController();
       abortControllersRef.current[conversationId] = controller;
-      accumulatorsRef.current[conversationId] = emptyAccumulator();
+      accumulatorsRef.current[conversationId] = emptyAccumulator(
+        runtimes[conversationId]?.pendingApprovals,
+      );
 
       setInput("");
       setImageDataUrl(null);
@@ -228,7 +237,7 @@ export function useAssistantChat(): UseAssistantChatResult {
             : emptyRuntime());
         return {
           ...current,
-          [conversationId]: startUserTurn(runtime, userMessage, requestId),
+          [conversationId]: startUserTurn(runtime, userMessage, requestId, !options.isRetry),
         };
       });
 
@@ -257,6 +266,7 @@ export function useAssistantChat(): UseAssistantChatResult {
           error: error instanceof Error ? error.message : "Assistant stream failed.",
           requestId: null,
         });
+        delete accumulatorsRef.current[conversationId];
       } finally {
         delete abortControllersRef.current[conversationId];
       }
@@ -273,6 +283,72 @@ export function useAssistantChat(): UseAssistantChatResult {
       runtimes,
       workspaceId,
     ],
+  );
+
+  const replacePendingAction = useCallback(
+    (conversationId: string, updatedAction: PendingAction) => {
+      setRuntimes((current) => {
+        const runtime = current[conversationId];
+        if (!runtime) return current;
+        return {
+          ...current,
+          [conversationId]: {
+            ...runtime,
+            pendingApprovals: runtime.pendingApprovals.map((action) =>
+              action.id === updatedAction.id ? updatedAction : action,
+            ),
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  const reviewPendingAction = useCallback(
+    async (actionId: string, decision: PendingActionReviewState) => {
+      if (!workspaceId || actionReviewStates[actionId]) return;
+      const conversationId = resolvedActiveConversationId;
+      setActionReviewStates((current) => ({ ...current, [actionId]: decision }));
+
+      try {
+        const updatedAction =
+          decision === "approving"
+            ? await pendingActionsApi.approve(workspaceId, actionId)
+            : await pendingActionsApi.reject(workspaceId, actionId);
+        replacePendingAction(conversationId, updatedAction);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.pendingActions.root() });
+        toast.success(decision === "approving" ? "Action approved" : "Action rejected");
+      } catch (error) {
+        toast.error(
+          getApiErrorMessage(
+            error,
+            decision === "approving" ? "Failed to approve action" : "Failed to reject action",
+          ),
+        );
+      } finally {
+        setActionReviewStates((current) => {
+          const next = { ...current };
+          delete next[actionId];
+          return next;
+        });
+      }
+    },
+    [
+      actionReviewStates,
+      queryClient,
+      replacePendingAction,
+      resolvedActiveConversationId,
+      workspaceId,
+    ],
+  );
+
+  const handleApprovePendingAction = useCallback(
+    (actionId: string) => reviewPendingAction(actionId, "approving"),
+    [reviewPendingAction],
+  );
+  const handleRejectPendingAction = useCallback(
+    (actionId: string) => reviewPendingAction(actionId, "rejecting"),
+    [reviewPendingAction],
   );
 
   const handleDeleteConversation = useCallback(
@@ -330,6 +406,14 @@ export function useAssistantChat(): UseAssistantChatResult {
     [activeRuntime.isStreaming, input, sendMessage],
   );
 
+  const handleRetry = useCallback(async () => {
+    if (!activeRuntime.retryRequest || activeRuntime.isStreaming) return;
+    await sendMessage(activeRuntime.retryRequest.message, {
+      image: activeRuntime.retryRequest.image,
+      isRetry: true,
+    });
+  }, [activeRuntime.isStreaming, activeRuntime.retryRequest, sendMessage]);
+
   const handleStop = useCallback(() => {
     abortControllersRef.current[resolvedActiveConversationId]?.abort();
     patchRuntime(resolvedActiveConversationId, {
@@ -355,15 +439,18 @@ export function useAssistantChat(): UseAssistantChatResult {
     setImageDataUrl,
     isEnhancing,
     enhancementError,
+    actionReviewStates,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,
-    handleDeleteConversation: (conversationId) =>
-      void handleDeleteConversation(conversationId),
+    handleDeleteConversation: (conversationId) => void handleDeleteConversation(conversationId),
     sendMessage,
     handleEnhancePrompt,
     handleSubmit,
     handleKeyDown,
     handleStop,
+    handleRetry,
+    handleApprovePendingAction,
+    handleRejectPendingAction,
   };
 }

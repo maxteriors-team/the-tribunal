@@ -1,9 +1,14 @@
 """Pending action schemas for HITL approval gate endpoints."""
 
+from __future__ import annotations
+
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    from app.models.pending_action import PendingAction
 
 
 class PendingActionResponse(BaseModel):
@@ -31,6 +36,34 @@ class PendingActionResponse(BaseModel):
     updated_at: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def pending_action_response(action: PendingAction) -> PendingActionResponse:
+    """Serialize one pending-action ORM row for HTTP and stream responses."""
+    return PendingActionResponse(
+        id=action.id,
+        workspace_id=action.workspace_id,
+        agent_id=action.agent_id,
+        action_type=action.action_type,
+        action_payload=action.action_payload,
+        description=action.description,
+        context=action.context,
+        status=action.status,
+        urgency=action.urgency,
+        reviewed_by_id=action.reviewed_by_id,
+        reviewed_at=action.reviewed_at.isoformat() if action.reviewed_at else None,
+        review_channel=action.review_channel,
+        rejection_reason=action.rejection_reason,
+        executed_at=action.executed_at.isoformat() if action.executed_at else None,
+        execution_result=action.execution_result,
+        expires_at=action.expires_at.isoformat() if action.expires_at else None,
+        notification_sent=action.notification_sent,
+        notification_sent_at=(
+            action.notification_sent_at.isoformat() if action.notification_sent_at else None
+        ),
+        created_at=action.created_at.isoformat(),
+        updated_at=action.updated_at.isoformat(),
+    )
 
 
 class PendingActionListResponse(BaseModel):

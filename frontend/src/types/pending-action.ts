@@ -1,9 +1,15 @@
-export type PendingActionStatus = "pending" | "approved" | "rejected" | "expired" | "executed" | "failed";
+export type PendingActionStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "executed"
+  | "failed";
 
 export interface PendingAction {
   id: string;
   workspace_id: string;
-  agent_id: string;
+  agent_id: string | null;
   action_type: string;
   action_payload: Record<string, unknown>;
   description: string;

@@ -7,6 +7,7 @@ Covers:
 - Tool-pairing repair drops orphan tool_calls/results.
 """
 
+import json
 import uuid
 from types import SimpleNamespace
 from typing import Any
@@ -69,9 +70,7 @@ async def test_enhance_prompt_uses_workspace_client_without_executing_tools() ->
             )
         )
     )
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
     with patch.object(
         processor,
@@ -104,15 +103,19 @@ async def test_simple_response_no_tools() -> None:
         )
     )
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ) as client_factory, patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ) as client_factory,
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
     ):
         result = await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=42, message="hi",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=42,
+            message="hi",
         )
 
     assert result["response"] == "Hello, operator."
@@ -137,13 +140,15 @@ async def test_stream_uses_workspace_openai_client() -> None:
             "tool_calls_payload": [],
         }
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ) as client_factory, patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(processor, "_collect_stream_turn", new=fake_stream_turn):
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ) as client_factory,
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(processor, "_collect_stream_turn", new=fake_stream_turn),
+    ):
         events = [
             event
             async for event in processor.stream_assistant_message(
@@ -161,6 +166,132 @@ async def test_stream_uses_workspace_openai_client() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_emits_pending_approval_with_action() -> None:
+    """A gated tool exposes its queued action before the assistant finishes."""
+    db = _make_db()
+    workspace_id = uuid.uuid4()
+    action_id = uuid.uuid4()
+    fake_client = SimpleNamespace()
+    tool_call = processor._StreamToolCall(
+        id="call_approval",
+        function=processor._StreamToolFunction(
+            name="start_campaign",
+            arguments='{"campaign_id": "campaign-1"}',
+        ),
+    )
+    pending_event = {
+        "type": "pending_approval",
+        "action": {
+            "id": str(action_id),
+            "workspace_id": str(workspace_id),
+            "agent_id": None,
+            "action_type": "start_campaign",
+            "action_payload": {"campaign_id": "campaign-1"},
+            "description": "Start campaign",
+            "context": {"source": "crm_assistant"},
+            "status": "pending",
+            "urgency": "normal",
+            "reviewed_by_id": None,
+            "reviewed_at": None,
+            "review_channel": None,
+            "rejection_reason": None,
+            "executed_at": None,
+            "execution_result": None,
+            "expires_at": None,
+            "notification_sent": False,
+            "notification_sent_at": None,
+            "created_at": "2026-07-29T12:00:00+00:00",
+            "updated_at": "2026-07-29T12:00:00+00:00",
+        },
+    }
+    turn = 0
+
+    async def fake_stream_turn(*_args: Any) -> Any:
+        nonlocal turn
+        turn += 1
+        if turn == 1:
+            yield {
+                "type": "turn_complete",
+                "content": "",
+                "tool_calls": [tool_call],
+                "tool_calls_payload": [
+                    {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments,
+                        },
+                    }
+                ],
+            }
+            return
+        yield {"type": "delta", "text": "Waiting for your approval."}
+        yield {
+            "type": "turn_complete",
+            "content": "Waiting for your approval.",
+            "tool_calls": [],
+            "tool_calls_payload": [],
+        }
+
+    tool_result = {
+        "success": False,
+        "code": "pending_approval",
+        "pending_approval": True,
+        "pending_action_id": str(action_id),
+    }
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(processor, "_collect_stream_turn", new=fake_stream_turn),
+        patch.object(
+            processor.CRMToolExecutor,
+            "execute",
+            AsyncMock(return_value=tool_result),
+        ),
+        patch.object(
+            processor,
+            "_pending_approval_event",
+            AsyncMock(return_value=pending_event),
+        ) as event_builder,
+    ):
+        events = [
+            event
+            async for event in processor.stream_assistant_message(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=42,
+                message="Start it",
+            )
+        ]
+
+    assert pending_event in events
+    assert next(event for event in events if event["type"] == "tool_end") == {
+        "type": "tool_end",
+        "name": "start_campaign",
+        "success": None,
+    }
+    assert events.index(pending_event) < next(
+        index for index, event in enumerate(events) if event["type"] == "delta"
+    )
+    done_event = next(event for event in events if event["type"] == "done")
+    assert done_event["actions_taken"] == [
+        {
+            "tool_name": "start_campaign",
+            "success": False,
+            "summary": json.dumps(tool_result)[:200],
+            "arguments": {"campaign_id": "campaign-1"},
+            "result": tool_result,
+        }
+    ]
+    event_builder.assert_awaited_once_with(db, workspace_id, tool_result)
+
+
+@pytest.mark.asyncio
 async def test_tool_loop_dispatches_and_records_actions() -> None:
     """Tool call → executor runs → follow-up call returns final text."""
     db = _make_db()
@@ -174,29 +305,37 @@ async def test_tool_loop_dispatches_and_records_actions() -> None:
             _make_response(content="You have 5 contacts."),
         ]
     )
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(
-        processor.CRMToolExecutor,
-        "execute",
-        AsyncMock(return_value={"success": True, "data": {"contacts": 5}}),
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(
+            processor.CRMToolExecutor,
+            "execute",
+            AsyncMock(return_value={"success": True, "data": {"contacts": 5}}),
+        ),
     ):
         result = await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=42, message="how many contacts?",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=42,
+            message="how many contacts?",
         )
 
     assert result["response"] == "You have 5 contacts."
     assert len(result["actions_taken"]) == 1
     assert result["actions_taken"][0]["tool_name"] == "get_dashboard_stats"
     assert result["actions_taken"][0]["success"] is True
+    assert result["actions_taken"][0]["arguments"] == {}
+    assert result["actions_taken"][0]["result"] == {
+        "success": True,
+        "data": {"contacts": 5},
+    }
     # Two LLM calls: tool turn + final reply turn
     assert create.await_count == 2
 
@@ -223,20 +362,20 @@ async def test_five_contact_summary_can_reach_terminal_response() -> None:
         _make_response(content="Contact summary complete."),
     ]
     create = AsyncMock(side_effect=responses)
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
-    ), patch.object(
-        processor.CRMToolExecutor,
-        "execute",
-        AsyncMock(return_value={"success": True, "data": []}),
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
+        patch.object(
+            processor.CRMToolExecutor,
+            "execute",
+            AsyncMock(return_value={"success": True, "data": []}),
+        ),
     ):
         result = await processor.process_assistant_message(
             db=db,
@@ -272,19 +411,21 @@ async def test_prompt_cache_key_passed_to_openai_call() -> None:
     db = _make_db()
     workspace_id = uuid.uuid4()
     create = AsyncMock(return_value=_make_response(content="ok"))
-    fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
-    )
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
-    with patch.object(
-        processor,
-        "create_workspace_openai_client",
-        new=AsyncMock(return_value=fake_client),
-    ), patch.object(
-        processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)
+    with (
+        patch.object(
+            processor,
+            "create_workspace_openai_client",
+            new=AsyncMock(return_value=fake_client),
+        ),
+        patch.object(processor, "maybe_summarize", AsyncMock(side_effect=lambda _c, m: m)),
     ):
         await processor.process_assistant_message(
-            db=db, workspace_id=workspace_id, user_id=99, message="ping",
+            db=db,
+            workspace_id=workspace_id,
+            user_id=99,
+            message="ping",
         )
 
     assert create.await_count == 1
@@ -312,8 +453,11 @@ def test_repair_pairing_strips_orphan_tool_calls_from_assistant() -> None:
             "role": "assistant",
             "content": "thinking…",
             "tool_calls": [
-                {"id": "call_orphan", "type": "function",
-                 "function": {"name": "foo", "arguments": "{}"}},
+                {
+                    "id": "call_orphan",
+                    "type": "function",
+                    "function": {"name": "foo", "arguments": "{}"},
+                },
             ],
         },
     ]
@@ -331,8 +475,11 @@ def test_repair_pairing_drops_assistant_with_only_orphan_calls_and_no_text() -> 
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_orphan", "type": "function",
-                 "function": {"name": "foo", "arguments": "{}"}},
+                {
+                    "id": "call_orphan",
+                    "type": "function",
+                    "function": {"name": "foo", "arguments": "{}"},
+                },
             ],
         },
         {"role": "user", "content": "hi"},

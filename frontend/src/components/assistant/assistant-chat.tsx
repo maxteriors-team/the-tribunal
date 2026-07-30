@@ -11,6 +11,7 @@ import {
 } from "@/components/assistant/assistant-chat-views";
 import { useAssistantChat } from "@/hooks/useAssistantChat";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/providers/workspace-provider";
 
 const BRIEFING_PROMPT = "Give me my morning briefing";
 
@@ -30,6 +31,7 @@ export function AssistantChat({ className }: { className?: string }) {
     setImageDataUrl,
     isEnhancing,
     enhancementError,
+    actionReviewStates,
     scrollRef,
     handleNewConversation,
     handleSelectConversation,
@@ -39,7 +41,11 @@ export function AssistantChat({ className }: { className?: string }) {
     handleSubmit,
     handleKeyDown,
     handleStop,
+    handleRetry,
+    handleApprovePendingAction,
+    handleRejectPendingAction,
   } = useAssistantChat();
+  const { currentWorkspace } = useWorkspace();
 
   // /assistant?briefing=1 auto-sends the morning-briefing prompt once, then
   // strips the param so a refresh doesn't re-trigger it.
@@ -78,7 +84,12 @@ export function AssistantChat({ className }: { className?: string }) {
           messages={visibleMessages}
           runtime={activeRuntime}
           scrollRef={scrollRef}
-          onPrompt={sendMessage}
+          workspaceName={currentWorkspace?.workspace.name ?? null}
+          actionReviewStates={actionReviewStates}
+          onPrompt={setInput}
+          onApproveAction={handleApprovePendingAction}
+          onRejectAction={handleRejectPendingAction}
+          onRetry={handleRetry}
         />
 
         <MessageComposer
