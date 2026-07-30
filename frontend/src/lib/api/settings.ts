@@ -175,6 +175,30 @@ export interface UpdateQuoteRevivalSettings {
   touches?: QuoteRevivalTouch[];
 }
 
+// Job-site neighbor outreach — turning a finished job into leads next door.
+export interface NeighborOutreachSettings {
+  enabled: boolean;
+  radius_meters: number;
+  max_neighbors: number;
+  auto_generate_on_completion: boolean;
+  message_template_id: string | null;
+  /**
+   * Master switch for the SMS/email path. Off by default: a radius returns
+   * addresses, not permission, so print/canvass is the legal default and
+   * messaging is limited to neighbours who are already consented contacts.
+   */
+  allow_messaging: boolean;
+}
+
+export interface UpdateNeighborOutreachSettings {
+  enabled?: boolean;
+  radius_meters?: number;
+  max_neighbors?: number;
+  auto_generate_on_completion?: boolean;
+  message_template_id?: string | null;
+  allow_messaging?: boolean;
+}
+
 export const settingsApi = {
   // Profile endpoints
   getProfile: async (): Promise<UserProfile> => {
@@ -286,6 +310,25 @@ export const settingsApi = {
   ): Promise<QuoteRevivalSettings> => {
     return apiPut<QuoteRevivalSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`,
+      data
+    );
+  },
+
+  // Job-site neighbor outreach
+  getNeighborOutreach: async (
+    workspaceId: string
+  ): Promise<NeighborOutreachSettings> => {
+    return apiGet<NeighborOutreachSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/neighbor-outreach`
+    );
+  },
+
+  updateNeighborOutreach: async (
+    workspaceId: string,
+    data: UpdateNeighborOutreachSettings
+  ): Promise<NeighborOutreachSettings> => {
+    return apiPut<NeighborOutreachSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/neighbor-outreach`,
       data
     );
   },
