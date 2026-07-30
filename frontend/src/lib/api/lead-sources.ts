@@ -132,9 +132,30 @@ export interface AssignLeadSourceRequest {
   lead_source_id: string;
   lead_source_campaign_id?: string | null;
   source_type?: LeadSourceType;
+  correct_existing?: boolean;
+}
+
+export interface LeadSourceCaptureSettings {
+  require_lead_source_on_manual_create: boolean;
 }
 
 export const leadSourcesApi = {
+  getCaptureSettings: async (workspaceId: string): Promise<LeadSourceCaptureSettings> => {
+    return apiGet<LeadSourceCaptureSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/lead-source-capture`,
+    );
+  },
+
+  updateCaptureSettings: async (
+    workspaceId: string,
+    settings: LeadSourceCaptureSettings,
+  ): Promise<LeadSourceCaptureSettings> => {
+    return apiPut<LeadSourceCaptureSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/lead-source-capture`,
+      settings,
+    );
+  },
+
   list: async (workspaceId: string): Promise<LeadSource[]> => {
     return apiGet<LeadSource[]>(
       `/api/v1/workspaces/${workspaceId}/lead-sources`

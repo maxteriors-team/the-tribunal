@@ -32,6 +32,12 @@ class AttributionConfidenceSummary(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class LeadSourceCaptureSettings(BaseModel):
+    """Workspace policy for operator-created contacts only."""
+
+    require_lead_source_on_manual_create: bool = False
+
+
 class LeadAttributionFields(BaseModel):
     """Structured first/latest touch fields stored on contacts."""
 
@@ -211,11 +217,12 @@ class UnattributedLeadResponse(BaseModel):
 
 
 class AssignLeadSourceRequest(BaseModel):
-    """Operator action assigning a lead source to an unattributed contact."""
+    """Operator assignment or explicit correction of structured attribution."""
 
     lead_source_id: uuid.UUID
     lead_source_campaign_id: uuid.UUID | None = None
     source_type: LeadSourceType | None = None
+    correct_existing: bool = False
 
 
 class SourceROIRow(BaseModel):

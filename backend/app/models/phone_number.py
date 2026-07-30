@@ -24,6 +24,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
+    from app.models.lead_source import LeadSource, LeadSourceCampaign
     from app.models.workspace import Workspace
 
 
@@ -112,6 +113,22 @@ class PhoneNumber(Base):
         index=True,
     )
 
+    # Call-tracking attribution. Dedicated numbers provide direct evidence for
+    # offline channels that cannot carry UTM parameters.
+    lead_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    lead_source_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lead_source_campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    tracking_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -188,6 +205,12 @@ class PhoneNumber(Base):
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="phone_numbers")
     assigned_agent: Mapped["Agent | None"] = relationship("Agent", back_populates="phone_numbers")
+    lead_source: Mapped["LeadSource | None"] = relationship(
+        "LeadSource", foreign_keys=[lead_source_id]
+    )
+    lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
+        "LeadSourceCampaign", foreign_keys=[lead_source_campaign_id]
+    )
 
     def __repr__(self) -> str:
         return f"<PhoneNumber(id={self.id}, number={self.phone_number})>"
