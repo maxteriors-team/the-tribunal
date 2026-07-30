@@ -218,7 +218,7 @@ async def test_call_initiated_creates_message_and_conversation(
     _stub_metrics_and_push: dict[str, MagicMock],
 ) -> None:
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -260,14 +260,15 @@ async def test_call_initiated_links_known_caller_by_phone_hash(
     # matches an equality compare), so a known caller's conversation is linked
     # to their existing contact instead of looking like a brand-new lead.
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
 
     known_contact = MagicMock()
     known_contact.id = 4321
-
+    attribution = AsyncMock()
+    monkeypatch.setattr(handlers, "apply_tracking_number_attribution", attribution)
     db = _make_db(
         execute_returns=[
             _Result(scalar=phone_record),  # PhoneNumber lookup
@@ -285,6 +286,40 @@ async def test_call_initiated_links_known_caller_by_phone_hash(
     ]
     assert conversations, "expected a Conversation to be created"
     assert conversations[0].contact_id == known_contact.id
+    attribution.assert_not_awaited()
+
+
+async def test_call_initiated_applies_mapped_tracking_number(
+    monkeypatch: pytest.MonkeyPatch,
+    call_initiated: dict[str, Any],
+    _stub_metrics_and_push: dict[str, MagicMock],
+) -> None:
+    workspace_id = uuid.uuid4()
+    source_id = uuid.uuid4()
+    phone_record = MagicMock(lead_source_id=source_id)
+    phone_record.workspace_id = workspace_id
+    phone_record.phone_number = "+12125550100"
+    phone_record.assigned_agent_id = None
+
+    known_contact = MagicMock()
+    known_contact.id = 4321
+    attribution = AsyncMock(return_value=True)
+    monkeypatch.setattr(handlers, "apply_tracking_number_attribution", attribution)
+
+    db = _make_db(
+        execute_returns=[
+            _Result(scalar=phone_record),
+            _Result(scalar=None),
+            _Result(scalar=None),
+            _Result(scalar=known_contact),
+        ]
+    )
+    _patch_session_local(monkeypatch, db)
+
+    await handlers.handle_call_initiated(call_initiated, _make_log())
+
+    attribution.assert_awaited_once_with(db, known_contact, phone_record)
+    db.commit.assert_awaited()
 
 
 async def test_call_initiated_is_idempotent_on_retry(
@@ -296,7 +331,7 @@ async def test_call_initiated_is_idempotent_on_retry(
     second ringing Message or re-fire the push / auto-answer.
     """
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
 
     # Message dedupe SELECT hits → bail out.
@@ -344,7 +379,7 @@ async def test_call_initiated_rejects_spam_caller(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -390,7 +425,7 @@ async def test_call_initiated_challenge_routes_to_voicemail(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -429,7 +464,7 @@ async def test_call_initiated_passes_routing_reason_to_auto_answer(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock()
+    phone_record = MagicMock(lead_source_id=None)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None

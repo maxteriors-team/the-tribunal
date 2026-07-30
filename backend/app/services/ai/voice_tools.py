@@ -293,8 +293,9 @@ SAVE_LEAD_INFO_TOOL: dict[str, Any] = {
     "description": (
         "Save details the CURRENT caller gives you about themselves onto their "
         "contact record in the CRM. Call this whenever the caller shares their "
-        "name, email, company, mailing address, or what they're looking for, so "
-        "the team has it after the call. You can call it more than once as new "
+        "name, email, company, mailing address, what they're looking for, or how "
+        "they heard about the business, so the team has it after the call. You can "
+        "call it more than once as new "
         "details come up. Only include fields the caller actually gave you \u2014 "
         "never guess or invent an email, address, or name. Read an email or "
         "address back to the caller to confirm before saving it."
@@ -333,6 +334,14 @@ SAVE_LEAD_INFO_TOOL: dict[str, Any] = {
                     "Short summary of what the caller wants or is interested in "
                     "(e.g. 'wants a quote for a kitchen remodel in April'). Saved "
                     "as a note on the contact."
+                ),
+            },
+            "lead_source_answer": {
+                "type": "string",
+                "description": (
+                    "The caller's VERBATIM answer to how they heard about the business. "
+                    "Do not interpret, categorize, rewrite, or guess it; the CRM maps "
+                    "clear answers conservatively and keeps uncertain answers as raw text."
                 ),
             },
         },

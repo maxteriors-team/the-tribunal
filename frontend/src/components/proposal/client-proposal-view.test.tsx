@@ -216,11 +216,8 @@ describe("client package selection", () => {
     expect(screen.getByText("$4,700.00")).toBeInTheDocument();
   });
 
-  it("never offers financing, even when the snapshot carries it", () => {
-    // The pricing model still computes monthly figures and a workspace may still
-    // have financing enabled in config (the fee buffer lives there and protects
-    // margin). None of it is a client-facing offer: no monthly estimate, term
-    // picker, APR claim, or lender name may reach the proposal page.
+  it("renders configured payment estimates with their disclaimer", async () => {
+    const user = userEvent.setup();
     const financed = {
       ...DOCUMENT,
       grand_monthly_payment: 699,
@@ -234,7 +231,8 @@ describe("client package selection", () => {
         headline: "0% APR financing available.",
         body: "Pay monthly instead.",
         points: ["No interest, ever"],
-        disclaimer: "Subject to credit approval.",
+        disclaimer:
+          "Payment estimates are not offers and are subject to credit approval.",
       },
       tiers: DOCUMENT.tiers.map((t) => ({
         ...t,
@@ -249,20 +247,23 @@ describe("client package selection", () => {
       proposal_document: financed as unknown as Record<string, unknown>,
     });
 
-    for (const forbidden of [
-      /financing/i,
-      /\bAPR\b/,
-      /Wisetack/i,
-      /per month|\/month|\/mo\b/i,
-      /as low as/i,
-      /no interest/i,
-      /credit approval/i,
-      /\bmonths\b/i,
-    ]) {
-      expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
-    }
-    expect(screen.queryByText("$699")).not.toBeInTheDocument();
-    // The package price itself is untouched by removing the offer.
+    const estimate = screen.getByRole("complementary", {
+      name: /estimated financing payments/i,
+    });
+    expect(estimate).toHaveTextContent("$699/month");
+    expect(estimate).toHaveTextContent(
+      "Payment estimates are not offers and are subject to credit approval.",
+    );
+    expect(estimate).toHaveTextContent("Wisetack");
+    expect(card(/The Premier/)).toHaveTextContent(
+      "Estimated payment options below",
+    );
+
+    await user.click(
+      within(estimate).getByRole("button", { name: /12 months.*\$1,398\/mo est/i }),
+    );
+    expect(estimate).toHaveTextContent("$1,398/month");
+    // Financing presentation is additive; package pricing remains untouched.
     expect(card(/The Premier/)).toHaveTextContent("$16,782");
   });
 

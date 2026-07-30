@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
+from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.workspace import Workspace
 from app.schemas.proposal import PublicProposal, PublicProposalLineItem
@@ -121,6 +122,71 @@ async def test_public_get_returns_safe_proposal_with_branding() -> None:
         assert proposal.branding.brand_color == "#0A7C3A"
         assert proposal.branding.footer == "Licensed & insured — CA #123456"
         assert proposal.is_decided is False
+
+
+async def test_core_quote_financing_respects_category_minimum_on_public_payload() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(
+            db,
+            settings={
+                "pricing": {"financing": {"category_minimums": {"roof": 1000, "gutters": 1000}}}
+            },
+        )
+        contact = await _make_contact(db, ws.id)
+        roof = CatalogItem(
+            workspace_id=ws.id,
+            name="Roof replacement",
+            unit_price=9000,
+            service_category="roof",
+        )
+        gutter = CatalogItem(
+            workspace_id=ws.id,
+            name="Gutter cleaning",
+            unit_price=400,
+            service_category="gutters",
+        )
+        db.add_all([roof, gutter])
+        await db.flush()
+        svc = QuoteService(db)
+
+        roof_quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                line_items=[
+                    QuoteLineItemCreate(
+                        name=roof.name,
+                        unit_price=roof.unit_price,
+                        catalog_item_id=roof.id,
+                    )
+                ],
+            ),
+        )
+        assert roof_quote.financing is not None
+        assert roof_quote.financing.monthly_payment == 375.0
+        roof_sent = await svc.mark_sent(ws.id, roof_quote.id)
+        roof_proposal = await svc.get_public_proposal(roof_sent.public_token or "")
+        assert roof_proposal.financing is not None
+        assert roof_proposal.financing.monthly_payment == 375.0
+        assert "not a financing offer" in roof_proposal.financing.disclaimer
+
+        gutter_quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                line_items=[
+                    QuoteLineItemCreate(
+                        name=gutter.name,
+                        unit_price=gutter.unit_price,
+                        catalog_item_id=gutter.id,
+                    )
+                ],
+            ),
+        )
+        assert gutter_quote.financing is None
+        gutter_sent = await svc.mark_sent(ws.id, gutter_quote.id)
+        gutter_proposal = await svc.get_public_proposal(gutter_sent.public_token or "")
+        assert gutter_proposal.financing is None
 
 
 async def test_unknown_and_draft_tokens_404() -> None:

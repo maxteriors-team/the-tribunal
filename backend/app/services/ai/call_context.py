@@ -242,6 +242,9 @@ async def lookup_call_context(
             contact = contact_result.scalar_one_or_none()
             if contact:
                 context.contact_info = {
+                    # Internal prompt-control metadata; PromptBuilder does not
+                    # render this key to the model as customer profile text.
+                    "lead_source_known": contact.first_touch_lead_source_id is not None,
                     "name": f"{contact.first_name} {contact.last_name or ''}".strip(),
                     "phone": contact.phone_number,
                     "email": contact.email,
@@ -262,6 +265,11 @@ async def lookup_call_context(
                     current_message_id=message.id,
                     log=log,
                 )
+
+        # Unknown inbound callers have no Contact yet. Keep an explicit false
+        # flag so the prompt still asks before save_lead_info creates the row.
+        if context.contact_info is None:
+            context.contact_info = {"lead_source_known": False}
 
         # Look up offer info from campaign if applicable
         campaign_contact_result = await db.execute(

@@ -118,6 +118,63 @@ export interface UpdateMissedCallTextbackRequest {
   timezone?: string | null;
 }
 
+// First-14-days post-estimate follow-up
+export type QuoteFollowupChannel = "sms" | "email" | "call";
+
+export interface QuoteFollowupTouch {
+  offset_days: number;
+  channel: QuoteFollowupChannel;
+  template_id: string | null;
+}
+
+export interface QuoteFollowupSettings {
+  enabled: boolean;
+  high_value_threshold: number;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  timezone: string | null;
+  touches: QuoteFollowupTouch[];
+}
+
+export interface UpdateQuoteFollowupSettings {
+  enabled?: boolean;
+  high_value_threshold?: number;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone?: string | null;
+  touches?: QuoteFollowupTouch[];
+}
+
+// 30/60/90-day unsold-quote revival
+export type QuoteRevivalChannel = QuoteFollowupChannel;
+
+export interface QuoteRevivalTouch {
+  offset_days: number;
+  channel: QuoteRevivalChannel;
+  template_id: string | null;
+  high_value_template_id: string | null;
+}
+
+export interface QuoteRevivalSettings {
+  enabled: boolean;
+  high_value_threshold: number;
+  max_touches: number;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  timezone: string | null;
+  touches: QuoteRevivalTouch[];
+}
+
+export interface UpdateQuoteRevivalSettings {
+  enabled?: boolean;
+  high_value_threshold?: number;
+  max_touches?: number;
+  quiet_hours_start?: string | null;
+  quiet_hours_end?: string | null;
+  timezone?: string | null;
+  touches?: QuoteRevivalTouch[];
+}
+
 export const settingsApi = {
   // Profile endpoints
   getProfile: async (): Promise<UserProfile> => {
@@ -191,6 +248,44 @@ export const settingsApi = {
   ): Promise<MissedCallTextbackSettings> => {
     return apiPut<MissedCallTextbackSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/missed-call-textback`,
+      data
+    );
+  },
+
+  // First-14-days post-estimate follow-up
+  getQuoteFollowup: async (
+    workspaceId: string
+  ): Promise<QuoteFollowupSettings> => {
+    return apiGet<QuoteFollowupSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/post-estimate-followup`
+    );
+  },
+
+  updateQuoteFollowup: async (
+    workspaceId: string,
+    data: UpdateQuoteFollowupSettings
+  ): Promise<QuoteFollowupSettings> => {
+    return apiPut<QuoteFollowupSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/post-estimate-followup`,
+      data
+    );
+  },
+
+  // 30/60/90-day unsold-quote revival
+  getQuoteRevival: async (
+    workspaceId: string
+  ): Promise<QuoteRevivalSettings> => {
+    return apiGet<QuoteRevivalSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`
+    );
+  },
+
+  updateQuoteRevival: async (
+    workspaceId: string,
+    data: UpdateQuoteRevivalSettings
+  ): Promise<QuoteRevivalSettings> => {
+    return apiPut<QuoteRevivalSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`,
       data
     );
   },

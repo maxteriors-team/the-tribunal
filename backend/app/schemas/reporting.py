@@ -1,8 +1,15 @@
-"""Schemas for operational reporting (AR aging, job profitability, sales).
+"""Schemas for operational reporting (AR aging, job profitability, sales, capacity).
 
-These are read-only roll-ups computed on the fly from invoices, job costing and
-quotes; no new tables back them. Money is in major units (matching
-invoices/quotes) and rates are ratios in 0..1, not percentages.
+These are read-only roll-ups computed on the fly from invoices, job costing,
+quotes, jobs and appointments; no new tables back them. Money is in major units
+(matching invoices/quotes) and rates are ratios in 0..1, not percentages — the
+one exception is the capacity report's ``utilization_pct``, a 0..100 percent
+matching the owner-entered rate fields on
+:class:`app.models.revenue_target.RevenueTarget`.
+
+Any number whose denominator is missing is ``None``, never ``0``: an owner who
+never entered a crew capacity must be told the gauge is unreadable, not shown a
+full tank.
 """
 
 from datetime import date
@@ -145,4 +152,121 @@ class SalesPerformanceReport(BaseModel):
     )
     by_primary_service: list[SalesPerformanceBreakdownRow] = Field(
         ..., description="Performance grouped by the quote's dominant service line"
+    )
+
+
+class BacklogReport(BaseModel):
+    """Sold-but-undelivered work, expressed in weeks of crew capacity.
+
+    The forward-looking counterpart to :class:`JobPnLSummary`: how much work is
+    on the books, not what past work earned. ``backlog_weeks`` is the headline —
+    the number that decides whether the next dollar goes to marketing.
+
+    Hours are estimated (``Job`` has no duration column): a job's booked window
+    when it has one, otherwise ``default_job_hours``. Read
+    ``assumed_duration_job_count`` alongside ``job_count`` to see how much of the
+    total is measured versus assumed.
+    """
+
+    as_of: date = Field(..., description="Date this snapshot of open work was taken")
+    backlog_hours: float = Field(
+        ..., description="Estimated hours of sold work not yet completed or cancelled"
+    )
+    weekly_capacity_hours: float | None = Field(
+        None,
+        description=(
+            "Sellable crew hours per week used as the divisor; null when the "
+            "workspace has never set one"
+        ),
+    )
+    backlog_weeks: float | None = Field(
+        None,
+        description=(
+            "backlog_hours / weekly_capacity_hours — weeks of work booked; null "
+            "when capacity is unset, never 0"
+        ),
+    )
+    job_count: int = Field(..., ge=0, description="Open jobs counted into the backlog")
+    unscheduled_job_count: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Open jobs with no time window yet — work sold but not on the "
+            "calendar, a separate operational risk from the backlog's size"
+        ),
+    )
+    assumed_duration_job_count: int = Field(
+        ...,
+        ge=0,
+        description="Jobs sized by default_job_hours because they have no usable window",
+    )
+    default_job_hours: float = Field(
+        ..., description="Hours assumed for a job with no usable scheduled window"
+    )
+    alert_weeks: float | None = Field(
+        None,
+        description=(
+            "Booked-out weeks the owner asked to be warned below "
+            "(RevenueTarget.backlog_alert_weeks); null when unset"
+        ),
+    )
+    below_alert_threshold: bool | None = Field(
+        None,
+        description=(
+            "True when backlog_weeks has fallen under alert_weeks — the dry-spell "
+            "warning that should trigger marketing spend. Null when either is unknown."
+        ),
+    )
+
+
+class EstimateCapacityReport(BaseModel):
+    """A month's booked estimates against the estimates it can actually run.
+
+    The hire trigger. One full-time closer tops out near 60-80 estimates a
+    month, so utilization sustained above ``at_capacity_threshold_pct`` means
+    more leads would only push the calendar further out: the next dollar belongs
+    in headcount, not ad spend.
+
+    ``utilization_pct`` is a percent (0..100, matching the target's rate fields),
+    not a 0..1 ratio, and is null rather than 0 when no capacity is stored.
+    """
+
+    period_month: date = Field(..., description="First day of the reported month")
+    booked: int = Field(
+        ..., ge=0, description="Appointments occupying the month's estimate calendar"
+    )
+    capacity: int | None = Field(
+        None,
+        description=(
+            "Estimates the workspace says it can run this month "
+            "(RevenueTarget.estimate_capacity_per_month); null when unset"
+        ),
+    )
+    utilization_pct: float | None = Field(
+        None, description="booked / capacity as a percent; null when capacity is unset"
+    )
+    at_capacity: bool | None = Field(
+        None,
+        description=(
+            "True when utilization_pct has reached at_capacity_threshold_pct; "
+            "null when capacity is unset, because 'not full' cannot be claimed "
+            "off a ceiling nobody set"
+        ),
+    )
+    at_capacity_threshold_pct: float = Field(
+        ..., description="Utilization percent treated as full (below 100 on purpose)"
+    )
+
+
+class AttributionGapReport(BaseModel):
+    """Structured first-touch coverage for contacts created in a date range."""
+
+    date_from: date = Field(..., description="Inclusive contact-created start date")
+    date_to: date = Field(..., description="Inclusive contact-created end date")
+    total_contacts: int = Field(..., ge=0)
+    unattributed_contacts: int = Field(..., ge=0)
+    attributed_contacts: int = Field(..., ge=0)
+    gap_rate: float | None = Field(
+        None,
+        description="Unattributed share in 0..1, or null when no contacts were created",
     )

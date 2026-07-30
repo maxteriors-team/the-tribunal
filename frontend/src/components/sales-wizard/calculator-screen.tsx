@@ -638,9 +638,11 @@ export function CalculatorScreen({
               </div>
               <ul className="rep-notes-list">
                 <li>
-                  <strong>We do not offer financing.</strong>{" "}Don&rsquo;t
-                  quote monthly payments, terms, or a lender. The proposal shows
-                  one number per package plus any deposit — nothing else.
+                  <strong>Financing is category-qualified.</strong>{" "}Only
+                  quote a monthly estimate when this builder shows one; workspace
+                  minimums intentionally suppress low-value jobs. It is never an
+                  approval or guarantee, and the client sees the disclaimer with
+                  every estimate.
                 </li>
                 <li>
                   <strong>Prices still carry the pricing buffer.</strong>{" "}

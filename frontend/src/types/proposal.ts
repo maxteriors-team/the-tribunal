@@ -1,6 +1,8 @@
 // Public client-facing proposal types.
 // Mirrors backend `app/schemas/proposal.py` (PublicProposal + friends).
 
+import type { FinancingEstimate } from "./financing";
+
 export interface PublicProposalLineItem {
   name: string;
   description?: string | null;
@@ -54,6 +56,8 @@ export interface PublicProposal {
   tax_amount: number;
   discount_amount: number;
   total: number;
+  /** Present only when a categorized core quote meets its configured minimum. */
+  financing?: FinancingEstimate | null;
   issue_date?: string | null;
   expiry_date?: string | null;
   is_expired: boolean;

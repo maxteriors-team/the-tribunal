@@ -23,6 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity
 from app.models.workspace import Workspace
+from app.services.lead_sources.attribution_service import (
+    snapshot_contact_attribution_on_opportunity,
+)
 from app.services.opportunities.default_pipeline import get_default_pipeline_first_stage
 
 logger = structlog.get_logger()
@@ -101,6 +104,7 @@ async def open_lead_opportunity(
         source=source,
         status=_OPEN_STATUS,
     )
+    snapshot_contact_attribution_on_opportunity(opportunity, contact)
     db.add(opportunity)
     await db.flush()
 

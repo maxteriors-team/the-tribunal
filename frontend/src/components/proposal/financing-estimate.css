@@ -1,0 +1,191 @@
+.financing-estimate {
+  --fin-gold: var(--gold, #d4af5a);
+  --fin-gold-bright: var(--gold2, #ebca78);
+  --fin-text: var(--t1, #f4efe4);
+  --fin-muted: var(--t3, #a49d91);
+  margin: 42px 0;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(212, 175, 90, 0.42);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(212, 175, 90, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.025);
+  color: var(--fin-text);
+  text-align: center;
+}
+
+.financing-estimate__eyebrow {
+  margin-bottom: 12px;
+  color: var(--fin-gold);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.financing-estimate__headline {
+  max-width: 760px;
+  margin: 0 auto;
+  color: var(--fin-text);
+  font-family: var(--font-cormorant, Georgia, serif);
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 400;
+  line-height: 1.04;
+}
+
+.financing-estimate__figure {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  color: var(--fin-muted);
+  font-size: 15px;
+}
+
+.financing-estimate__figure strong {
+  color: var(--fin-gold-bright);
+  font-family: var(--font-cormorant, Georgia, serif);
+  font-size: clamp(46px, 8vw, 76px);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.financing-estimate__term-copy {
+  margin-top: 8px;
+  color: var(--fin-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.financing-estimate__terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  max-width: 680px;
+  margin: 24px auto 0;
+}
+
+.financing-estimate__terms button {
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fin-muted);
+  cursor: pointer;
+}
+
+.financing-estimate__terms button:hover,
+.financing-estimate__terms button:focus-visible,
+.financing-estimate__terms button.is-active {
+  border-color: var(--fin-gold);
+  color: var(--fin-text);
+  outline: none;
+}
+
+.financing-estimate__terms button.is-active {
+  background: rgba(212, 175, 90, 0.12);
+}
+
+.financing-estimate__terms span,
+.financing-estimate__terms strong {
+  display: block;
+}
+
+.financing-estimate__terms span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.financing-estimate__terms strong {
+  margin-top: 5px;
+  color: inherit;
+  font-size: 13px;
+}
+
+.financing-estimate__body {
+  max-width: 700px;
+  margin: 24px auto 0;
+  color: var(--fin-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.financing-estimate__points {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+  max-width: 760px;
+  margin: 16px auto 0;
+  padding: 0;
+  color: var(--fin-text);
+  font-size: 12px;
+  list-style: none;
+}
+
+.financing-estimate__points li::before {
+  content: "✓ ";
+  color: var(--fin-gold);
+}
+
+.financing-estimate__disclaimer {
+  max-width: 780px;
+  margin: 22px auto 0;
+  color: var(--fin-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.financing-estimate--compact {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  background: rgba(127, 127, 127, 0.06);
+  color: inherit;
+  text-align: left;
+}
+
+.quote-financing-estimate {
+  max-width: 300px;
+  margin-left: auto;
+}
+
+.financing-estimate__compact-payment {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.82;
+}
+
+.financing-estimate__compact-payment strong {
+  color: var(--fin-gold-bright);
+  font-size: 14px;
+}
+
+.financing-estimate--compact .financing-estimate__disclaimer {
+  margin: 7px 0 0;
+  color: inherit;
+  font-size: 9px;
+  opacity: 0.68;
+}
+
+@media (max-width: 520px) {
+  .financing-estimate__figure {
+    flex-wrap: wrap;
+  }
+
+  .financing-estimate__figure strong {
+    width: 100%;
+  }
+}
+
+@media print {
+  .financing-estimate {
+    break-inside: avoid;
+    background: transparent;
+  }
+}

@@ -13,6 +13,7 @@ from decimal import Decimal
 import pytest
 
 from app.schemas.pricing import (
+    DEFAULT_FINANCING_DISCLAIMER,
     BistroConfig,
     BistroProduct,
     BistroTier,
@@ -201,6 +202,52 @@ def test_monthly_payment_with_apr():
     )
     # r = .01/mo, 24 mo, 10000 -> ~470.73
     assert pp.monthly_payment(10000, cfg, term=24) == Decimal("470.73")
+
+
+def test_financing_eligibility_uses_each_category_subtotal_and_minimum():
+    cfg = _landscape_config(
+        financing=FinancingConfig(
+            category_minimums={"roof": 1000, "gutters": 1000},
+            disclaimer=None,
+        )
+    )
+
+    roof = pp.financing_estimate(9000, {"roof": 9000}, cfg)
+    assert roof is not None
+    assert roof.monthly_payment == 375.0
+    assert roof.disclaimer == DEFAULT_FINANCING_DISCLAIMER
+
+    assert pp.financing_estimate(400, {"gutters": 400}, cfg) is None
+    assert pp.financing_estimate(400, {"roof": 9000}, cfg) is None
+    # A large uncategorized amount cannot make a $400 gutter line qualify.
+    assert pp.financing_estimate(9400, {"gutters": 400, "other": 9000}, cfg) is None
+    assert pp.financing_estimate(9000, {"unknown": 9000}, cfg) is None
+
+
+def test_category_presentation_gate_never_changes_fee_buffer_or_cash_reversal():
+    cfg = _landscape_config(
+        financing=FinancingConfig(
+            enabled=True,
+            fee_buffer=0.11,
+            category_minimums={},
+        )
+    )
+
+    assert pp.financing_is_eligible(10000, {"landscape": 10000}, cfg) is False
+    assert pp.gross_up_price(2266, cfg) == Decimal("2546")
+    assert pp.cash_price(10000, cfg) == Decimal("9167")
+
+
+def test_landscape_financing_pricing_bytes_are_unchanged():
+    """Lock the pre-generalization landscape financing payload byte-for-byte."""
+    actual = pp.price_tier(base=10000, additional=0, config=_landscape_config())
+
+    assert actual.model_dump_json().encode() == (
+        b'{"base":10000.0,"additional":0.0,"financed_total":10000.0,'
+        b'"cash_total":9167.0,"cash_savings":833.0,"monthly_payment":416.67,'
+        b'"monthly_by_term":{"6":1666.67,"12":833.33,"24":416.67},'
+        b'"commission_financed":1200.0,"commission_cash":1100.0}'
+    )
 
 
 # --------------------------------------------------------------------------- #

@@ -42,6 +42,9 @@ from app.workers.outbound_auto_draft_worker import (
 from app.workers.outbound_improvement_suggestion_worker import (
     _registry as outbound_improvement_suggestion_registry,
 )
+from app.workers.post_estimate_followup_worker import (
+    _registry as post_estimate_followup_registry,
+)
 from app.workers.prompt_improvement_worker import _registry as prompt_improvement_registry
 from app.workers.prompt_stats_worker import _registry as prompt_stats_registry
 from app.workers.prospect_enrichment_worker import (
@@ -55,6 +58,7 @@ from app.workers.reminder_worker import _registry as reminder_registry
 from app.workers.reputation_worker import _registry as reputation_registry
 from app.workers.review_request_worker import _registry as review_request_registry
 from app.workers.transcript_analysis_worker import _registry as transcript_analysis_registry
+from app.workers.unsold_quote_worker import _registry as unsold_quote_registry
 from app.workers.voice_campaign_worker import _registry as voice_campaign_registry
 from app.workers.web_people_discovery_worker import (
     _registry as web_people_discovery_registry,
@@ -288,6 +292,25 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="webhook_signature_cleanup",
         registry=webhook_signature_cleanup_registry,
         dependencies=("postgres",),
+    ),
+    # New workers append so existing startup order remains stable.
+    WorkerSpec(
+        name="post_estimate_followup_worker",
+        registry=post_estimate_followup_registry,
+        dependencies=(
+            "postgres",
+            "text_message_provider",
+            "resend",
+        ),
+    ),
+    WorkerSpec(
+        name="unsold_quote_worker",
+        registry=unsold_quote_registry,
+        dependencies=(
+            "postgres",
+            "text_message_provider",
+            "resend",
+        ),
     ),
 )
 

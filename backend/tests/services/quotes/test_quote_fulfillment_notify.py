@@ -17,6 +17,8 @@ from typing import Any
 import pytest
 
 from app.models.quote import Quote
+from app.models.workspace import Workspace
+from app.schemas.pricing import PricingSettings
 from app.services.notifications import NotificationDispatchResult
 from app.services.quotes import QuoteService
 from app.services.quotes import quote_service as quote_service_module
@@ -44,6 +46,33 @@ def _quote(document: dict[str, Any] | None) -> Quote:
         updated_at=now,
         proposal_document=document,
     )
+
+
+class _FakeDb:
+    """Minimal session stand-in for the response-building path.
+
+    ``_detail_response`` reads the workspace pricing config, so ``get`` is part
+    of what ``approve_quote`` legitimately needs; returning ``None`` here would
+    exercise the missing-workspace fallback instead of the normal path.
+    """
+
+    def __init__(self, workspace: Workspace | None) -> None:
+        self.workspace = workspace
+        self.get_calls = 0
+
+    async def get(self, model: type[Any], pk: Any) -> Any:
+        self.get_calls += 1
+        return self.workspace
+
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, obj: object, attrs: list[str] | None = None) -> None:
+        return None
+
+
+def _workspace(quote: Quote) -> Workspace:
+    return Workspace(id=quote.workspace_id, name="Maxteriors", slug="maxteriors", settings={})
 
 
 def _capture(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
@@ -172,19 +201,13 @@ async def test_approve_quote_fires_the_parts_notification(
     async def _track(self: object, q: Quote) -> None:
         notified.append(q)
 
-    class _Db:
-        async def commit(self) -> None:
-            return None
-
-        async def refresh(self, obj: object, attrs: list[str] | None = None) -> None:
-            return None
-
     monkeypatch.setattr(QuoteService, "_expire_overdue", _no_expire)
     monkeypatch.setattr(QuoteService, "_emit_lifecycle_event", _no_event)
     monkeypatch.setattr(QuoteService, "_notify_fulfillment_parts", _track)
     monkeypatch.setattr(quote_service_module, "get_or_404", _get)
 
-    await QuoteService(db=_Db()).approve_quote(quote.workspace_id, quote.id)  # type: ignore[arg-type]
+    db = _FakeDb(_workspace(quote))
+    await QuoteService(db=db).approve_quote(quote.workspace_id, quote.id)  # type: ignore[arg-type]
 
     assert notified == [quote]
     assert quote.status == "approved"
@@ -212,6 +235,38 @@ async def test_already_approved_quote_does_not_reorder(
     monkeypatch.setattr(QuoteService, "_notify_fulfillment_parts", _track)
     monkeypatch.setattr(quote_service_module, "get_or_404", _get)
 
-    await QuoteService(db=None).approve_quote(quote.workspace_id, quote.id)  # type: ignore[arg-type]
+    await QuoteService(db=_FakeDb(_workspace(quote))).approve_quote(  # type: ignore[arg-type]
+        quote.workspace_id,
+        quote.id,
+    )
 
     assert notified == []
+
+
+async def test_preloaded_workspace_costs_no_extra_query() -> None:
+    """A caller that eager-loaded the workspace must not pay a second round trip."""
+    quote = _quote(None)
+    workspace = _workspace(quote)
+    workspace.settings = {"pricing": {}}
+    quote.workspace = workspace
+    db = _FakeDb(None)
+
+    config = await QuoteService(db=db)._pricing_config_for_quote(quote)  # type: ignore[arg-type]
+
+    assert db.get_calls == 0
+    assert config is not None
+
+
+async def test_missing_workspace_falls_back_instead_of_404ing_a_committed_approval() -> None:
+    """``approve_quote`` has already committed by here, so this must not raise.
+
+    ``get_or_404`` used to run at this point, which would report a 404 for an
+    approval that actually succeeded.
+    """
+    quote = _quote(None)
+    db = _FakeDb(None)
+
+    config = await QuoteService(db=db)._pricing_config_for_quote(quote)  # type: ignore[arg-type]
+
+    assert db.get_calls == 1
+    assert config == PricingSettings()

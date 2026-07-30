@@ -17,9 +17,9 @@ the quote/invoice schemas; the server recomputes canonical totals with
 """
 
 from calendar import monthrange
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # --------------------------------------------------------------------------- #
 # Money / financing knobs
@@ -36,13 +36,47 @@ class TaxConfig(BaseModel):
     label: str = "Sales Tax"
 
 
-class FinancingConfig(BaseModel):
-    """Wisetack 0% APR promotional financing (shared across lighting brands).
+DEFAULT_FINANCING_DISCLAIMER = (
+    "Payment figures are estimates for illustration only and are not a financing offer. "
+    "Financing is subject to application and approval by the provider; actual terms, APR, "
+    "and payment may vary."
+)
 
-    ``feeBuffer`` grosses every price up by ``price / (1 - feeBuffer)`` so a
-    financed job never eats margin; cash pricing backs it out again while keeping
-    the card reserve. Defaults mirror the landscape wizard so a new lighting
-    workspace inherits the same financing before it customizes anything.
+
+def _default_financing_category_minimums() -> dict[str, float]:
+    """Service categories financed by default and their qualifying subtotals.
+
+    Lighting categories retain the original zero-minimum behavior. Core exterior
+    services require a meaningful project subtotal, so a small gutter cleaning does
+    not get financing copy while a roof, siding, or replacement-gutter project does.
+    Workspaces may add free-form catalog categories or remove a key to disable one.
+    """
+    return {
+        "landscape": 0,
+        "bistro": 0,
+        "permanent": 0,
+        "christmas": 0,
+        "roof": 1000,
+        "roofing": 1000,
+        "siding": 1000,
+        "gutters": 1000,
+        "windows": 1000,
+        "trim": 1000,
+    }
+
+
+class FinancingConfig(BaseModel):
+    """Promotional financing shared across service categories.
+
+    ``fee_buffer`` grosses every wizard price up by ``price / (1 - fee_buffer)``
+    so a financed job never eats margin; cash pricing backs it out again while
+    keeping the card reserve. Category eligibility only controls whether an
+    estimate is presented — it never changes that margin-protection math.
+
+    ``category_minimums`` maps normalized service-category keys to the minimum
+    subtotal that qualifies. Presence enables a category; removing a key disables
+    it. Lighting categories default to their historical zero minimum, while core
+    exterior categories default to a $1,000 floor.
     """
 
     enabled: bool = True
@@ -52,10 +86,40 @@ class FinancingConfig(BaseModel):
     default_term: int = 24
     apr: float = Field(default=0.0, ge=0, le=1)
     fee_buffer: float = Field(default=0.11, ge=0, lt=0.95)
+    category_minimums: dict[str, Annotated[float, Field(ge=0)]] = Field(
+        default_factory=_default_financing_category_minimums
+    )
     headline: str | None = None
     body: str | None = None
     points: list[str] = Field(default_factory=list)
-    disclaimer: str | None = None
+    disclaimer: str | None = DEFAULT_FINANCING_DISCLAIMER
+
+    @field_validator("category_minimums", mode="before")
+    @classmethod
+    def _normalize_category_keys(cls, value: Any) -> Any:
+        """Match free-form catalog categories case-insensitively."""
+        if not isinstance(value, dict):
+            return value
+        return {
+            str(category).strip().lower(): minimum
+            for category, minimum in value.items()
+            if str(category).strip()
+        }
+
+
+class FinancingEstimate(BaseModel):
+    """Client-safe, server-computed monthly-payment estimate for one quote."""
+
+    provider: str
+    terms: list[int] = Field(default_factory=list)
+    default_term: int
+    apr: float = 0
+    monthly_payment: float
+    monthly_by_term: dict[int, float] = Field(default_factory=dict)
+    headline: str | None = None
+    body: str | None = None
+    points: list[str] = Field(default_factory=list)
+    disclaimer: str
 
 
 class CashDiscountConfig(BaseModel):

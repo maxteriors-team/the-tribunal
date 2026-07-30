@@ -436,6 +436,11 @@
   .pkg-card.best .pkg-subprice strong { color: var(--gold-l); }
   .pkg-card.better .pkg-subprice { color: rgba(255, 255, 255, 0.55); }
   .pkg-card.better .pkg-subprice strong { color: #ffffff; }
+  /* Pointer to the financing block. Sits under .pkg-subprice when a package
+     takes a deposit, so it stays one step quieter than the amount due. */
+  .pkg-monthly { font-family: var(--font-cormorant), serif; font-size: 14px; font-style: italic; color: var(--t4); margin-top: 6px; }
+  .pkg-card.best .pkg-monthly { color: var(--gold-d); }
+  .pkg-card.better .pkg-monthly { color: rgba(255, 255, 255, 0.45); }
   .pkg-cash { font-family: var(--font-cormorant), serif; font-size: 15px; font-style: italic; color: var(--t3); margin-top: 4px; }
   .pkg-cash strong { font-style: normal; font-weight: 600; color: var(--t2); }
   .pkg-cash-save { font-style: normal; font-size: 11px; letter-spacing: 0.04em; color: var(--gold); }

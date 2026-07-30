@@ -110,6 +110,7 @@ from app.models.prospect_signal import (
     ProspectSignalType,
 )
 from app.models.quote import Quote, QuoteLineItem
+from app.models.quote_followup_touch import QuoteFollowupTouch
 from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
 from app.models.refresh_token import RefreshToken
 from app.models.revenue_target import RevenueTarget
@@ -210,6 +211,7 @@ __all__ = [
     "JobExpense",
     "Quote",
     "QuoteLineItem",
+    "QuoteFollowupTouch",
     "RecurringJobTemplate",
     "RecurrenceFrequency",
     "RevenueTarget",

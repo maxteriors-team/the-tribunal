@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.schemas.pricing import FinancingEstimate
+
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
 
 
@@ -191,6 +193,9 @@ class QuoteResponse(BaseModel):
     discount_amount: float
     total: float
     currency: str
+    # Category-qualified, server-computed estimate. Null means this quote's
+    # categorized subtotal is disabled, below its minimum, or above the cap.
+    financing: FinancingEstimate | None = None
     deposit_percentage: float | None = None
     deposit_amount_fixed: float | None = None
     deposit_paid_at: datetime | None = None

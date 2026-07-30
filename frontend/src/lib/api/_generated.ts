@@ -1080,6 +1080,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/lead-source-capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lead Source Capture Policy
+         * @description Get the operator-only lead-source requirement for manual intake.
+         */
+        get: operations["get_lead_source_capture_policy_api_v1_settings_workspaces__workspace_id__lead_source_capture_get"];
+        /**
+         * Update Lead Source Capture Policy
+         * @description Replace the namespaced manual-intake policy without touching other settings.
+         */
+        put: operations["update_lead_source_capture_policy_api_v1_settings_workspaces__workspace_id__lead_source_capture_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/missed-call-textback": {
         parameters: {
             query?: never;
@@ -1097,6 +1121,30 @@ export interface paths {
          * @description Update workspace missed-call text-back settings.
          */
         put: operations["update_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/post-estimate-followup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quote Followup Settings
+         * @description Get the workspace's first-14-days quote follow-up cadence.
+         */
+        get: operations["get_quote_followup_settings_api_v1_settings_workspaces__workspace_id__post_estimate_followup_get"];
+        /**
+         * Update Quote Followup Settings
+         * @description Merge and validate the quote cadence inside ``workspace.settings``.
+         */
+        put: operations["update_quote_followup_settings_api_v1_settings_workspaces__workspace_id__post_estimate_followup_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1218,6 +1266,30 @@ export interface paths {
          */
         get: operations["get_team_members_api_v1_settings_workspaces__workspace_id__team_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/unsold-quote-revival": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Quote Revival Settings
+         * @description Get the workspace's 30/60/90-day unsold-quote revival ladder.
+         */
+        get: operations["get_quote_revival_settings_api_v1_settings_workspaces__workspace_id__unsold_quote_revival_get"];
+        /**
+         * Update Quote Revival Settings
+         * @description Merge and validate the revival ladder inside ``workspace.settings``.
+         */
+        put: operations["update_quote_revival_settings_api_v1_settings_workspaces__workspace_id__unsold_quote_revival_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2919,7 +2991,10 @@ export interface paths {
         put?: never;
         /**
          * Create Contact
-         * @description Create a new contact.
+         * @description Create a contact through the general API/automation ingestion path.
+         *
+         *     Workspace manual-intake policy is intentionally not consulted here: API,
+         *     webhook, import, and other automated ingestion must remain non-breaking.
          */
         post: operations["create_contact_api_v1_workspaces__workspace_id__contacts_post"];
         delete?: never;
@@ -3056,6 +3131,26 @@ export interface paths {
         get: operations["get_import_template_api_v1_workspaces__workspace_id__contacts_import_template_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Contact Manually
+         * @description Create an operator-entered contact and enforce only the manual policy.
+         */
+        post: operations["create_contact_manually_api_v1_workspaces__workspace_id__contacts_manual_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6890,6 +6985,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/reports/attribution-gap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attribution Gap
+         * @description Surface the share of newly created contacts missing structured attribution.
+         */
+        get: operations["attribution_gap_api_v1_workspaces__workspace_id__reports_attribution_gap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/reports/backlog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Backlog
+         * @description How many weeks of sold work are on the books (the marketing-spend trigger).
+         */
+        get: operations["backlog_api_v1_workspaces__workspace_id__reports_backlog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/reports/estimate-capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estimate Capacity
+         * @description Booked estimates versus the month's estimate capacity (the hire trigger).
+         */
+        get: operations["estimate_capacity_api_v1_workspaces__workspace_id__reports_estimate_capacity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/reports/job-pnl": {
         parameters: {
             query?: never;
@@ -9722,9 +9877,14 @@ export interface components {
         };
         /**
          * AssignLeadSourceRequest
-         * @description Operator action assigning a lead source to an unattributed contact.
+         * @description Operator assignment or explicit correction of structured attribution.
          */
         AssignLeadSourceRequest: {
+            /**
+             * Correct Existing
+             * @default false
+             */
+            correct_existing: boolean;
             /** Lead Source Campaign Id */
             lead_source_campaign_id?: string | null;
             /**
@@ -9936,6 +10096,35 @@ export interface components {
             total_closed_won_jobs: number;
         };
         /**
+         * AttributionGapReport
+         * @description Structured first-touch coverage for contacts created in a date range.
+         */
+        AttributionGapReport: {
+            /** Attributed Contacts */
+            attributed_contacts: number;
+            /**
+             * Date From
+             * Format: date
+             * @description Inclusive contact-created start date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             * @description Inclusive contact-created end date
+             */
+            date_to: string;
+            /**
+             * Gap Rate
+             * @description Unattributed share in 0..1, or null when no contacts were created
+             */
+            gap_rate?: number | null;
+            /** Total Contacts */
+            total_contacts: number;
+            /** Unattributed Contacts */
+            unattributed_contacts: number;
+        };
+        /**
          * AutomationActionSchema
          * @description Schema for automation action.
          */
@@ -10054,6 +10243,72 @@ export interface components {
             } | null;
             /** Trigger Type */
             trigger_type?: string | null;
+        };
+        /**
+         * BacklogReport
+         * @description Sold-but-undelivered work, expressed in weeks of crew capacity.
+         *
+         *     The forward-looking counterpart to :class:`JobPnLSummary`: how much work is
+         *     on the books, not what past work earned. ``backlog_weeks`` is the headline —
+         *     the number that decides whether the next dollar goes to marketing.
+         *
+         *     Hours are estimated (``Job`` has no duration column): a job's booked window
+         *     when it has one, otherwise ``default_job_hours``. Read
+         *     ``assumed_duration_job_count`` alongside ``job_count`` to see how much of the
+         *     total is measured versus assumed.
+         */
+        BacklogReport: {
+            /**
+             * Alert Weeks
+             * @description Booked-out weeks the owner asked to be warned below (RevenueTarget.backlog_alert_weeks); null when unset
+             */
+            alert_weeks?: number | null;
+            /**
+             * As Of
+             * Format: date
+             * @description Date this snapshot of open work was taken
+             */
+            as_of: string;
+            /**
+             * Assumed Duration Job Count
+             * @description Jobs sized by default_job_hours because they have no usable window
+             */
+            assumed_duration_job_count: number;
+            /**
+             * Backlog Hours
+             * @description Estimated hours of sold work not yet completed or cancelled
+             */
+            backlog_hours: number;
+            /**
+             * Backlog Weeks
+             * @description backlog_hours / weekly_capacity_hours — weeks of work booked; null when capacity is unset, never 0
+             */
+            backlog_weeks?: number | null;
+            /**
+             * Below Alert Threshold
+             * @description True when backlog_weeks has fallen under alert_weeks — the dry-spell warning that should trigger marketing spend. Null when either is unknown.
+             */
+            below_alert_threshold?: boolean | null;
+            /**
+             * Default Job Hours
+             * @description Hours assumed for a job with no usable scheduled window
+             */
+            default_job_hours: number;
+            /**
+             * Job Count
+             * @description Open jobs counted into the backlog
+             */
+            job_count: number;
+            /**
+             * Unscheduled Job Count
+             * @description Open jobs with no time window yet — work sold but not on the calendar, a separate operational risk from the backlog's size
+             */
+            unscheduled_job_count: number;
+            /**
+             * Weekly Capacity Hours
+             * @description Sellable crew hours per week used as the divisor; null when the workspace has never set one
+             */
+            weekly_capacity_hours?: number | null;
         };
         /**
          * BatchQualifyResponse
@@ -12568,6 +12823,8 @@ export interface components {
             latest_touch_lead_source_id?: string | null;
             /** Lead Score */
             lead_score: number;
+            /** Lead Source Raw Answer */
+            lead_source_raw_answer?: string | null;
             /** Linkedin Url */
             linkedin_url?: string | null;
             /**
@@ -12806,6 +13063,8 @@ export interface components {
             latest_touch_lead_source_id?: string | null;
             /** Lead Score */
             lead_score: number;
+            /** Lead Source Raw Answer */
+            lead_source_raw_answer?: string | null;
             /** Linkedin Url */
             linkedin_url?: string | null;
             /**
@@ -13731,6 +13990,51 @@ export interface components {
             contact_ids: number[];
         };
         /**
+         * EstimateCapacityReport
+         * @description A month's booked estimates against the estimates it can actually run.
+         *
+         *     The hire trigger. One full-time closer tops out near 60-80 estimates a
+         *     month, so utilization sustained above ``at_capacity_threshold_pct`` means
+         *     more leads would only push the calendar further out: the next dollar belongs
+         *     in headcount, not ad spend.
+         *
+         *     ``utilization_pct`` is a percent (0..100, matching the target's rate fields),
+         *     not a 0..1 ratio, and is null rather than 0 when no capacity is stored.
+         */
+        EstimateCapacityReport: {
+            /**
+             * At Capacity
+             * @description True when utilization_pct has reached at_capacity_threshold_pct; null when capacity is unset, because 'not full' cannot be claimed off a ceiling nobody set
+             */
+            at_capacity?: boolean | null;
+            /**
+             * At Capacity Threshold Pct
+             * @description Utilization percent treated as full (below 100 on purpose)
+             */
+            at_capacity_threshold_pct: number;
+            /**
+             * Booked
+             * @description Appointments occupying the month's estimate calendar
+             */
+            booked: number;
+            /**
+             * Capacity
+             * @description Estimates the workspace says it can run this month (RevenueTarget.estimate_capacity_per_month); null when unset
+             */
+            capacity?: number | null;
+            /**
+             * Period Month
+             * Format: date
+             * @description First day of the reported month
+             */
+            period_month: string;
+            /**
+             * Utilization Pct
+             * @description booked / capacity as a percent; null when capacity is unset
+             */
+            utilization_pct?: number | null;
+        };
+        /**
          * EstimateQuoteRequest
          * @description Convert a measured estimate into a real draft quote.
          *
@@ -13848,12 +14152,17 @@ export interface components {
         };
         /**
          * FinancingConfig
-         * @description Wisetack 0% APR promotional financing (shared across lighting brands).
+         * @description Promotional financing shared across service categories.
          *
-         *     ``feeBuffer`` grosses every price up by ``price / (1 - feeBuffer)`` so a
-         *     financed job never eats margin; cash pricing backs it out again while keeping
-         *     the card reserve. Defaults mirror the landscape wizard so a new lighting
-         *     workspace inherits the same financing before it customizes anything.
+         *     ``fee_buffer`` grosses every wizard price up by ``price / (1 - fee_buffer)``
+         *     so a financed job never eats margin; cash pricing backs it out again while
+         *     keeping the card reserve. Category eligibility only controls whether an
+         *     estimate is presented — it never changes that margin-protection math.
+         *
+         *     ``category_minimums`` maps normalized service-category keys to the minimum
+         *     subtotal that qualifies. Presence enables a category; removing a key disables
+         *     it. Lighting categories default to their historical zero minimum, while core
+         *     exterior categories default to a $1,000 floor.
          */
         FinancingConfig: {
             /**
@@ -13863,13 +14172,20 @@ export interface components {
             apr: number;
             /** Body */
             body?: string | null;
+            /** Category Minimums */
+            category_minimums?: {
+                [key: string]: number;
+            };
             /**
              * Default Term
              * @default 24
              */
             default_term: number;
-            /** Disclaimer */
-            disclaimer?: string | null;
+            /**
+             * Disclaimer
+             * @default Payment figures are estimates for illustration only and are not a financing offer. Financing is subject to application and approval by the provider; actual terms, APR, and payment may vary.
+             */
+            disclaimer: string | null;
             /**
              * Enabled
              * @default true
@@ -13893,6 +14209,37 @@ export interface components {
              * Provider
              * @default Wisetack
              */
+            provider: string;
+            /** Terms */
+            terms?: number[];
+        };
+        /**
+         * FinancingEstimate
+         * @description Client-safe, server-computed monthly-payment estimate for one quote.
+         */
+        FinancingEstimate: {
+            /**
+             * Apr
+             * @default 0
+             */
+            apr: number;
+            /** Body */
+            body?: string | null;
+            /** Default Term */
+            default_term: number;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Headline */
+            headline?: string | null;
+            /** Monthly By Term */
+            monthly_by_term?: {
+                [key: string]: number;
+            };
+            /** Monthly Payment */
+            monthly_payment: number;
+            /** Points */
+            points?: string[];
+            /** Provider */
             provider: string;
             /** Terms */
             terms?: number[];
@@ -16049,6 +16396,17 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * LeadSourceCaptureSettings
+         * @description Workspace policy for operator-created contacts only.
+         */
+        LeadSourceCaptureSettings: {
+            /**
+             * Require Lead Source On Manual Create
+             * @default false
+             */
+            require_lead_source_on_manual_create: boolean;
+        };
+        /**
          * LeadSourceCreate
          * @description Schema for creating a lead source.
          */
@@ -16431,6 +16789,83 @@ export interface components {
         LiveCallsResponse: {
             /** Items */
             items: components["schemas"]["LiveCallResponse"][];
+        };
+        /**
+         * ManualContactCreate
+         * @description Operator-created contact with an optional first-class source selection.
+         */
+        ManualContactCreate: {
+            /** Address City */
+            address_city?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** Address State */
+            address_state?: string | null;
+            /** Address Zip */
+            address_zip?: string | null;
+            /** Attribution Confidence */
+            attribution_confidence?: number | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Company Name */
+            company_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Fbclid */
+            fbclid?: string | null;
+            /** First Name */
+            first_name: string;
+            /** First Touch At */
+            first_touch_at?: string | null;
+            /** First Touch Lead Source Campaign Id */
+            first_touch_lead_source_campaign_id?: string | null;
+            /** First Touch Lead Source Id */
+            first_touch_lead_source_id?: string | null;
+            /** Gclid */
+            gclid?: string | null;
+            /** Important Dates */
+            important_dates?: {
+                [key: string]: unknown;
+            } | null;
+            /** Landing Page */
+            landing_page?: string | null;
+            /** Last Name */
+            last_name?: string | null;
+            /** Latest Touch At */
+            latest_touch_at?: string | null;
+            /** Latest Touch Lead Source Campaign Id */
+            latest_touch_lead_source_campaign_id?: string | null;
+            /** Latest Touch Lead Source Id */
+            latest_touch_lead_source_id?: string | null;
+            /** Lead Source Id */
+            lead_source_id?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Phone Number */
+            phone_number: string;
+            /** Referrer */
+            referrer?: string | null;
+            /** Source */
+            source?: string | null;
+            /**
+             * Status
+             * @default new
+             */
+            status: string;
+            /** Tags */
+            tags?: string[] | null;
+            /** Utm Campaign */
+            utm_campaign?: string | null;
+            /** Utm Content */
+            utm_content?: string | null;
+            /** Utm Medium */
+            utm_medium?: string | null;
+            /** Utm Source */
+            utm_source?: string | null;
+            /** Utm Term */
+            utm_term?: string | null;
         };
         /**
          * MemberResponse
@@ -18943,6 +19378,33 @@ export interface components {
             phone_number: string;
         };
         /**
+         * PhoneNumberLeadSourceCampaignResponse
+         * @description Campaign identity displayed beside a tracking number.
+         */
+        PhoneNumberLeadSourceCampaignResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * PhoneNumberLeadSourceResponse
+         * @description Lead-source identity displayed beside a tracking number.
+         */
+        PhoneNumberLeadSourceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            source_type: components["schemas"]["LeadSourceType"];
+        };
+        /**
          * PhoneNumberResponse
          * @description Phone number response schema.
          */
@@ -18960,6 +19422,12 @@ export interface components {
             imessage_enabled: boolean;
             /** Is Active */
             is_active: boolean;
+            lead_source: components["schemas"]["PhoneNumberLeadSourceResponse"] | null;
+            lead_source_campaign: components["schemas"]["PhoneNumberLeadSourceCampaignResponse"] | null;
+            /** Lead Source Campaign Id */
+            lead_source_campaign_id: string | null;
+            /** Lead Source Id */
+            lead_source_id: string | null;
             /** Mac Relay Sender Id */
             mac_relay_sender_id: string | null;
             /** Mac Relay Service */
@@ -18972,6 +19440,8 @@ export interface components {
             provider: string;
             /** Sms Enabled */
             sms_enabled: boolean;
+            /** Tracking Label */
+            tracking_label: string | null;
             /** Voice Enabled */
             voice_enabled: boolean;
             /**
@@ -18991,6 +19461,12 @@ export interface components {
             friendly_name?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Lead Source Campaign Id */
+            lead_source_campaign_id?: string | null;
+            /** Lead Source Id */
+            lead_source_id?: string | null;
+            /** Tracking Label */
+            tracking_label?: string | null;
         };
         /**
          * PipelineCreate
@@ -20090,6 +20566,7 @@ export interface components {
             discount_amount: number;
             /** Expiry Date */
             expiry_date?: string | null;
+            financing?: components["schemas"]["FinancingEstimate"] | null;
             /** Intro */
             intro?: string | null;
             /**
@@ -20670,6 +21147,7 @@ export interface components {
             discount_amount: number;
             /** Expiry Date */
             expiry_date?: string | null;
+            financing?: components["schemas"]["FinancingEstimate"] | null;
             /**
              * Id
              * Format: uuid
@@ -20722,6 +21200,69 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * QuoteFollowupSettings
+         * @description Validated workspace configuration for post-estimate follow-up.
+         */
+        QuoteFollowupSettings: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * High Value Threshold
+             * @default 10000
+             */
+            high_value_threshold: number;
+            /**
+             * Quiet Hours End
+             * @default 08:00:00
+             */
+            quiet_hours_end: string | null;
+            /**
+             * Quiet Hours Start
+             * @default 20:00:00
+             */
+            quiet_hours_start: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["QuoteFollowupTouchSettings"][];
+        };
+        /**
+         * QuoteFollowupSettingsUpdate
+         * @description Partial update payload for post-estimate follow-up settings.
+         */
+        QuoteFollowupSettingsUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** High Value Threshold */
+            high_value_threshold?: number | null;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["QuoteFollowupTouchSettings"][] | null;
+        };
+        /**
+         * QuoteFollowupTouchSettings
+         * @description One touch anchored to the quote's first ``sent_at`` timestamp.
+         */
+        QuoteFollowupTouchSettings: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "email" | "call";
+            /** Offset Days */
+            offset_days: number;
+            /** Template Id */
+            template_id?: string | null;
         };
         /**
          * QuoteLineItemCreate
@@ -20871,6 +21412,7 @@ export interface components {
             discount_amount: number;
             /** Expiry Date */
             expiry_date?: string | null;
+            financing?: components["schemas"]["FinancingEstimate"] | null;
             /**
              * Id
              * Format: uuid
@@ -20917,6 +21459,78 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * QuoteRevivalSettings
+         * @description Validated workspace configuration for unsold-quote revival.
+         */
+        QuoteRevivalSettings: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * High Value Threshold
+             * @default 5000
+             */
+            high_value_threshold: number;
+            /**
+             * Max Touches
+             * @default 3
+             */
+            max_touches: number;
+            /**
+             * Quiet Hours End
+             * @default 08:00:00
+             */
+            quiet_hours_end: string | null;
+            /**
+             * Quiet Hours Start
+             * @default 20:00:00
+             */
+            quiet_hours_start: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["QuoteRevivalTouchSettings"][];
+        };
+        /**
+         * QuoteRevivalSettingsUpdate
+         * @description Partial update payload for unsold-quote revival settings.
+         */
+        QuoteRevivalSettingsUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** High Value Threshold */
+            high_value_threshold?: number | null;
+            /** Max Touches */
+            max_touches?: number | null;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["QuoteRevivalTouchSettings"][] | null;
+        };
+        /**
+         * QuoteRevivalTouchSettings
+         * @description One revival touch anchored to the quote's issue date.
+         */
+        QuoteRevivalTouchSettings: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "sms" | "email" | "call";
+            /** High Value Template Id */
+            high_value_template_id?: string | null;
+            /** Offset Days */
+            offset_days: number;
+            /** Template Id */
+            template_id?: string | null;
         };
         /**
          * QuoteUpdate
@@ -26299,6 +26913,72 @@ export interface operations {
             };
         };
     };
+    get_lead_source_capture_policy_api_v1_settings_workspaces__workspace_id__lead_source_capture_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadSourceCaptureSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_lead_source_capture_policy_api_v1_settings_workspaces__workspace_id__lead_source_capture_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadSourceCaptureSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadSourceCaptureSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_missed_call_textback_api_v1_settings_workspaces__workspace_id__missed_call_textback_get: {
         parameters: {
             query?: never;
@@ -26352,6 +27032,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MissedCallTextbackSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quote_followup_settings_api_v1_settings_workspaces__workspace_id__post_estimate_followup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteFollowupSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_quote_followup_settings_api_v1_settings_workspaces__workspace_id__post_estimate_followup_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteFollowupSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteFollowupSettings"];
                 };
             };
             /** @description Validation Error */
@@ -26612,6 +27358,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamMemberResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quote_revival_settings_api_v1_settings_workspaces__workspace_id__unsold_quote_revival_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteRevivalSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_quote_revival_settings_api_v1_settings_workspaces__workspace_id__unsold_quote_revival_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteRevivalSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteRevivalSettings"];
                 };
             };
             /** @description Validation Error */
@@ -30568,6 +31380,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_contact_manually_api_v1_workspaces__workspace_id__contacts_manual_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualContactCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38566,6 +39413,114 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ARAgingReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attribution_gap_api_v1_workspaces__workspace_id__reports_attribution_gap_get: {
+        parameters: {
+            query?: {
+                /** @description Contacts created on or after this date (defaults to the 1st of this month) */
+                date_from?: string | null;
+                /** @description Contacts created on or before this date (defaults to today) */
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttributionGapReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backlog_api_v1_workspaces__workspace_id__reports_backlog_get: {
+        parameters: {
+            query?: {
+                /** @description Snapshot date (defaults to today) */
+                as_of?: string | null;
+                /** @description Override the workspace's stored crew capacity, e.g. to model adding a crew. Required to get backlog_weeks at all when no revenue target sets crew_capacity_hours_per_week. */
+                weekly_capacity_hours?: number | null;
+                /** @description Hours to assume for a job with no scheduled window */
+                default_job_hours?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacklogReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_capacity_api_v1_workspaces__workspace_id__reports_estimate_capacity_get: {
+        parameters: {
+            query?: {
+                /** @description Any date inside the month to report (defaults to this month) */
+                month?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EstimateCapacityReport"];
                 };
             };
             /** @description Validation Error */

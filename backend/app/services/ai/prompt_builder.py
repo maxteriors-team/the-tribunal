@@ -242,6 +242,31 @@ You can use these auditory cues naturally in your responses to sound more human:
             "invent details the caller didn't give."
         )
 
+    def get_lead_source_capture_guidance(
+        self,
+        contact_info: dict[str, Any] | None,
+        *,
+        is_outbound: bool,
+    ) -> str:
+        """Tell an equipped inbound receptionist to capture missing attribution."""
+        if is_outbound or not self.agent or not self.agent.enabled_tools:
+            return ""
+        if not {"save_lead_info", "crm_update"}.intersection(self.agent.enabled_tools):
+            return ""
+        if contact_info and contact_info.get("lead_source_known"):
+            return ""
+
+        return (
+            "\n\n# Lead Source Capture\n"
+            "This inbound caller has no structured lead source on file. After you "
+            "have handled their immediate need and established rapport, ask one "
+            "short question: 'Before I let you go, how did you hear about us?' "
+            "Do not ask again if they already volunteered the answer. Pass their "
+            "answer verbatim as lead_source_answer to save_lead_info; do not "
+            "categorize or rewrite it yourself. If they do not know or decline, "
+            "accept that and move on without pressure."
+        )
+
     def get_ivr_navigation_guidance(
         self,
         ivr_status: "IVRStatus | None" = None,
@@ -474,9 +499,8 @@ AVAILABILITY ACCURACY RULES:
         ]
 
     def _build_contact_section(self, contact_info: dict[str, Any], is_outbound: bool) -> list[str]:
-        """Build contact information section."""
-        header = "\n## Customer You Are Calling:" if is_outbound else "\n## Customer Information:"
-        parts = [header]
+        """Build visible contact information, ignoring prompt-control metadata."""
+        parts: list[str] = []
         if contact_info.get("name"):
             parts.append(f"- Name: {contact_info['name']}")
         if contact_info.get("company"):
@@ -491,7 +515,10 @@ AVAILABILITY ACCURACY RULES:
         # renders identically for every voice provider.
         if contact_info.get("returning_summary"):
             parts.append(contact_info["returning_summary"])
-        return parts
+        if not parts:
+            return []
+        header = "\n## Customer You Are Calling:" if is_outbound else "\n## Customer Information:"
+        return [header, *parts]
 
     def _build_offer_section(self, offer_info: dict[str, Any], is_outbound: bool) -> list[str]:
         """Build offer information section."""
@@ -580,6 +607,9 @@ AVAILABILITY ACCURACY RULES:
 
         # 6d. "Take a message" capture guidance
         parts.append(self.get_take_message_guidance())
+
+        # 6e. Missing lead-source capture for inbound receptionists
+        parts.append(self.get_lead_source_capture_guidance(contact_info, is_outbound=is_outbound))
 
         # 7. IVR/DTMF navigation guidance (before booking, critical for outbound)
         if include_ivr_guidance:
