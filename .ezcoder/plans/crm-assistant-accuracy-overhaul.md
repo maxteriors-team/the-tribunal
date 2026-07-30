@@ -186,6 +186,58 @@ So "how do I set up an automation?" is answered purely from model priors — whi
 
 Plan: allow workspace-scoped documents with `agent_id NULL`, seed a product-knowledge corpus from `docs/`, expose `search_help`. Largest phase — defer until 1–2 land.
 
+### Phase 3 shipped (2026-07-29)
+
+**Corpus source (open question 2, answered):** hand-written help, not generated
+from the existing `docs/` tree. Those files are strategy, security-audit and
+runbook material written for us, not operator how-to. Six articles now live in
+`backend/docs/help/` — automations, campaigns-vs-automations, approvals,
+phone numbers, messaging compliance, assistant capabilities — each grounded in
+verified code (nav routes, dialog fields, enum values, the compliance service),
+not in prose about how CRMs generally work.
+
+They sit under `backend/docs/`, not repo-root `docs/`, because production
+deploys upload the `backend/` folder only: a repo-root path would not exist on
+the server, so the seed could never run in prod.
+
+| Piece | Where |
+|---|---|
+| Corpus | `backend/docs/help/*.md` (6 articles) |
+| Loader + idempotent sync | `app/services/knowledge/product_help.py` |
+| Seeder | `scripts/seeds/seed_product_help.py --env local [--workspace-id …] [--force]` |
+| Tool | `app/services/ai/crm_assistant/_help_tools.py` → `search_help` |
+| Prompt rule | `_processor.SYSTEM_PROMPT` → "## Product questions" |
+
+**Eval movement.** All 48 golden cases are now structurally scoreable — the
+last 5 (`how_to`) were blocked on `search_help` alone.
+
+| | Baseline | After Phase 1 | After Phase 2 | After Phase 3 |
+|---|---|---|---|---|
+| Tools exposed | 28 | 28 | 39 | **40** |
+| Cases that *cannot* score | 9/48 | 9/48 | 5/48 | **0/48** |
+| Live accuracy | ❌ blocked | ❌ blocked | ❌ blocked | ❌ blocked |
+
+Live accuracy is still blocked on the same missing OpenAI credential; the eval
+self-skips. To record it:
+
+```bash
+cd backend && OPENAI_API_KEY=sk-... uv run pytest tests/evals/crm_assistant -m eval -s
+```
+
+**What *was* proven locally**, on a scratch database at
+`c4a7e1d92b35` with a deterministic stub embedder:
+
+- Seeding writes 6 documents / 12 chunks, every row `agent_id IS NULL`.
+- Re-running the seed updates in place (`created=0, skipped=6`) — no duplicates,
+  no re-embedding spend.
+- Retrieval for another workspace returns 0 rows.
+- `search_help` degrades honestly when embeddings fail: `success: true`,
+  no passages, and a message telling the model to say it doesn't know.
+
+**Keyword-arm ranking, before → after adding "Questions this answers" to each
+article.** `websearch_to_tsquery` is AND-semantics, so a question containing one
+word the corpus never uses matches *nothing*:
+
 ---
 
 ## Phase 4 — Trust & UX

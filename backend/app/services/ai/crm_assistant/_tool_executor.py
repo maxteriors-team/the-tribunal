@@ -15,6 +15,7 @@ from app.services.ai.crm_assistant._automation_tools import AutomationAssistantT
 from app.services.ai.crm_assistant._campaign_tools import CampaignAssistantTools
 from app.services.ai.crm_assistant._contact_tools import ContactAssistantTools
 from app.services.ai.crm_assistant._conversation_tools import ConversationAssistantTools
+from app.services.ai.crm_assistant._help_tools import HelpAssistantTools
 from app.services.ai.crm_assistant._offer_tools import OfferAssistantTools
 from app.services.ai.crm_assistant._opportunity_tools import OpportunityAssistantTools
 from app.services.ai.crm_assistant._outbound_tools import OutboundAssistantTools
@@ -58,6 +59,7 @@ class CRMToolExecutor:
             OpportunityAssistantTools(self.context),
             OfferAssistantTools(self.context),
             OutboundAssistantTools(self.context),
+            HelpAssistantTools(self.context),
         )
         for module in modules:
             handlers.update(module.handlers())

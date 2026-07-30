@@ -1149,6 +1149,33 @@ CRM_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_help",
+            "description": (
+                "Search the product help corpus for how this CRM works: setting up "
+                "automations, campaigns vs automations, the approval queue, adding a "
+                "sending phone number, quiet hours and consent rules, what the "
+                "assistant can do. Use it for every 'how do I', 'where do I', or "
+                "'does the system' question instead of answering from memory, and "
+                "never create a record to demonstrate an answer. Returns ranked "
+                "passages with their help topic title."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The operator's question, in their words",
+                    },
+                    "top_k": {"type": "integer", "minimum": 1, "maximum": 8},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 
