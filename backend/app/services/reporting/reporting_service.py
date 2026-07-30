@@ -16,17 +16,23 @@ and job-costing services.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import select_workspace_owned
+from app.models.contact import Contact
 from app.models.field_service import Job
 from app.models.invoice import Invoice
 from app.models.job_costing import JobExpense, TimeEntry
-from app.schemas.reporting import ARAgingBucket, ARAgingReport, JobPnLSummary
+from app.schemas.reporting import (
+    ARAgingBucket,
+    ARAgingReport,
+    AttributionGapReport,
+    JobPnLSummary,
+)
 
 # Invoice statuses with a collectable balance (issued but not settled/cancelled).
 _OUTSTANDING_STATUSES = ("sent", "partial", "overdue")
@@ -62,6 +68,48 @@ class ReportingService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    # ------------------------------------------------------------------ #
+    # Attribution coverage
+    # ------------------------------------------------------------------ #
+    async def attribution_gap(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        date_from: date,
+        date_to: date,
+    ) -> AttributionGapReport:
+        """Count contacts created in the inclusive range without first touch."""
+        if date_to < date_from:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="date_to must be on or after date_from",
+            )
+
+        start_at = datetime.combine(date_from, time.min, tzinfo=UTC)
+        end_before = datetime.combine(date_to, time.min, tzinfo=UTC) + timedelta(days=1)
+        result = await self.db.execute(
+            select(
+                func.count(Contact.id),
+                func.count(Contact.id).filter(Contact.first_touch_lead_source_id.is_(None)),
+            ).where(
+                Contact.workspace_id == workspace_id,
+                Contact.created_at >= start_at,
+                Contact.created_at < end_before,
+            )
+        )
+        total_contacts, unattributed_contacts = result.one()
+        total = int(total_contacts or 0)
+        missing = int(unattributed_contacts or 0)
+
+        return AttributionGapReport(
+            date_from=date_from,
+            date_to=date_to,
+            total_contacts=total,
+            unattributed_contacts=missing,
+            attributed_contacts=total - missing,
+            gap_rate=round(missing / total, 4) if total else None,
+        )
 
     # ------------------------------------------------------------------ #
     # AR aging
