@@ -24,6 +24,7 @@ from app.api.deps import (
     WorkspaceAccess,
     WorkspaceDispatcher,
 )
+from app.api.service_errors import ServiceErrorRoute
 from app.core.permissions import Capability, role_can
 from app.models.field_service import JobStatus
 from app.models.workspace import WorkspaceMembership
@@ -43,9 +44,19 @@ from app.schemas.job_costing import (
     TimeEntryCreate,
     TimeEntryResponse,
 )
+from app.schemas.neighbor_outreach import (
+    NeighborOutreachBatchResponse,
+    NeighborOutreachCampaignRequest,
+    NeighborOutreachCampaignResponse,
+    NeighborOutreachEntryResponse,
+    NeighborOutreachEntryUpdate,
+    NeighborOutreachExportResponse,
+    NeighborOutreachGenerateRequest,
+)
+from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.jobs import JobCostingService, JobService
 
-router = APIRouter()
+router = APIRouter(route_class=ServiceErrorRoute)
 
 
 def _can_see_costs(membership: WorkspaceMembership) -> bool:
@@ -344,3 +355,100 @@ async def job_profitability(
     it — even though they can still log their own time and expenses on the job.
     """
     return await JobCostingService(db).get_profitability(job_id, workspace.id)
+
+
+# --------------------------------------------------------------------------- #
+# Neighbor outreach: turning a finished job into leads from the same street.
+#
+# Reads are open to any workspace member (a technician can see who else on the
+# street to leave a hanger with); everything that creates a list, changes an
+# entry, exports addresses, or touches the messaging path is dispatcher-gated —
+# the export payload is customer PII and enrollment spends the workspace's
+# sending reputation.
+# --------------------------------------------------------------------------- #
+@router.get("/{job_id}/neighbors", response_model=NeighborOutreachBatchResponse)
+async def get_job_neighbors(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> NeighborOutreachBatchResponse:
+    """The generated neighbour list for a job, nearest first (404 until generated)."""
+    return await NeighborOutreachService(db).get_for_job(job_id, workspace.id)
+
+
+@router.post(
+    "/{job_id}/neighbors",
+    response_model=NeighborOutreachBatchResponse,
+    status_code=201,
+)
+async def generate_job_neighbors(
+    job_id: uuid.UUID,
+    payload: NeighborOutreachGenerateRequest,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> NeighborOutreachBatchResponse:
+    """Generate (or top up) the job's neighbour list.
+
+    Idempotent: re-running reuses the job's existing batch and appends only newly
+    in-radius sites, so statuses an operator already set are never reset and no
+    house is worked twice for the same job.
+    """
+    return await NeighborOutreachService(db).generate_for_job(
+        job_id,
+        membership.workspace_id,
+        radius_meters=payload.radius_meters,
+        max_neighbors=payload.max_neighbors,
+    )
+
+
+@router.get("/{job_id}/neighbors/export", response_model=NeighborOutreachExportResponse)
+async def export_job_neighbors(
+    job_id: uuid.UUID,
+    membership: WorkspaceDispatcher,
+    db: DB,
+) -> NeighborOutreachExportResponse:
+    """Door-hanger / direct-mail list for the job's neighbours.
+
+    Dispatcher-gated because the rows carry neighbours' postal addresses decrypted
+    out of ``service_locations`` — the default, always-legal output channel, but
+    customer PII all the same.
+    """
+    return await NeighborOutreachService(db).export(job_id, membership.workspace_id)
+
+
+@router.patch(
+    "/{job_id}/neighbors/entries/{entry_id}",
+    response_model=NeighborOutreachEntryResponse,
+)
+async def update_job_neighbor_entry(
+    job_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    payload: NeighborOutreachEntryUpdate,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> NeighborOutreachEntryResponse:
+    """Mark a neighbour contacted/skipped/converted, or add a note."""
+    return await NeighborOutreachService(db).update_entry(
+        entry_id, membership.workspace_id, payload
+    )
+
+
+@router.post(
+    "/{job_id}/neighbors/campaign",
+    response_model=NeighborOutreachCampaignResponse,
+)
+async def enroll_job_neighbors_in_campaign(
+    job_id: uuid.UUID,
+    payload: NeighborOutreachCampaignRequest,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> NeighborOutreachCampaignResponse:
+    """Enroll the *consented* subset of the batch into an existing campaign.
+
+    Neighbours with no contact record, no recorded consent, or a global opt-out are
+    left on the print channel and reported in ``blocked_by_reason``. Zero
+    enrollments on a street of strangers is the correct result.
+    """
+    return await NeighborOutreachService(db).enroll_in_campaign(
+        job_id, membership.workspace_id, payload
+    )
