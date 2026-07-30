@@ -6,23 +6,34 @@ contact's touch fields and any of its still-unattributed opportunities so the
 correction flows through to closed-won ROI.
 """
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.contact import Contact
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
+from app.models.phone_number import PhoneNumber
 
 # Confidence assigned when an operator manually picks the source by hand.
 MANUAL_ASSIGNMENT_CONFIDENCE = 1.0
 
+# Confidence for a call received on a number explicitly mapped by an operator.
+# This direct evidence must outrank heuristic UTM inference.
+TRACKING_NUMBER_ATTRIBUTION_CONFIDENCE = 1.0
+
 # Confidence for a lead captured through a known lead-source form. The owning
 # source is certain; only the upstream channel detail can be fuzzy.
 WEB_FORM_ATTRIBUTION_CONFIDENCE = 0.9
+
+# Spoken answers are only promoted into structured ROI when the deterministic
+# mapper finds exactly one recognizable channel. Ambiguous answers stay raw.
+AI_ATTRIBUTION_MIN_CONFIDENCE = 0.8
 
 # Tracking-metadata columns copied verbatim from a submission onto the contact.
 _TRACKING_FIELDS = (
@@ -95,6 +106,165 @@ def suggest_source_type_for_contact(contact: Contact) -> LeadSourceType | None:
 
 
 @dataclass(frozen=True)
+class AILeadSourceMatch:
+    """One conservative channel match from a caller's verbatim answer."""
+
+    source_type: LeadSourceType
+    confidence: float
+
+
+def _normalize_spoken_source(value: str) -> str:
+    """Normalize speech text for deterministic phrase matching."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
+
+
+def map_ai_lead_source_answer(answer: str) -> AILeadSourceMatch | None:
+    """Map an unambiguous spoken answer to one acquisition channel.
+
+    This intentionally uses a small allowlist rather than an LLM guess. If an
+    answer names multiple channels or uses vague wording, ``None`` preserves the
+    raw answer without silently corrupting ROI.
+    """
+    normalized = _normalize_spoken_source(answer)
+    if not normalized:
+        return None
+    words = set(normalized.split())
+    matches: set[LeadSourceType] = set()
+
+    if words.intersection({"facebook", "instagram"}) or "meta ad" in normalized:
+        matches.add(LeadSourceType.FACEBOOK_ADS)
+    if "google" in words:
+        # A bare "Google" is a deliberate supported answer. Workspaces that
+        # split multiple Google sources still require an exact source-name match.
+        matches.add(LeadSourceType.GOOGLE_ADS)
+    if (
+        "online search" in normalized
+        or "web search" in normalized
+        or "search engine" in normalized
+        or words.intersection({"website", "internet", "seo"})
+    ):
+        matches.add(LeadSourceType.ORGANIC)
+    if words.intersection({"radio", "podcast"}):
+        matches.add(LeadSourceType.PHONE_RADIO)
+    if (
+        words.intersection({"friend", "family", "referral", "referred", "recommended"})
+        or "word of mouth" in normalized
+        or "my neighbor" in normalized
+        or "neighbor told" in normalized
+        or "neighbor recommended" in normalized
+    ):
+        matches.add(LeadSourceType.REFERRAL_PARTNER)
+    if (
+        "repeat customer" in normalized
+        or "past customer" in normalized
+        or "existing customer" in normalized
+        or "used you before" in normalized
+        or "hired you before" in normalized
+    ):
+        matches.add(LeadSourceType.REPEAT_CUSTOMER)
+    if words.intersection({"truck", "van"}) or "vehicle wrap" in normalized:
+        matches.add(LeadSourceType.TRUCK_WRAP)
+    if "yard sign" in normalized or "lawn sign" in normalized:
+        matches.add(LeadSourceType.YARD_SIGN)
+    if (
+        "knocked on my door" in normalized
+        or "door hanger" in normalized
+        or "working next door" in normalized
+        or "job next door" in normalized
+        or "neighbor s house" in normalized
+    ):
+        matches.add(LeadSourceType.CANVASS_NEIGHBOR)
+
+    if len(matches) != 1:
+        return None
+
+    source_type = next(iter(matches))
+    confidence = 0.85 if normalized == "google" else 0.95
+    if confidence < AI_ATTRIBUTION_MIN_CONFIDENCE:  # pragma: no cover - defensive constant guard
+        return None
+    return AILeadSourceMatch(source_type=source_type, confidence=confidence)
+
+
+async def apply_ai_receptionist_attribution(
+    db: AsyncSession,
+    contact: Contact,
+    raw_answer: str,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Store a caller answer and structure it only when source resolution is safe."""
+    answer = raw_answer.strip()[:500]
+    if not answer:
+        return False
+    contact.lead_source_raw_answer = answer
+
+    # AI must never replace a source established by an operator, tracking
+    # number, public form, or earlier high-confidence capture.
+    if contact.first_touch_lead_source_id is not None:
+        return False
+
+    match = map_ai_lead_source_answer(answer)
+    if match is None:
+        return False
+
+    result = await db.execute(
+        select(LeadSource)
+        .where(
+            LeadSource.workspace_id == contact.workspace_id,
+            LeadSource.source_type == match.source_type,
+            LeadSource.enabled.is_(True),
+        )
+        .order_by(LeadSource.created_at.asc())
+    )
+    candidates = list(result.scalars().all())
+    if not candidates:
+        return False
+
+    chosen: LeadSource | None = candidates[0] if len(candidates) == 1 else None
+    if len(candidates) > 1:
+        normalized_answer = _normalize_spoken_source(answer)
+        named_matches = [
+            source
+            for source in candidates
+            if (name := _normalize_spoken_source(source.name))
+            and (normalized_answer == name or name in normalized_answer)
+        ]
+        if len(named_matches) == 1:
+            chosen = named_matches[0]
+
+    # A channel with several configured sources is not specific enough unless
+    # the caller named exactly one; choosing the oldest row would fabricate ROI.
+    if chosen is None:
+        return False
+
+    _apply_contact_touch(
+        contact,
+        lead_source_id=chosen.id,
+        lead_source_campaign_id=None,
+        confidence=match.confidence,
+        now=now,
+    )
+
+    if contact.id is not None:
+        opportunities = await db.execute(
+            select(Opportunity).where(
+                Opportunity.workspace_id == contact.workspace_id,
+                Opportunity.primary_contact_id == contact.id,
+                Opportunity.lead_source_id.is_(None),
+            )
+        )
+        for opportunity in opportunities.scalars().all():
+            apply_opportunity_attribution_snapshot(
+                opportunity,
+                lead_source_id=chosen.id,
+                lead_source_campaign_id=None,
+                confidence=match.confidence,
+            )
+
+    return True
+
+
+@dataclass(frozen=True)
 class WebAttributionInput:
     """Tracking signals captured from a public lead-form submission."""
 
@@ -109,6 +279,112 @@ class WebAttributionInput:
     fbclid: str | None = None
     landing_page: str | None = None
     referrer: str | None = None
+
+
+def _apply_contact_touch(
+    contact: Contact,
+    *,
+    lead_source_id: uuid.UUID,
+    lead_source_campaign_id: uuid.UUID | None,
+    confidence: float,
+    now: datetime | None = None,
+) -> None:
+    """Preserve first touch while refreshing the contact's latest touch."""
+    stamp = now or datetime.now(UTC)
+
+    if contact.first_touch_lead_source_id is None:
+        contact.first_touch_lead_source_id = lead_source_id
+        contact.first_touch_lead_source_campaign_id = lead_source_campaign_id
+        contact.first_touch_at = stamp
+
+    contact.latest_touch_lead_source_id = lead_source_id
+    contact.latest_touch_lead_source_campaign_id = lead_source_campaign_id
+    contact.latest_touch_at = stamp
+    contact.attribution_confidence = confidence
+
+
+def apply_opportunity_attribution_snapshot(
+    opportunity: Opportunity,
+    *,
+    lead_source_id: uuid.UUID,
+    lead_source_campaign_id: uuid.UUID | None,
+    confidence: float | None,
+) -> bool:
+    """Set an opportunity's immutable attribution snapshot when still empty."""
+    if opportunity.lead_source_id is not None:
+        return False
+
+    opportunity.lead_source_id = lead_source_id
+    opportunity.lead_source_campaign_id = lead_source_campaign_id
+    opportunity.attribution_confidence = confidence
+    return True
+
+
+def snapshot_contact_attribution_on_opportunity(opportunity: Opportunity, contact: Contact) -> bool:
+    """Copy the contact's latest known touch onto a newly created opportunity."""
+    lead_source_id: uuid.UUID | None
+    campaign_id: uuid.UUID | None
+    if contact.latest_touch_lead_source_id is not None:
+        lead_source_id = contact.latest_touch_lead_source_id
+        campaign_id = contact.latest_touch_lead_source_campaign_id
+    else:
+        lead_source_id = contact.first_touch_lead_source_id
+        campaign_id = contact.first_touch_lead_source_campaign_id
+
+    if lead_source_id is None:
+        return False
+
+    return apply_opportunity_attribution_snapshot(
+        opportunity,
+        lead_source_id=lead_source_id,
+        lead_source_campaign_id=campaign_id,
+        confidence=contact.attribution_confidence,
+    )
+
+
+async def apply_tracking_number_attribution(
+    db: AsyncSession,
+    contact: Contact,
+    phone_number: PhoneNumber,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Attribute a mapped inbound number without rewriting historical snapshots.
+
+    Tracking-number evidence always becomes the contact's latest touch and only
+    becomes first touch when no prior touch exists. Opportunities are updated only
+    while unattributed, preserving the immutable source on already-attributed jobs.
+    """
+    if phone_number.lead_source_id is None:
+        return False
+
+    _apply_contact_touch(
+        contact,
+        lead_source_id=phone_number.lead_source_id,
+        lead_source_campaign_id=phone_number.lead_source_campaign_id,
+        confidence=TRACKING_NUMBER_ATTRIBUTION_CONFIDENCE,
+        now=now,
+    )
+
+    if contact.id is None:
+        return True
+
+    result = await db.execute(
+        select(Opportunity).where(
+            Opportunity.workspace_id == contact.workspace_id,
+            Opportunity.primary_contact_id == contact.id,
+            Opportunity.lead_source_id.is_(None),
+        )
+    )
+    for opportunity in result.scalars().all():
+        apply_opportunity_attribution_snapshot(
+            opportunity,
+            lead_source_id=phone_number.lead_source_id,
+            lead_source_campaign_id=phone_number.lead_source_campaign_id,
+            confidence=TRACKING_NUMBER_ATTRIBUTION_CONFIDENCE,
+        )
+
+    return True
 
 
 def apply_web_attribution(
@@ -126,22 +402,18 @@ def apply_web_attribution(
     refreshed. Tracking fields are overwritten only when the submission carries
     a value, so a later blank submission never erases earlier signal.
     """
-    stamp = now or datetime.now(UTC)
     confidence = (
         data.attribution_confidence
         if data.attribution_confidence is not None
         else WEB_FORM_ATTRIBUTION_CONFIDENCE
     )
-
-    if contact.first_touch_lead_source_id is None:
-        contact.first_touch_lead_source_id = lead_source.id
-        contact.first_touch_lead_source_campaign_id = data.lead_source_campaign_id
-        contact.first_touch_at = stamp
-
-    contact.latest_touch_lead_source_id = lead_source.id
-    contact.latest_touch_lead_source_campaign_id = data.lead_source_campaign_id
-    contact.latest_touch_at = stamp
-    contact.attribution_confidence = confidence
+    _apply_contact_touch(
+        contact,
+        lead_source_id=lead_source.id,
+        lead_source_campaign_id=data.lead_source_campaign_id,
+        confidence=confidence,
+        now=now,
+    )
 
     for field in _TRACKING_FIELDS:
         value = getattr(data, field)
@@ -194,6 +466,7 @@ class AttributionCleanupService:
         lead_source_id: uuid.UUID,
         lead_source_campaign_id: uuid.UUID | None = None,
         source_type: LeadSourceType | None = None,
+        correct_existing: bool = False,
     ) -> Contact:
         """Assign a lead source to a contact and backfill its open jobs.
 
@@ -202,23 +475,34 @@ class AttributionCleanupService:
         opportunities that are still missing a source so ROI reflects the fix.
         """
         lead_source = await self.db.get(LeadSource, lead_source_id)
-        if lead_source is None or lead_source.workspace_id != workspace_id:
-            raise AttributionCleanupError("Lead source not found")
+        if (
+            lead_source is None
+            or lead_source.workspace_id != workspace_id
+            or not lead_source.enabled
+        ):
+            raise AttributionCleanupError("Active lead source not found")
 
         contact = await self.db.get(Contact, contact_id)
         if contact is None or contact.workspace_id != workspace_id:
             raise AttributionCleanupError("Contact not found")
 
-        now = datetime.now(UTC)
-
-        contact.latest_touch_lead_source_id = lead_source_id
-        contact.latest_touch_lead_source_campaign_id = lead_source_campaign_id
-        contact.latest_touch_at = now
-        if contact.first_touch_lead_source_id is None:
+        previous_first_source_id = contact.first_touch_lead_source_id
+        if correct_existing:
+            stamp = datetime.now(UTC)
             contact.first_touch_lead_source_id = lead_source_id
             contact.first_touch_lead_source_campaign_id = lead_source_campaign_id
-            contact.first_touch_at = now
-        contact.attribution_confidence = MANUAL_ASSIGNMENT_CONFIDENCE
+            contact.first_touch_at = contact.first_touch_at or stamp
+            contact.latest_touch_lead_source_id = lead_source_id
+            contact.latest_touch_lead_source_campaign_id = lead_source_campaign_id
+            contact.latest_touch_at = stamp
+            contact.attribution_confidence = MANUAL_ASSIGNMENT_CONFIDENCE
+        else:
+            _apply_contact_touch(
+                contact,
+                lead_source_id=lead_source_id,
+                lead_source_campaign_id=lead_source_campaign_id,
+                confidence=MANUAL_ASSIGNMENT_CONFIDENCE,
+            )
 
         # Persist the chosen channel on the source itself when the operator
         # corrected it (e.g. confirming a guessed phone/radio lead).
@@ -230,6 +514,7 @@ class AttributionCleanupService:
             contact_id=contact_id,
             lead_source_id=lead_source_id,
             lead_source_campaign_id=lead_source_campaign_id,
+            replace_source_id=previous_first_source_id if correct_existing else None,
         )
 
         await self.db.commit()
@@ -243,17 +528,25 @@ class AttributionCleanupService:
         contact_id: int,
         lead_source_id: uuid.UUID,
         lead_source_campaign_id: uuid.UUID | None,
+        replace_source_id: uuid.UUID | None = None,
     ) -> None:
-        """Attribute the contact's still-unattributed opportunities.
+        """Backfill gaps, or repair snapshots inherited from a corrected source.
 
-        Only rows where ``lead_source_id IS NULL`` are touched so historical
-        attribution snapshots are never rewritten.
+        Normal cleanup touches only unattributed rows. Explicit correction also
+        replaces the old contact source while preserving independently sourced
+        opportunities.
         """
+        source_filters: list[ColumnElement[bool]] = [Opportunity.lead_source_id.is_(None)]
+        if replace_source_id is not None:
+            # Explicit corrections may rewrite snapshots inherited from the old
+            # contact source, but never opportunities attributed independently.
+            source_filters.append(Opportunity.lead_source_id == replace_source_id)
+
         result = await self.db.execute(
             select(Opportunity).where(
                 Opportunity.workspace_id == workspace_id,
                 Opportunity.primary_contact_id == contact_id,
-                Opportunity.lead_source_id.is_(None),
+                or_(*source_filters),
             )
         )
         for opportunity in result.scalars().all():

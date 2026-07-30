@@ -9,13 +9,7 @@ import {
   SyncFromTelnyxButton,
   type PhoneNumbersTableVariant,
 } from "@/components/settings/phone-numbers-views";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { usePhoneNumberManager } from "@/hooks/usePhoneNumberManager";
 
@@ -27,6 +21,7 @@ export interface PhoneNumbersTableProps {
 
 export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
   const {
+    workspaceId,
     phoneNumbers,
     isLoadingNumbers,
     numbersError,
@@ -38,23 +33,26 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
     hasSearched,
     isSearching,
     isPurchasing,
+    isUpdating,
     isSyncing,
     handleSearch,
     purchase,
+    updateAttribution,
     release,
     sync,
   } = usePhoneNumberManager();
 
-  const syncButton = (
-    <SyncFromTelnyxButton variant={variant} isSyncing={isSyncing} onSync={sync} />
-  );
+  const syncButton = <SyncFromTelnyxButton variant={variant} isSyncing={isSyncing} onSync={sync} />;
 
   const ownedNumbersContent = (
     <OwnedNumbersContent
       variant={variant}
+      workspaceId={workspaceId ?? ""}
       phoneNumbers={phoneNumbers}
       isLoading={isLoadingNumbers}
       hasError={!!numbersError}
+      isUpdating={isUpdating}
+      onUpdate={updateAttribution}
       onRelease={release}
     />
   );
@@ -136,9 +134,7 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
             <Phone className="size-5" />
             Your Phone Numbers
           </CardTitle>
-          <CardDescription>
-            Phone numbers currently provisioned in your workspace
-          </CardDescription>
+          <CardDescription>Phone numbers currently provisioned in your workspace</CardDescription>
         </CardHeader>
         <CardContent>{ownedNumbersContent}</CardContent>
       </Card>
@@ -149,9 +145,7 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
             <Search className="size-5" />
             Search for New Numbers
           </CardTitle>
-          <CardDescription>
-            Find and purchase new phone numbers from Telnyx
-          </CardDescription>
+          <CardDescription>Find and purchase new phone numbers from Telnyx</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {searchForm}

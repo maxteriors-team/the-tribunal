@@ -464,10 +464,29 @@ export function LeadSourcesSettingsTab() {
   const [editingSource, setEditingSource] = useState<LeadSource | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadSource | null>(null);
 
+  const { data: captureSettings, isPending: isCaptureSettingsPending } = useQuery({
+    queryKey: queryKeys.leadSources.captureSettings(workspaceId ?? ""),
+    queryFn: () => leadSourcesApi.getCaptureSettings(workspaceId!),
+    enabled: !!workspaceId,
+  });
+
   const { data: sources, isPending } = useQuery({
     queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
     queryFn: () => leadSourcesApi.list(workspaceId!),
     enabled: !!workspaceId,
+  });
+
+  const captureSettingsMutation = useMutation({
+    mutationFn: (required: boolean) =>
+      leadSourcesApi.updateCaptureSettings(workspaceId!, {
+        require_lead_source_on_manual_create: required,
+      }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(
+        queryKeys.leadSources.captureSettings(workspaceId ?? ""),
+        settings,
+      );
+    },
   });
 
   const deleteMutation = useMutation({
@@ -499,6 +518,41 @@ export function LeadSourcesSettingsTab() {
   return (
     <div className="space-y-6">
       {workspaceId && <OutboundAutopilotCard workspaceId={workspaceId} />}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Manual contact attribution</CardTitle>
+          <CardDescription>
+            Control whether operators must answer “How did you hear about us?” when
+            adding a contact. Imports, webhooks, public forms, and API ingestion are
+            never blocked by this setting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+            <div className="space-y-1">
+              <Label htmlFor="require-manual-lead-source">
+                Require a lead source on manual creation
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Operators must select an active workspace source before saving.
+              </p>
+            </div>
+            <Switch
+              id="require-manual-lead-source"
+              checked={
+                captureSettings?.require_lead_source_on_manual_create ?? false
+              }
+              disabled={
+                isCaptureSettingsPending || captureSettingsMutation.isPending
+              }
+              onCheckedChange={(checked) =>
+                captureSettingsMutation.mutate(checked)
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

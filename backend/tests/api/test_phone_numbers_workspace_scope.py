@@ -18,10 +18,16 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.phone_numbers import get_phone_number, list_phone_numbers
+from app.api.v1.phone_numbers import (
+    get_phone_number,
+    list_phone_numbers,
+    update_phone_number,
+)
 from app.db.session import AsyncSessionLocal, engine
+from app.models.lead_source import LeadSource, LeadSourceCampaign, LeadSourceType
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
+from app.schemas.phone_number import PhoneNumberResponse, PhoneNumberUpdate
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -93,3 +99,69 @@ async def test_get_returns_an_owned_number() -> None:
         found = await get_phone_number(ws.id, mine.id, _ANY, db, _ANY)
 
         assert found.id == mine.id
+
+
+async def test_deleting_lead_source_nulls_number_mapping_without_deleting_number() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        source = LeadSource(
+            workspace_id=ws.id,
+            name="Westside Truck Wrap",
+            source_type=LeadSourceType.TRUCK_WRAP,
+        )
+        db.add(source)
+        await db.flush()
+
+        number = await _make_number(db, ws.id)
+        number.lead_source_id = source.id
+        await db.flush()
+        number_id = number.id
+
+        await db.delete(source)
+        await db.flush()
+        await db.refresh(number)
+
+        assert number.id == number_id
+        assert number.lead_source_id is None
+
+
+async def test_update_sets_and_serializes_tracking_mapping() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        source = LeadSource(
+            workspace_id=ws.id,
+            name="Northside Yard Signs",
+            source_type=LeadSourceType.YARD_SIGN,
+        )
+        db.add(source)
+        await db.flush()
+        campaign = LeadSourceCampaign(
+            workspace_id=ws.id,
+            lead_source_id=source.id,
+            name="Spring Cleanup",
+        )
+        db.add(campaign)
+        number = await _make_number(db, ws.id)
+        await db.flush()
+
+        updated = await update_phone_number(
+            ws.id,
+            number.id,
+            PhoneNumberUpdate(
+                lead_source_id=source.id,
+                lead_source_campaign_id=campaign.id,
+                tracking_label="  Northside route  ",
+            ),
+            _ANY,
+            db,
+            _ANY,
+        )
+        response = PhoneNumberResponse.model_validate(updated)
+
+        assert response.lead_source_id == source.id
+        assert response.lead_source_campaign_id == campaign.id
+        assert response.tracking_label == "Northside route"
+        assert response.lead_source is not None
+        assert response.lead_source.name == "Northside Yard Signs"
+        assert response.lead_source_campaign is not None
+        assert response.lead_source_campaign.name == "Spring Cleanup"
