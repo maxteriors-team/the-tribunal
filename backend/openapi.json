@@ -10323,6 +10323,18 @@
             "title": "Phone Number",
             "type": "string"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "referrer": {
             "anyOf": [
               {
@@ -10940,6 +10952,18 @@
             ],
             "title": "Qualified At"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "referrer": {
             "anyOf": [
               {
@@ -11479,6 +11503,18 @@
             ],
             "title": "Phone Number"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "referrer": {
             "anyOf": [
               {
@@ -11985,6 +12021,18 @@
               }
             ],
             "title": "Qualified At"
+          },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
           },
           "referrer": {
             "anyOf": [
@@ -21135,6 +21183,18 @@
             "title": "Phone Number",
             "type": "string"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "referrer": {
             "anyOf": [
               {
@@ -24683,6 +24743,18 @@
             ],
             "title": "Primary Contact Id"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "source": {
             "anyOf": [
               {
@@ -24902,6 +24974,18 @@
           "probability": {
             "title": "Probability",
             "type": "integer"
+          },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
           },
           "source": {
             "anyOf": [
@@ -25314,6 +25398,18 @@
             "title": "Probability",
             "type": "integer"
           },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
+          },
           "source": {
             "anyOf": [
               {
@@ -25512,6 +25608,18 @@
               }
             ],
             "title": "Name"
+          },
+          "referral_partner_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Partner Id"
           },
           "source": {
             "anyOf": [
@@ -35255,6 +35363,505 @@
           }
         },
         "title": "RecurringJobTemplateUpdate",
+        "type": "object"
+      },
+      "ReferralPartnerCreate": {
+        "description": "Create a referral partner.",
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Existing CRM contact this partner already is, if any",
+            "title": "Contact Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "partner_type": {
+            "$ref": "#/components/schemas/ReferralPartnerType",
+            "default": "other"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ReferralPartnerCreate",
+        "type": "object"
+      },
+      "ReferralPartnerListResponse": {
+        "description": "List of referral partners.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReferralPartnerResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReferralPartnerListResponse",
+        "type": "object"
+      },
+      "ReferralPartnerResponse": {
+        "description": "A referral partner record.",
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Existing CRM contact this partner already is, if any",
+            "title": "Contact Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "partner_type": {
+            "$ref": "#/components/schemas/ReferralPartnerType",
+            "default": "other"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "workspace_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReferralPartnerResponse",
+        "type": "object"
+      },
+      "ReferralPartnerScoreboardResponse": {
+        "description": "Partner scoreboard, ranked by closed-won revenue descending.",
+        "properties": {
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "gone_quiet_only": {
+            "default": false,
+            "title": "Gone Quiet Only",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReferralPartnerScoreboardRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "quiet_after_days": {
+            "default": 60,
+            "minimum": 1.0,
+            "title": "Quiet After Days",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_jobs_closed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Jobs Closed",
+            "type": "integer"
+          },
+          "total_referrals_sent": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Referrals Sent",
+            "type": "integer"
+          },
+          "total_revenue": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Total Revenue",
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReferralPartnerScoreboardResponse",
+        "type": "object"
+      },
+      "ReferralPartnerScoreboardRow": {
+        "description": "One partner's production, as the owner would read it off a whiteboard.\n\n``close_rate`` is the share of *referred leads* that produced at least one\nclosed-won job, so it is bounded at 1.0 even when a single referred customer\nbuys twice. ``jobs_closed`` and ``total_revenue`` count every closed-won job,\nwhich is why ``average_job_value`` divides by ``jobs_closed`` rather than by\nthe referral count. Both rates are ``None`` — not ``0.0`` — when their\ndenominator is zero, so \"no data yet\" never renders as a 0% failure.",
+        "properties": {
+          "average_job_value": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Job Value"
+          },
+          "close_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Rate"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "days_since_last_referral": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Referral"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_gone_quiet": {
+            "default": false,
+            "title": "Is Gone Quiet",
+            "type": "boolean"
+          },
+          "jobs_closed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Jobs Closed",
+            "type": "integer"
+          },
+          "last_referral_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Referral At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "partner_id": {
+            "format": "uuid",
+            "title": "Partner Id",
+            "type": "string"
+          },
+          "partner_type": {
+            "$ref": "#/components/schemas/ReferralPartnerType"
+          },
+          "referrals_sent": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Referrals Sent",
+            "type": "integer"
+          },
+          "total_revenue": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Total Revenue",
+            "type": "number"
+          }
+        },
+        "required": [
+          "partner_id",
+          "name",
+          "partner_type"
+        ],
+        "title": "ReferralPartnerScoreboardRow",
+        "type": "object"
+      },
+      "ReferralPartnerType": {
+        "description": "What kind of relationship the partner is, for grouping the scoreboard.\n\nPersisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``\non :attr:`ReferralPartner.partner_type`), **not** a Postgres ``ENUM`` type, so\nadding a member here needs no DDL migration — the same treatment as\n:class:`app.models.lead_source.LeadSourceType`. Keep values under 50 chars.",
+        "enum": [
+          "realtor",
+          "insurance",
+          "trade",
+          "bni",
+          "customer",
+          "other"
+        ],
+        "title": "ReferralPartnerType",
+        "type": "string"
+      },
+      "ReferralPartnerUpdate": {
+        "description": "Partial update for a referral partner.",
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "partner_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferralPartnerType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "title": "ReferralPartnerUpdate",
         "type": "object"
       },
       "RegisterTokenRequest": {
@@ -70279,6 +70886,427 @@
         "summary": "Run Template",
         "tags": [
           "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/referral-partners": {
+      "get": {
+        "description": "List referral partners, optionally filtered by active state or type.",
+        "operationId": "list_referral_partners_api_v1_workspaces__workspace_id__referral_partners_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "partner_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReferralPartnerType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Partner Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Referral Partners",
+        "tags": [
+          "Referral Partners"
+        ]
+      },
+      "post": {
+        "description": "Add a referral partner to the roster.",
+        "operationId": "create_referral_partner_api_v1_workspaces__workspace_id__referral_partners_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralPartnerCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Referral Partner",
+        "tags": [
+          "Referral Partners"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/referral-partners/scoreboard": {
+      "get": {
+        "description": "Per-partner referrals, close rate, and revenue, ranked by revenue.",
+        "operationId": "get_referral_partner_scoreboard_api_v1_workspaces__workspace_id__referral_partners_scoreboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A partner is 'gone quiet' after this many days with no referral.",
+            "in": "query",
+            "name": "quiet_after_days",
+            "required": false,
+            "schema": {
+              "default": 60,
+              "description": "A partner is 'gone quiet' after this many days with no referral.",
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Quiet After Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Return only partners with at least one historical referral and nothing inside the window — the call list.",
+            "in": "query",
+            "name": "gone_quiet_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Return only partners with at least one historical referral and nothing inside the window — the call list.",
+              "title": "Gone Quiet Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "partner_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ReferralPartnerType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Partner Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerScoreboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Referral Partner Scoreboard",
+        "tags": [
+          "Referral Partners"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}": {
+      "delete": {
+        "description": "Delete a referral partner. Their referred leads and jobs keep their history.",
+        "operationId": "delete_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Referral Partner",
+        "tags": [
+          "Referral Partners"
+        ]
+      },
+      "get": {
+        "description": "Get a single referral partner.",
+        "operationId": "get_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Referral Partner",
+        "tags": [
+          "Referral Partners"
+        ]
+      },
+      "put": {
+        "description": "Update a referral partner.",
+        "operationId": "update_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralPartnerUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Referral Partner",
+        "tags": [
+          "Referral Partners"
         ]
       }
     },

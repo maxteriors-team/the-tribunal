@@ -112,6 +112,7 @@ from app.models.prospect_signal import (
 from app.models.quote import Quote, QuoteLineItem
 from app.models.quote_followup_touch import QuoteFollowupTouch
 from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
+from app.models.referral_partner import ReferralPartner, ReferralPartnerType
 from app.models.refresh_token import RefreshToken
 from app.models.revenue_target import RevenueTarget
 from app.models.review import (
@@ -214,6 +215,8 @@ __all__ = [
     "QuoteFollowupTouch",
     "RecurringJobTemplate",
     "RecurrenceFrequency",
+    "ReferralPartner",
+    "ReferralPartnerType",
     "RevenueTarget",
     "MessageTemplate",
     "MessageTest",

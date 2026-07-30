@@ -48,6 +48,10 @@ class LeadAttributionFields(BaseModel):
     latest_touch_lead_source_campaign_id: uuid.UUID | None = None
     latest_touch_at: datetime | None = None
     attribution_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    # The named referral partner who sent this lead. One column, not a
+    # first/latest pair: the partner who made the introduction is a fixed origin
+    # fact and must not be overwritten by a later ad click.
+    referral_partner_id: uuid.UUID | None = None
     utm_source: str | None = Field(default=None, max_length=255)
     utm_medium: str | None = Field(default=None, max_length=255)
     utm_campaign: str | None = Field(default=None, max_length=255)
@@ -65,6 +69,7 @@ class OpportunityLeadAttributionFields(BaseModel):
     lead_source_id: uuid.UUID | None = None
     lead_source_campaign_id: uuid.UUID | None = None
     attribution_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    referral_partner_id: uuid.UUID | None = None
 
 
 class LeadSourceCampaignBase(BaseModel):

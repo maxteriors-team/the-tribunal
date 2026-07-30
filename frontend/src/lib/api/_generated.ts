@@ -6965,6 +6965,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/referral-partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Referral Partners
+         * @description List referral partners, optionally filtered by active state or type.
+         */
+        get: operations["list_referral_partners_api_v1_workspaces__workspace_id__referral_partners_get"];
+        put?: never;
+        /**
+         * Create Referral Partner
+         * @description Add a referral partner to the roster.
+         */
+        post: operations["create_referral_partner_api_v1_workspaces__workspace_id__referral_partners_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/referral-partners/scoreboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Referral Partner Scoreboard
+         * @description Per-partner referrals, close rate, and revenue, ranked by revenue.
+         */
+        get: operations["get_referral_partner_scoreboard_api_v1_workspaces__workspace_id__referral_partners_scoreboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Referral Partner
+         * @description Get a single referral partner.
+         */
+        get: operations["get_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__get"];
+        /**
+         * Update Referral Partner
+         * @description Update a referral partner.
+         */
+        put: operations["update_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__put"];
+        post?: never;
+        /**
+         * Delete Referral Partner
+         * @description Delete a referral partner. Their referred leads and jobs keep their history.
+         */
+        delete: operations["delete_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/reports/ar-aging": {
         parameters: {
             query?: never;
@@ -12674,6 +12746,8 @@ export interface components {
             notes?: string | null;
             /** Phone Number */
             phone_number: string;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Referrer */
             referrer?: string | null;
             /** Source */
@@ -12839,6 +12913,8 @@ export interface components {
             qualification_signals: components["schemas"]["QualificationSignals"] | null;
             /** Qualified At */
             qualified_at: string | null;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Referrer */
             referrer?: string | null;
             /** Source */
@@ -12965,6 +13041,8 @@ export interface components {
             notes?: string | null;
             /** Phone Number */
             phone_number?: string | null;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Referrer */
             referrer?: string | null;
             /** Status */
@@ -13079,6 +13157,8 @@ export interface components {
             qualification_signals: components["schemas"]["QualificationSignals"] | null;
             /** Qualified At */
             qualified_at: string | null;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Referrer */
             referrer?: string | null;
             /** Source */
@@ -16845,6 +16925,8 @@ export interface components {
             notes?: string | null;
             /** Phone Number */
             phone_number: string;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Referrer */
             referrer?: string | null;
             /** Source */
@@ -17982,6 +18064,8 @@ export interface components {
             pipeline_id: string;
             /** Primary Contact Id */
             primary_contact_id?: number | null;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Source */
             source?: string | null;
             /** Stage Id */
@@ -18056,6 +18140,8 @@ export interface components {
             primary_contact_id?: number | null;
             /** Probability */
             probability: number;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Source */
             source?: string | null;
             /** Stage Changed At */
@@ -18218,6 +18304,8 @@ export interface components {
             primary_contact_id?: number | null;
             /** Probability */
             probability: number;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Source */
             source?: string | null;
             /** Stage Changed At */
@@ -18267,6 +18355,8 @@ export interface components {
             lost_reason?: string | null;
             /** Name */
             name?: string | null;
+            /** Referral Partner Id */
+            referral_partner_id?: string | null;
             /** Source */
             source?: string | null;
             /** Stage Id */
@@ -21869,6 +21959,220 @@ export interface components {
             service_location_id?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * ReferralPartnerCreate
+         * @description Create a referral partner.
+         */
+        ReferralPartnerCreate: {
+            /** Company */
+            company?: string | null;
+            /**
+             * Contact Id
+             * @description Existing CRM contact this partner already is, if any
+             */
+            contact_id?: number | null;
+            /** Email */
+            email?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** @default other */
+            partner_type: components["schemas"]["ReferralPartnerType"];
+            /** Phone */
+            phone?: string | null;
+        };
+        /**
+         * ReferralPartnerListResponse
+         * @description List of referral partners.
+         */
+        ReferralPartnerListResponse: {
+            /** Items */
+            items: components["schemas"]["ReferralPartnerResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * ReferralPartnerResponse
+         * @description A referral partner record.
+         */
+        ReferralPartnerResponse: {
+            /** Company */
+            company?: string | null;
+            /**
+             * Contact Id
+             * @description Existing CRM contact this partner already is, if any
+             */
+            contact_id?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** @default other */
+            partner_type: components["schemas"]["ReferralPartnerType"];
+            /** Phone */
+            phone?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * ReferralPartnerScoreboardResponse
+         * @description Partner scoreboard, ranked by closed-won revenue descending.
+         */
+        ReferralPartnerScoreboardResponse: {
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Gone Quiet Only
+             * @default false
+             */
+            gone_quiet_only: boolean;
+            /** Items */
+            items: components["schemas"]["ReferralPartnerScoreboardRow"][];
+            /**
+             * Quiet After Days
+             * @default 60
+             */
+            quiet_after_days: number;
+            /** Total */
+            total: number;
+            /**
+             * Total Jobs Closed
+             * @default 0
+             */
+            total_jobs_closed: number;
+            /**
+             * Total Referrals Sent
+             * @default 0
+             */
+            total_referrals_sent: number;
+            /**
+             * Total Revenue
+             * @default 0
+             */
+            total_revenue: number;
+        };
+        /**
+         * ReferralPartnerScoreboardRow
+         * @description One partner's production, as the owner would read it off a whiteboard.
+         *
+         *     ``close_rate`` is the share of *referred leads* that produced at least one
+         *     closed-won job, so it is bounded at 1.0 even when a single referred customer
+         *     buys twice. ``jobs_closed`` and ``total_revenue`` count every closed-won job,
+         *     which is why ``average_job_value`` divides by ``jobs_closed`` rather than by
+         *     the referral count. Both rates are ``None`` — not ``0.0`` — when their
+         *     denominator is zero, so "no data yet" never renders as a 0% failure.
+         */
+        ReferralPartnerScoreboardRow: {
+            /** Average Job Value */
+            average_job_value?: number | null;
+            /** Close Rate */
+            close_rate?: number | null;
+            /** Company */
+            company?: string | null;
+            /** Days Since Last Referral */
+            days_since_last_referral?: number | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Gone Quiet
+             * @default false
+             */
+            is_gone_quiet: boolean;
+            /**
+             * Jobs Closed
+             * @default 0
+             */
+            jobs_closed: number;
+            /** Last Referral At */
+            last_referral_at?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Partner Id
+             * Format: uuid
+             */
+            partner_id: string;
+            partner_type: components["schemas"]["ReferralPartnerType"];
+            /**
+             * Referrals Sent
+             * @default 0
+             */
+            referrals_sent: number;
+            /**
+             * Total Revenue
+             * @default 0
+             */
+            total_revenue: number;
+        };
+        /**
+         * ReferralPartnerType
+         * @description What kind of relationship the partner is, for grouping the scoreboard.
+         *
+         *     Persisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``
+         *     on :attr:`ReferralPartner.partner_type`), **not** a Postgres ``ENUM`` type, so
+         *     adding a member here needs no DDL migration — the same treatment as
+         *     :class:`app.models.lead_source.LeadSourceType`. Keep values under 50 chars.
+         * @enum {string}
+         */
+        ReferralPartnerType: "realtor" | "insurance" | "trade" | "bni" | "customer" | "other";
+        /**
+         * ReferralPartnerUpdate
+         * @description Partial update for a referral partner.
+         */
+        ReferralPartnerUpdate: {
+            /** Company */
+            company?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
+            /** Email */
+            email?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            partner_type?: components["schemas"]["ReferralPartnerType"] | null;
+            /** Phone */
+            phone?: string | null;
         };
         /**
          * RegisterTokenRequest
@@ -39380,6 +39684,211 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RecurringJobRunResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_referral_partners_api_v1_workspaces__workspace_id__referral_partners_get: {
+        parameters: {
+            query?: {
+                is_active?: boolean | null;
+                partner_type?: components["schemas"]["ReferralPartnerType"] | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_referral_partner_api_v1_workspaces__workspace_id__referral_partners_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralPartnerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_referral_partner_scoreboard_api_v1_workspaces__workspace_id__referral_partners_scoreboard_get: {
+        parameters: {
+            query?: {
+                /** @description A partner is 'gone quiet' after this many days with no referral. */
+                quiet_after_days?: number;
+                /** @description Return only partners with at least one historical referral and nothing inside the window — the call list. */
+                gone_quiet_only?: boolean;
+                is_active?: boolean | null;
+                partner_type?: components["schemas"]["ReferralPartnerType"] | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerScoreboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralPartnerUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

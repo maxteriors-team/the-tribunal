@@ -306,22 +306,37 @@ def _apply_contact_touch(
 def apply_opportunity_attribution_snapshot(
     opportunity: Opportunity,
     *,
-    lead_source_id: uuid.UUID,
+    lead_source_id: uuid.UUID | None,
     lead_source_campaign_id: uuid.UUID | None,
     confidence: float | None,
+    referral_partner_id: uuid.UUID | None = None,
 ) -> bool:
-    """Set an opportunity's immutable attribution snapshot when still empty."""
-    if opportunity.lead_source_id is not None:
+    """Set an opportunity's immutable attribution snapshot when still empty.
+
+    ``referral_partner_id`` rides along in the same snapshot as the lead source
+    so per-partner closed-won revenue reads off the very rows ROI reporting
+    already scans. A snapshot that already names a source *or* a partner is
+    treated as written and is never rewritten.
+    """
+    if opportunity.lead_source_id is not None or opportunity.referral_partner_id is not None:
+        return False
+    if lead_source_id is None and referral_partner_id is None:
         return False
 
     opportunity.lead_source_id = lead_source_id
     opportunity.lead_source_campaign_id = lead_source_campaign_id
     opportunity.attribution_confidence = confidence
+    opportunity.referral_partner_id = referral_partner_id
     return True
 
 
 def snapshot_contact_attribution_on_opportunity(opportunity: Opportunity, contact: Contact) -> bool:
-    """Copy the contact's latest known touch onto a newly created opportunity."""
+    """Copy the contact's latest known touch onto a newly created opportunity.
+
+    A referred lead whose partner is known but whose channel was never wired to a
+    configured lead source still gets credited, so the partner scoreboard does not
+    silently drop referrals from workspaces that skipped lead-source setup.
+    """
     lead_source_id: uuid.UUID | None
     campaign_id: uuid.UUID | None
     if contact.latest_touch_lead_source_id is not None:
@@ -331,7 +346,8 @@ def snapshot_contact_attribution_on_opportunity(opportunity: Opportunity, contac
         lead_source_id = contact.first_touch_lead_source_id
         campaign_id = contact.first_touch_lead_source_campaign_id
 
-    if lead_source_id is None:
+    referral_partner_id = contact.referral_partner_id
+    if lead_source_id is None and referral_partner_id is None:
         return False
 
     return apply_opportunity_attribution_snapshot(
@@ -339,6 +355,7 @@ def snapshot_contact_attribution_on_opportunity(opportunity: Opportunity, contac
         lead_source_id=lead_source_id,
         lead_source_campaign_id=campaign_id,
         confidence=contact.attribution_confidence,
+        referral_partner_id=referral_partner_id,
     )
 
 

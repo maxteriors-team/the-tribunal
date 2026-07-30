@@ -26,6 +26,7 @@ def _contact() -> SimpleNamespace:
         latest_touch_lead_source_campaign_id=None,
         latest_touch_at=None,
         attribution_confidence=None,
+        referral_partner_id=None,
         utm_source=None,
         utm_medium=None,
         utm_campaign=None,
@@ -69,11 +70,13 @@ async def test_mapped_number_beats_utm_and_preserves_historical_attribution() ->
         lead_source_id=None,
         lead_source_campaign_id=None,
         attribution_confidence=None,
+        referral_partner_id=None,
     )
     historical_opportunity = SimpleNamespace(
         lead_source_id=web_source_id,
         lead_source_campaign_id=web_campaign_id,
         attribution_confidence=WEB_FORM_ATTRIBUTION_CONFIDENCE,
+        referral_partner_id=None,
     )
     db = _db_with_opportunities(unattributed_opportunity, historical_opportunity)
     tracking_number = SimpleNamespace(
@@ -148,6 +151,7 @@ def test_new_opportunity_snapshots_contacts_latest_tracking_touch() -> None:
         lead_source_id=None,
         lead_source_campaign_id=None,
         attribution_confidence=None,
+        referral_partner_id=None,
     )
 
     changed = snapshot_contact_attribution_on_opportunity(opportunity, contact)
@@ -156,3 +160,57 @@ def test_new_opportunity_snapshots_contacts_latest_tracking_touch() -> None:
     assert opportunity.lead_source_id == tracking_source_id
     assert opportunity.lead_source_campaign_id == tracking_campaign_id
     assert opportunity.attribution_confidence == TRACKING_NUMBER_ATTRIBUTION_CONFIDENCE
+
+
+def test_snapshot_credits_the_referral_partner_alongside_the_source() -> None:
+    """The partner rides in the same snapshot, not a parallel attribution path."""
+    contact = _contact()
+    source_id = uuid.uuid4()
+    partner_id = uuid.uuid4()
+    contact.latest_touch_lead_source_id = source_id
+    contact.referral_partner_id = partner_id
+    opportunity = SimpleNamespace(
+        lead_source_id=None,
+        lead_source_campaign_id=None,
+        attribution_confidence=None,
+        referral_partner_id=None,
+    )
+
+    assert snapshot_contact_attribution_on_opportunity(opportunity, contact) is True
+    assert opportunity.lead_source_id == source_id
+    assert opportunity.referral_partner_id == partner_id
+
+
+def test_partner_only_referral_is_credited_without_a_configured_lead_source() -> None:
+    """A workspace that never configured lead sources still scores its partners."""
+    contact = _contact()
+    partner_id = uuid.uuid4()
+    contact.referral_partner_id = partner_id
+    opportunity = SimpleNamespace(
+        lead_source_id=None,
+        lead_source_campaign_id=None,
+        attribution_confidence=None,
+        referral_partner_id=None,
+    )
+
+    assert snapshot_contact_attribution_on_opportunity(opportunity, contact) is True
+    assert opportunity.lead_source_id is None
+    assert opportunity.referral_partner_id == partner_id
+
+
+def test_snapshot_never_rewrites_an_existing_partner_credit() -> None:
+    """An already-credited job is immutable, so revenue cannot be re-assigned."""
+    contact = _contact()
+    contact.latest_touch_lead_source_id = uuid.uuid4()
+    contact.referral_partner_id = uuid.uuid4()
+    original_partner_id = uuid.uuid4()
+    opportunity = SimpleNamespace(
+        lead_source_id=None,
+        lead_source_campaign_id=None,
+        attribution_confidence=None,
+        referral_partner_id=original_partner_id,
+    )
+
+    assert snapshot_contact_attribution_on_opportunity(opportunity, contact) is False
+    assert opportunity.referral_partner_id == original_partner_id
+    assert opportunity.lead_source_id is None

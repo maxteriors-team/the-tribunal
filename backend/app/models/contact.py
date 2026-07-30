@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.lead_source import LeadSource, LeadSourceCampaign
     from app.models.message_test import TestContact
+    from app.models.referral_partner import ReferralPartner
     from app.models.tag import ContactTag
     from app.models.workspace import Workspace
 
@@ -179,6 +180,18 @@ class Contact(Base):
     )
     latest_touch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attribution_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Which named referral partner sent this lead. Deliberately a single column
+    # rather than a first/latest pair: "Dana the realtor sent me this lead" is a
+    # one-time origin fact, and it must not be overwritten when the same lead
+    # later clicks an ad. Set on capture and carried onto the lead's
+    # opportunities by ``snapshot_contact_attribution_on_opportunity``, so the
+    # partner scoreboard reads the same attribution path lead sources use.
+    referral_partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("referral_partners.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Verbatim answer captured by the AI receptionist. Kept separate from the
     # legacy ``source`` field so uncertain speech never pollutes structured ROI.
     lead_source_raw_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -249,6 +262,9 @@ class Contact(Base):
     )
     latest_touch_lead_source_campaign: Mapped["LeadSourceCampaign | None"] = relationship(
         "LeadSourceCampaign", foreign_keys=[latest_touch_lead_source_campaign_id]
+    )
+    referral_partner: Mapped["ReferralPartner | None"] = relationship(
+        "ReferralPartner", foreign_keys=[referral_partner_id]
     )
 
     @property
