@@ -1128,6 +1128,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/neighbor-outreach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Neighbor Outreach Settings
+         * @description Get the workspace's job-site neighbour-outreach config.
+         */
+        get: operations["get_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_get"];
+        /**
+         * Update Neighbor Outreach Settings
+         * @description Update the neighbour-outreach config (partial merge into ``settings``).
+         *
+         *     Only provided keys are written, so changing ``radius_meters`` never clobbers
+         *     ``message_template_id``. The merged blob is validated before it is persisted — a
+         *     stored config that no longer parses would silently fall back to "disabled", so
+         *     a bad radius must fail loudly at the edit instead.
+         *
+         *     ``message_template_id`` is checked to belong to this workspace: a template id is
+         *     an opaque UUID, and pointing neighbour messaging at another tenant's copy would
+         *     leak their copy to your customers.
+         */
+        put: operations["update_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/post-estimate-followup": {
         parameters: {
             query?: never;
@@ -4553,6 +4586,102 @@ export interface paths {
          * @description Delete an expense.
          */
         delete: operations["delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Neighbors
+         * @description The generated neighbour list for a job, nearest first (404 until generated).
+         */
+        get: operations["get_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_get"];
+        put?: never;
+        /**
+         * Generate Job Neighbors
+         * @description Generate (or top up) the job's neighbour list.
+         *
+         *     Idempotent: re-running reuses the job's existing batch and appends only newly
+         *     in-radius sites, so statuses an operator already set are never reset and no
+         *     house is worked twice for the same job.
+         */
+        post: operations["generate_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Job Neighbors In Campaign
+         * @description Enroll the *consented* subset of the batch into an existing campaign.
+         *
+         *     Neighbours with no contact record, no recorded consent, or a global opt-out are
+         *     left on the print channel and reported in ``blocked_by_reason``. Zero
+         *     enrollments on a street of strangers is the correct result.
+         */
+        post: operations["enroll_job_neighbors_in_campaign_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_campaign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Job Neighbor Entry
+         * @description Mark a neighbour contacted/skipped/converted, or add a note.
+         */
+        patch: operations["update_job_neighbor_entry_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_entries__entry_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/neighbors/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Job Neighbors
+         * @description Door-hanger / direct-mail list for the job's neighbours.
+         *
+         *     Dispatcher-gated because the rows carry neighbours' postal addresses decrypted
+         *     out of ``service_locations`` — the default, always-legal output channel, but
+         *     customer PII all the same.
+         */
+        get: operations["export_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -17315,6 +17444,337 @@ export interface components {
          */
         MissionStatus: "draft" | "active" | "paused" | "completed" | "archived";
         /**
+         * NeighborOutreachBatchResponse
+         * @description A job's generated neighbour list, nearest first.
+         */
+        NeighborOutreachBatchResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Entries */
+            entries?: components["schemas"]["NeighborOutreachEntryResponse"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Messageable Count
+             * @default 0
+             */
+            messageable_count: number;
+            /** Origin Latitude */
+            origin_latitude: number;
+            /** Origin Location Id */
+            origin_location_id: string | null;
+            /** Origin Longitude */
+            origin_longitude: number;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /** Radius Meters */
+            radius_meters: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * NeighborOutreachCampaignRequest
+         * @description Enroll the *consented* subset of a batch into an existing campaign.
+         *
+         *     Enrollment, not a bespoke sender: the entries become
+         *     :class:`app.models.campaign.CampaignContact` rows on a campaign the operator
+         *     already owns, so the send goes through the same pipeline — and the same
+         *     :class:`app.services.compliance.OutboundComplianceService` gate at send time —
+         *     as every other message the workspace sends. The eligibility filter here is an
+         *     additional pre-flight check, not a replacement for it.
+         */
+        NeighborOutreachCampaignRequest: {
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /** @default sms */
+            channel: components["schemas"]["NeighborOutreachChannel"];
+        };
+        /**
+         * NeighborOutreachCampaignResponse
+         * @description Outcome of an enrollment run over a batch.
+         *
+         *     ``blocked_by_reason`` is the compliance ledger for the run: every entry that
+         *     was *not* enrolled, grouped by why. An empty ``enrolled_entry_ids`` with a
+         *     populated ``blocked_by_reason`` is the normal, correct result for a street of
+         *     strangers — and the reason the default channel is print.
+         */
+        NeighborOutreachCampaignResponse: {
+            /**
+             * Batch Id
+             * Format: uuid
+             */
+            batch_id: string;
+            /** Blocked By Reason */
+            blocked_by_reason?: {
+                [key: string]: number;
+            };
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            channel: components["schemas"]["NeighborOutreachChannel"];
+            /**
+             * Enrolled Count
+             * @default 0
+             */
+            enrolled_count: number;
+            /** Enrolled Entry Ids */
+            enrolled_entry_ids?: string[];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Skipped Count
+             * @default 0
+             */
+            skipped_count: number;
+        };
+        /**
+         * NeighborOutreachChannel
+         * @description How this neighbour is to be reached.
+         *
+         *     ``print`` is the default and the only channel available for a location with no
+         *     consented contact behind it: a door hanger or a mailer needs no prior
+         *     relationship. ``sms``/``email`` are assigned only after the compliance gate in
+         *     :mod:`app.services.field_service.neighbor_outreach` clears the location's
+         *     contact. Same ``VARCHAR(50)`` treatment as :class:`NeighborOutreachStatus`.
+         * @enum {string}
+         */
+        NeighborOutreachChannel: "print" | "sms" | "email";
+        /**
+         * NeighborOutreachEntryResponse
+         * @description One neighbouring site in a job's outreach batch.
+         */
+        NeighborOutreachEntryResponse: {
+            channel: components["schemas"]["NeighborOutreachChannel"];
+            /** Contact Id */
+            contact_id: number | null;
+            /** Contacted At */
+            contacted_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Customer Name */
+            customer_name?: string | null;
+            /** Distance Meters */
+            distance_meters: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label?: string | null;
+            /**
+             * Messageable
+             * @default false
+             */
+            messageable: boolean;
+            /** Messaging Blocked Reason */
+            messaging_blocked_reason: string | null;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Service Location Id
+             * Format: uuid
+             */
+            service_location_id: string;
+            status: components["schemas"]["NeighborOutreachStatus"];
+            /** Status Changed At */
+            status_changed_at: string | null;
+        };
+        /**
+         * NeighborOutreachEntryUpdate
+         * @description Operator update for a single entry (status, channel, notes).
+         */
+        NeighborOutreachEntryUpdate: {
+            channel?: components["schemas"]["NeighborOutreachChannel"] | null;
+            /** Notes */
+            notes?: string | null;
+            status?: components["schemas"]["NeighborOutreachStatus"] | null;
+        };
+        /**
+         * NeighborOutreachExportResponse
+         * @description The exportable print/canvass list for a job's neighbour batch.
+         */
+        NeighborOutreachExportResponse: {
+            /**
+             * Batch Id
+             * Format: uuid
+             */
+            batch_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Radius Meters */
+            radius_meters: number;
+            /** Rows */
+            rows?: components["schemas"]["NeighborOutreachExportRow"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * NeighborOutreachExportRow
+         * @description One row of the door-hanger / direct-mail list.
+         *
+         *     Carries the neighbour's postal address, which is customer PII decrypted out of
+         *     :class:`app.models.field_service.ServiceLocation`. Dispatcher-gated, workspace
+         *     scoped, and never persisted to a public path.
+         */
+        NeighborOutreachExportRow: {
+            /** Address Line1 */
+            address_line1: string | null;
+            /** Address Line2 */
+            address_line2: string | null;
+            channel: components["schemas"]["NeighborOutreachChannel"];
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string;
+            /** Customer Name */
+            customer_name: string | null;
+            /** Distance Meters */
+            distance_meters: number;
+            /**
+             * Entry Id
+             * Format: uuid
+             */
+            entry_id: string;
+            /** Label */
+            label: string | null;
+            /** Latitude */
+            latitude: number | null;
+            /** Longitude */
+            longitude: number | null;
+            /** Postal Code */
+            postal_code: string | null;
+            /**
+             * Service Location Id
+             * Format: uuid
+             */
+            service_location_id: string;
+            /** State */
+            state: string | null;
+            status: components["schemas"]["NeighborOutreachStatus"];
+        };
+        /**
+         * NeighborOutreachGenerateRequest
+         * @description Optional per-run overrides when generating a job's neighbour list.
+         */
+        NeighborOutreachGenerateRequest: {
+            /** Max Neighbors */
+            max_neighbors?: number | null;
+            /** Radius Meters */
+            radius_meters?: number | null;
+        };
+        /**
+         * NeighborOutreachSettings
+         * @description Validated per-workspace configuration for job-site neighbour outreach.
+         */
+        NeighborOutreachSettings: {
+            /**
+             * Allow Messaging
+             * @default false
+             */
+            allow_messaging: boolean;
+            /**
+             * Auto Generate On Completion
+             * @default true
+             */
+            auto_generate_on_completion: boolean;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Max Neighbors
+             * @default 50
+             */
+            max_neighbors: number;
+            /** Message Template Id */
+            message_template_id?: string | null;
+            /**
+             * Radius Meters
+             * @default 150
+             */
+            radius_meters: number;
+        };
+        /**
+         * NeighborOutreachSettingsUpdate
+         * @description Partial update payload for neighbour-outreach settings.
+         */
+        NeighborOutreachSettingsUpdate: {
+            /** Allow Messaging */
+            allow_messaging?: boolean | null;
+            /** Auto Generate On Completion */
+            auto_generate_on_completion?: boolean | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Max Neighbors */
+            max_neighbors?: number | null;
+            /** Message Template Id */
+            message_template_id?: string | null;
+            /** Radius Meters */
+            radius_meters?: number | null;
+        };
+        /**
+         * NeighborOutreachStatus
+         * @description Where one neighbour stands in the outreach for a given job.
+         *
+         *     ``pending``   — generated, not yet worked.
+         *     ``contacted`` — a door hanger was hung / a mailer went out / a message sent.
+         *     ``skipped``   — deliberately passed over (vacant, hostile, already a customer).
+         *     ``converted`` — turned into a lead or a booked job.
+         *
+         *     Persisted as ``VARCHAR(50)`` (``native_enum=False``, ``create_constraint=False``),
+         *     not a Postgres ``ENUM``, so a future status needs no ``ALTER TYPE`` migration —
+         *     the same treatment as :class:`app.models.referral_partner.ReferralPartnerType`.
+         *     Keep values under 50 chars.
+         * @enum {string}
+         */
+        NeighborOutreachStatus: "pending" | "contacted" | "skipped" | "converted";
+        /**
          * NextBestAction
          * @description The single recommended next move for the operator.
          */
@@ -27349,6 +27809,72 @@ export interface operations {
             };
         };
     };
+    get_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_neighbor_outreach_settings_api_v1_settings_workspaces__workspace_id__neighbor_outreach_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborOutreachSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_quote_followup_settings_api_v1_settings_workspaces__workspace_id__post_estimate_followup_get: {
         parameters: {
             query?: never;
@@ -34506,6 +35032,179 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborOutreachGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_job_neighbors_in_campaign_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_campaign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborOutreachCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachCampaignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_job_neighbor_entry_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_entries__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                entry_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeighborOutreachEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborOutreachExportResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
