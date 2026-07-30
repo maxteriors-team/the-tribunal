@@ -68,6 +68,18 @@ def _automation_trigger_config_schema() -> dict[str, Any]:
             ),
             _closed_config(
                 description=(
+                    "backlog_below_threshold: fire when weeks of booked work drop under "
+                    "threshold_weeks (4 is typical for home services), then stay silent for "
+                    "cooldown_days so a slow month cannot re-blast the same audience"
+                ),
+                properties={
+                    "threshold_weeks": {"type": "number", "exclusiveMinimum": 0, "maximum": 104},
+                    "cooldown_days": {"type": "integer", "minimum": 1, "maximum": 365},
+                },
+                required=["threshold_weeks", "cooldown_days"],
+            ),
+            _closed_config(
+                description=(
                     "lead_created: optionally match one or more lead-source selectors "
                     "(OR semantics)"
                 ),
@@ -160,6 +172,24 @@ def _automation_actions_schema() -> dict[str, Any]:
                 description="Target campaign",
                 properties={"campaign_id": {"type": "string", "description": "Campaign UUID"}},
                 required=["campaign_id"],
+            ),
+        ),
+        _automation_action_variant(
+            ["start_drip_campaign"],
+            description="Start a reactivation drip sequence for the workspace",
+            config=_closed_config(
+                description="Target drip campaign",
+                properties={
+                    "drip_campaign_id": {"type": "string", "description": "Drip campaign UUID"},
+                    "enroll_contact": {
+                        "type": "boolean",
+                        "description": (
+                            "Also enroll the matched contact (default true; ignored when the "
+                            "trigger has no contact)"
+                        ),
+                    },
+                },
+                required=["drip_campaign_id"],
             ),
         ),
         _automation_action_variant(

@@ -28,12 +28,22 @@ import {
   UserPlus,
   Megaphone,
   Timer,
+  Gauge,
+  Rocket,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  BACKLOG_DEFAULT_THRESHOLD_WEEKS,
+  buildBacklogTriggerConfig,
+  defaultBacklogTriggerInputs,
+  describeBacklogTrigger,
+  parseBacklogTriggerConfig,
+  validateBacklogTriggerInputs,
+} from "@/components/automations/backlog-trigger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -82,6 +92,7 @@ import {
 } from "@/hooks/useAutomations";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { automationsApi } from "@/lib/api/automations";
+import { dripCampaignsApi } from "@/lib/api/drip-campaigns";
 import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { tagsApi } from "@/lib/api/tags";
@@ -103,6 +114,7 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
   no_show: { label: "No-show", icon: CalendarX, color: "text-destructive", description: "When a contact misses an appointment" },
   contact_tagged: { label: "Contact Tagged", icon: Tag, color: "text-primary", description: "When a contact gets a specific tag" },
   never_booked: { label: "Never Booked", icon: UserPlus, color: "text-warning", description: "When a contact never booked after engaging" },
+  backlog_below_threshold: { label: "Backlog Below Threshold", icon: Gauge, color: "text-warning", description: "When booked work drops below your threshold" },
   review_received: { label: "Review Received", icon: Star, color: "text-warning", description: "When a new review or rating comes in" },
   review_request_response: { label: "Review Request Response", icon: Star, color: "text-warning", description: "When a contact responds to a review request" },
   opportunity_created: { label: "Opportunity Created", icon: TrendingUp, color: "text-success", description: "When a new deal is created" },
@@ -118,6 +130,7 @@ const actionTypeConfig: Record<AutomationActionType, { label: string; icon: Luci
   send_email: { label: "Send Email", icon: Mail },
   make_call: { label: "Make Call", icon: Phone },
   enroll_campaign: { label: "Enroll in Campaign", icon: Megaphone },
+  start_drip_campaign: { label: "Start Drip Campaign", icon: Rocket },
   apply_tag: { label: "Apply Tag", icon: Tag },
   add_tag: { label: "Add Tag", icon: Tag },
   move_to_stage: { label: "Move Deal Stage", icon: TrendingUp },
@@ -130,6 +143,7 @@ const actionTypeConfig: Record<AutomationActionType, { label: string; icon: Luci
 const TRIGGER_OPTIONS: { group: string; values: AutomationTriggerType[] }[] = [
   { group: "General", values: ["event", "schedule", "condition"] },
   { group: "Leads", values: ["lead_created"] },
+  { group: "Capacity", values: ["backlog_below_threshold"] },
   { group: "Appointments", values: ["appointment_booked", "booking_created", "no_show", "never_booked"] },
   { group: "Contacts & Pipeline", values: ["contact_tagged", "opportunity_created", "deal_stage_changed"] },
   { group: "Engagement", values: ["review_received", "review_request_response", "missed_call", "roleplay_completed", "knowledge_document_uploaded"] },
@@ -141,6 +155,7 @@ const ACTION_OPTIONS: AutomationActionType[] = [
   "send_email",
   "make_call",
   "enroll_campaign",
+  "start_drip_campaign",
   "apply_tag",
   "move_to_stage",
   "wait",
@@ -207,6 +222,11 @@ export function AutomationsPage() {
   // alongside it for builder context / opportunity disambiguation.
   const [newStageId, setNewStageId] = useState("");
   const [newStagePipelineId, setNewStagePipelineId] = useState("");
+  // backlog_below_threshold settings: fire under this many weeks of booked work,
+  // then stay silent for this many days so a slow month can't re-blast everyone.
+  const [newBacklogInputs, setNewBacklogInputs] = useState(defaultBacklogTriggerInputs);
+  // Drip sequence a start_drip_campaign action switches on.
+  const [newDripCampaignId, setNewDripCampaignId] = useState("");
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
@@ -230,6 +250,11 @@ export function AutomationsPage() {
     queryFn: () => opportunitiesApi.listPipelines(workspaceId!),
     enabled: !!workspaceId,
   });
+  const { data: dripCampaignsData } = useQuery({
+    queryKey: queryKeys.dripCampaigns.all(workspaceId ?? ""),
+    queryFn: () => dripCampaignsApi.list(workspaceId!),
+    enabled: !!workspaceId,
+  });
   const createMutation = useCreateAutomation(workspaceId ?? "");
   const updateMutation = useUpdateAutomation(workspaceId ?? "");
   const deleteMutation = useDeleteAutomation(workspaceId ?? "");
@@ -240,8 +265,16 @@ export function AutomationsPage() {
   const tagOptions = tagsData?.items ?? [];
   const isTagAction = TAG_ACTIONS.includes(newActionType);
   const isStageAction = newActionType === "move_to_stage";
+  const isDripAction = newActionType === "start_drip_campaign";
   const isTagTrigger = newTriggerType === "contact_tagged";
+  const isBacklogTrigger = newTriggerType === "backlog_below_threshold";
   const pipelines = pipelinesData ?? [];
+  // A completed sequence can't be restarted, so the builder doesn't offer one.
+  const dripCampaigns = (dripCampaignsData ?? []).filter(
+    (campaign) => campaign.status !== "completed"
+  );
+  const dripCampaignNameById = (id: string): string | undefined =>
+    dripCampaigns.find((campaign) => campaign.id === id)?.name;
   // Resolve a stored stage_id to its display name for the action chip.
   const stageNameById = (stageId: string): string | undefined => {
     for (const pipeline of pipelines) {
@@ -271,6 +304,8 @@ export function AutomationsPage() {
     setNewTriggerTag("");
     setNewStageId("");
     setNewStagePipelineId("");
+    setNewBacklogInputs(defaultBacklogTriggerInputs());
+    setNewDripCampaignId("");
   };
 
   // Build the first action's config from the builder fields while preserving
@@ -294,6 +329,10 @@ export function AutomationsPage() {
         delete config.pipeline_id;
       }
     }
+    // The worker reads drip_campaign_id; without it the action is a no-op.
+    if (newActionType === "start_drip_campaign") {
+      config.drip_campaign_id = newDripCampaignId;
+    }
     return [{ type: newActionType, config }];
   };
 
@@ -316,6 +355,10 @@ export function AutomationsPage() {
     if (newTriggerType === "contact_tagged") {
       config.tag = newTriggerTag.trim();
     }
+    // Weeks-of-work threshold plus the mandatory cooldown between fires.
+    if (newTriggerType === "backlog_below_threshold") {
+      Object.assign(config, buildBacklogTriggerConfig(newBacklogInputs));
+    }
     return config;
   };
 
@@ -335,6 +378,17 @@ export function AutomationsPage() {
     if (newTriggerType === "contact_tagged" && !newTriggerTag.trim()) {
       toast.error("Pick the tag that should trigger this automation");
       return;
+    }
+    if (newActionType === "start_drip_campaign" && !newDripCampaignId) {
+      toast.error("Pick the drip campaign to start");
+      return;
+    }
+    if (isBacklogTrigger) {
+      const backlogError = validateBacklogTriggerInputs(newBacklogInputs);
+      if (backlogError) {
+        toast.error(backlogError);
+        return;
+      }
     }
 
     try {
@@ -382,6 +436,12 @@ export function AutomationsPage() {
     setNewStagePipelineId(
       typeof firstAction?.config?.pipeline_id === "string" ? firstAction.config.pipeline_id : ""
     );
+    setNewDripCampaignId(
+      typeof firstAction?.config?.drip_campaign_id === "string"
+        ? firstAction.config.drip_campaign_id
+        : ""
+    );
+    setNewBacklogInputs(parseBacklogTriggerConfig(automation.trigger_config));
     const sourceKey = automation.trigger_config?.lead_source_public_key;
     setNewLeadSourceKey(typeof sourceKey === "string" ? sourceKey : "");
     const triggerTag = automation.trigger_config?.tag;
@@ -447,12 +507,7 @@ export function AutomationsPage() {
             if (!open) {
               setIsCreateDialogOpen(false);
               setEditingAutomation(null);
-              setNewAutomationName("");
-              setNewAutomationDescription("");
-              setNewTriggerType("event");
-              setNewActionType("send_sms");
-              setNewStageId("");
-              setNewStagePipelineId("");
+              resetForm();
             }
           }}
         >
@@ -573,6 +628,53 @@ export function AutomationsPage() {
                   </p>
                 </div>
               )}
+              {isBacklogTrigger && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="auto-backlog-threshold">Fire below (weeks of work)</Label>
+                    <Input
+                      id="auto-backlog-threshold"
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      value={newBacklogInputs.thresholdWeeks}
+                      onChange={(e) =>
+                        setNewBacklogInputs((prev) => ({
+                          ...prev,
+                          thresholdWeeks: e.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {BACKLOG_DEFAULT_THRESHOLD_WEEKS} weeks is a common threshold for home
+                      services — under that, fill the calendar now, while a new lead still has
+                      time to become a job. Needs crew capacity set in Revenue Targets;
+                      without it the backlog is unknown and this never fires.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="auto-backlog-cooldown">Cooldown (days)</Label>
+                    <Input
+                      id="auto-backlog-cooldown"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={newBacklogInputs.cooldownDays}
+                      onChange={(e) =>
+                        setNewBacklogInputs((prev) => ({
+                          ...prev,
+                          cooldownDays: e.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      A thin backlog stays thin, so this waits at least this many days before
+                      firing again — otherwise a slow month would message your whole list
+                      daily.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Action</Label>
                 <Select
@@ -652,6 +754,33 @@ export function AutomationsPage() {
                   <p className="text-xs text-muted-foreground">
                     When this runs, the contact&apos;s open deal is moved to this stage
                     (e.g. Estimate Scheduled).
+                  </p>
+                </div>
+              )}
+              {isDripAction && (
+                <div className="space-y-2">
+                  <Label>Drip campaign to start</Label>
+                  {dripCampaigns.length > 0 ? (
+                    <Select value={newDripCampaignId} onValueChange={setNewDripCampaignId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a drip campaign" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dripCampaigns.map((campaign) => (
+                          <SelectItem key={campaign.id} value={campaign.id}>
+                            {campaign.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No drip campaigns yet — create a reactivation sequence first.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Switches the sequence on so its enrolled past customers start receiving
+                    it. When the trigger has a contact, that contact is enrolled too.
                   </p>
                 </div>
               )}
@@ -876,6 +1005,11 @@ export function AutomationsPage() {
                                 Tag: {automation.trigger_config.tag as string}
                               </p>
                             )}
+                          {automation.trigger_type === "backlog_below_threshold" && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {describeBacklogTrigger(automation.trigger_config)}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -898,14 +1032,22 @@ export function AutomationsPage() {
                             typeof action.config?.stage_id === "string"
                               ? action.config.stage_id
                               : "";
-                          // Show the tag for tag actions, or the resolved stage
-                          // name for a move_to_stage action.
+                          const dripId =
+                            typeof action.config?.drip_campaign_id === "string"
+                              ? action.config.drip_campaign_id
+                              : "";
+                          // Show the tag for tag actions, or the resolved stage /
+                          // drip-campaign name for the actions that target one.
                           const chip =
                             action.type === "move_to_stage"
                               ? stageId
                                 ? stageNameById(stageId) ?? "Stage"
                                 : ""
-                              : tagValue;
+                              : action.type === "start_drip_campaign"
+                                ? dripId
+                                  ? dripCampaignNameById(dripId) ?? "Drip campaign"
+                                  : ""
+                                : tagValue;
                           return (
                             <div
                               key={index}

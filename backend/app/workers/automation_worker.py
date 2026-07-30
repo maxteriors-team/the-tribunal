@@ -29,12 +29,21 @@ Event triggers (drained from ``automation_events``, emitted by services):
 - ``roleplay_completed``                            : a practice-arena run finished
 - ``knowledge_document_uploaded``                   : a knowledge doc was added
 
+Condition triggers (evaluated against workspace state, no contact matching):
+
+- ``backlog_below_threshold`` : weeks of booked work fell under the owner's
+  threshold, so demand generation should fire. Evaluated once per automation per
+  cycle, cooldown-gated, and skipped entirely when crew capacity is unset. See
+  :mod:`app.services.automations.conditions`.
+
 Supported action type values
 -----------------------------
 - ``send_sms``       : send an SMS via Telnyx using a resolved from-number
 - ``send_email``     : send an email via Resend to the contact's email
 - ``make_call``      : initiate an outbound AI voice call via Telnyx
 - ``enroll_campaign``: create a CampaignContact record (idempotent via upsert)
+- ``start_drip_campaign``: activate a reactivation drip sequence (and enroll the
+                      matched contact when the trigger has one)
 - ``apply_tag`` / ``add_tag`` : add a normalized workspace tag to the contact
 - ``move_to_stage`` : move the contact's / event's opportunity to a pipeline
                       stage (idempotent; re-firing against a settled stage is a
@@ -66,11 +75,17 @@ from app.models.automation_execution import AutomationExecution
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus, CampaignStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.drip_campaign import DripCampaign, DripCampaignStatus
 from app.models.opportunity import Opportunity
 from app.models.phone_number import PhoneNumber
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import ContactTag, Tag
 from app.services.approval.approval_gate_service import approval_gate_service
+from app.services.automations.conditions import (
+    AUTOMATION_CONDITION_TRIGGERS,
+    CONDITION_BACKLOG_BELOW_THRESHOLD,
+    evaluate_backlog_condition,
+)
 from app.services.automations.events import (
     AUTOMATION_EVENT_TRIGGERS,
     EVENT_LEAD_CREATED,
@@ -78,6 +93,8 @@ from app.services.automations.events import (
 )
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
+from app.services.reactivation.drip_runner import enroll_contacts
+from app.services.reporting.capacity_service import CapacityService
 from app.services.tags import TagService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.services.telephony.text_provider import get_text_message_provider
@@ -217,6 +234,12 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             trigger_type=automation.trigger_type,
         )
 
+        # Condition triggers watch workspace state, not contacts: they fire once
+        # for the workspace instead of once per matched contact.
+        if automation.trigger_type.lower() in AUTOMATION_CONDITION_TRIGGERS:
+            await self._evaluate_condition(automation, db)
+            return
+
         since = automation.last_evaluated_at or (
             datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
         )
@@ -240,6 +263,91 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
 
         automation.last_evaluated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------ #
+    # Condition triggers (workspace state)                                 #
+    # ------------------------------------------------------------------ #
+
+    async def _evaluate_condition(self, automation: Automation, db: AsyncSession) -> None:
+        """Route a condition trigger to its evaluator."""
+        if automation.trigger_type.lower() == CONDITION_BACKLOG_BELOW_THRESHOLD:
+            await self._evaluate_backlog_condition(automation, db)
+            return
+
+        self.logger.warning(
+            "Unhandled condition trigger — skipping",
+            trigger_type=automation.trigger_type,
+            automation_id=str(automation.id),
+        )
+
+    async def _evaluate_backlog_condition(self, automation: Automation, db: AsyncSession) -> None:
+        """Fire demand generation when weeks of booked work fall under the line.
+
+        Reads the fuel gauge (``CapacityService.compute_backlog``) and defers the
+        verdict to :func:`~app.services.automations.conditions.evaluate_backlog_condition`,
+        which owns the two rules that make this safe to aim at a whole customer
+        list: skip silently when ``backlog_weeks`` is ``None`` (capacity unset —
+        an unreadable gauge, not an empty tank), and stay quiet for
+        ``cooldown_days`` after a fire so a slow month cannot blast the database
+        every poll cycle.
+
+        The execution row carries no ``contact_id``/``event_id``: a condition is
+        caused by the business, not a person. Postgres treats NULLs as distinct
+        in ``uq_automation_execution_contact``, so repeat fires insert cleanly and
+        the cooldown — not a unique index — is what bounds them.
+        """
+        log = self.logger.bind(
+            automation_id=str(automation.id),
+            trigger_type=automation.trigger_type,
+        )
+
+        report = await CapacityService(db).compute_backlog(automation.workspace_id)
+        decision = evaluate_backlog_condition(
+            automation.trigger_config,
+            backlog_weeks=report.backlog_weeks,
+            last_triggered_at=automation.last_triggered_at,
+        )
+        automation.last_evaluated_at = datetime.now(UTC)
+
+        if not decision.should_fire:
+            log.debug(
+                "backlog_condition_not_fired",
+                reason=decision.reason,
+                backlog_weeks=decision.backlog_weeks,
+                threshold_weeks=decision.threshold_weeks,
+                cooldown_until=(
+                    None if decision.cooldown_until is None else decision.cooldown_until.isoformat()
+                ),
+            )
+            return
+
+        log.info(
+            "backlog_condition_fired",
+            backlog_weeks=decision.backlog_weeks,
+            threshold_weeks=decision.threshold_weeks,
+            cooldown_days=decision.cooldown_days,
+        )
+
+        execution = AutomationExecution(
+            automation_id=automation.id,
+            contact_id=None,
+            status="pending",
+        )
+        db.add(execution)
+        await db.flush()
+        await self._run_actions(
+            automation,
+            None,
+            {
+                "backlog_weeks": decision.backlog_weeks,
+                "threshold_weeks": decision.threshold_weeks,
+                "backlog_hours": report.backlog_hours,
+                "weekly_capacity_hours": report.weekly_capacity_hours,
+                "open_job_count": report.job_count,
+            },
+            execution,
+            db,
+        )
 
     # ------------------------------------------------------------------ #
     # Trigger evaluators                                                   #
@@ -287,6 +395,11 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         elif trigger in AUTOMATION_EVENT_TRIGGERS:
             # Event-based triggers are handled by the event-draining path
             # (_process_events), not by polling contacts — skip silently.
+            return []
+
+        elif trigger in AUTOMATION_CONDITION_TRIGGERS:
+            # Condition triggers are evaluated against workspace state by
+            # _evaluate_condition, which never reaches this contact query.
             return []
 
         else:
@@ -519,6 +632,11 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
                 elif action_type == "enroll_campaign" and contact is not None:
                     await self._action_enroll_campaign(automation, contact, action_config, db)
+
+                elif action_type == "start_drip_campaign":
+                    # Not a _CONTACT_ACTION: starting a drip is a workspace-level
+                    # act, so a contactless condition trigger can launch one.
+                    await self._action_start_drip_campaign(automation, contact, action_config, db)
 
                 elif action_type == "move_to_stage":
                     # Not a _CONTACT_ACTION: the event path can carry an
@@ -882,6 +1000,79 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             "Contact enrolled in campaign",
             contact_id=contact.id,
             campaign_id=str(campaign_id),
+        )
+
+    async def _action_start_drip_campaign(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        config: dict[str, Any],
+        db: AsyncSession,
+    ) -> None:
+        """Start a reactivation drip sequence, enrolling the contact if there is one.
+
+        Config keys:
+            drip_campaign_id (str): UUID of the drip campaign to start (required).
+            enroll_contact (bool, optional, default True): also enroll the
+                trigger's contact. Ignored when the trigger has no contact (e.g.
+                ``backlog_below_threshold``), where the point is to open the tap
+                on an audience enrolled elsewhere (imports, ``/enroll``).
+
+        Idempotent and safe to re-fire: an already-active campaign is left alone,
+        ``enroll_contacts`` skips a contact who is already enrolled, and
+        ``started_at`` records the *first* start. A ``completed`` campaign is
+        refused rather than resurrected — the same rule the
+        ``POST /drip-campaigns/{id}/start`` endpoint enforces, so both paths agree
+        on what "start" means.
+        """
+        campaign_id = self._parse_uuid(config.get("drip_campaign_id"))
+        if campaign_id is None:
+            self.logger.warning(
+                "start_drip_campaign missing or invalid drip_campaign_id",
+                automation_id=str(automation.id),
+                drip_campaign_id=config.get("drip_campaign_id"),
+            )
+            return
+
+        result = await db.execute(
+            select(DripCampaign).where(
+                and_(
+                    DripCampaign.id == campaign_id,
+                    DripCampaign.workspace_id == automation.workspace_id,
+                )
+            )
+        )
+        campaign = result.scalar_one_or_none()
+        if campaign is None:
+            self.logger.warning(
+                "start_drip_campaign: drip campaign not found in workspace",
+                drip_campaign_id=str(campaign_id),
+                workspace_id=str(automation.workspace_id),
+            )
+            return
+
+        if campaign.status == DripCampaignStatus.COMPLETED:
+            self.logger.warning(
+                "start_drip_campaign: campaign already completed — skipping",
+                drip_campaign_id=str(campaign_id),
+            )
+            return
+
+        activated = campaign.status != DripCampaignStatus.ACTIVE
+        if activated:
+            campaign.status = DripCampaignStatus.ACTIVE
+            campaign.started_at = campaign.started_at or datetime.now(UTC)
+
+        enrolled = 0
+        if contact is not None and config.get("enroll_contact", True):
+            enrolled = await enroll_contacts(campaign, [contact.id], db)
+
+        self.logger.info(
+            "Automation started drip campaign",
+            drip_campaign_id=str(campaign_id),
+            activated=activated,
+            enrolled=enrolled,
+            contact_id=contact.id if contact else None,
         )
 
     async def _action_apply_tag(
