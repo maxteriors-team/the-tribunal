@@ -32,6 +32,7 @@ export type ContactSortBy =
 // ---------------------------------------------------------------------------
 
 export type ContactCreatePayload = Schemas["ContactCreate"];
+export type ManualContactCreatePayload = Schemas["ManualContactCreate"];
 export type ContactUpdatePayload = Schemas["ContactUpdate"];
 export type ContactResponse = Schemas["ContactResponse"];
 export type ContactListResponse = Schemas["ContactListResponse"];
@@ -187,6 +188,16 @@ const baseApi = createApiClient<Contact, CreateContactRequest, UpdateContactRequ
 
 export const contactsApi = {
   ...baseApi,
+
+  manualCreate: async (
+    workspaceId: string,
+    data: ManualContactCreatePayload,
+  ): Promise<ContactResponse> => {
+    return apiClient.post("/api/v1/workspaces/{workspace_id}/contacts/manual", {
+      path: { workspace_id: workspaceId },
+      body: data,
+    });
+  },
 
   listIds: async (workspaceId: string, params: ContactIdsParams = {}): Promise<ContactIdsResponse> => {
     return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/ids", {

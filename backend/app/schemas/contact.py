@@ -33,6 +33,12 @@ class ContactCreate(LeadAttributionFields):
     important_dates: dict[str, Any] | None = None
 
 
+class ManualContactCreate(ContactCreate):
+    """Operator-created contact with an optional first-class source selection."""
+
+    lead_source_id: uuid.UUID | None = None
+
+
 class ContactUpdate(LeadAttributionFields):
     """Schema for updating a contact."""
 
@@ -103,6 +109,7 @@ class ContactResponse(LeadAttributionFields):
     important_dates: dict[str, Any] | None = None
     source: str | None
     source_campaign_id: uuid.UUID | None
+    lead_source_raw_answer: str | None = None
     # AI Enrichment fields
     website_url: str | None = None
     linkedin_url: str | None = None
