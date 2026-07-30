@@ -1,8 +1,9 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { LeadSourcePicker } from "@/components/lead-sources/source-pickers";
 import {
   FormControl,
   FormField,
@@ -24,9 +25,10 @@ import { contactQueryKeys } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   contactsApi,
-  type CreateContactRequest,
+  type ManualContactCreatePayload,
   type UpdateContactRequest,
 } from "@/lib/api/contacts";
+import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { useContactStore } from "@/lib/contact-store";
 import { useFormDialog } from "@/lib/forms/use-form-dialog";
 import { messages } from "@/lib/messages";
@@ -68,6 +70,7 @@ function contactToFormValues(contact: Contact): ContactFormValues {
     status: contact.status || "new",
     tags: tagsString,
     notes: contact.notes || "",
+    lead_source_id: contact.first_touch_lead_source_id || "",
     birthday: contact.important_dates?.birthday || "",
     anniversary: contact.important_dates?.anniversary || "",
     address_line1: contact.address_line1 || "",
@@ -86,10 +89,16 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
   const { setSelectedContact } = useContactStore();
   const workspaceId = useWorkspaceId();
 
+  const { data: captureSettings } = useQuery({
+    queryKey: queryKeys.leadSources.captureSettings(workspaceId ?? ""),
+    queryFn: () => leadSourcesApi.getCaptureSettings(workspaceId!),
+    enabled: mode === "create" && !!workspaceId,
+  });
+
   const createContactMutation = useMutation({
-    mutationFn: (data: CreateContactRequest) => {
+    mutationFn: (data: ManualContactCreatePayload) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
-      return contactsApi.create(workspaceId, data);
+      return contactsApi.manualCreate(workspaceId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId ?? "") });
@@ -130,7 +139,15 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
         : undefined;
 
       if (mode === "create") {
-        const request: CreateContactRequest = {
+        if (
+          captureSettings?.require_lead_source_on_manual_create &&
+          !data.lead_source_id
+        ) {
+          toast.error("Select how this contact heard about the business");
+          return;
+        }
+
+        const request: ManualContactCreatePayload = {
           first_name: data.first_name,
           last_name: data.last_name || undefined,
           email: data.email || undefined,
@@ -139,6 +156,7 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           status: data.status as ContactStatus,
           tags: tagsArray,
           notes: data.notes || undefined,
+          lead_source_id: data.lead_source_id || undefined,
           address_line1: data.address_line1 || undefined,
           address_line2: data.address_line2 || undefined,
           address_city: data.address_city || undefined,
@@ -298,6 +316,32 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           </FormItem>
         )}
       />
+
+      {mode === "create" && (
+        <FormField
+          control={form.control}
+          name="lead_source_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                How did you hear about us?
+                {captureSettings?.require_lead_source_on_manual_create ? " *" : ""}
+              </FormLabel>
+              <FormControl>
+                <LeadSourcePicker
+                  workspaceId={workspaceId ?? ""}
+                  value={field.value || undefined}
+                  onChange={(leadSourceId) => field.onChange(leadSourceId)}
+                  onClear={() => field.onChange("")}
+                  allowClear={!captureSettings?.require_lead_source_on_manual_create}
+                  aria-label="How did you hear about us?"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}

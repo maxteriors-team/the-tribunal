@@ -245,6 +245,100 @@ class TestCreateContactSuccess:
         assert kwargs["workspace_id"] == WS_ID
 
 
+class TestManualContactLeadSourcePolicy:
+    """Manual-only source requirement never changes generic ingestion behavior."""
+
+    async def test_manual_create_allows_missing_source_when_requirement_disabled(
+        self, client: AsyncClient
+    ) -> None:
+        from unittest.mock import patch
+
+        create_mock = AsyncMock(side_effect=RuntimeError("created"))
+        with (
+            patch.object(contacts_module.ContactService, "create_contact", new=create_mock),
+            suppress(RuntimeError),
+        ):
+            await client.post(
+                f"/api/v1/workspaces/{WS_ID}/contacts/manual",
+                json={"first_name": "Alice", "phone_number": "+15551234567"},
+            )
+
+        create_mock.assert_awaited_once()
+        assert create_mock.call_args.kwargs["attribution_fields"] == {}
+
+    async def test_manual_create_rejects_missing_source_when_requirement_enabled(
+        self, client: AsyncClient, mock_workspace: MagicMock
+    ) -> None:
+        mock_workspace.settings = {
+            "lead_source_capture": {"require_lead_source_on_manual_create": True}
+        }
+
+        response = await client.post(
+            f"/api/v1/workspaces/{WS_ID}/contacts/manual",
+            json={"first_name": "Alice", "phone_number": "+15551234567"},
+        )
+
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Lead source is required for manually created contacts"
+
+    async def test_manual_create_persists_selected_structured_source(
+        self,
+        client: AsyncClient,
+        mock_db: AsyncMock,
+        mock_workspace: MagicMock,
+    ) -> None:
+        from unittest.mock import patch
+
+        source_id = uuid.uuid4()
+        source = MagicMock(id=source_id, workspace_id=WS_ID, enabled=True)
+        mock_db.get = AsyncMock(return_value=source)
+        mock_workspace.settings = {
+            "lead_source_capture": {"require_lead_source_on_manual_create": True}
+        }
+        create_mock = AsyncMock(side_effect=RuntimeError("created"))
+
+        with (
+            patch.object(contacts_module.ContactService, "create_contact", new=create_mock),
+            suppress(RuntimeError),
+        ):
+            await client.post(
+                f"/api/v1/workspaces/{WS_ID}/contacts/manual",
+                json={
+                    "first_name": "Alice",
+                    "phone_number": "+15551234567",
+                    "lead_source_id": str(source_id),
+                    "source": "legacy-import-value",
+                },
+            )
+
+        fields = create_mock.call_args.kwargs["attribution_fields"]
+        assert fields["first_touch_lead_source_id"] == source_id
+        assert fields["latest_touch_lead_source_id"] == source_id
+        assert fields["attribution_confidence"] == 1.0
+        # Legacy source remains a separate, untouched input field.
+        assert create_mock.call_args.kwargs["source"] == "legacy-import-value"
+
+    async def test_generic_api_ignores_manual_requirement(
+        self, client: AsyncClient, mock_workspace: MagicMock
+    ) -> None:
+        from unittest.mock import patch
+
+        mock_workspace.settings = {
+            "lead_source_capture": {"require_lead_source_on_manual_create": True}
+        }
+        create_mock = AsyncMock(side_effect=RuntimeError("created"))
+        with (
+            patch.object(contacts_module.ContactService, "create_contact", new=create_mock),
+            suppress(RuntimeError),
+        ):
+            await client.post(
+                f"/api/v1/workspaces/{WS_ID}/contacts",
+                json={"first_name": "API Lead", "phone_number": "+15551234567"},
+            )
+
+        create_mock.assert_awaited_once()
+
+
 class TestListContactsAuth:
     """Tests for GET /contacts."""
 

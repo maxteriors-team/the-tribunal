@@ -75,6 +75,16 @@ export interface Contact {
   tags?: string[] | string;
   tag_objects?: Tag[];
   notes?: string;
+  /** Legacy free-text import/source label; never used as structured attribution. */
+  source?: string | null;
+  first_touch_lead_source_id?: string | null;
+  first_touch_lead_source_campaign_id?: string | null;
+  first_touch_at?: string | null;
+  latest_touch_lead_source_id?: string | null;
+  latest_touch_lead_source_campaign_id?: string | null;
+  latest_touch_at?: string | null;
+  attribution_confidence?: number | null;
+  lead_source_raw_answer?: string | null;
   created_at: string;
   updated_at: string;
   // Conversation metadata (from list endpoint)

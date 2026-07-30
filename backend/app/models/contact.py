@@ -179,6 +179,9 @@ class Contact(Base):
     )
     latest_touch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attribution_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Verbatim answer captured by the AI receptionist. Kept separate from the
+    # legacy ``source`` field so uncertain speech never pollutes structured ROI.
+    lead_source_raw_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     utm_source: Mapped[str | None] = mapped_column(String(255), nullable=True)
     utm_medium: Mapped[str | None] = mapped_column(String(255), nullable=True)
     utm_campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)

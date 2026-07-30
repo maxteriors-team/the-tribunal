@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CalendarPlus,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
@@ -21,21 +23,73 @@ import { EngagementSummary } from "@/components/contacts/contact-sidebar/engagem
 import { ImportantDatesSection } from "@/components/contacts/contact-sidebar/important-dates";
 import { useContactSidebarData } from "@/components/contacts/contact-sidebar/use-contact-sidebar-data";
 import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appointment-dialog";
+import { LeadSourcePicker } from "@/components/lead-sources/source-pickers";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Separator } from "@/components/ui/separator";
-import { useContact } from "@/hooks/useContacts";
+import { contactQueryKeys, useContact } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { contactStatusDotColors, contactStatusLabels } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/utils/date";
 import { getContactInitials } from "@/lib/utils/initials";
+import type { Contact } from "@/types";
 
 interface ContactDetailPageProps {
   contactId: number;
+}
+
+function ContactLeadSourceCorrection({
+  workspaceId,
+  contact,
+}: {
+  workspaceId: string;
+  contact: Contact;
+}) {
+  const queryClient = useQueryClient();
+  const correctionMutation = useMutation({
+    mutationFn: (leadSourceId: string) =>
+      leadSourcesApi.assignSource(workspaceId, contact.id, {
+        lead_source_id: leadSourceId,
+        correct_existing: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: contactQueryKeys.all(workspaceId) });
+      queryClient.invalidateQueries({
+        queryKey: contactQueryKeys.detail(workspaceId, contact.id),
+      });
+      toast.success("Lead source updated");
+    },
+    onError: () => toast.error("Could not update the lead source"),
+  });
+
+  return (
+    <Card>
+      <CardContent className="space-y-3">
+        <div>
+          <h2 className="text-sm font-medium">How did they hear about us?</h2>
+          <p className="text-xs text-muted-foreground">
+            Correct first-touch attribution without changing the legacy source field.
+          </p>
+        </div>
+        <LeadSourcePicker
+          workspaceId={workspaceId}
+          value={contact.first_touch_lead_source_id ?? undefined}
+          onChange={(leadSourceId) => correctionMutation.mutate(leadSourceId)}
+          aria-label="Contact lead source"
+        />
+        {contact.lead_source_raw_answer && (
+          <p className="text-xs text-muted-foreground">
+            Receptionist captured: “{contact.lead_source_raw_answer}”
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 /**
@@ -171,6 +225,10 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
               <ContactNotesMeta contact={contact} />
             </CardContent>
           </Card>
+
+          {workspaceId && (
+            <ContactLeadSourceCorrection workspaceId={workspaceId} contact={contact} />
+          )}
 
           <Card>
             <CardContent className="space-y-6">

@@ -10,15 +10,23 @@ also resolves workspace membership, replacing the old ``get_workspace`` check;
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CanReadCRM, CanSendComms, CanWriteCRM, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanSendComms,
+    CanWriteCRM,
+    CurrentUser,
+    WorkspaceAccess,
+)
 from app.api.service_errors import ServiceErrorRoute
 from app.models.contact import Contact
+from app.models.lead_source import LeadSource
 from app.schemas.contact import (
     AIToggleRequest,
     AIToggleResponse,
@@ -38,6 +46,7 @@ from app.schemas.contact import (
     ContactUpdate,
     CSVPreviewResponse,
     ImportResult,
+    ManualContactCreate,
     MessageResponse,
     QualificationSignals,
     QualifyContactResponse,
@@ -60,9 +69,11 @@ from app.services.contacts.exceptions import (
 from app.services.dashboard.dashboard_service import invalidate_dashboard_cache
 from app.services.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
 from app.services.lead_sources.attribution_service import (
+    MANUAL_ASSIGNMENT_CONFIDENCE,
     AttributionCleanupError,
     AttributionCleanupService,
 )
+from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -182,19 +193,20 @@ async def get_contact_stats(
     return ContactStatsResponse(**result)
 
 
-@router.post("", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
-async def create_contact(
+async def _create_contact_record(
+    *,
     workspace_id: uuid.UUID,
     contact_in: ContactCreate,
-    current_user: CurrentUser,
-    db: DB,
-    membership: CanWriteCRM,
+    db: Any,
+    attribution_fields: dict[str, Any] | None = None,
 ) -> Contact:
-    """Create a new contact."""
+    """Forward one validated contact payload into the shared service."""
     service = ContactService(db)
-    attribution_fields = contact_in.model_dump(
-        include=set(LeadAttributionFields.model_fields), exclude_none=True
-    )
+    if attribution_fields is None:
+        attribution_fields = contact_in.model_dump(
+            include=set(LeadAttributionFields.model_fields), exclude_none=True
+        )
+
     # Mailing address + avatar are accepted by the schema but aren't named
     # params on the service; forward them like attribution_fields, or they'd
     # be silently dropped on create (update never dropped them).
@@ -223,6 +235,71 @@ async def create_contact(
         important_dates=contact_in.important_dates,
         attribution_fields=attribution_fields,
         profile_fields=profile_fields,
+    )
+
+
+@router.post("", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
+async def create_contact(
+    workspace_id: uuid.UUID,
+    contact_in: ContactCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> Contact:
+    """Create a contact through the general API/automation ingestion path.
+
+    Workspace manual-intake policy is intentionally not consulted here: API,
+    webhook, import, and other automated ingestion must remain non-breaking.
+    """
+    return await _create_contact_record(workspace_id=workspace_id, contact_in=contact_in, db=db)
+
+
+@router.post("/manual", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
+async def create_contact_manually(
+    workspace_id: uuid.UUID,
+    contact_in: ManualContactCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+    workspace: WorkspaceAccess,
+) -> Contact:
+    """Create an operator-entered contact and enforce only the manual policy."""
+    capture_settings = get_lead_source_capture_settings(workspace)
+    lead_source_id = contact_in.lead_source_id
+
+    if capture_settings.require_lead_source_on_manual_create and lead_source_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Lead source is required for manually created contacts",
+        )
+
+    attribution_fields: dict[str, Any] = {}
+    if lead_source_id is not None:
+        lead_source = await db.get(LeadSource, lead_source_id)
+        if (
+            lead_source is None
+            or lead_source.workspace_id != workspace_id
+            or not lead_source.enabled
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Select an active lead source from this workspace",
+            )
+
+        captured_at = datetime.now(UTC)
+        attribution_fields = {
+            "first_touch_lead_source_id": lead_source_id,
+            "first_touch_at": captured_at,
+            "latest_touch_lead_source_id": lead_source_id,
+            "latest_touch_at": captured_at,
+            "attribution_confidence": MANUAL_ASSIGNMENT_CONFIDENCE,
+        }
+
+    return await _create_contact_record(
+        workspace_id=workspace_id,
+        contact_in=contact_in,
+        db=db,
+        attribution_fields=attribution_fields,
     )
 
 
@@ -416,6 +493,7 @@ async def assign_contact_lead_source(
             lead_source_id=assign_in.lead_source_id,
             lead_source_campaign_id=assign_in.lead_source_campaign_id,
             source_type=assign_in.source_type,
+            correct_existing=assign_in.correct_existing,
         )
     except AttributionCleanupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
