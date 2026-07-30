@@ -432,6 +432,20 @@ async def test_prompt_cache_key_passed_to_openai_call() -> None:
     assert kwargs["prompt_cache_key"] == processor._cache_key(workspace_id, 99)
 
 
+def test_tool_calls_disable_reasoning_effort() -> None:
+    """Every tool-bearing call must set reasoning_effort, or the API rejects it.
+
+    Reasoning-tier models refuse function tools on /v1/chat/completions unless
+    reasoning effort is explicitly ``none``. Because every assistant turn sends
+    tools, omitting this 400s the entire feature — and no mocked test notices,
+    since the mock accepts any kwargs. This shipped to production once already.
+    """
+    params = processor._api_params([{"role": "user", "content": "hi"}], "cache-key")
+
+    assert params["tools"], "the guard only matters because tools are always sent"
+    assert params["reasoning_effort"] == "none"
+
+
 def test_repair_pairing_drops_orphan_tool_results() -> None:
     """Tool messages whose tool_call_id has no matching assistant call are removed."""
     messages = [
