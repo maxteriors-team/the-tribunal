@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.pending_action import PendingActionResponse
 from app.services.ai.image_input import ImageValidationError, validate_image_data_url
 
 AssistantRole = Literal["user", "assistant", "tool"]
@@ -63,6 +64,8 @@ class ActionSummary(BaseModel):
     tool_name: str
     success: bool
     summary: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    result: dict[str, Any] = Field(default_factory=dict)
 
 
 class AssistantChatResponse(BaseModel):
@@ -114,13 +117,6 @@ class AssistantStreamDeltaEvent(BaseModel):
     text: str
 
 
-class AssistantStreamReasoningEvent(BaseModel):
-    """Streaming assistant reasoning delta."""
-
-    type: Literal["reasoning"]
-    text: str
-
-
 class AssistantStreamToolStartEvent(BaseModel):
     """Assistant tool execution started."""
 
@@ -136,12 +132,11 @@ class AssistantStreamToolEndEvent(BaseModel):
     success: bool | None = None
 
 
-class AssistantStreamRetryEvent(BaseModel):
-    """Assistant stream retry notice."""
+class AssistantStreamPendingApprovalEvent(BaseModel):
+    """Assistant action queued for an operator's approval."""
 
-    type: Literal["retry"]
-    reason: str
-    attempt: int
+    type: Literal["pending_approval"]
+    action: PendingActionResponse
 
 
 class AssistantStreamErrorEvent(BaseModel):
@@ -162,10 +157,9 @@ class AssistantStreamDoneEvent(BaseModel):
 
 AssistantStreamEvent = (
     AssistantStreamDeltaEvent
-    | AssistantStreamReasoningEvent
     | AssistantStreamToolStartEvent
     | AssistantStreamToolEndEvent
-    | AssistantStreamRetryEvent
+    | AssistantStreamPendingApprovalEvent
     | AssistantStreamErrorEvent
     | AssistantStreamDoneEvent
 )

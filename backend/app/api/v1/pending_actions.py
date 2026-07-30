@@ -16,38 +16,11 @@ from app.schemas.pending_action import (
     PendingActionListResponse,
     PendingActionResponse,
     RejectActionRequest,
+    pending_action_response,
 )
 from app.services.approval.approval_gate_service import approval_gate_service
 
 router = APIRouter()
-
-
-def _action_to_response(action: PendingAction) -> PendingActionResponse:
-    """Convert a PendingAction model to a PendingActionResponse."""
-    return PendingActionResponse(
-        id=action.id,
-        workspace_id=action.workspace_id,
-        agent_id=action.agent_id,
-        action_type=action.action_type,
-        action_payload=action.action_payload,
-        description=action.description,
-        context=action.context,
-        status=action.status,
-        urgency=action.urgency,
-        reviewed_by_id=action.reviewed_by_id,
-        reviewed_at=action.reviewed_at.isoformat() if action.reviewed_at else None,
-        review_channel=action.review_channel,
-        rejection_reason=action.rejection_reason,
-        executed_at=action.executed_at.isoformat() if action.executed_at else None,
-        execution_result=action.execution_result,
-        expires_at=action.expires_at.isoformat() if action.expires_at else None,
-        notification_sent=action.notification_sent,
-        notification_sent_at=action.notification_sent_at.isoformat()
-        if action.notification_sent_at
-        else None,
-        created_at=action.created_at.isoformat(),
-        updated_at=action.updated_at.isoformat(),
-    )
 
 
 @router.get("/stats")
@@ -101,7 +74,7 @@ async def list_actions(
     result = await paginate(db, query, page=page, page_size=page_size)
 
     return PendingActionListResponse(
-        items=[_action_to_response(a) for a in result.items],
+        items=[pending_action_response(a) for a in result.items],
         total=result.total,
         page=result.page,
         page_size=result.page_size,
@@ -131,7 +104,7 @@ async def get_action(
             detail="Pending action not found",
         )
 
-    return _action_to_response(action)
+    return pending_action_response(action)
 
 
 @router.post("/{action_id}/approve", response_model=PendingActionResponse)
@@ -170,7 +143,7 @@ async def approve_action(
         user_id=current_user.id,
     )
 
-    return _action_to_response(updated)
+    return pending_action_response(updated)
 
 
 @router.post("/{action_id}/reject", response_model=PendingActionResponse)
@@ -210,4 +183,4 @@ async def reject_action(
         reason=body.reason if body else None,
     )
 
-    return _action_to_response(updated)
+    return pending_action_response(updated)

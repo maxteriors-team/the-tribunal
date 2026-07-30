@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  AssistantMessageResponse,
-  AssistantStreamEvent,
-} from "@/lib/api/assistant";
+import type { AssistantMessageResponse, AssistantStreamEvent } from "@/lib/api/assistant";
 
 import {
   applyStreamResult,
@@ -58,19 +55,6 @@ describe("reduceStreamEvent", () => {
     expect(accumulator.text).toBe("");
   });
 
-  it("accumulates consecutive deltas and reasoning separately", () => {
-    const { accumulator, runtime } = runEvents([
-      { type: "delta", text: "Found " },
-      { type: "reasoning", text: "Checking leads" },
-      { type: "delta", text: "12 leads." },
-    ]);
-
-    expect(accumulator.text).toBe("Found 12 leads.");
-    expect(accumulator.reasoning).toBe("Checking leads");
-    expect(runtime.streamingText).toBe("Found 12 leads.");
-    expect(runtime.reasoningText).toBe("Checking leads");
-  });
-
   it("moves a tool from active to completed across tool_start/tool_end", () => {
     const startResult = reduceStreamEvent(
       emptyAccumulator(),
@@ -104,20 +88,47 @@ describe("reduceStreamEvent", () => {
       FIXED_NOW,
     );
 
-    expect(second.accumulator.activeTools).toEqual([
-      { name: "draft_sms", status: "running" },
-    ]);
+    expect(second.accumulator.activeTools).toEqual([{ name: "draft_sms", status: "running" }]);
   });
 
-  it("formats a human-readable retry notice", () => {
-    const result = reduceStreamEvent(
+  it("stores a complete pending approval action for inline review", () => {
+    const action = {
+      id: "action-1",
+      workspace_id: "workspace-1",
+      agent_id: null,
+      action_type: "start_campaign",
+      action_payload: { campaign_id: "campaign-1" },
+      description: "Start the summer campaign",
+      context: { source: "crm_assistant" },
+      status: "pending" as const,
+      urgency: "normal",
+      reviewed_by_id: null,
+      reviewed_at: null,
+      review_channel: null,
+      rejection_reason: null,
+      executed_at: null,
+      execution_result: null,
+      expires_at: null,
+      notification_sent: false,
+      notification_sent_at: null,
+      created_at: "2026-07-29T12:00:00Z",
+      updated_at: "2026-07-29T12:00:00Z",
+    };
+
+    const first = reduceStreamEvent(
       emptyAccumulator(),
-      { type: "retry", reason: "rate_limited", attempt: 2 },
+      { type: "pending_approval", action },
+      FIXED_NOW,
+    );
+    const replacement = { ...action, description: "Updated review details" };
+    const second = reduceStreamEvent(
+      first.accumulator,
+      { type: "pending_approval", action: replacement },
       FIXED_NOW,
     );
 
-    expect(result.patch.retryNotice).toBe("Retrying rate limited (2)");
-    expect(result.finished).toBe(false);
+    expect(second.patch.pendingApprovals).toEqual([replacement]);
+    expect(second.accumulator.pendingApprovals).toEqual([replacement]);
   });
 
   it("stops streaming and surfaces the message on error", () => {
@@ -132,6 +143,21 @@ describe("reduceStreamEvent", () => {
       error: "stream failed",
       requestId: null,
     });
+    expect(result.finished).toBe(true);
+  });
+
+  it("preserves partial assistant text when the stream errors", () => {
+    const { runtime, appended } = runEvents([
+      { type: "delta", text: "I found three" },
+      { type: "error", message: "connection lost" },
+    ]);
+
+    expect(runtime).toMatchObject({
+      streamingText: "I found three",
+      isStreaming: false,
+      error: "connection lost",
+    });
+    expect(appended).toHaveLength(0);
   });
 
   it("builds an assistant message with deterministic id and tool calls on done", () => {
@@ -143,7 +169,15 @@ describe("reduceStreamEvent", () => {
         type: "done",
         conversation_id: "conv_1",
         message_id: null,
-        actions_taken: [],
+        actions_taken: [
+          {
+            tool_name: "search_contacts",
+            success: true,
+            summary: "12 contacts found",
+            arguments: { query: "dormant" },
+            result: { success: true, total: 12 },
+          },
+        ],
       },
     ]);
 
@@ -153,6 +187,15 @@ describe("reduceStreamEvent", () => {
     expect(message.content).toBe("Done.");
     expect(message.tool_calls).toEqual([
       { id: "tool-0", function: { name: "search_contacts", arguments: "{}" } },
+    ]);
+    expect(message.actions_taken).toEqual([
+      {
+        tool_name: "search_contacts",
+        success: true,
+        summary: "12 contacts found",
+        arguments: { query: "dormant" },
+        result: { success: true, total: 12 },
+      },
     ]);
     expect(runtime.isStreaming).toBe(false);
     expect(runtime.streamingText).toBe("");
@@ -217,15 +260,13 @@ describe("toolNamesFromMessage", () => {
 
 describe("resolveActiveConversationId", () => {
   it("prefers the explicit selection when present", () => {
-    expect(
-      resolveActiveConversationId("conv_sel", [{ id: "conv_first" }], "draft_1"),
-    ).toBe("conv_sel");
+    expect(resolveActiveConversationId("conv_sel", [{ id: "conv_first" }], "draft_1")).toBe(
+      "conv_sel",
+    );
   });
 
   it("falls back to the first conversation, then the draft", () => {
-    expect(
-      resolveActiveConversationId(null, [{ id: "conv_first" }], "draft_1"),
-    ).toBe("conv_first");
+    expect(resolveActiveConversationId(null, [{ id: "conv_first" }], "draft_1")).toBe("conv_first");
     expect(resolveActiveConversationId(null, [], "draft_1")).toBe("draft_1");
   });
 });
@@ -294,9 +335,46 @@ describe("selectVisibleMessages", () => {
       { id: "b", role: "tool", content: "{}", created_at: "2026-05-20T14:00:01Z" },
       { id: "c", role: "assistant", content: "a", created_at: "2026-05-20T14:00:02Z" },
     ];
-    expect(selectVisibleMessages(messages).map((message) => message.id)).toEqual([
-      "a",
-      "c",
+    expect(selectVisibleMessages(messages).map((message) => message.id)).toEqual(["a", "c"]);
+  });
+
+  it("pairs persisted tool calls with their arguments and results", () => {
+    const messages: AssistantMessageResponse[] = [
+      {
+        id: "assistant-tool-call",
+        role: "assistant",
+        content: "I checked that contact.",
+        created_at: "2026-05-20T14:00:00Z",
+        tool_calls: [
+          {
+            id: "call-1",
+            function: {
+              name: "get_contact",
+              arguments: JSON.stringify({ contact_id: 42 }),
+            },
+          },
+        ],
+      },
+      {
+        id: "tool-result",
+        role: "tool",
+        content: JSON.stringify({ success: false, code: "not_found", message: "Missing" }),
+        created_at: "2026-05-20T14:00:01Z",
+        tool_call_id: "call-1",
+      },
+    ];
+
+    const visible = selectVisibleMessages(messages);
+
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.actions_taken).toEqual([
+      {
+        tool_name: "get_contact",
+        success: false,
+        summary: expect.stringContaining("not_found"),
+        arguments: { contact_id: 42 },
+        result: { success: false, code: "not_found", message: "Missing" },
+      },
     ]);
   });
 });
@@ -345,15 +423,42 @@ describe("startUserTurn", () => {
     expect(next.isStreaming).toBe(true);
     expect(next.requestId).toBe("req_1");
   });
+
+  it("restarts a failed turn without duplicating the user message", () => {
+    const userMessage: AssistantMessageResponse = {
+      id: "u1",
+      role: "user",
+      content: "Try this again",
+      image: "data:image/png;base64,reuse-me",
+      created_at: "2026-05-20T14:00:00Z",
+    };
+    const runtime: ConversationRuntime = {
+      ...emptyRuntime(),
+      messages: [userMessage],
+      streamingText: "Partial answer",
+      error: "connection lost",
+      retryRequest: { message: userMessage.content, image: userMessage.image ?? null },
+    };
+
+    const next = startUserTurn(runtime, userMessage, "req_retry", false);
+
+    expect(next.messages).toEqual([userMessage]);
+    expect(next.streamingText).toBe("");
+    expect(next.error).toBeNull();
+    expect(next.isStreaming).toBe(true);
+    expect(next.requestId).toBe("req_retry");
+    expect(next.retryRequest).toEqual({
+      message: "Try this again",
+      image: "data:image/png;base64,reuse-me",
+    });
+  });
 });
 
 describe("applyStreamResult", () => {
   it("merges the patch and appends a completed message", () => {
     const runtime: ConversationRuntime = {
       ...emptyRuntime(),
-      messages: [
-        { id: "u1", role: "user", content: "q", created_at: "2026-05-20T14:00:00Z" },
-      ],
+      messages: [{ id: "u1", role: "user", content: "q", created_at: "2026-05-20T14:00:00Z" }],
       isStreaming: true,
     };
     const appendMessage: AssistantMessageResponse = {
@@ -377,9 +482,7 @@ describe("applyStreamResult", () => {
   it("keeps existing messages when there is nothing to append", () => {
     const runtime: ConversationRuntime = {
       ...emptyRuntime(),
-      messages: [
-        { id: "u1", role: "user", content: "q", created_at: "2026-05-20T14:00:00Z" },
-      ],
+      messages: [{ id: "u1", role: "user", content: "q", created_at: "2026-05-20T14:00:00Z" }],
     };
 
     const next = applyStreamResult(runtime, {
