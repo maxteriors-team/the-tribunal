@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
+import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import {
   AlertDialog,
@@ -106,6 +107,10 @@ export function JobDetailDialog({
 
   if (!job) return null;
 
+  // Neighbor outreach only makes sense once the crew has actually been on the
+  // street, so the tab appears on completion — and the grid tracks it, since a
+  // fixed `grid-cols-2` would leave a third trigger overflowing its row.
+  const showNeighbors = job.status === "completed";
   const windowError = jobWindowError(start, end);
   // The customer's name, never the raw `contact_id`: a technician can't resolve
   // a database id, and the API now embeds the name for exactly this reason.
@@ -199,9 +204,12 @@ export function JobDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList
+            className={`grid w-full ${showNeighbors ? "grid-cols-3" : "grid-cols-2"}`}
+          >
             <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
             <TabsTrigger value="field-work">Field work</TabsTrigger>
+            {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
           </TabsList>
           <TabsContent value="details" className="space-y-5 pt-2">
           {/* Site, customer, access notes and scope: the technician's "what am I
@@ -333,6 +341,15 @@ export function JobDetailDialog({
           <TabsContent value="field-work" className="pt-2">
             <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
           </TabsContent>
+          {showNeighbors && (
+            <TabsContent value="neighbors" className="pt-2">
+              <JobNeighborsPanel
+                workspaceId={workspaceId}
+                jobId={job.id}
+                readOnly={readOnly}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </DialogContent>
 

@@ -335,6 +335,8 @@ export const queryKeys = {
       [...jobs.detail(workspaceId, jobId), "expenses"] as const,
     profitability: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "profitability"] as const,
+    neighbors: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "neighbors"] as const,
   },
   servicePlans: {
     ...servicePlans,
@@ -495,6 +497,8 @@ export const queryKeys = {
       ["settings", "post-estimate-followup", workspaceId] as const,
     quoteRevival: (workspaceId: string) =>
       ["settings", "unsold-quote-revival", workspaceId] as const,
+    neighborOutreach: (workspaceId: string) =>
+      ["settings", "neighbor-outreach", workspaceId] as const,
   },
   smsCampaigns: createResourceQueryKeys("sms-campaigns"),
   tags: createResourceQueryKeys("tags"),
