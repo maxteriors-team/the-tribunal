@@ -7,8 +7,18 @@
 
 **Coverage already exists. Do not build a second worker.** The first-14-days
 cadence shipped in commit `d973342f` and is complete against the original
-specification. This re-audit found two genuine residual defects in the shipped
-code and one scale limitation, all narrow. Only the two defects are fixed here.
+specification on paper — every requirement has code behind it.
+
+But it did not run. An end-to-end test drive found that **the day-1 touch never
+fired for any quote**, because the worker's fetch was a fixed `LIMIT` over an
+ascending `sent_at` ordering: the newest quotes sort last and were never
+reached, and workspaces with the feature switched off consumed the entire budget
+before the enabled ones were considered. The feature was, in practice, dead on
+arrival for the touches that matter most.
+
+Three defects are fixed here: the cross-sequence collision rail (§A), an
+undecryptable contact stalling every tick (§B), and the fetch starvation (§C).
+All three are covered by tests confirmed to fail against the pre-fix code.
 
 ## 1. What each existing worker actually targets
 
@@ -35,7 +45,7 @@ lives in `workspace.settings["post_estimate_followup"]`, is served by
 in the **Quote Follow-Up** settings tab. Building anything new here would be a
 duplicate.
 
-## 3. Residual defects found (fixed in this change)
+## 3. Defects found (all fixed in this change)
 
 ### A. The two quote sequences can double-message — the collision rail is measured in the wrong space
 
@@ -98,17 +108,63 @@ behind, which `make rotate.encryption-key` exists precisely to manage. The local
 dev database has 677 quotes in `sent`, so the old code materialized every one of
 their contact rows on every tick to decide four booleans.
 
-## 4. Known limitation, deliberately not changed here
+### C. The fetch ceiling starved the newest quotes — the cadence did not work at all
 
-`MAX_QUOTES_PER_TICK = 100` with `ORDER BY sent_at` is a per-tick ceiling, not a
-cursor. Above roughly 7 sent quotes/day a workspace has more than 100 quotes
-inside the 15-day window, and the newest ones are crowded out until older quotes
-age past day 15 — so their day-1 and day-3 touches are missed permanently, which
-is precisely the part of the window worth the most. `unsold_quote_worker` has the
-same shape and a far wider window (366 days), so it is affected harder.
+An earlier draft of this note called `MAX_QUOTES_PER_TICK = 100` "a scaling item,
+not an outage" and assumed volumes were far below the threshold. **That was
+wrong, and an end-to-end test drive against the local database disproved it
+within minutes.** Every day-1 touch failed; every day-3, day-7 and day-14 touch
+succeeded. That signature is not a cadence bug, it is a fetch bug.
 
-Fixing this well means choosing a fairness model (keyset pagination per tick vs.
-per-workspace round-robin) and applying it to both workers, which reaches into
-the separate 30/60/90 revival task. It is called out here rather than fixed
-opportunistically. Today's volumes are far below the threshold, so this is a
-scaling item, not an outage.
+Two compounding defects:
+
+1. **The `LIMIT` was a ceiling, not a cursor.** Ordered by `sent_at` ascending,
+   the newest quote in the window sorts *last*. The local database holds 424
+   quotes inside the 15-day window, so a one-day-old quote ranks **302nd** and
+   was never reached. The starved touches are exactly day 1 and day 3 — the most
+   valuable in the sequence, and the entire premise of the feature.
+2. **Disabled workspaces consumed the budget.** `enabled` defaults to `False`,
+   but the fetch selected quotes across all workspaces and discarded the
+   disabled ones *in Python, after the `LIMIT`*. All 100 rows in the measured
+   batch belonged to workspaces with no config block at all. A workspace that
+   switched the cadence on could therefore receive **nothing, indefinitely**,
+   starved by unrelated tenants that do not even use the feature.
+
+**Fix (both workers):** filter `enabled` in SQL via the JSONB predicate so
+disabled workspaces cost nothing, and replace the single `LIMIT` with keyset
+pagination over `(sent_at, id)` — `(anchor, id)` for revival — that pages until
+the due set is exhausted. `MAX_QUOTES_PER_TICK` survives only as a 5,000-row
+safety ceiling that logs loudly when crossed, since crossing it now means real
+work was skipped.
+
+`unsold_quote_worker` had the identical shape over a 366-day window. It is fixed
+the same way here rather than left broken: the overlap guarantee added in §A is
+worthless if the sequence enforcing it silently stops running.
+
+## 4. How this was verified
+
+Beyond unit tests, an end-to-end harness drove both sequences against the real
+local Postgres: real workers, real config parsing, real compliance and
+quiet-hours evaluation, real opt-out layer, real ledger writes, real
+stop-condition SQL. The only faked functions were the two network egress calls,
+`TelnyxSMSService._post_message` and `app.services.email._send`, so no live SMS
+or email was billed while conversations, `Message` rows, idempotency keys and
+status transitions all executed for real. Time was advanced by moving
+`Quote.sent_at` backwards rather than by faking the clock, so the workers' own
+`datetime.now(UTC)` and SQL windows were exercised.
+
+24 checks covering the full ladder, idempotency, value segmentation, all five
+stop conditions, quiet-hours deferral and resumption, and non-overlap with the
+revival sequence in both directions. The harness lives at
+`.ezcoder/eyes/out/cadence_drive.py` (gitignored); the durable regression
+coverage it produced is committed in `backend/tests/workers/` and
+`frontend/src/components/settings/quote-followup-settings-tab.test.tsx`.
+
+## 5. Still open, deliberately not changed here
+
+The 5,000-row per-tick ceiling is now a genuine bound rather than a silent
+truncation, but a single workspace with more than 5,000 quotes in-window would
+still lose the tail of the ordering. Fixing that properly means per-workspace
+round-robin fairness rather than a global ordering, which is a larger design
+change than this audit warrants. The worker now logs a warning naming the
+ceiling when it is crossed, so the condition is observable rather than silent.

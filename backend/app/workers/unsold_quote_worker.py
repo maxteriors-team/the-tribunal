@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
-from sqlalchemy import Date, and_, cast, exists, func, or_, select
+from sqlalchemy import Date, and_, cast, exists, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 
 from app.core.encryption import InvalidToken, hash_phone
 from app.db.session import AsyncSessionLocal
@@ -32,6 +32,7 @@ from app.models.message_template import MessageTemplate
 from app.models.phone_number import PhoneNumber
 from app.models.quote import UNSOLD_QUOTE_STATUSES, Quote
 from app.models.quote_followup_touch import SEQUENCE_UNSOLD_REVIVAL, QuoteFollowupTouch
+from app.models.workspace import Workspace
 from app.schemas.quote_revival import (
     REVIVAL_MAX_OFFSET_DAYS,
     QuoteRevivalSettings,
@@ -44,7 +45,12 @@ from app.services.compliance.outbound_compliance import (
 )
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
-from app.services.quotes.revival_config import get_quote_revival_config
+from app.services.quotes.revival_config import (
+    SETTINGS_KEY as REVIVAL_SETTINGS_KEY,
+)
+from app.services.quotes.revival_config import (
+    get_quote_revival_config,
+)
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.tags import TagService
 from app.services.telephony.text_provider import get_text_message_provider
@@ -61,7 +67,10 @@ from app.workers.post_estimate_followup_worker import (
 )
 from app.workers.retryable import RetryableWorker
 
-MAX_QUOTES_PER_TICK = 100
+# Rows per keyset page; the tick pages until the due set is exhausted.
+QUOTE_PAGE_SIZE = 100
+# Absolute per-tick ceiling so a pathological dataset cannot spin forever.
+MAX_QUOTES_PER_TICK = 5_000
 # Only these two statuses mean "issued and undecided". ``draft`` was never
 # presented; ``approved``/``declined`` are settled outcomes. Defined on the model
 # so pre-booking audience selection shares one definition of "unsold".
@@ -180,43 +189,75 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         # ``expired`` is only stamped lazily by the quote service, so age is
         # computed from the dates rather than trusted from the status column.
         anchor_expr = func.coalesce(Quote.issue_date, cast(Quote.sent_at, Date))
-        async with AsyncSessionLocal() as db:
-            # Only the workspace is eager-loaded. Contact columns are encrypted,
-            # and a single row written under a retired key raises while the
-            # result set is materialized — which would abort the whole tick
-            # before any per-quote error handling could contain it.
-            result = await db.execute(
-                select(Quote)
-                .options(joinedload(Quote.workspace))
-                .where(
-                    and_(
-                        Quote.status.in_(REVIVABLE_STATUSES),
-                        Quote.sent_at.is_not(None),
-                        # Presented long enough ago that the first-14-days
-                        # cadence has finished with it, whatever it is dated.
-                        Quote.sent_at <= now - timedelta(days=POST_ESTIMATE_WINDOW_DAYS),
-                        anchor_expr.is_not(None),
-                        anchor_expr <= now.date(),
-                        anchor_expr > now.date() - timedelta(days=MAX_QUOTE_AGE_DAYS),
-                    )
-                )
-                .order_by(anchor_expr)
-                .limit(MAX_QUOTES_PER_TICK)
-            )
-            quotes = list(result.unique().scalars().all())
+        processed = 0
+        cursor: tuple[date, uuid.UUID] | None = None
 
-            for quote in quotes:
-                config = get_quote_revival_config(quote.workspace)
-                if not config.enabled:
-                    continue
-                await self.execute_with_retry(
-                    self._process_quote,
-                    quote,
-                    config,
-                    now,
-                    db,
-                    item_key=derive_worker_retry_key("unsold_quote_revival", quote.id),
+        async with AsyncSessionLocal() as db:
+            while processed < MAX_QUOTES_PER_TICK:
+                # Only the workspace is eager-loaded. Contact columns are
+                # encrypted, and a single row written under a retired key raises
+                # while the result set is materialized — which would abort the
+                # whole tick before any per-quote error handling could contain it.
+                statement = (
+                    select(Quote)
+                    .join(Quote.workspace)
+                    .options(contains_eager(Quote.workspace))
+                    .where(
+                        and_(
+                            Quote.status.in_(REVIVABLE_STATUSES),
+                            Quote.sent_at.is_not(None),
+                            # Presented long enough ago that the first-14-days
+                            # cadence has finished with it, whatever it is dated.
+                            Quote.sent_at <= now - timedelta(days=POST_ESTIMATE_WINDOW_DAYS),
+                            anchor_expr.is_not(None),
+                            anchor_expr <= now.date(),
+                            anchor_expr > now.date() - timedelta(days=MAX_QUOTE_AGE_DAYS),
+                            # Disabled workspaces are discarded below anyway;
+                            # excluding them in SQL stops them consuming pages.
+                            Workspace.settings[REVIVAL_SETTINGS_KEY]["enabled"]
+                            .as_boolean()
+                            .is_(True),
+                        )
+                    )
+                    .order_by(anchor_expr, Quote.id)
+                    .limit(QUOTE_PAGE_SIZE)
                 )
+                if cursor is not None:
+                    statement = statement.where(tuple_(anchor_expr, Quote.id) > cursor)
+
+                quotes = list((await db.execute(statement)).unique().scalars().all())
+                if not quotes:
+                    return
+
+                for quote in quotes:
+                    config = get_quote_revival_config(quote.workspace)
+                    if not config.enabled:
+                        continue
+                    await self.execute_with_retry(
+                        self._process_quote,
+                        quote,
+                        config,
+                        now,
+                        db,
+                        item_key=derive_worker_retry_key("unsold_quote_revival", quote.id),
+                    )
+
+                last = quotes[-1]
+                last_anchor = last.issue_date or (
+                    last.sent_at.date() if last.sent_at is not None else None
+                )
+                if last_anchor is None:
+                    return
+                cursor = (last_anchor, last.id)
+                processed += len(quotes)
+                if len(quotes) < QUOTE_PAGE_SIZE:
+                    return
+
+        self.logger.warning(
+            "Unsold-quote tick hit its ceiling; some due quotes went unworked",
+            processed=processed,
+            ceiling=MAX_QUOTES_PER_TICK,
+        )
 
     async def _process_quote(
         self,
