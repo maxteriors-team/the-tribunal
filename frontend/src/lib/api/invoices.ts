@@ -4,6 +4,7 @@ import type {
   Invoice,
   InvoiceLineItemInput,
   InvoicePaymentLink,
+  InvoiceSendResult,
   UpdateInvoiceRequest,
 } from "@/types";
 
@@ -36,8 +37,15 @@ export const invoicesApi = {
   delete: baseInvoicesApi.delete!,
 
   // Lifecycle transitions
-  send: async (workspaceId: string, invoiceId: string): Promise<Invoice> => {
-    return apiPost<Invoice>(`${invoicePath(workspaceId, invoiceId)}/send`);
+  // Returns the invoice plus `delivery`, so callers can tell the operator
+  // whether the customer was actually emailed.
+  send: async (
+    workspaceId: string,
+    invoiceId: string
+  ): Promise<InvoiceSendResult> => {
+    return apiPost<InvoiceSendResult>(
+      `${invoicePath(workspaceId, invoiceId)}/send`
+    );
   },
 
   void: async (workspaceId: string, invoiceId: string): Promise<Invoice> => {

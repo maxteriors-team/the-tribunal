@@ -5,6 +5,16 @@ import { MoreHorizontal, Plus, Receipt } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { invoicesApi } from "@/lib/api/invoices";
+import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 import { formatDate } from "@/lib/utils/date";
@@ -36,6 +47,7 @@ import { formatCurrency } from "@/lib/utils/number";
 import type { Invoice, InvoiceStatus } from "@/types";
 
 import { InvoiceCreateDialog } from "./invoice-create-dialog";
+import { InvoiceEditDialog } from "./invoice-edit-dialog";
 
 const STATUS_VARIANT: Record<
   InvoiceStatus,
@@ -53,6 +65,8 @@ export function InvoicesList() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Invoice | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Invoice | null>(null);
 
   const query = useQuery({
     queryKey: queryKeys.invoices.list(workspaceId ?? ""),
@@ -72,7 +86,13 @@ export function InvoicesList() {
   const sendMutation = useMutation({
     mutationFn: (id: string) => invoicesApi.send(workspaceId ?? "", id),
     onSuccess: (inv) => {
-      toast.success(`Invoice ${inv.number} sent`);
+      // Report what actually reached the customer, not just the transition.
+      const notice = describeInvoiceDelivery(inv);
+      if (notice.tone === "success") {
+        toast.success(notice.message);
+      } else {
+        toast.warning(notice.message, { description: notice.description });
+      }
       invalidate();
     },
     onError: (err: unknown) =>
@@ -87,6 +107,18 @@ export function InvoicesList() {
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to void invoice")),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (invoice: Invoice) =>
+      invoicesApi.delete(workspaceId ?? "", invoice.id),
+    onSuccess: (_result, invoice) => {
+      toast.success(`Invoice ${invoice.number} deleted`);
+      setPendingDelete(null);
+      invalidate();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to delete invoice")),
   });
 
   const newInvoiceButton = (
@@ -151,8 +183,10 @@ export function InvoicesList() {
                 <TableCell>
                   <RowActions
                     invoice={invoice}
+                    onEdit={() => setEditing(invoice)}
                     onSend={() => sendMutation.mutate(invoice.id)}
                     onVoid={() => voidMutation.mutate(invoice.id)}
+                    onDelete={() => setPendingDelete(invoice)}
                     busy={sendMutation.isPending || voidMutation.isPending}
                   />
                 </TableCell>
@@ -169,21 +203,86 @@ export function InvoicesList() {
       <div className="flex items-center justify-end">{newInvoiceButton}</div>
       {body}
       <InvoiceCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <InvoiceEditDialog
+        invoice={editing}
+        open={editing !== null}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null);
+        }}
+      />
+
+      {/* Deleting is only offered for drafts, but it still destroys a record —
+          confirm with the number so the operator sees which one. */}
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(next) => {
+          if (!next && !deleteMutation.isPending) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete invoice {pendingDelete?.number}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This draft has never been sent, so deleting it removes it for good.
+              This can&rsquo;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                // Keep the dialog mounted while the request is in flight.
+                event.preventDefault();
+                if (pendingDelete) deleteMutation.mutate(pendingDelete);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting\u2026" : "Delete invoice"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
 interface RowActionsProps {
   invoice: Invoice;
+  onEdit: () => void;
   onSend: () => void;
   onVoid: () => void;
+  onDelete: () => void;
   busy: boolean;
 }
 
-function RowActions({ invoice, onSend, onVoid, busy }: RowActionsProps) {
-  const canSend = invoice.status !== "void" && invoice.status !== "paid";
-  const canVoid = invoice.status !== "void" && invoice.status !== "paid";
-  if (!canSend && !canVoid) return null;
+/**
+ * Row menu. Each item mirrors a backend rule rather than guessing:
+ * a voided invoice is frozen, a paid one keeps its lines as history (but its
+ * notes stay editable), and only an unsent draft can be destroyed — anything
+ * the customer has seen gets voided so the record survives.
+ */
+function RowActions({
+  invoice,
+  onEdit,
+  onSend,
+  onVoid,
+  onDelete,
+  busy,
+}: RowActionsProps) {
+  const isVoid = invoice.status === "void";
+  const isDraft = invoice.status === "draft";
+  // Void is terminal; everything else stays editable (a paid invoice opens with
+  // its line items locked, matching the service's own guard).
+  const canEdit = !isVoid;
+  const canSend = !isVoid && invoice.status !== "paid";
+  const canVoid = !isVoid && invoice.status !== "paid";
+  // Issued invoices are accounting records: void, never delete.
+  const canDelete = isDraft;
+  if (!canEdit && !canSend && !canVoid && !canDelete) return null;
 
   return (
     <DropdownMenu>
@@ -193,14 +292,24 @@ function RowActions({ invoice, onSend, onVoid, busy }: RowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {canEdit && (
+          <DropdownMenuItem onClick={onEdit}>
+            {invoice.status === "paid" ? "Edit notes" : "Edit invoice"}
+          </DropdownMenuItem>
+        )}
         {canSend && (
           <DropdownMenuItem onClick={onSend}>
-            {invoice.status === "draft" ? "Send invoice" : "Resend invoice"}
+            {isDraft ? "Send invoice" : "Resend invoice"}
           </DropdownMenuItem>
         )}
         {canVoid && (
           <DropdownMenuItem variant="destructive" onClick={onVoid}>
             Void invoice
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            Delete draft
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

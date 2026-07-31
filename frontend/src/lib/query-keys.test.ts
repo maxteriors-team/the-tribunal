@@ -275,6 +275,43 @@ describe("queryKeys factory composition", () => {
     ]);
   });
 
+  it("nests pre-booking keys under the campaign detail key so campaign invalidates cascade", () => {
+    // The pre-booking offer is part of a campaign, not a resource of its own, so
+    // an offer/launch mutation invalidating `campaigns.all` must also refresh the
+    // offer panel and its reservation list.
+    const detail = queryKeys.campaigns.detail("ws_1", "c1");
+    expect(queryKeys.preBooking.offer("ws_1", "c1")).toEqual([
+      ...detail,
+      "pre-booking",
+    ]);
+    expect(queryKeys.preBooking.reservations("ws_1", "c1")).toEqual([
+      ...detail,
+      "pre-booking",
+      "reservations",
+    ]);
+  });
+
+  it("keys the pre-booking audience preview by workspace + normalized params", () => {
+    // Workspace-scoped because the wizard sizes the audience before a campaign
+    // exists; normalized params keep toggle flips cache-hit safe.
+    expect(
+      queryKeys.preBooking.audience("ws_1", {
+        include_unsold_quotes: false,
+        include_past_customers: true,
+        segment_id: undefined,
+      }),
+    ).toEqual([
+      "pre-booking-audience",
+      "ws_1",
+      { include_past_customers: true, include_unsold_quotes: false },
+    ]);
+    expect(queryKeys.preBooking.audience("ws_1")).toEqual([
+      "pre-booking-audience",
+      "ws_1",
+      undefined,
+    ]);
+  });
+
   it("normalizes infinite-contacts filters and prefixes with the contacts root", () => {
     expect(
       queryKeys.contacts.infinite("ws_1", { status: "lead", search: undefined }),
