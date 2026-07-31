@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
+from app.core.encryption import InvalidToken
 from app.schemas.quote_followup import (
     QuoteFollowupSettings,
     QuoteFollowupTouchSettings,
@@ -17,6 +18,7 @@ from app.workers.post_estimate_followup_worker import (
     PostEstimateFollowupWorker,
     QuoteRecipient,
     due_touches,
+    post_estimate_window_is_open,
     resolve_delivery_channel,
 )
 
@@ -110,6 +112,24 @@ def test_completed_touch_is_never_due_twice() -> None:
 def test_offsets_cannot_enter_30_day_revival_window() -> None:
     with pytest.raises(ValidationError):
         QuoteFollowupTouchSettings(offset_days=30, channel="call")
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        (SENT_AT, True),
+        (SENT_AT + timedelta(days=14), True),
+        (SENT_AT + timedelta(days=15) - timedelta(microseconds=1), True),
+        (SENT_AT + timedelta(days=15), False),
+    ],
+)
+def test_window_ownership_is_measured_from_presentation(now: datetime, expected: bool) -> None:
+    """The rail the revival sequence honours: who owns this quote right now."""
+    assert post_estimate_window_is_open(SENT_AT, now=now) is expected
+
+
+def test_unsent_quote_is_owned_by_nobody() -> None:
+    assert post_estimate_window_is_open(None, now=SENT_AT) is False
 
 
 def test_high_value_sms_routes_to_human_call_but_email_stays_email() -> None:
@@ -256,6 +276,44 @@ async def test_quiet_hours_defer_automated_touch_before_template_or_send() -> No
 
     assert result is None
     worker._load_template.assert_not_awaited()
+
+
+async def test_undecryptable_contact_skips_one_quote_without_killing_the_tick() -> None:
+    """A contact under a retired key must not stall the cadence for everyone.
+
+    The row raises while it is materialized, so eager-loading it would abort the
+    whole tick before any per-quote handling — silently, since the loop logs and
+    the heartbeat keeps ``/readyz`` green.
+    """
+    worker = PostEstimateFollowupWorker()
+    worker._get_stop_reason = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    worker._completed_offsets = AsyncMock(return_value=set())  # type: ignore[method-assign]
+    worker._dispatch_touch = AsyncMock()  # type: ignore[method-assign]
+    db = AsyncMock()
+    db.get = AsyncMock(side_effect=InvalidToken())
+
+    await worker._process_quote(
+        _quote(),  # type: ignore[arg-type]
+        QuoteFollowupSettings(enabled=True),
+        SENT_AT + timedelta(days=1),
+        db,
+    )
+
+    # Materialized per quote rather than eager-joined into the broad fetch, and
+    # a quote that cannot be decrypted is dropped instead of dispatched.
+    db.get.assert_awaited_once()
+    worker._dispatch_touch.assert_not_awaited()
+
+
+async def test_quote_without_a_contact_never_queries_for_one() -> None:
+    db = AsyncMock()
+    contact = await PostEstimateFollowupWorker._load_contact(
+        _quote(contact_id=None),  # type: ignore[arg-type]
+        db,
+    )
+
+    assert contact is None
+    db.get.assert_not_awaited()
 
 
 async def test_processed_offset_prevents_double_message() -> None:

@@ -45,6 +45,16 @@ if TYPE_CHECKING:
 # a still-``sent`` quote by the service (never free-set by API clients).
 QUOTE_STATUSES = ("draft", "sent", "approved", "declined", "expired")
 
+# The unsold pile: issued and undecided. ``draft`` was never presented and
+# ``approved``/``declined`` are settled outcomes, so neither is recoverable
+# revenue. Lives on the model rather than in one worker because two features now
+# depend on the same definition — the unsold-quote revival worker
+# (:data:`app.workers.unsold_quote_worker.REVIVABLE_STATUSES`) and pre-booking
+# audience selection (:mod:`app.services.prebooking.audience`) — and "unsold"
+# meaning two different things in the same product is how a customer ends up in
+# both campaigns or neither.
+UNSOLD_QUOTE_STATUSES = ("sent", "expired")
+
 
 def generate_quote_token() -> str:
     """Return a URL-safe token for a public client proposal page.

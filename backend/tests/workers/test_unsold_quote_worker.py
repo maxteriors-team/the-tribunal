@@ -36,6 +36,7 @@ def _quote(
     total: float = 12_000,
     issue_date: date | None = ISSUE_DATE,
     expiry_date: date | None = date(2026, 7, 31),
+    sent_at: datetime = SENT_AT,
 ) -> SimpleNamespace:
     workspace = SimpleNamespace(
         id=uuid.uuid4(),
@@ -58,7 +59,7 @@ def _quote(
         status=status,
         issue_date=issue_date,
         expiry_date=expiry_date,
-        sent_at=SENT_AT,
+        sent_at=sent_at,
         approved_at=None,
         declined_at=None,
         proposal_document=None,
@@ -179,6 +180,71 @@ def test_offsets_cannot_enter_the_post_estimate_window(offset: int) -> None:
 
 def test_offset_15_is_the_first_legal_revival_day() -> None:
     assert QuoteRevivalTouchSettings(offset_days=15, channel="sms").offset_days == 15
+
+
+# A quote written on 1 April and presented on 1 July: the ladder counts from the
+# document date, so its day-30 touch is "due" the moment the customer receives
+# the estimate. Only a presentation-anchored rail keeps the two apart.
+BACK_DATED = date(2026, 4, 1)
+
+
+@pytest.mark.parametrize("days_after_presentation", [0, 1, 14])
+async def test_back_dated_quote_is_left_to_the_first_14_days_cadence(
+    days_after_presentation: int,
+) -> None:
+    worker = UnsoldQuoteWorker()
+    worker.opt_out_manager.check_opt_out = AsyncMock(return_value=False)
+    worker._has_recent_reply = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    reason = await worker._get_stop_reason(
+        _quote(issue_date=BACK_DATED),  # type: ignore[arg-type]
+        _recipient(),
+        SENT_AT + timedelta(days=days_after_presentation),
+        AsyncMock(),
+    )
+
+    assert reason == "post_estimate_window_open"
+    # The rail is cheap and runs before any opt-out or reply lookup.
+    worker.opt_out_manager.check_opt_out.assert_not_awaited()
+
+
+async def test_revival_resumes_once_the_post_estimate_window_closes() -> None:
+    """The rail delays a back-dated quote; it never drops it."""
+    worker = UnsoldQuoteWorker()
+    worker.opt_out_manager.check_opt_out = AsyncMock(return_value=False)
+    worker._has_recent_reply = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarResult(False))
+
+    reason = await worker._get_stop_reason(
+        _quote(issue_date=BACK_DATED),  # type: ignore[arg-type]
+        _recipient(),
+        SENT_AT + timedelta(days=15),
+        db,
+    )
+
+    assert reason is None
+
+
+async def test_revival_never_double_messages_inside_the_post_estimate_window() -> None:
+    """End-to-end guard: no touch is dispatched while the other sequence owns it."""
+    worker = UnsoldQuoteWorker()
+    worker._load_contact = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    worker._has_recent_reply = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    worker._completed_offsets = AsyncMock(return_value=set())  # type: ignore[method-assign]
+    worker.opt_out_manager.check_opt_out = AsyncMock(return_value=False)
+    worker._dispatch_touch = AsyncMock()  # type: ignore[method-assign]
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=_ScalarResult(False))
+
+    await worker._process_quote(
+        _quote(issue_date=BACK_DATED, contact_id=None),  # type: ignore[arg-type]
+        QuoteRevivalSettings(enabled=True),
+        SENT_AT + timedelta(days=1),
+        db,
+    )
+
+    worker._dispatch_touch.assert_not_awaited()
 
 
 def test_ledger_reads_are_scoped_to_this_sequence() -> None:
