@@ -79,8 +79,17 @@ def _category_section(
     label: str,
     pricing: PermanentPricing | ChristmasPricing,
     config: PricingSettings,
+    *,
+    takedown: bool | None = None,
+    storage: bool | None = None,
 ) -> ProposalCategorySection:
-    """Wrap a category pricing result with financed/cash/monthly figures."""
+    """Wrap a category pricing result with financed/cash/monthly figures.
+
+    ``takedown``/``storage`` are the seasonal services the client bought. Only
+    the christmas section passes them (permanent leaves them ``None``) so
+    dispatch can later read what was sold instead of inferring it from the
+    wording of a display line.
+    """
     total = _d(pricing.total)
     return ProposalCategorySection(
         key=key,
@@ -91,6 +100,8 @@ def _category_section(
         cash_savings=float(pp.cash_savings(total, config)) if total > 0 else 0.0,
         monthly_payment=float(pp.monthly_payment(total, config)) if total > 0 else 0.0,
         min_applied=pricing.min_applied,
+        takedown=takedown,
+        storage=storage,
     )
 
 
@@ -296,7 +307,17 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
         if christmas_pricing is not None and christmas_pricing.total > 0:
             category_sections.append(
-                _category_section("christmas", config.christmas.label, christmas_pricing, config)
+                _category_section(
+                    "christmas",
+                    config.christmas.label,
+                    christmas_pricing,
+                    config,
+                    # What the client bought, not what the workspace offers:
+                    # takedown only counts when the config allowed it too, so
+                    # this matches the money the engine actually charged.
+                    takedown=payload.christmas.takedown and config.christmas.takedown_enabled,
+                    storage=payload.christmas.storage,
+                )
             )
 
     selection = select_tier(
@@ -313,9 +334,15 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
     # global so category configuration can never remove the fee gross-up or alter
     # cash-price reversal. Each qualifying service contributes its own subtotal;
     # uncategorized add-on charges cannot make an otherwise ineligible quote qualify.
-    category_totals: dict[str, float] = {
-        section.key: section.financed_total for section in category_sections
-    }
+    #
+    # Every product line the quote covers starts at 0 rather than being omitted:
+    # a category with no priced work still *is* part of this quote, and lighting
+    # categories carry a zero minimum, so a landscape package sold entirely on
+    # add-on charges keeps the estimate it showed before financing became
+    # category-aware. A category with a real floor still has to clear it.
+    category_totals: dict[str, float] = dict.fromkeys(categories, 0.0)
+    for section in category_sections:
+        category_totals[section.key] = section.financed_total
     selected_view = next((view for view in tier_views if view.key == selected), None)
     if has_landscape and selected_view is not None:
         category_totals["landscape"] = selected_view.pricing.base

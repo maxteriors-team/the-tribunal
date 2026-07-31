@@ -11,6 +11,7 @@ quote (idempotently). It reuses the generic one-off payment helpers in
 from __future__ import annotations
 
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -233,7 +234,40 @@ async def mark_deposit_paid(
         quote_id=str(quote.id),
         workspace_id=str(quote.workspace_id),
     )
+    await _confirm_prebooking(db, quote)
     return True
+
+
+async def _confirm_prebooking(db: AsyncSession, quote: Quote) -> None:
+    """Turn a paid pre-booking deposit into a confirmed slot and a queued job.
+
+    Hung off the single paid transition so the Stripe webhook and the
+    return-from-checkout backstop both land here exactly once, and a pre-booking
+    campaign needs no payment path of its own. A no-op for ordinary quotes.
+
+    Failures are logged, never raised: the money is already taken and the deposit
+    is already recorded, so a booking hiccup must not turn a successful payment
+    into a webhook Stripe will retry forever. The confirmation is idempotent, so
+    a retry (or the reconcile backstop) fixes it.
+    """
+    from app.services.prebooking.reservation_service import PreBookingReservationService
+
+    # Read before the try: a rollback in the handler expires the instance, and
+    # reading an expired attribute afterwards emits sync IO under asyncio.
+    quote_id = str(quote.id)
+    workspace_id = str(quote.workspace_id)
+    try:
+        await PreBookingReservationService(db).confirm_reservation_for_quote(quote)
+    except Exception:
+        logger.warning(
+            "prebooking_confirmation_failed",
+            quote_id=quote_id,
+            workspace_id=workspace_id,
+            exc_info=True,
+        )
+        # Leave the session usable for whatever the webhook handler does next.
+        with suppress(Exception):
+            await db.rollback()
 
 
 async def handle_deposit_checkout_session_completed(
