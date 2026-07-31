@@ -988,6 +988,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/attach-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attach Rules Settings
+         * @description Get the workspace's attach-rule config (the cross-sell prompt).
+         */
+        get: operations["get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get"];
+        /**
+         * Update Attach Rules Settings
+         * @description Update the attach-rule config (shallow top-level merge into ``settings``).
+         *
+         *     Only provided keys are written, so editing the prompt copy never clobbers the
+         *     rules. A provided ``rules`` list replaces the whole list (validated at the
+         *     edge), matching how the pricing config writes blocks wholesale.
+         */
+        put: operations["update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/business-hours": {
         parameters: {
             query?: never;
@@ -1218,6 +1246,35 @@ export interface paths {
          */
         get: operations["get_team_members_api_v1_settings_workspaces__workspace_id__team_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/workspaces/{workspace_id}/unsold-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unsold Quote Settings
+         * @description Get the workspace's unsold-quote follow-up config (the quiet-quote sequence).
+         */
+        get: operations["get_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_get"];
+        /**
+         * Update Unsold Quote Settings
+         * @description Update the unsold-quote config (shallow top-level merge into ``settings``).
+         *
+         *     Only provided keys are written, so pausing the sequence (``enabled: false``)
+         *     never clobbers the cadence an operator tuned. A provided ``touches`` list
+         *     replaces the whole list, validated at the edge, matching how the pricing
+         *     config writes blocks wholesale.
+         */
+        put: operations["update_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -8507,6 +8564,14 @@ export interface components {
          * @description Summary of a tool action taken by the assistant.
          */
         ActionSummary: {
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            };
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            };
             /** Success */
             success: boolean;
             /** Summary */
@@ -9898,6 +9963,136 @@ export interface components {
              * @default 0
              */
             total_amount_at_risk: number;
+        };
+        /**
+         * AttachDismissal
+         * @description A recorded "we asked and they said no", stored on the quote.
+         *
+         *     This is the half of attach reporting that a bare attach *rate* cannot give
+         *     you: a workspace at 20% attach looks identical whether the other 80% were
+         *     never asked or were asked and declined, and those two problems have opposite
+         *     fixes (coaching vs pricing). Persisted as JSONB on
+         *     :attr:`app.models.quote.Quote.attach_dismissals`.
+         */
+        AttachDismissal: {
+            /** Categories */
+            categories?: string[];
+            /**
+             * Dismissed At
+             * Format: date-time
+             */
+            dismissed_at: string;
+            /** Primary Service */
+            primary_service: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AttachDismissalRequest
+         * @description A rep dismissing the attach prompt for the quote being saved.
+         *
+         *     Only the reason crosses the wire. The categories are resolved server-side
+         *     from the rule that actually fired, so a client cannot record a dismissal for
+         *     an attach that was never suggested (which would corrupt attach reporting the
+         *     same way a client-set ``service_category`` would corrupt attach rate).
+         */
+        AttachDismissalRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AttachRule
+         * @description One rule: when a quote is *this* job, prompt for *these* add-ons.
+         *
+         *     ``suggested_categories`` is an any-of test, not an all-of one: a roof quote
+         *     that already carries gutters satisfies a ``roof -> [gutters, trim]`` rule.
+         *     The rep is being reminded to have the conversation, not forced to sell every
+         *     line on the list.
+         */
+        AttachRule: {
+            /**
+             * Mode
+             * @default advisory
+             * @enum {string}
+             */
+            mode: "off" | "advisory" | "blocking";
+            /** Primary Category */
+            primary_category: string;
+            /** Suggested Categories */
+            suggested_categories?: string[];
+        };
+        /**
+         * AttachRulesSettings
+         * @description The full attach-rule config for a workspace (read view, lenient).
+         */
+        AttachRulesSettings: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Prompt Template
+             * @default This is a {primary} job with no add-on attached. Ask about the services below before sending it.
+             */
+            prompt_template: string;
+            /**
+             * Require Dismissal Reason
+             * @default true
+             */
+            require_dismissal_reason: boolean;
+            /** Rules */
+            rules?: components["schemas"]["AttachRule"][];
+        };
+        /**
+         * AttachRulesSettingsUpdate
+         * @description Partial update of the attach-rule config (shallow top-level merge).
+         *
+         *     Every block is optional; only provided keys are written, so editing the
+         *     prompt copy never clobbers the rules. Mirrors
+         *     :class:`app.schemas.pricing.PricingSettingsUpdate`.
+         */
+        AttachRulesSettingsUpdate: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[] | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Prompt Template */
+            prompt_template?: string | null;
+            /** Require Dismissal Reason */
+            require_dismissal_reason?: boolean | null;
+            /** Rules */
+            rules?: components["schemas"]["AttachRule"][] | null;
+        };
+        /**
+         * AttachWarning
+         * @description A missing attach, returned on the quote that triggered it.
+         *
+         *     Structured rather than a rendered string so the builder can offer the exact
+         *     next action ("Add gutters") instead of only telling the rep off. ``mode`` is
+         *     never ``off`` here — an off rule produces no warning at all.
+         */
+        AttachWarning: {
+            /** Dismissal Reasons */
+            dismissal_reasons?: string[];
+            /** Message */
+            message: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "advisory" | "blocking";
+            /** Primary Service */
+            primary_service: string;
+            /**
+             * Require Dismissal Reason
+             * @default true
+             */
+            require_dismissal_reason: boolean;
+            /** Suggested Categories */
+            suggested_categories: string[];
         };
         /**
          * AttributionConfidenceLevel
@@ -12049,6 +12244,10 @@ export interface components {
          *     package's included categories (+ roofline when ``includes_roofline``), so the
          *     display lines and totals reuse the same engine as the à la carte flow. The
          *     copy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.
+         *
+         *     Implements :class:`PackagePricing` through the three derived members below.
+         *     They are properties, not fields, so ``model_dump()`` — and therefore every
+         *     already-shared seasonal link — is byte-for-byte what it was before.
          */
         ChristmasPackagePricing: {
             /** Experience */
@@ -15509,11 +15708,8 @@ export interface components {
          * @description Response schema for a single knowledge document.
          */
         KnowledgeDocumentResponse: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
+            /** Agent Id */
+            agent_id: string | null;
             /** Content */
             content: string;
             /** Created At */
@@ -19154,6 +19350,8 @@ export interface components {
              */
             roofline_comparison_enabled: boolean;
             savings?: components["schemas"]["SavingsConfig"];
+            /** Service Packages */
+            service_packages?: components["schemas"]["ServicePackageConfig"][];
             tax?: components["schemas"]["TaxConfig"];
             /** Tier Order */
             tier_order?: string[];
@@ -19183,6 +19381,8 @@ export interface components {
             /** Roofline Comparison Enabled */
             roofline_comparison_enabled?: boolean | null;
             savings?: components["schemas"]["SavingsConfig"] | null;
+            /** Service Packages */
+            service_packages?: components["schemas"]["ServicePackageConfig"][] | null;
             tax?: components["schemas"]["TaxConfig"] | null;
             /** Tier Order */
             tier_order?: string[] | null;
@@ -19427,6 +19627,8 @@ export interface components {
         ProposalCharge: {
             /** Amount */
             amount: number;
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
             /** Description */
             description: string;
         };
@@ -19437,6 +19639,7 @@ export interface components {
         ProposalDocument: {
             /** Additional Charges */
             additional_charges?: components["schemas"]["ProposalCharge"][];
+            attach_warning?: components["schemas"]["AttachWarning"] | null;
             bistro?: components["schemas"]["BistroPricing"] | null;
             care_plan?: components["schemas"]["ProposalCarePlan"] | null;
             /** Categories */
@@ -19678,6 +19881,7 @@ export interface components {
         ProposalWizardPayload: {
             /** Additional Charges */
             additional_charges?: components["schemas"]["WizardCharge"][];
+            attach_dismissal?: components["schemas"]["AttachDismissalRequest"] | null;
             bistro?: components["schemas"]["WizardBistroSelection"] | null;
             /** Care Count Manual */
             care_count_manual?: number | null;
@@ -20534,6 +20738,7 @@ export interface components {
          * @description Create a quote with its initial line items.
          */
         QuoteCreate: {
+            attach_dismissal?: components["schemas"]["AttachDismissalRequest"] | null;
             /** Contact Id */
             contact_id?: number | null;
             /**
@@ -20623,11 +20828,14 @@ export interface components {
              * @default 0
              */
             attach_count: number;
+            /** Attach Dismissals */
+            attach_dismissals?: components["schemas"]["AttachDismissal"][];
             /**
              * Attach Value
              * @default 0
              */
             attach_value: number;
+            attach_warning?: components["schemas"]["AttachWarning"] | null;
             /** Contact Id */
             contact_id?: number | null;
             /** Converted Invoice Id */
@@ -20824,6 +21032,8 @@ export interface components {
              * @default 0
              */
             attach_count: number;
+            /** Attach Dismissals */
+            attach_dismissals?: components["schemas"]["AttachDismissal"][];
             /**
              * Attach Value
              * @default 0
@@ -22444,6 +22654,33 @@ export interface components {
          */
         SequenceEnrollmentStatus: "active" | "paused" | "completed" | "replied" | "opted_out" | "converted" | "failed" | "cancelled";
         /**
+         * ServiceInclusion
+         * @description One scope item a service package may include (the non-seasonal analog of
+         *     :class:`SeasonalItem`).
+         *
+         *     A category declares its scope items once — "Ice & water shield", "Ridge
+         *     vent", "Gutter guards" — and each tier lists the ones it covers by ``key``.
+         *     That is what makes a tier ladder *inclusive by construction*: Better is Good
+         *     plus two more keys, so widening a tier is a config edit and the totals stay
+         *     monotonic without a second pricing path.
+         */
+        ServiceInclusion: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Per Unit
+             * @default false
+             */
+            per_unit: boolean;
+            /**
+             * Price
+             * @default 0
+             */
+            price: number;
+        };
+        /**
          * ServiceLocationCreate
          * @description Create a service location (job site) for a customer.
          */
@@ -22569,6 +22806,113 @@ export interface components {
             postal_code?: string | null;
             /** State */
             state?: string | null;
+        };
+        /**
+         * ServicePackage
+         * @description One tier of a non-seasonal service category (roof, siding, gutters, …).
+         *
+         *     The category-agnostic sibling of :class:`ChristmasPackage`: same presentation
+         *     fields (so one set of cards renders either), different pricing inputs —
+         *     a measurement-driven ``per_unit_price`` plus a flat ``base_price`` instead of
+         *     a roofline flag and decor keys.
+         *
+         *     ``recommended`` is the tier the operator steers toward. Seasonal packages have
+         *     no such flag and fall back to "most inclusive wins"; declaring it here lets a
+         *     three-tier ladder anchor on its middle option, which is the whole point of
+         *     good/better/best.
+         */
+        ServicePackage: {
+            /**
+             * Base Price
+             * @default 0
+             */
+            base_price: number;
+            /** Card Tier */
+            card_tier?: string | null;
+            /** Experience */
+            experience?: string | null;
+            /** Inclusion Keys */
+            inclusion_keys?: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Marker */
+            marker?: string | null;
+            /** Name */
+            name?: string | null;
+            /**
+             * Per Unit Price
+             * @default 0
+             */
+            per_unit_price: number;
+            /** Points */
+            points?: string[];
+            /**
+             * Popular
+             * @default false
+             */
+            popular: boolean;
+            /**
+             * Recommended
+             * @default false
+             */
+            recommended: boolean;
+            /** Value Tag */
+            value_tag?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+        };
+        /**
+         * ServicePackageConfig
+         * @description A service category sold as tiers — the non-seasonal package set.
+         *
+         *     One entry per ``service_category`` (matching
+         *     :attr:`app.models.catalog.CatalogItem.service_category`, e.g. ``"roof"``), so
+         *     the trades that pay the bills get the same good/better/best presentation the
+         *     seasonal lighting side already has. Everything the presentation layer needs
+         *     lives on the tiers; everything the engine needs — the measurement basis, the
+         *     shared scope catalog, and the job minimum — lives here.
+         *
+         *     Off by default and absent from every existing settings blob, so a workspace
+         *     that never configures a category behaves exactly as it does today.
+         */
+        ServicePackageConfig: {
+            /**
+             * Basis
+             * @default per_unit
+             * @enum {string}
+             */
+            basis: "flat" | "per_unit";
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Inclusions */
+            inclusions?: components["schemas"]["ServiceInclusion"][];
+            /** Label */
+            label: string;
+            /**
+             * Minimum
+             * @default 0
+             */
+            minimum: number;
+            /** Package Order */
+            package_order?: string[];
+            /** Packages */
+            packages?: components["schemas"]["ServicePackage"][];
+            /** Perks */
+            perks?: string[];
+            /** Price Note */
+            price_note?: string | null;
+            /** Service Category */
+            service_category: string;
+            /**
+             * Unit Label
+             * @default sq ft
+             */
+            unit_label: string;
         };
         /**
          * ServicePlanType
@@ -23492,6 +23836,89 @@ export interface components {
             suggested_source_type?: components["schemas"]["LeadSourceType"] | null;
         };
         /**
+         * UnsoldQuoteSettings
+         * @description The full unsold-quote follow-up config for a workspace (read view, lenient).
+         */
+        UnsoldQuoteSettings: {
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Max Touches
+             * @default 3
+             */
+            max_touches: number;
+            /**
+             * Quiet Hours End
+             * @default 08:00
+             */
+            quiet_hours_end: string | null;
+            /**
+             * Quiet Hours Start
+             * @default 21:00
+             */
+            quiet_hours_start: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["UnsoldQuoteTouch"][];
+            /**
+             * Value Threshold
+             * @default 5000
+             */
+            value_threshold: number;
+        };
+        /**
+         * UnsoldQuoteSettingsUpdate
+         * @description Partial update of the unsold-quote config (shallow top-level merge).
+         *
+         *     Every block is optional; only provided keys are written, so flipping
+         *     ``enabled`` never clobbers the cadence. A provided ``touches`` list replaces
+         *     the whole list, matching how the pricing config writes blocks wholesale.
+         */
+        UnsoldQuoteSettingsUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Max Touches */
+            max_touches?: number | null;
+            /** Quiet Hours End */
+            quiet_hours_end?: string | null;
+            /** Quiet Hours Start */
+            quiet_hours_start?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Touches */
+            touches?: components["schemas"]["UnsoldQuoteTouch"][] | null;
+            /** Value Threshold */
+            value_threshold?: number | null;
+        };
+        /**
+         * UnsoldQuoteTouch
+         * @description One nudge in the sequence: when it fires and what it leads with.
+         *
+         *     Templates are named, not inlined, so the copy lives in the existing
+         *     :class:`~app.models.message_template.MessageTemplate` library the operator
+         *     already edits and tests. A name that no longer resolves falls back to the
+         *     built-in copy for the hook rather than dropping the touch — a deleted
+         *     template must not silently switch the sequence off.
+         */
+        UnsoldQuoteTouch: {
+            /** Day Offset */
+            day_offset: number;
+            /** High Value Template Name */
+            high_value_template_name?: string | null;
+            /**
+             * Hook
+             * @default price_validity
+             * @enum {string}
+             */
+            hook: "price_validity" | "seasonal" | "financing";
+            /** Template Name */
+            template_name?: string | null;
+        };
+        /**
          * UpdateMemberRoleRequest
          * @description Request to update a member's role.
          */
@@ -24090,6 +24517,8 @@ export interface components {
          *     server grosses it up by the finance buffer like every other price.
          */
         WizardCharge: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
             /** Description */
             description?: string | null;
             /**
@@ -26059,6 +26488,72 @@ export interface operations {
             };
         };
     };
+    get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachRulesSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachRulesSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachRulesSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_business_hours_api_v1_settings_workspaces__workspace_id__business_hours_get: {
         parameters: {
             query?: never;
@@ -26607,6 +27102,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamMemberResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsoldQuoteSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnsoldQuoteSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsoldQuoteSettings"];
                 };
             };
             /** @description Validation Error */

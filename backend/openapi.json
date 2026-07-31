@@ -359,6 +359,16 @@
       "ActionSummary": {
         "description": "Summary of a tool action taken by the assistant.",
         "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
           "success": {
             "title": "Success",
             "type": "boolean"
@@ -4042,6 +4052,250 @@
           "total"
         ],
         "title": "AtRiskDealsResponse",
+        "type": "object"
+      },
+      "AttachDismissal": {
+        "description": "A recorded \"we asked and they said no\", stored on the quote.\n\nThis is the half of attach reporting that a bare attach *rate* cannot give\nyou: a workspace at 20% attach looks identical whether the other 80% were\nnever asked or were asked and declined, and those two problems have opposite\nfixes (coaching vs pricing). Persisted as JSONB on\n:attr:`app.models.quote.Quote.attach_dismissals`.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "dismissed_at": {
+            "format": "date-time",
+            "title": "Dismissed At",
+            "type": "string"
+          },
+          "primary_service": {
+            "title": "Primary Service",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "primary_service",
+          "dismissed_at"
+        ],
+        "title": "AttachDismissal",
+        "type": "object"
+      },
+      "AttachDismissalRequest": {
+        "description": "A rep dismissing the attach prompt for the quote being saved.\n\nOnly the reason crosses the wire. The categories are resolved server-side\nfrom the rule that actually fired, so a client cannot record a dismissal for\nan attach that was never suggested (which would corrupt attach reporting the\nsame way a client-set ``service_category`` would corrupt attach rate).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "AttachDismissalRequest",
+        "type": "object"
+      },
+      "AttachRule": {
+        "description": "One rule: when a quote is *this* job, prompt for *these* add-ons.\n\n``suggested_categories`` is an any-of test, not an all-of one: a roof quote\nthat already carries gutters satisfies a ``roof -> [gutters, trim]`` rule.\nThe rep is being reminded to have the conversation, not forced to sell every\nline on the list.",
+        "properties": {
+          "mode": {
+            "default": "advisory",
+            "enum": [
+              "off",
+              "advisory",
+              "blocking"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "primary_category": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Primary Category",
+            "type": "string"
+          },
+          "suggested_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "primary_category"
+        ],
+        "title": "AttachRule",
+        "type": "object"
+      },
+      "AttachRulesSettings": {
+        "description": "The full attach-rule config for a workspace (read view, lenient).",
+        "properties": {
+          "dismissal_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissal Reasons",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "prompt_template": {
+            "default": "This is a {primary} job with no add-on attached. Ask about the services below before sending it.",
+            "maxLength": 500,
+            "title": "Prompt Template",
+            "type": "string"
+          },
+          "require_dismissal_reason": {
+            "default": true,
+            "title": "Require Dismissal Reason",
+            "type": "boolean"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/AttachRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "AttachRulesSettings",
+        "type": "object"
+      },
+      "AttachRulesSettingsUpdate": {
+        "description": "Partial update of the attach-rule config (shallow top-level merge).\n\nEvery block is optional; only provided keys are written, so editing the\nprompt copy never clobbers the rules. Mirrors\n:class:`app.schemas.pricing.PricingSettingsUpdate`.",
+        "properties": {
+          "dismissal_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dismissal Reasons"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "prompt_template": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Template"
+          },
+          "require_dismissal_reason": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Dismissal Reason"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AttachRule"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rules"
+          }
+        },
+        "title": "AttachRulesSettingsUpdate",
+        "type": "object"
+      },
+      "AttachWarning": {
+        "description": "A missing attach, returned on the quote that triggered it.\n\nStructured rather than a rendered string so the builder can offer the exact\nnext action (\"Add gutters\") instead of only telling the rep off. ``mode`` is\nnever ``off`` here — an off rule produces no warning at all.",
+        "properties": {
+          "dismissal_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dismissal Reasons",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "advisory",
+              "blocking"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "primary_service": {
+            "title": "Primary Service",
+            "type": "string"
+          },
+          "require_dismissal_reason": {
+            "default": true,
+            "title": "Require Dismissal Reason",
+            "type": "boolean"
+          },
+          "suggested_categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "primary_service",
+          "suggested_categories",
+          "mode",
+          "message"
+        ],
+        "title": "AttachWarning",
         "type": "object"
       },
       "AttributionConfidenceLevel": {
@@ -9235,7 +9489,7 @@
         "type": "object"
       },
       "ChristmasPackagePricing": {
-        "description": "One priced seasonal-Christmas package (a tier card + its computed price).\n\n``pricing`` is the standard :class:`ChristmasPricing` breakdown for this\npackage's included categories (+ roofline when ``includes_roofline``), so the\ndisplay lines and totals reuse the same engine as the à la carte flow. The\ncopy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.",
+        "description": "One priced seasonal-Christmas package (a tier card + its computed price).\n\n``pricing`` is the standard :class:`ChristmasPricing` breakdown for this\npackage's included categories (+ roofline when ``includes_roofline``), so the\ndisplay lines and totals reuse the same engine as the à la carte flow. The\ncopy fields mirror :class:`ChristmasPackage` for the Good/Better/Best card.\n\nImplements :class:`PackagePricing` through the three derived members below.\nThey are properties, not fields, so ``model_dump()`` — and therefore every\nalready-shared seasonal link — is byte-for-byte what it was before.",
         "properties": {
           "experience": {
             "anyOf": [
@@ -18181,9 +18435,16 @@
         "description": "Response schema for a single knowledge document.",
         "properties": {
           "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
           },
           "content": {
             "title": "Content",
@@ -28143,6 +28404,13 @@
           "savings": {
             "$ref": "#/components/schemas/SavingsConfig"
           },
+          "service_packages": {
+            "items": {
+              "$ref": "#/components/schemas/ServicePackageConfig"
+            },
+            "title": "Service Packages",
+            "type": "array"
+          },
           "tax": {
             "$ref": "#/components/schemas/TaxConfig"
           },
@@ -28290,6 +28558,20 @@
                 "type": "null"
               }
             ]
+          },
+          "service_packages": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ServicePackageConfig"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Packages"
           },
           "tax": {
             "anyOf": [
@@ -28964,6 +29246,18 @@
             "title": "Amount",
             "type": "number"
           },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -28985,6 +29279,16 @@
             },
             "title": "Additional Charges",
             "type": "array"
+          },
+          "attach_warning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachWarning"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bistro": {
             "anyOf": [
@@ -29677,6 +29981,16 @@
             },
             "title": "Additional Charges",
             "type": "array"
+          },
+          "attach_dismissal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachDismissalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "bistro": {
             "anyOf": [
@@ -31854,6 +32168,16 @@
       "QuoteCreate": {
         "description": "Create a quote with its initial line items.",
         "properties": {
+          "attach_dismissal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachDismissalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "contact_id": {
             "anyOf": [
               {
@@ -32097,10 +32421,27 @@
             "title": "Attach Count",
             "type": "integer"
           },
+          "attach_dismissals": {
+            "items": {
+              "$ref": "#/components/schemas/AttachDismissal"
+            },
+            "title": "Attach Dismissals",
+            "type": "array"
+          },
           "attach_value": {
             "default": 0.0,
             "title": "Attach Value",
             "type": "number"
+          },
+          "attach_warning": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttachWarning"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "contact_id": {
             "anyOf": [
@@ -32643,6 +32984,13 @@
             "default": 0,
             "title": "Attach Count",
             "type": "integer"
+          },
+          "attach_dismissals": {
+            "items": {
+              "$ref": "#/components/schemas/AttachDismissal"
+            },
+            "title": "Attach Dismissals",
+            "type": "array"
           },
           "attach_value": {
             "default": 0.0,
@@ -36636,6 +36984,38 @@
         "title": "SequenceEnrollmentStatus",
         "type": "string"
       },
+      "ServiceInclusion": {
+        "description": "One scope item a service package may include (the non-seasonal analog of\n:class:`SeasonalItem`).\n\nA category declares its scope items once — \"Ice & water shield\", \"Ridge\nvent\", \"Gutter guards\" — and each tier lists the ones it covers by ``key``.\nThat is what makes a tier ladder *inclusive by construction*: Better is Good\nplus two more keys, so widening a tier is a config edit and the totals stay\nmonotonic without a second pricing path.",
+        "properties": {
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "per_unit": {
+            "default": false,
+            "title": "Per Unit",
+            "type": "boolean"
+          },
+          "price": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ServiceInclusion",
+        "type": "object"
+      },
       "ServiceLocationCreate": {
         "description": "Create a service location (job site) for a customer.",
         "properties": {
@@ -37090,6 +37470,214 @@
           }
         },
         "title": "ServiceLocationUpdate",
+        "type": "object"
+      },
+      "ServicePackage": {
+        "description": "One tier of a non-seasonal service category (roof, siding, gutters, …).\n\nThe category-agnostic sibling of :class:`ChristmasPackage`: same presentation\nfields (so one set of cards renders either), different pricing inputs —\na measurement-driven ``per_unit_price`` plus a flat ``base_price`` instead of\na roofline flag and decor keys.\n\n``recommended`` is the tier the operator steers toward. Seasonal packages have\nno such flag and fall back to \"most inclusive wins\"; declaring it here lets a\nthree-tier ladder anchor on its middle option, which is the whole point of\ngood/better/best.",
+        "properties": {
+          "base_price": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Base Price",
+            "type": "number"
+          },
+          "card_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Tier"
+          },
+          "experience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience"
+          },
+          "inclusion_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inclusion Keys",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "marker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Marker"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "per_unit_price": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Per Unit Price",
+            "type": "number"
+          },
+          "points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "popular": {
+            "default": false,
+            "title": "Popular",
+            "type": "boolean"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "value_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Tag"
+          },
+          "warranty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warranty"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ServicePackage",
+        "type": "object"
+      },
+      "ServicePackageConfig": {
+        "description": "A service category sold as tiers — the non-seasonal package set.\n\nOne entry per ``service_category`` (matching\n:attr:`app.models.catalog.CatalogItem.service_category`, e.g. ``\"roof\"``), so\nthe trades that pay the bills get the same good/better/best presentation the\nseasonal lighting side already has. Everything the presentation layer needs\nlives on the tiers; everything the engine needs — the measurement basis, the\nshared scope catalog, and the job minimum — lives here.\n\nOff by default and absent from every existing settings blob, so a workspace\nthat never configures a category behaves exactly as it does today.",
+        "properties": {
+          "basis": {
+            "default": "per_unit",
+            "enum": [
+              "flat",
+              "per_unit"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "inclusions": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceInclusion"
+            },
+            "title": "Inclusions",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "minimum": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "number"
+          },
+          "package_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Package Order",
+            "type": "array"
+          },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/ServicePackage"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "perks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Perks",
+            "type": "array"
+          },
+          "price_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Note"
+          },
+          "service_category": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Service Category",
+            "type": "string"
+          },
+          "unit_label": {
+            "default": "sq ft",
+            "title": "Unit Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_category",
+          "label"
+        ],
+        "title": "ServicePackageConfig",
         "type": "object"
       },
       "ServicePlanType": {
@@ -39240,6 +39828,213 @@
         "title": "UnattributedLeadResponse",
         "type": "object"
       },
+      "UnsoldQuoteSettings": {
+        "description": "The full unsold-quote follow-up config for a workspace (read view, lenient).",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "max_touches": {
+            "default": 3,
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Max Touches",
+            "type": "integer"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "08:00",
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "21:00",
+            "title": "Quiet Hours Start"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "touches": {
+            "items": {
+              "$ref": "#/components/schemas/UnsoldQuoteTouch"
+            },
+            "title": "Touches",
+            "type": "array"
+          },
+          "value_threshold": {
+            "default": 5000.0,
+            "minimum": 0.0,
+            "title": "Value Threshold",
+            "type": "number"
+          }
+        },
+        "title": "UnsoldQuoteSettings",
+        "type": "object"
+      },
+      "UnsoldQuoteSettingsUpdate": {
+        "description": "Partial update of the unsold-quote config (shallow top-level merge).\n\nEvery block is optional; only provided keys are written, so flipping\n``enabled`` never clobbers the cadence. A provided ``touches`` list replaces\nthe whole list, matching how the pricing config writes blocks wholesale.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "max_touches": {
+            "anyOf": [
+              {
+                "maximum": 6.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Touches"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "touches": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/UnsoldQuoteTouch"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Touches"
+          },
+          "value_threshold": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Threshold"
+          }
+        },
+        "title": "UnsoldQuoteSettingsUpdate",
+        "type": "object"
+      },
+      "UnsoldQuoteTouch": {
+        "description": "One nudge in the sequence: when it fires and what it leads with.\n\nTemplates are named, not inlined, so the copy lives in the existing\n:class:`~app.models.message_template.MessageTemplate` library the operator\nalready edits and tests. A name that no longer resolves falls back to the\nbuilt-in copy for the hook rather than dropping the touch — a deleted\ntemplate must not silently switch the sequence off.",
+        "properties": {
+          "day_offset": {
+            "maximum": 730.0,
+            "minimum": 1.0,
+            "title": "Day Offset",
+            "type": "integer"
+          },
+          "high_value_template_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Value Template Name"
+          },
+          "hook": {
+            "default": "price_validity",
+            "enum": [
+              "price_validity",
+              "seasonal",
+              "financing"
+            ],
+            "title": "Hook",
+            "type": "string"
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Name"
+          }
+        },
+        "required": [
+          "day_offset"
+        ],
+        "title": "UnsoldQuoteTouch",
+        "type": "object"
+      },
       "UpdateMemberRoleRequest": {
         "description": "Request to update a member's role.",
         "properties": {
@@ -40915,6 +41710,18 @@
       "WizardCharge": {
         "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.",
         "properties": {
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
           "description": {
             "anyOf": [
               {
@@ -44188,6 +44995,112 @@
         ]
       }
     },
+    "/api/v1/settings/workspaces/{workspace_id}/attach-rules": {
+      "get": {
+        "description": "Get the workspace's attach-rule config (the cross-sell prompt).",
+        "operationId": "get_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachRulesSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Attach Rules Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the attach-rule config (shallow top-level merge into ``settings``).\n\nOnly provided keys are written, so editing the prompt copy never clobbers the\nrules. A provided ``rules`` list replaces the whole list (validated at the\nedge), matching how the pricing config writes blocks wholesale.",
+        "operationId": "update_attach_rules_settings_api_v1_settings_workspaces__workspace_id__attach_rules_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachRulesSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachRulesSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Attach Rules Settings",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
     "/api/v1/settings/workspaces/{workspace_id}/business-hours": {
       "get": {
         "description": "Get workspace business hours settings.",
@@ -45088,6 +46001,112 @@
           }
         ],
         "summary": "Get Team Members",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/unsold-quotes": {
+      "get": {
+        "description": "Get the workspace's unsold-quote follow-up config (the quiet-quote sequence).",
+        "operationId": "get_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsoldQuoteSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Unsold Quote Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Update the unsold-quote config (shallow top-level merge into ``settings``).\n\nOnly provided keys are written, so pausing the sequence (``enabled: false``)\nnever clobbers the cadence an operator tuned. A provided ``touches`` list\nreplaces the whole list, validated at the edge, matching how the pricing\nconfig writes blocks wholesale.",
+        "operationId": "update_unsold_quote_settings_api_v1_settings_workspaces__workspace_id__unsold_quotes_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsoldQuoteSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsoldQuoteSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Unsold Quote Settings",
         "tags": [
           "Settings"
         ]
