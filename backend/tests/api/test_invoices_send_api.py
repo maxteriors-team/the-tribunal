@@ -101,9 +101,11 @@ async def client(mock_service: AsyncMock) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_transactional_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: _make_user()
-    app.dependency_overrides[get_workspace] = lambda: _make_workspace()
-    app.dependency_overrides[get_membership] = lambda: _make_membership()
+    # The factories are the overrides directly; wrapping them in a lambda would
+    # add a layer that does nothing (and CodeQL rightly flags it).
+    app.dependency_overrides[get_current_user] = _make_user
+    app.dependency_overrides[get_workspace] = _make_workspace
+    app.dependency_overrides[get_membership] = _make_membership
     app.include_router(
         invoices_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/invoices",
