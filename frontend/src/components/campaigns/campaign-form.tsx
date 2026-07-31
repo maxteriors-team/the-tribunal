@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  CalendarClock,
   MessageSquare,
   Mail,
   Phone,
@@ -38,7 +39,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { CampaignType } from "@/types";
 
-const campaignTypes: { value: CampaignType; label: string; icon: LucideIcon; description: string }[] = [
+/**
+ * What this chooser offers, which is not the same thing as a `CampaignType`.
+ *
+ * Pre-booking is an ordinary `sms` campaign with a seasonal offer attached, so
+ * it deliberately never becomes a campaign type on the wire — it is a different
+ * *wizard*, not a different channel.
+ */
+type CampaignChoice = CampaignType | "pre_booking";
+
+const campaignTypes: { value: CampaignChoice; label: string; icon: LucideIcon; description: string }[] = [
   {
     value: "sms",
     label: "SMS",
@@ -58,6 +68,12 @@ const campaignTypes: { value: CampaignType; label: string; icon: LucideIcon; des
     description: "AI-powered voice calls to contacts",
   },
   {
+    value: "pre_booking",
+    label: "Pre-Booking",
+    icon: CalendarClock,
+    description: "Sell next season's work now, at a discount, for a deposit",
+  },
+  {
     value: "multi_channel",
     label: "Multi-Channel",
     icon: Layers,
@@ -73,7 +89,7 @@ export function CampaignForm({ campaignId }: CampaignFormProps) {
   const router = useRouter();
   const isEditing = !!campaignId;
 
-  const [campaignType, setCampaignType] = useState<CampaignType>("sms");
+  const [campaignType, setCampaignType] = useState<CampaignChoice>("sms");
   const [enableSchedule, setEnableSchedule] = useState(false);
 
   const handleSave = () => {
@@ -84,6 +100,8 @@ export function CampaignForm({ campaignId }: CampaignFormProps) {
       router.push("/campaigns/voice/new");
     } else if (campaignType === "email") {
       router.push("/campaigns/email/new");
+    } else if (campaignType === "pre_booking") {
+      router.push("/campaigns/pre-booking/new");
     } else {
       // multi_channel is not yet available; return to the list.
       router.push("/campaigns");

@@ -3,6 +3,7 @@
 import type { CallRecord } from "./call";
 import type { Contact } from "./contact";
 import type { MessageStatus } from "./conversation";
+import type { CampaignPreBookingSummary } from "./pre-booking";
 
 export type CampaignStatus = "draft" | "scheduled" | "running" | "paused" | "completed" | "cancelled";
 export type CampaignType = "sms" | "email" | "voice" | "voice_sms_fallback" | "multi_channel";
@@ -46,6 +47,10 @@ export interface Campaign {
   guarantee_target?: number;
   guarantee_window_days?: number;
   guarantee_status?: "pending" | "met" | "missed" | null;
+  // Pre-booking offer, when one is attached. A pre-booking campaign is still an
+  // ordinary `sms` campaign, so this field — not `campaign_type` — is what marks
+  // it as one.
+  pre_booking?: CampaignPreBookingSummary | null;
   // Timestamps
   started_at?: string;
   completed_at?: string;

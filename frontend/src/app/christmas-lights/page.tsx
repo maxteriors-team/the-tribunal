@@ -8,6 +8,7 @@
  */
 import {
   ArrowRight,
+  History,
   Ruler,
   Settings2,
   Sparkles,
@@ -32,6 +33,13 @@ interface HubAction {
 
 const HUB_ACTIONS: HubAction[] = [
   {
+    title: "Renew Last Season's Homes",
+    description:
+      "Book the houses you already lit last year. The roof is measured, the crew knows it, and they have already said yes once.",
+    href: "/campaigns/pre-booking/new",
+    Icon: History,
+  },
+  {
     title: "Design & Night Render",
     description:
       "Trace roofline and place decor on a customer photo, then generate a realistic after-dark preview.",
@@ -48,7 +56,7 @@ const HUB_ACTIONS: HubAction[] = [
   {
     title: "Seasonal Pricing & Packages",
     description:
-      "Tune per-foot roofline rates, decor prices and the Good / Better / Best package tiers for this workspace.",
+      "Turn the season on, set roofline and decor rates, takedown and storage pricing, and your install and takedown dates.",
     href: "/settings?tab=pricing",
     Icon: Settings2,
   },
@@ -82,8 +90,9 @@ export default function ChristmasLightsRoute() {
                   Christmas Light Estimator
                 </h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Your seasonal command center. Design a lit-up render, build a
-                  package quote, and set holiday pricing, all in one place.
+                  Your seasonal command center. Win back last season&rsquo;s
+                  homes, design a lit-up render, build a package quote, and set
+                  holiday pricing, all in one place.
                 </p>
               </div>
             </div>

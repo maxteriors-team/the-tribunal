@@ -140,6 +140,23 @@ const estimator = {
     ["estimator", workspaceId, normalizeQueryKeyParams(params)] as const,
 };
 
+// Pre-booking: an offer attached to an existing campaign, so the offer and its
+// reservations nest under the campaign detail key and a campaign invalidate
+// cascades to them. The audience preview is workspace-level on purpose — the
+// wizard sizes the warm database before the campaign row exists.
+const preBooking = {
+  offer: (workspaceId: string, campaignId: string) =>
+    [...campaigns.detail(workspaceId, campaignId), "pre-booking"] as const,
+  audience: (workspaceId: string, params?: QueryKeyParams | null) =>
+    ["pre-booking-audience", workspaceId, normalizeQueryKeyParams(params)] as const,
+  reservations: (workspaceId: string, campaignId: string) =>
+    [
+      ...campaigns.detail(workspaceId, campaignId),
+      "pre-booking",
+      "reservations",
+    ] as const,
+};
+
 export const queryKeys = {
   salesWizard,
   estimator,
@@ -407,6 +424,7 @@ export const queryKeys = {
     stats: (workspaceId: string) =>
       [...pendingActions.all(workspaceId), "stats"] as const,
   },
+  preBooking,
   phoneNumbers: {
     ...phoneNumbers,
     smsEnabled: (workspaceId: string) =>
@@ -429,6 +447,10 @@ export const queryKeys = {
   publicProposals: {
     all: () => ["public-proposals"] as const,
     byToken: (token: string) => ["public-proposals", token] as const,
+  },
+  publicInvoices: {
+    all: () => ["public-invoices"] as const,
+    byToken: (token: string) => ["public-invoices", token] as const,
   },
   publicComparisons: {
     all: () => ["public-comparisons"] as const,
