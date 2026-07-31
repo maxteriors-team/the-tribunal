@@ -38,7 +38,7 @@ revision: str = "b3f1c7d92a04"
 # two touch unrelated tables -- workspace knowledge documents there, quote attach
 # dismissals here -- so the ordering between them is arbitrary and linearizing is
 # purely mechanical.
-down_revision: str | None = "c4a7e1d92b35"
+down_revision: str | None = "0f445fca20c5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
