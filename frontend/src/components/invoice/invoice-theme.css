@@ -1,0 +1,210 @@
+/**
+ * Public customer invoice page — additions on top of `proposal-theme.css`.
+ *
+ * The invoice reuses the proposal's dark/gold brand wholesale (same tokens,
+ * fonts, table, totals, and pay-panel anatomy) so a customer who saw the
+ * proposal recognises the invoice. Everything here is scoped under
+ * `.invoice-view`, which is applied *alongside* `.proposal-view`, so none of
+ * these rules can alter the proposal pages.
+ *
+ * Three groups:
+ *   1. Accessibility the shared theme is missing (visible keyboard focus,
+ *      reduced motion, an sr-only utility). Scoped rather than pushed into the
+ *      shared file so this change cannot restyle the proposal surface.
+ *   2. The balance-due hero — the invoice's single job is "pay what's owed",
+ *      so the amount outstanding is the largest element on the page.
+ *   3. The credit row, which shows *why* the balance is less than the total.
+ */
+
+/* --- 1. Accessibility floor ------------------------------------------- */
+
+/* The shared theme styles :hover but never :focus-visible, so a keyboard user
+   sees nothing. Applies to every control this page renders. */
+.invoice-view :is(button, a):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* The shared theme's `--t4` (#666) lands at ~3.4:1 on the near-black page,
+   under the 4.5:1 WCAG AA floor for normal text. An invoice is a financial
+   document -- the line describing what was billed and the business's own
+   contact details have to be readable -- so every muted string on this page is
+   lifted to `--t3` (~6.9:1). Measured, not eyeballed. */
+.invoice-view .pq-item-desc,
+.invoice-view .pp-meta,
+.invoice-view .pp-footer-note {
+  color: var(--t3);
+}
+
+.invoice-view .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .invoice-view *,
+  .invoice-view *::before,
+  .invoice-view *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- 2. Balance-due hero ---------------------------------------------- */
+
+.invoice-view .inv-due {
+  text-align: center;
+  margin: 8px 0 4px;
+}
+
+.invoice-view .inv-due-label {
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold-d);
+  margin-bottom: 10px;
+}
+
+.invoice-view .inv-due-amount {
+  font-family: var(--font-cormorant), serif;
+  font-size: clamp(46px, 12vw, 72px);
+  font-weight: 300;
+  line-height: 1;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-view .inv-due-amount.settled {
+  color: #8fd6a8;
+}
+
+.invoice-view .inv-due-sub {
+  font-size: 12px;
+  color: var(--t3);
+  margin-top: 12px;
+}
+
+.invoice-view .inv-due-sub.overdue {
+  color: #e0968f;
+  font-weight: 600;
+}
+
+/* The hero already states the balance at display size and the totals ledger
+   restates it directly above this panel. Repeating it a third time at the
+   proposal's 34px would make the page read as three competing headlines, so
+   here the amount confirms the charge next to the button rather than shouting. */
+.invoice-view .dep-panel .dep-amount {
+  font-size: 24px;
+}
+
+/* --- 3. Totals credit row --------------------------------------------- */
+
+/* The deposit already collected. Tinted green like the paid states elsewhere
+   in the theme so "money already handled" reads the same everywhere. */
+.invoice-view .pq-total-row.credit strong,
+.invoice-view .pq-total-row.credit span {
+  color: #8fd6a8;
+}
+
+.invoice-view .inv-pay-note {
+  max-width: 560px;
+  /* Bottom margin matters: without it the Notes/Terms heading that follows
+     collides with this line on narrow screens. */
+  margin: 16px auto 48px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--t3);
+  line-height: 1.7;
+}
+
+/* --- 4. Narrow screens ------------------------------------------------- */
+
+/* The shared `.pq-table` has no responsive treatment: at phone widths its five
+   columns crush together and the amount overlaps the discount. Most invoices
+   are opened on a phone from an email, so below 560px the per-unit columns
+   collapse into a single meta line under the item name and the table shows the
+   two things that matter -- what it was, and what it cost. */
+.invoice-view .inv-item-meta {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .invoice-view .pq-table thead th.inv-col-detail,
+  .invoice-view .pq-table tbody td.inv-col-detail {
+    display: none;
+  }
+
+  .invoice-view .inv-item-meta {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--font-montserrat), sans-serif;
+    font-size: 12px;
+    color: var(--t3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .invoice-view .pq-table tbody td:first-child {
+    padding-right: 12px;
+  }
+
+  /* Full-width tap target for the primary action on a phone. */
+  .invoice-view .dep-panel {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .invoice-view .dep-panel .dep-info {
+    align-items: center;
+  }
+
+  .invoice-view .dep-pay-btn {
+    width: 100%;
+  }
+}
+
+/* The shared theme stacks the nav into a column below 700px because the
+   proposal carries two buttons there. This page carries one, so stacking just
+   doubles the header height and reads as a broken bar. Keep it a single row and
+   let the brand truncate instead. Matches the shared breakpoint so there is no
+   band where the column layout leaks back in. */
+@media (max-width: 700px) {
+  .invoice-view .present-nav {
+    flex-direction: row;
+    align-items: center;
+    height: 54px;
+    min-height: 54px;
+    gap: 12px;
+    padding: 0 16px;
+  }
+
+  .invoice-view .present-nav-brand {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    letter-spacing: 0.18em;
+  }
+
+  .invoice-view .present-nav-actions {
+    display: flex;
+    width: auto;
+    flex-shrink: 0;
+  }
+}
+
+.invoice-view .dep-error {
+  flex-basis: 100%;
+  color: #e0968f;
+  font-size: 12px;
+}

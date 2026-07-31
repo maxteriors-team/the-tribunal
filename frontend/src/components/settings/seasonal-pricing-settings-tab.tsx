@@ -3,12 +3,14 @@
 /**
  * Settings → Pricing: the seasonal-decor editor (operator self-serve).
  *
- * Lets a non-technical operator add, edit, reorder-free, and remove seasonal
- * decor categories (trees, bushes, wreaths, garland, and anything new) plus the
- * roofline base rate — the exact `christmas.items` catalog the sales wizard and
- * roofline estimator render from. Saving PUTs the whole `christmas` block back
- * (the endpoint replaces blocks wholesale), so every other pricing field is
- * preserved. No code change or deploy needed to add a new add-on.
+ * Lets a non-technical operator switch the Christmas offering on, add/edit/remove
+ * seasonal decor categories (trees, bushes, wreaths, garland, and anything new),
+ * set the roofline base rate, price the post-season takedown and storage add-ons,
+ * and pick the season dates the install/takedown Service Plans anchor on — the
+ * exact `christmas` block the sales wizard, roofline estimator, and quote-approval
+ * provisioner read. Saving PUTs the whole block back (the endpoint replaces blocks
+ * wholesale), so every field this editor doesn't expose (`perks`, package markers,
+ * …) round-trips untouched. No code change or deploy needed.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
@@ -96,6 +98,49 @@ function slugify(value: string, fallback: string): string {
   return slug || fallback;
 }
 
+// Month options for the season anchors. The shadcn Select speaks strings, so
+// values are "1"…"12" and are parsed back to ints on save.
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+].map((label, i) => ({ value: String(i + 1), label }));
+
+// How many days each month can hold. Mirrors the backend clamp in
+// `ChristmasConfig._clamp_season_days`, which uses a non-leap year — February is
+// 28 so a yearly plan anchor lands on a real date every year.
+const MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function daysInMonth(month: number): number {
+  return MONTH_LENGTHS[month - 1] ?? 31;
+}
+
+/**
+ * Clamp a typed day down to one the chosen month actually has (Feb 31 → Feb 28).
+ * Applied on every day/month edit so the operator always sees the value that will
+ * be saved, instead of the backend silently rewriting it after the fact.
+ */
+function clampDay(day: string, month: string): string {
+  const parsed = Number.parseInt(day, 10);
+  if (!Number.isFinite(parsed)) return day;
+  const max = daysInMonth(Number.parseInt(month, 10));
+  return parsed > max ? String(max) : day;
+}
+
+/** `takedown_rate` is stored as a fraction but shown to the operator as a percent. */
+function rateToPercent(rate: number): string {
+  return String(Math.round(rate * 10000) / 100);
+}
+
 /** Ensure a unique key within an already-used set (append -2, -3, …). */
 function uniqueKey(base: string, used: Set<string>): string {
   let candidate = base;
@@ -171,15 +216,29 @@ export function SeasonalPricingSettingsTab() {
     refetchOnWindowFocus: false,
   });
 
+  // Whether the workspace sells Christmas lighting at all — the quote builder
+  // hides the whole service when this is off.
+  const [enabled, setEnabled] = useState(false);
+  const [offeringLabel, setOfferingLabel] = useState("");
   const [rooflineRate, setRooflineRate] = useState("");
+  const [minimum, setMinimum] = useState("");
+  const [takedownEnabled, setTakedownEnabled] = useState(false);
+  // Held as a percent string; converted to/from the stored 0..1 fraction.
+  const [takedownRatePct, setTakedownRatePct] = useState("");
+  const [storagePrice, setStoragePrice] = useState("");
+  // Season anchors for the install/takedown Service Plans (months are "1"…"12").
+  const [installMonth, setInstallMonth] = useState("11");
+  const [installDay, setInstallDay] = useState("15");
+  const [takedownMonth, setTakedownMonth] = useState("1");
+  const [takedownDay, setTakedownDay] = useState("8");
   const [categories, setCategories] = useState<EditCategory[]>([]);
   const [packagesEnabled, setPackagesEnabled] = useState(false);
   const [packages, setPackages] = useState<EditPackage[]>([]);
   // Client-visible roofline-vs-roofline cost comparison. Lives at the top level
   // of the pricing config (next to comparison_years), not inside `christmas`.
   const [rooflineComparison, setRooflineComparison] = useState(false);
-  // Snapshot of the server christmas block so save preserves takedown/storage/
-  // perks/etc. that this editor intentionally does not expose.
+  // Snapshot of the server christmas block so save preserves `perks`, the package
+  // sub-fields, and anything else this editor intentionally does not expose.
   const [serverChristmas, setServerChristmas] = useState<ChristmasConfig | null>(
     null,
   );
@@ -190,7 +249,17 @@ export function SeasonalPricingSettingsTab() {
   // pattern and avoids a cascading effect render.
   if (pricing?.christmas && pricing.christmas !== serverChristmas) {
     setServerChristmas(pricing.christmas);
+    setEnabled(pricing.christmas.enabled ?? false);
+    setOfferingLabel(pricing.christmas.label ?? "Christmas Lighting");
     setRooflineRate(String(pricing.christmas.roofline_per_ft ?? 0));
+    setMinimum(String(pricing.christmas.minimum ?? 0));
+    setTakedownEnabled(pricing.christmas.takedown_enabled ?? false);
+    setTakedownRatePct(rateToPercent(pricing.christmas.takedown_rate ?? 0));
+    setStoragePrice(String(pricing.christmas.storage_price ?? 0));
+    setInstallMonth(String(pricing.christmas.season_install_month ?? 11));
+    setInstallDay(String(pricing.christmas.season_install_day ?? 15));
+    setTakedownMonth(String(pricing.christmas.season_takedown_month ?? 1));
+    setTakedownDay(String(pricing.christmas.season_takedown_day ?? 8));
     const cats = toEditModel(pricing.christmas.items ?? []);
     setCategories(cats);
     setPackagesEnabled(pricing.christmas.packages_enabled ?? false);
@@ -338,10 +407,48 @@ export function SeasonalPricingSettingsTab() {
   // ── Save ────────────────────────────────────────────────────────────────
   const save = () => {
     if (!serverChristmas) return;
-    const rate = Number.parseFloat(rooflineRate);
-    if (!Number.isFinite(rate) || rate < 0) {
-      toast.error("Roofline rate must be a number ≥ 0");
+    const offeringName = offeringLabel.trim();
+    if (!offeringName) {
+      toast.error("Give the offering a name");
       return;
+    }
+    const rate = Number.parseFloat(rooflineRate);
+    const minimumValue = Number.parseFloat(minimum);
+    const storageValue = Number.parseFloat(storagePrice);
+    const numeric: Array<[string, number]> = [
+      ["Roofline rate", rate],
+      ["Job minimum", minimumValue],
+      ["Storage price", storageValue],
+    ];
+    for (const [name, value] of numeric) {
+      if (!Number.isFinite(value) || value < 0) {
+        toast.error(`${name} must be a number ≥ 0`);
+        return;
+      }
+    }
+    // The operator types a percent of the install subtotal; the config stores the
+    // 0..1 fraction the pricing engine multiplies by.
+    const takedownPct = Number.parseFloat(takedownRatePct);
+    if (!Number.isFinite(takedownPct) || takedownPct < 0 || takedownPct > 100) {
+      toast.error("Takedown rate must be a percent between 0 and 100");
+      return;
+    }
+    const takedownRate = Math.round(takedownPct * 100) / 10000;
+    // Season anchors. Days are clamped as they're typed, so this only catches a
+    // blank or zero day — never let the backend clamp silently rewrite a save.
+    const installMonthValue = Number.parseInt(installMonth, 10);
+    const takedownMonthValue = Number.parseInt(takedownMonth, 10);
+    const installDayValue = Number.parseInt(installDay, 10);
+    const takedownDayValue = Number.parseInt(takedownDay, 10);
+    const seasonDays: Array<[string, number, number]> = [
+      ["Install day", installDayValue, daysInMonth(installMonthValue)],
+      ["Takedown day", takedownDayValue, daysInMonth(takedownMonthValue)],
+    ];
+    for (const [name, value, max] of seasonDays) {
+      if (!Number.isFinite(value) || value < 1 || value > max) {
+        toast.error(`${name} must be between 1 and ${max}`);
+        return;
+      }
     }
     // Validate + freeze keys for new rows. Pre-seed the used-key sets with every
     // existing key so a freshly-named row can never collide with one assigned
@@ -424,10 +531,22 @@ export function SeasonalPricingSettingsTab() {
       });
     }
 
+    // Spread the server snapshot first so unexposed fields (perks, package
+    // markers) survive the block-replace save; then apply the edited values.
     mutation.mutate({
       christmas: {
         ...serverChristmas,
+        enabled,
+        label: offeringName,
         roofline_per_ft: rate,
+        minimum: minimumValue,
+        takedown_enabled: takedownEnabled,
+        takedown_rate: takedownRate,
+        storage_price: storageValue,
+        season_install_month: installMonthValue,
+        season_install_day: installDayValue,
+        season_takedown_month: takedownMonthValue,
+        season_takedown_day: takedownDayValue,
         items,
         packages_enabled: packagesEnabled,
         package_order: builtPackages.map((p) => p.key),
@@ -449,15 +568,60 @@ export function SeasonalPricingSettingsTab() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Seasonal Decor Pricing</CardTitle>
-          <CardDescription>
-            Add or edit seasonal add-ons — trees, bushes, wreaths, garland, and
-            anything else. Choose whether each is priced per item or per linear
-            foot. Changes apply instantly to the sales wizard and roofline
-            estimator — no developer needed.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1.5">
+              <CardTitle>Seasonal Decor Pricing</CardTitle>
+              <CardDescription>
+                Add or edit seasonal add-ons — trees, bushes, wreaths, garland,
+                and anything else. Choose whether each is priced per item or per
+                linear foot. Turn the offering on to sell Christmas lighting at
+                all — the quote builder hides the whole service while it&apos;s off.
+                Changes apply instantly to the sales wizard and roofline
+                estimator — no developer needed.
+              </CardDescription>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              disabled={disabled}
+              aria-label="Offer Christmas lighting"
+            />
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="xmas-label">Offering name</Label>
+              <Input
+                id="xmas-label"
+                value={offeringLabel}
+                onChange={(e) => setOfferingLabel(e.target.value)}
+                disabled={disabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown to customers on the estimate and proposal, and used to
+                title the install/takedown jobs a signup schedules.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="xmas-minimum">Job minimum ($)</Label>
+              <Input
+                id="xmas-minimum"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={minimum}
+                onChange={(e) => setMinimum(e.target.value)}
+                disabled={disabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                Floor price for any seasonal job. 0 = no minimum.
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-2 max-w-xs">
             <Label htmlFor="roofline-rate">Roofline rate ($ per linear ft)</Label>
             <Input
@@ -799,6 +963,190 @@ export function SeasonalPricingSettingsTab() {
             >
               <Plus className="size-4" /> Add package
             </Button>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold">Takedown &amp; storage</h3>
+              <p className="text-sm text-muted-foreground">
+                The two post-season add-ons a client can buy alongside the
+                install.
+              </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label>Offer post-season takedown</Label>
+                <p className="text-xs text-muted-foreground">
+                  Shows the takedown option in the sales wizard. Off = you don&apos;t
+                  sell takedown, and an approved quote never schedules one.
+                </p>
+              </div>
+              <Switch
+                checked={takedownEnabled}
+                onCheckedChange={setTakedownEnabled}
+                disabled={disabled}
+                aria-label="Offer post-season takedown"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="xmas-takedown-rate">
+                  Takedown rate (% of install)
+                </Label>
+                <Input
+                  id="xmas-takedown-rate"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.5"
+                  inputMode="decimal"
+                  value={takedownRatePct}
+                  onChange={(e) => setTakedownRatePct(e.target.value)}
+                  disabled={disabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Added on top of the install subtotal (roofline + decor) when a
+                  client buys takedown. 25 = 25% of the install. If takedown is
+                  already baked into your install price, set 0 and leave the
+                  toggle on &mdash; the January job still needs to be on the
+                  board.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="xmas-storage">Off-season storage price ($)</Label>
+                <Input
+                  id="xmas-storage"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={storagePrice}
+                  onChange={(e) => setStoragePrice(e.target.value)}
+                  disabled={disabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Flat fee to store the client&apos;s lights until next season. The
+                  wizard only offers storage when this is above $0 — leave it at
+                  0 if you don&apos;t store lights.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold">Season dates</h3>
+              <p className="text-sm text-muted-foreground">
+                When the crew hangs the lights and when they come back for them.
+                Approving a Christmas quote schedules two yearly Service Plans
+                anchored on these days — install, plus takedown when the client
+                bought it — so next season&apos;s work is already on the board. The
+                year is resolved at approval, always forward from that date.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <div className="space-y-2 flex-1">
+                  <Label htmlFor="xmas-install-month">Install month</Label>
+                  <Select
+                    value={installMonth}
+                    onValueChange={(v) => {
+                      setInstallMonth(v);
+                      setInstallDay((d) => clampDay(d, v));
+                    }}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger
+                      id="xmas-install-month"
+                      aria-label="Install month"
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-24">
+                  <Label htmlFor="xmas-install-day">Install day</Label>
+                  <Input
+                    id="xmas-install-day"
+                    type="number"
+                    min={1}
+                    max={daysInMonth(Number.parseInt(installMonth, 10))}
+                    step="1"
+                    inputMode="numeric"
+                    value={installDay}
+                    onChange={(e) =>
+                      setInstallDay(clampDay(e.target.value, installMonth))
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="space-y-2 flex-1">
+                  <Label htmlFor="xmas-takedown-month">Takedown month</Label>
+                  <Select
+                    value={takedownMonth}
+                    onValueChange={(v) => {
+                      setTakedownMonth(v);
+                      setTakedownDay((d) => clampDay(d, v));
+                    }}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger
+                      id="xmas-takedown-month"
+                      aria-label="Takedown month"
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 w-24">
+                  <Label htmlFor="xmas-takedown-day">Takedown day</Label>
+                  <Input
+                    id="xmas-takedown-day"
+                    type="number"
+                    min={1}
+                    max={daysInMonth(Number.parseInt(takedownMonth, 10))}
+                    step="1"
+                    inputMode="numeric"
+                    value={takedownDay}
+                    onChange={(e) =>
+                      setTakedownDay(clampDay(e.target.value, takedownMonth))
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              February caps at the 28th so a yearly plan always lands on a real
+              date.
+            </p>
           </div>
 
           <Separator />

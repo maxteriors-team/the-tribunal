@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
@@ -27,13 +27,22 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { contactsApi } from "@/lib/api/contacts";
 import { invoicesApi } from "@/lib/api/invoices";
+import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
-import type { Invoice } from "@/types";
+import type { Contact, Invoice, InvoiceSendResult } from "@/types";
 
 const moneyString = z
   .string()
@@ -54,6 +63,10 @@ const lineItemSchema = z.object({
 });
 
 const createInvoiceSchema = z.object({
+  // Who gets billed. Required: an invoice with no bill-to contact can be marked
+  // sent but can never be emailed to anyone, which is how invoices used to
+  // silently go nowhere. Empty when the caller pre-fills the contact.
+  contact_id: z.string(),
   due_date: z.string(),
   tax_amount: moneyString,
   notes: z.string(),
@@ -64,6 +77,14 @@ type CreateInvoiceFormValues = z.infer<typeof createInvoiceSchema>;
 
 const EMPTY_LINE = { name: "", quantity: "1", unit_price: "" } as const;
 
+/** "Sarah Henderson — sarah@example.com", degrading to whatever exists. */
+function contactLabel(contact: Contact): string {
+  const name =
+    [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
+    `Contact #${contact.id}`;
+  return contact.email ? `${name} — ${contact.email}` : name;
+}
+
 // True when the only line is the untouched starter row, so picking from the
 // price book replaces it instead of leaving an empty line above the selection.
 function isBlankLine(line: { name?: string; unit_price?: string }): boolean {
@@ -71,6 +92,7 @@ function isBlankLine(line: { name?: string; unit_price?: string }): boolean {
 }
 
 const DEFAULT_VALUES: CreateInvoiceFormValues = {
+  contact_id: "",
   due_date: "",
   tax_amount: "",
   notes: "",
@@ -93,11 +115,39 @@ export function InvoiceCreateDialog({
 }: InvoiceCreateDialogProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const [contactSearch, setContactSearch] = useState("");
+  // Only picked here when the caller didn't already know the customer.
+  const needsContactPicker = contactId === undefined;
 
   const form = useForm<CreateInvoiceFormValues>({
     resolver: zodResolver(createInvoiceSchema),
     defaultValues: DEFAULT_VALUES,
   });
+
+  // Server-side search keeps the picker usable past the endpoint's page cap:
+  // the operator narrows by name/email instead of loading the whole roster.
+  const contactsParams = {
+    page: 1,
+    page_size: 100,
+    search: contactSearch.trim() || undefined,
+  };
+  const contactsQuery = useQuery({
+    queryKey: queryKeys.contacts.list(workspaceId ?? "", contactsParams),
+    queryFn: () => contactsApi.list(workspaceId ?? "", contactsParams),
+    enabled: Boolean(workspaceId) && open && needsContactPicker,
+  });
+  const contacts = contactsQuery.data?.items ?? [];
+
+  const selectedContactId = useWatch({
+    control: form.control,
+    name: "contact_id",
+  });
+  const selectedContact = contacts.find(
+    (c) => String(c.id) === selectedContactId
+  );
+  // A contact with no email can be billed, but not *delivered* to. Say so
+  // before the operator hits send rather than after.
+  const selectedHasNoEmail = Boolean(selectedContact && !selectedContact.email);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -125,11 +175,11 @@ export function InvoiceCreateDialog({
     mutationFn: async (input: {
       values: CreateInvoiceFormValues;
       send: boolean;
-    }): Promise<Invoice> => {
+    }): Promise<Invoice | InvoiceSendResult> => {
       if (!workspaceId) throw new Error("No workspace selected");
       const { values, send } = input;
       const created = await invoicesApi.create(workspaceId, {
-        contact_id: contactId,
+        contact_id: contactId ?? Number(values.contact_id),
         due_date: values.due_date || undefined,
         tax_amount: values.tax_amount === "" ? undefined : Number(values.tax_amount),
         notes: values.notes.trim() || undefined,
@@ -145,28 +195,46 @@ export function InvoiceCreateDialog({
       return created;
     },
     onSuccess: (invoice, variables) => {
-      toast.success(
-        variables.send
-          ? `Invoice ${invoice.number} sent`
-          : `Invoice ${invoice.number} created`
-      );
+      if (variables.send) {
+        // Report the real delivery outcome, not just that the row was created.
+        const notice = describeInvoiceDelivery(invoice as InvoiceSendResult);
+        if (notice.tone === "success") {
+          toast.success(notice.message);
+        } else {
+          toast.warning(notice.message, { description: notice.description });
+        }
+      } else {
+        toast.success(`Invoice ${invoice.number} created`);
+      }
       if (workspaceId) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.invoices.all(workspaceId),
         });
       }
       onCreated?.(invoice);
+      setContactSearch("");
       onOpenChange(false);
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to create invoice")),
   });
 
-  const submit = (send: boolean) =>
+  const submit = (send: boolean) => {
+    // Enforced here rather than in the zod schema because the field is only
+    // required when the dialog is the one collecting it.
+    if (needsContactPicker && !form.getValues("contact_id")) {
+      form.setError("contact_id", {
+        message: "Pick the customer this invoice bills",
+      });
+      return;
+    }
     form.handleSubmit((values) => createMutation.mutate({ values, send }))();
+  };
 
   const handleOpenChange = (next: boolean) => {
     if (!next && createMutation.isPending) return;
+    // Clear the picker's search on close so the next open starts fresh.
+    if (!next) setContactSearch("");
     onOpenChange(next);
   };
 
@@ -189,6 +257,65 @@ export function InvoiceCreateDialog({
             }}
             className="space-y-5 py-4"
           >
+            {needsContactPicker && (
+              <FormField
+                control={form.control}
+                name="contact_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bill to</FormLabel>
+                    <Input
+                      placeholder="Search customers by name or email…"
+                      value={contactSearch}
+                      onChange={(event) => setContactSearch(event.target.value)}
+                      className="mb-2"
+                      disabled={createMutation.isPending}
+                    />
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={createMutation.isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue
+                            placeholder={
+                              contactsQuery.isLoading
+                                ? "Loading customers…"
+                                : "Select a customer"
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {contacts.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            {contactsQuery.isLoading
+                              ? "Loading customers…"
+                              : "No customers found"}
+                          </div>
+                        ) : (
+                          contacts.map((c: Contact) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                              {contactLabel(c)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {selectedHasNoEmail && (
+                      <p className="text-sm text-amber-600 dark:text-amber-500">
+                        This customer has no email address, so the invoice can be
+                        created but not sent. Add one on their contact record to
+                        email it.
+                      </p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <FormLabel>Line items</FormLabel>

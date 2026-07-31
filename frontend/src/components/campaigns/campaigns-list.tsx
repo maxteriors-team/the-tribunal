@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Play,
   Pause,
+  CalendarClock,
   Copy,
   Trash2,
   Mail,
@@ -202,6 +203,20 @@ export function CampaignsList() {
                     </div>
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/campaigns/pre-booking/new"
+                    className="flex items-center cursor-pointer"
+                  >
+                    <CalendarClock className="mr-2 size-4" />
+                    <div>
+                      <div>Pre-Booking Campaign</div>
+                      <div className="text-xs text-muted-foreground">
+                        Sell next season&apos;s work now
+                      </div>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           }
@@ -329,6 +344,15 @@ export function CampaignsList() {
                           <span className="capitalize">
                             {campaign.campaign_type.replace("_", " ")}
                           </span>
+                          {/* A pre-booking campaign still sends over SMS, so the
+                              channel icon alone cannot tell it apart from a
+                              blast — the offer is what makes it different. */}
+                          {campaign.pre_booking ? (
+                            <Badge variant="secondary" className="gap-1">
+                              <CalendarClock className="size-3" />
+                              Pre-booking
+                            </Badge>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell>
