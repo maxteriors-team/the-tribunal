@@ -10,7 +10,16 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
+
+from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
 
 from app.schemas.pricing import FinancingEstimate
 
@@ -103,6 +112,12 @@ class QuoteCreate(QuoteBase):
     """Create a quote with its initial line items."""
 
     line_items: list[QuoteLineItemCreate] = Field(default_factory=list)
+    # Set when the rep saw the attach prompt and chose to skip the add-on. Only
+    # the reason crosses the wire; which categories were skipped is resolved
+    # server-side from the rule that fired. Ignored when no rule fires, and
+    # required (with a reason, when the workspace demands one) to save past a
+    # ``blocking`` rule.
+    attach_dismissal: AttachDismissalRequest | None = None
 
 
 class QuoteUpdate(BaseModel):
@@ -215,6 +230,22 @@ class QuoteResponse(BaseModel):
     primary_service: str | None = None
     attach_count: int = 0
     attach_value: float = 0.0
+    # Recorded dismissals of the attach prompt, oldest first. Server-written.
+    attach_dismissals: list[AttachDismissal] = Field(default_factory=list)
+
+    @field_validator("attach_dismissals", mode="before")
+    @classmethod
+    def _empty_dismissals(cls, value: object) -> object:
+        """Read a null dismissal list as an empty one.
+
+        The column is NOT NULL with a ``'[]'`` server default, but a column
+        default only lands on flush — an in-memory ``Quote`` that has not been
+        inserted yet still reads ``None``. Serializing one is legitimate (the
+        approval notifier does it), and "nobody dismissed anything" is the
+        truthful answer, so coerce rather than 500.
+        """
+        return [] if value is None else value
+
     # Public client-proposal token (staff-only field; null until first sent). The
     # dashboard uses it to build/copy the client-facing proposal link.
     public_token: str | None = None
@@ -249,6 +280,12 @@ class QuoteDetailResponse(QuoteResponse):
     line_items: list[QuoteLineItemResponse] = Field(default_factory=list)
     # Multi-tier sales-wizard snapshot; null for quotes created outside the wizard.
     proposal_document: dict[str, Any] | None = None
+    # The cross-sell prompt this save earned, when an advisory attach rule
+    # matched and nothing was attached. Transient: computed per save from the
+    # workspace's attach-rule config, never stored on the quote and therefore
+    # always null on a plain read. Null also means "nothing to ask" — a blocking
+    # rule never returns here because it rejects the save instead.
+    attach_warning: AttachWarning | None = None
 
 
 class PaginatedQuotes(BaseModel):
