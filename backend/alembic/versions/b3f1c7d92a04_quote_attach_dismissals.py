@@ -1,7 +1,7 @@
 """Record attach-prompt dismissals on quotes.
 
 Revision ID: b3f1c7d92a04
-Revises: 7dc9d61efed7
+Revises: c4a7e1d92b35
 Create Date: 2026-07-29 14:05:11.203914
 
 ``quotes.primary_service`` / ``attach_count`` / ``attach_value`` (revision
@@ -32,7 +32,13 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b3f1c7d92a04"
-down_revision: str | None = "7dc9d61efed7"
+# Chained onto c4a7e1d92b35, not the shared parent 7dc9d61efed7. Both migrations
+# were authored against that same parent, which left the branch with two alembic
+# heads and made `alembic upgrade head` fail outright rather than pick one. The
+# two touch unrelated tables -- workspace knowledge documents there, quote attach
+# dismissals here -- so the ordering between them is arbitrary and linearizing is
+# purely mechanical.
+down_revision: str | None = "c4a7e1d92b35"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
