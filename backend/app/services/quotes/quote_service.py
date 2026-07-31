@@ -2130,6 +2130,14 @@ class QuoteService:
         # Create the invoice first so the job can be linked to it for costing
         # (its profitability reads revenue from the linked invoice).
         if create_invoice and invoice_id is None:
+            # A deposit the client already paid on the proposal page opens the
+            # invoice as a credit, so the balance due is the remainder rather
+            # than the full total -- otherwise conversion re-bills the deposit.
+            from app.services.payments.quote_deposit_service import deposit_amount
+
+            paid_deposit = 0.0
+            if quote.deposit_paid_at is not None:
+                paid_deposit = deposit_amount(quote) or 0.0
             invoice = await InvoiceService(self.db).create_invoice(
                 workspace_id,
                 InvoiceCreate(
@@ -2152,6 +2160,11 @@ class QuoteService:
                     ],
                 ),
                 created_by_id=quote.created_by_id,
+                amount_paid=paid_deposit,
+                # Carry the deposit's intent id so the invoice keeps a handle on
+                # the money already taken; a later balance payment arrives under
+                # a different intent, so ``record_payment`` still applies it.
+                payment_intent_id=quote.deposit_payment_intent_id if paid_deposit else None,
             )
             invoice_id = invoice.id
             quote.converted_invoice_id = invoice_id

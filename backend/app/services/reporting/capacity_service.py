@@ -37,6 +37,14 @@ empty backlog exactly when the queue is deepest. The response therefore carries
 ``assumed_duration_job_count`` so a client can say how much of the number is
 measured versus assumed.
 
+This is also where **pre-booked** work lands. A paid pre-booking deposit creates
+a provisional ``unscheduled`` job (see
+:meth:`app.services.prebooking.reservation_service.PreBookingReservationService.confirm_reservation_for_quote`)
+so next spring's sold work shows on the gauge in November, when the decision it
+informs — spend on marketing, or hire — is still open. Those jobs deliberately
+carry no window: stamping the whole target season on one would size a four-hour
+house wash at ~2 200 hours and make this report worse than useless.
+
 **Capacity** — :class:`~app.models.revenue_target.RevenueTarget`'s
 ``crew_capacity_hours_per_week`` and ``estimate_capacity_per_month``. Both are
 nullable owner-entered planning fields, so both are treated as *unknown* when

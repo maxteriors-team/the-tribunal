@@ -18,6 +18,13 @@ later pricing-config edit can never retroactively change what a client bought:
   exactly-once materialization for no operator benefit. Both plans are anchored
   on the workspace's configured season dates.
 
+  The takedown plan is provisioned only when the client actually **bought**
+  takedown (``ProposalCategorySection.takedown``). Dispatching a crew every
+  January for work nobody paid for is recurring unpaid labour, and it recurs
+  yearly. Sections written before that field existed record ``None``, which is
+  read as "unknown" and provisions the takedown plan exactly as before — a
+  season already sold never loses its crew.
+
 Provisioning runs **inside the approval transaction**: a silently missing plan is
 lost recurring revenue, so it is data, not a best-effort side effect. It is also
 idempotent — re-approving a quote (an operator retry, a client double-clicking
@@ -68,6 +75,19 @@ _CARE_PLAN_LEAD_DAYS = 14
 def _as_dict(value: Any) -> dict[str, Any]:
     """Read a JSONB sub-object defensively (a hand-edited blob never 500s)."""
     return value if isinstance(value, dict) else {}
+
+
+def _sold(section: dict[str, Any], service: str) -> bool:
+    """Whether an optional seasonal service was bought on this quote.
+
+    Missing or non-boolean means *unknown*, not *declined*: sections written
+    before the flag existed carry no value, and those quotes were provisioned
+    with takedown. Defaulting to ``True`` keeps every already-sold season
+    dispatching exactly as it does today; only quotes built after this shipped
+    can turn a service off.
+    """
+    value = section.get(service)
+    return value if isinstance(value, bool) else True
 
 
 def _anchor_in_year(year: int, month: int, day: int) -> datetime:
@@ -185,15 +205,19 @@ class ServicePlanProvisioner:
         return any(_as_dict(section).get("key") == "christmas" for section in sections)
 
     @staticmethod
-    def _christmas_label(document: dict[str, Any]) -> str:
-        """The workspace's Christmas label as frozen on this quote."""
+    def _christmas_section(document: dict[str, Any]) -> dict[str, Any]:
+        """The frozen christmas section of this quote (empty when absent)."""
         for section in document.get("category_sections") or []:
             data = _as_dict(section)
             if data.get("key") == "christmas":
-                label = str(data.get("label") or "").strip()
-                if label:
-                    return label
-        return "Christmas Lighting"
+                return data
+        return {}
+
+    @classmethod
+    def _christmas_label(cls, document: dict[str, Any]) -> str:
+        """The workspace's Christmas label as frozen on this quote."""
+        label = str(cls._christmas_section(document).get("label") or "").strip()
+        return label or "Christmas Lighting"
 
     def _christmas_specs(
         self,
@@ -201,9 +225,26 @@ class ServicePlanProvisioner:
         config: ChristmasConfig,
         anchor: datetime,
     ) -> list[dict[str, Any]]:
-        """Build the yearly install + takedown pair for a seasonal signup."""
+        """Build the yearly install (+ takedown, when sold) for a seasonal signup."""
         label = self._christmas_label(document)
+        section = self._christmas_section(document)
         install_at = _next_anchor(anchor, config.season_install_month, config.season_install_day)
+        specs = [
+            {
+                "plan_type": ServicePlanType.CHRISTMAS_LIGHTS,
+                "care_plan_tier": None,
+                "title": f"{label} — Install"[:200],
+                "description": self._install_description(section),
+                "frequency": RecurrenceFrequency.YEARLY,
+                "interval": 1,
+                "duration_minutes": _CHRISTMAS_INSTALL_MINUTES,
+                "generate_days_ahead": _CHRISTMAS_LEAD_DAYS,
+                "next_run_at": install_at,
+            }
+        ]
+        if not _sold(section, "takedown"):
+            return specs
+
         # Takedown belongs to the season we just installed, so it must fall after
         # that install — not on the anchor that already passed this year.
         takedown_at = _next_anchor(
@@ -211,34 +252,36 @@ class ServicePlanProvisioner:
             config.season_takedown_month,
             config.season_takedown_day,
         )
-        return [
-            {
-                "plan_type": ServicePlanType.CHRISTMAS_LIGHTS,
-                "care_plan_tier": None,
-                "title": f"{label} — Install"[:200],
-                "description": (
-                    "Seasonal install. Auto-created when the client signed up for the season."
-                ),
-                "frequency": RecurrenceFrequency.YEARLY,
-                "interval": 1,
-                "duration_minutes": _CHRISTMAS_INSTALL_MINUTES,
-                "generate_days_ahead": _CHRISTMAS_LEAD_DAYS,
-                "next_run_at": install_at,
-            },
+        specs.append(
             {
                 "plan_type": ServicePlanType.CHRISTMAS_LIGHTS,
                 "care_plan_tier": None,
                 "title": f"{label} — Takedown"[:200],
-                "description": (
-                    "Post-season takedown. Auto-created when the client signed up for the season."
-                ),
+                "description": self._takedown_description(section),
                 "frequency": RecurrenceFrequency.YEARLY,
                 "interval": 1,
                 "duration_minutes": _CHRISTMAS_TAKEDOWN_MINUTES,
                 "generate_days_ahead": _CHRISTMAS_LEAD_DAYS,
                 "next_run_at": takedown_at,
-            },
-        ]
+            }
+        )
+        return specs
+
+    @staticmethod
+    def _install_description(section: dict[str, Any]) -> str:
+        """Install instructions, mentioning storage retrieval when it was sold."""
+        base = "Seasonal install. Auto-created when the client signed up for the season."
+        if _sold(section, "storage"):
+            return f"{base} Client bought off-season storage — pull their decor before the visit."
+        return base
+
+    @staticmethod
+    def _takedown_description(section: dict[str, Any]) -> str:
+        """Takedown instructions, mentioning storage collection when it was sold."""
+        base = "Post-season takedown. Auto-created when the client signed up for the season."
+        if _sold(section, "storage"):
+            return f"{base} Client bought off-season storage — bring bins and haul the decor back."
+        return base
 
     async def _christmas_config(self, workspace_id: Any) -> ChristmasConfig:
         """Season anchors from the workspace's pricing config (defaults when unset)."""

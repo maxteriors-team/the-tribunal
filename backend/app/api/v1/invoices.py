@@ -22,12 +22,18 @@ from app.schemas.invoice import (
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
     InvoicePaymentLinkResponse,
+    InvoiceSendResponse,
     InvoiceUpdate,
     PaginatedInvoices,
+    PublicInvoice,
+    PublicInvoicePaymentCheckout,
+    PublicInvoicePaymentStatus,
 )
 from app.services.invoices import InvoiceService
 
 router = APIRouter(route_class=ServiceErrorRoute)
+# Customer-facing invoice page: no auth, addressed only by an unguessable token.
+public_router = APIRouter(route_class=ServiceErrorRoute)
 
 
 @router.get("", response_model=PaginatedInvoices)
@@ -106,15 +112,20 @@ async def delete_invoice(
 
 
 # Lifecycle transitions
-@router.post("/{invoice_id}/send", response_model=InvoiceDetailResponse)
+@router.post("/{invoice_id}/send", response_model=InvoiceSendResponse)
 async def send_invoice(
     workspace_id: uuid.UUID,
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteBilling,
-) -> InvoiceDetailResponse:
-    """Mark an invoice as sent (email delivery is wired in a later phase)."""
+) -> InvoiceSendResponse:
+    """Mark an invoice as sent and email it to the bill-to contact.
+
+    ``delivery`` reports whether the customer was actually emailed: an invoice
+    with no bill-to contact still transitions to ``sent`` but returns
+    ``skipped_no_email`` so the UI can say so instead of claiming success.
+    """
     service = InvoiceService(db)
     return await service.mark_sent(workspace_id, invoice_id)
 
@@ -195,3 +206,34 @@ async def remove_line_item(
     """Remove a line item and recompute invoice totals."""
     service = InvoiceService(db)
     return await service.remove_line_item(workspace_id, invoice_id, item_id)
+
+
+# ---------------------------------------------------------------------------
+# Public customer invoice (no auth, token-keyed)
+# ---------------------------------------------------------------------------
+@public_router.get("/{token}", response_model=PublicInvoice)
+async def get_public_invoice(token: str, db: DB) -> PublicInvoice:
+    """Render a customer's invoice from its share token. Drafts/unknown 404."""
+    return await InvoiceService(db).get_public_invoice(token)
+
+
+@public_router.post("/{token}/pay", response_model=PublicInvoicePaymentCheckout)
+async def create_public_invoice_payment(token: str, db: DB) -> PublicInvoicePaymentCheckout:
+    """Start a Stripe Checkout Session so the customer can pay their balance.
+
+    Returns the hosted payment URL for the frontend to redirect to. The charged
+    amount is re-derived from the invoice server-side, never taken from the
+    request. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces
+    through the service's own error mapping.
+    """
+    return await InvoiceService(db).create_public_payment_checkout(token)
+
+
+@public_router.post("/{token}/payment-status", response_model=PublicInvoicePaymentStatus)
+async def reconcile_public_invoice_payment(token: str, db: DB) -> PublicInvoicePaymentStatus:
+    """Reconcile the invoice against Stripe on return from checkout.
+
+    A webhook backstop so a delayed or dropped webhook never leaves a paid
+    invoice reading unpaid. Idempotent.
+    """
+    return await InvoiceService(db).reconcile_public_payment(token)
