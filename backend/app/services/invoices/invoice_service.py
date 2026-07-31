@@ -10,6 +10,16 @@ decimals to avoid binary-float dust.
 than free-set by clients. ``record_payment`` is the idempotent reconciliation
 primitive the Stripe webhook will call (phase 4); it lives here so the domain rule
 has one home and is testable without Stripe configured.
+
+Mutability rules, since "can I still change this?" has three different answers:
+
+* **Hard delete** -- drafts only. An issued invoice is an accounting record, so it
+  is voided (``_ISSUED_STATUSES``), never erased.
+* **Line items** -- everything except ``paid`` and ``void`` (see
+  ``_get_mutable_invoice``). Editing a *sent* invoice is deliberate: change orders
+  ("while we were there we also did X") are routine in home services, and the
+  customer's public page re-reads totals on load.
+* **Header fields** -- anything except ``void``.
 """
 
 import uuid
@@ -22,26 +32,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
+from app.core.config import settings
 from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.contact import Contact
-from app.models.invoice import Invoice, InvoiceLineItem
+from app.models.invoice import Invoice, InvoiceLineItem, generate_invoice_token
 from app.models.opportunity import Opportunity
 from app.schemas.invoice import (
     InvoiceCreate,
+    InvoiceDeliveryStatus,
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
     InvoiceResponse,
+    InvoiceSendResponse,
     InvoiceUpdate,
     PaginatedInvoices,
+    PublicInvoice,
+    PublicInvoiceLineItem,
+    PublicInvoicePaymentCheckout,
+    PublicInvoicePaymentStatus,
 )
+from app.schemas.proposal import PublicProposalBranding
 from app.services.automations.events import (
     EVENT_INVOICE_PAID,
     EVENT_INVOICE_SENT,
     emit_automation_event,
 )
-from app.services.exceptions import ConflictError, ServiceUnavailableError
+from app.services.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
 from app.services.payments import call_payment_service
 
 logger = structlog.get_logger()
@@ -184,8 +202,20 @@ class InvoiceService:
         invoice_in: InvoiceCreate,
         *,
         created_by_id: int | None = None,
+        amount_paid: float = 0.0,
+        payment_intent_id: str | None = None,
     ) -> InvoiceDetailResponse:
-        """Create a draft invoice with its initial line items and computed totals."""
+        """Create a draft invoice with its initial line items and computed totals.
+
+        ``amount_paid``/``payment_intent_id`` open the invoice with money already
+        collected -- today only a quote deposit the client paid on the public
+        proposal page (see :meth:`QuoteService.convert_quote`). They are
+        **service-internal on purpose**: ``InvoiceCreate`` does not carry them, so
+        an API client still cannot declare an invoice pre-paid and mark itself
+        settled without money moving. The opening credit is clamped to the
+        invoice total so a stale deposit can never create a negative balance, and
+        ``status`` is derived from it (a fully-covering deposit opens ``paid``).
+        """
         await self._validate_refs(
             workspace_id,
             contact_id=invoice_in.contact_id,
@@ -206,6 +236,7 @@ class InvoiceService:
             amount_paid=0,
             status="draft",
             created_by_id=created_by_id,
+            stripe_payment_intent_id=payment_intent_id,
         )
         for item in invoice_in.line_items:
             invoice.line_items.append(
@@ -219,7 +250,14 @@ class InvoiceService:
                 )
             )
 
+        # Totals first: the opening credit clamps against the computed total.
         self._recompute_totals(invoice)
+        opening_credit = round(max(0.0, min(float(amount_paid), float(invoice.total or 0))), 2)
+        if opening_credit > 0:
+            invoice.amount_paid = opening_credit
+            invoice.status = self.derive_status(invoice)
+            if invoice.status == "paid":
+                invoice.paid_at = datetime.now(UTC)
         self.db.add(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
@@ -230,6 +268,7 @@ class InvoiceService:
             workspace_id=str(workspace_id),
             number=invoice.number,
             total=float(invoice.total),
+            amount_paid=float(invoice.amount_paid),
         )
         return InvoiceDetailResponse.model_validate(invoice)
 
@@ -286,7 +325,28 @@ class InvoiceService:
             if value is not None:
                 setattr(invoice, field, value)
 
-        # tax/discount changes move the total, which can change paid/partial state.
+        if invoice_in.line_items is not None:
+            # Same rule as the per-item endpoints (``_get_mutable_invoice``):
+            # a settled invoice's lines are history, not a draft.
+            if invoice.status in ("paid", "void"):
+                raise ConflictError(f"Cannot edit line items on a {invoice.status} invoice")
+            # Whole-set replacement inside this transaction, so a multi-row edit
+            # can never half-apply. ``delete-orphan`` on the relationship removes
+            # the dropped rows.
+            invoice.line_items.clear()
+            for item in invoice_in.line_items:
+                invoice.line_items.append(
+                    InvoiceLineItem(
+                        name=item.name,
+                        description=item.description,
+                        quantity=item.quantity,
+                        unit_price=item.unit_price,
+                        discount=item.discount,
+                        total=self._line_total(item.quantity, item.unit_price, item.discount),
+                    )
+                )
+
+        # tax/discount/line changes move the total, which can change paid/partial state.
         self._recompute_totals(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
@@ -312,9 +372,14 @@ class InvoiceService:
         self,
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
-    ) -> InvoiceDetailResponse:
+    ) -> InvoiceSendResponse:
         """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
-        email the invoice to the bill-to contact (best-effort)."""
+        email the invoice to the bill-to contact.
+
+        Emailing stays best-effort -- a bounce must not undo the ``sent``
+        transition -- but the outcome is *reported* rather than swallowed, so an
+        operator is never told a contactless invoice reached the customer.
+        """
         invoice = await get_or_404(
             self.db,
             Invoice,
@@ -331,6 +396,11 @@ class InvoiceService:
         was_sent = invoice.sent_at is not None
         if invoice.sent_at is None:
             invoice.sent_at = datetime.now(UTC)
+        # Allocate the public page token lazily on first send, so a draft link
+        # can never resolve. Kept stable across re-sends: the customer may have
+        # bookmarked the link from an earlier reminder.
+        if invoice.public_token is None:
+            invoice.public_token = generate_invoice_token()
         invoice.status = self.derive_status(invoice)
         # Fire on the first send only; re-sending a reminder must not re-trigger.
         if not was_sent:
@@ -349,15 +419,31 @@ class InvoiceService:
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
 
-        await self._email_invoice(workspace_id, invoice)
-        return InvoiceDetailResponse.model_validate(invoice)
+        delivery, delivered_to = await self._email_invoice(workspace_id, invoice)
+        detail = InvoiceDetailResponse.model_validate(invoice)
+        return InvoiceSendResponse(
+            **detail.model_dump(),
+            delivery=delivery,
+            delivered_to=delivered_to,
+        )
 
-    async def _email_invoice(self, workspace_id: uuid.UUID, invoice: Invoice) -> None:
+    async def _email_invoice(
+        self, workspace_id: uuid.UUID, invoice: Invoice
+    ) -> tuple[InvoiceDeliveryStatus, str | None]:
         """Email the invoice to its bill-to contact (best-effort).
 
         Never raises: a delivery failure must not undo the ``sent`` transition,
-        mirroring ``notify_payment_operators``. Includes a Stripe "Pay now" link
-        when Stripe is configured; otherwise the summary email still goes out.
+        mirroring ``notify_payment_operators``.
+
+        The "Pay now" link points at the customer's own invoice page, **not** a
+        Stripe Checkout URL. A Checkout Session expires -- and a re-sent reminder
+        would mint a new one, silently killing the link in the previous email --
+        whereas the token page is stable for the life of the invoice and opens a
+        fresh session on demand. It also shows the customer what they are paying
+        for: line items, the credited deposit, and the remaining balance.
+
+        Returns ``(delivery, delivered_to)`` so the caller can surface what really
+        happened instead of assuming success.
         """
         from app.services.email import send_invoice_email
         from app.services.idempotency import derive_outbound_key
@@ -365,24 +451,21 @@ class InvoiceService:
         contact_email = invoice.contact.email if invoice.contact else None
         if not contact_email:
             self.log.info("invoice_email_skipped_no_contact", invoice_id=str(invoice.id))
-            return
+            return "skipped_no_email", None
 
         workspace_name = invoice.workspace.name if invoice.workspace else ""
         balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
         amount_str = f"{balance:.2f} {invoice.currency.upper()}"
         due_date = invoice.due_date.isoformat() if invoice.due_date else None
 
+        # Only offer a payment link when something is actually owed; a settled
+        # invoice emails as a receipt.
         pay_url: str | None = None
-        if call_payment_service.is_payment_configured() and balance > 0:
-            try:
-                _, pay_url = await self.create_payment_link(workspace_id, invoice.id)
-            except Exception as exc:  # pragma: no cover - best-effort pay link
-                self.log.warning(
-                    "invoice_pay_link_failed", invoice_id=str(invoice.id), error=str(exc)
-                )
+        if balance > 0 and invoice.public_token:
+            pay_url = f"{settings.frontend_url}/p/invoices/{invoice.public_token}"
 
         try:
-            await send_invoice_email(
+            accepted = await send_invoice_email(
                 to_email=contact_email,
                 workspace_name=workspace_name,
                 invoice_number=invoice.number,
@@ -394,6 +477,14 @@ class InvoiceService:
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("invoice_email_failed", invoice_id=str(invoice.id), error=str(exc))
+            return "failed", None
+
+        # ``send_invoice_email`` returns True only when the provider accepted it,
+        # so a False here (unconfigured provider, rejected send) is a real miss.
+        if not accepted:
+            self.log.warning("invoice_email_not_accepted", invoice_id=str(invoice.id))
+            return "failed", None
+        return "emailed", contact_email
 
     async def void_invoice(
         self,
@@ -596,9 +687,6 @@ class InvoiceService:
         ``record_payment`` keys idempotency on it -- pre-storing it would make the
         completion webhook a no-op and the payment would never be recorded.
         """
-        if not call_payment_service.is_payment_configured():
-            raise ServiceUnavailableError("Stripe is not configured for payments")
-
         invoice = await get_or_404(
             self.db,
             Invoice,
@@ -606,6 +694,29 @@ class InvoiceService:
             workspace_id=workspace_id,
             options=[selectinload(Invoice.contact)],
         )
+        return await self._start_checkout(invoice)
+
+    async def _start_checkout(
+        self,
+        invoice: Invoice,
+        *,
+        return_url: str | None = None,
+    ) -> tuple[str, str | None]:
+        """Open a Stripe Checkout Session for ``invoice``'s outstanding balance.
+
+        Shared by the operator's ``create_payment_link`` and the customer's public
+        pay action so both charge the **same server-computed balance** -- the
+        amount owed is never taken from the caller. ``return_url`` sends the
+        customer back to their own invoice page instead of the generic result
+        page.
+
+        Only the checkout *session id* is persisted. The payment-intent id is
+        deliberately left unset until the webhook records the payment, because
+        ``record_payment`` keys idempotency on it -- pre-storing it would make the
+        completion webhook a no-op and the payment would never be recorded.
+        """
+        if not call_payment_service.is_payment_configured():
+            raise ServiceUnavailableError("Stripe is not configured for payments")
         if invoice.status == "void":
             raise ConflictError("Cannot collect payment on a voided invoice")
         balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
@@ -617,8 +728,13 @@ class InvoiceService:
             amount=balance,
             currency=invoice.currency,
             product_name=f"Invoice {invoice.number}",
-            metadata={"invoice_id": str(invoice.id), "workspace_id": str(workspace_id)},
+            metadata={
+                "invoice_id": str(invoice.id),
+                "workspace_id": str(invoice.workspace_id),
+            },
             customer_email=customer_email,
+            success_url=f"{return_url}?payment=paid" if return_url else None,
+            cancel_url=return_url,
         )
         invoice.stripe_checkout_session_id = result.session_id
         await self.db.commit()
@@ -626,11 +742,165 @@ class InvoiceService:
         self.log.info(
             "invoice_payment_link_created",
             invoice_id=str(invoice.id),
-            workspace_id=str(workspace_id),
+            workspace_id=str(invoice.workspace_id),
             amount=balance,
             session_id=result.session_id,
         )
         return result.session_id, result.url
+
+    # ----------------------------------------------------------------- #
+    # Public customer invoice (no auth, token-keyed)
+    # ----------------------------------------------------------------- #
+    async def _load_by_public_token(self, token: str) -> Invoice:
+        """Load a sent invoice by its public token, or raise ``NotFoundError``.
+
+        Drafts have no token and never resolve, so an invoice the operator is
+        still editing cannot be viewed even if a link were guessed. Status is
+        re-derived on read so an invoice that lapsed since it was sent reports
+        ``overdue`` truthfully without waiting for a worker.
+        """
+        result = await self.db.execute(
+            select(Invoice)
+            .where(Invoice.public_token == token)
+            .options(
+                selectinload(Invoice.line_items),
+                selectinload(Invoice.contact),
+                selectinload(Invoice.workspace),
+            )
+        )
+        invoice = result.scalar_one_or_none()
+        if invoice is None or invoice.status == "draft":
+            raise NotFoundError("Invoice not found")
+
+        derived = self.derive_status(invoice)
+        if derived != invoice.status:
+            invoice.status = derived
+            await self.db.commit()
+            await self.db.refresh(invoice, ["line_items"])
+        return invoice
+
+    def _to_public(self, invoice: Invoice) -> PublicInvoice:
+        """Project an invoice onto its allowlisted public view."""
+        from app.services.quotes.proposal_template import get_proposal_template
+
+        template = get_proposal_template(invoice.workspace)
+        business_name = template.business_name or (
+            invoice.workspace.name if invoice.workspace else ""
+        )
+        client_name: str | None = None
+        if invoice.contact is not None:
+            client_name = invoice.contact.full_name or invoice.contact.first_name
+
+        total = float(invoice.total or 0)
+        paid = float(invoice.amount_paid or 0)
+        balance = round(max(0.0, total - paid), 2)
+        is_void = invoice.status == "void"
+        is_paid = balance <= 0 and total > 0
+
+        return PublicInvoice(
+            token=invoice.public_token or "",
+            number=invoice.number,
+            status=invoice.status,  # type: ignore[arg-type]
+            currency=invoice.currency,
+            line_items=[
+                PublicInvoiceLineItem(
+                    name=li.name,
+                    description=li.description,
+                    quantity=float(li.quantity),
+                    unit_price=float(li.unit_price),
+                    discount=float(li.discount),
+                    total=float(li.total),
+                )
+                for li in invoice.line_items
+            ],
+            subtotal=float(invoice.subtotal or 0),
+            tax_amount=float(invoice.tax_amount or 0),
+            discount_amount=float(invoice.discount_amount or 0),
+            total=total,
+            amount_paid=paid,
+            balance_due=balance,
+            issue_date=invoice.issue_date,
+            due_date=invoice.due_date,
+            is_paid=is_paid,
+            is_void=is_void,
+            is_overdue=invoice.status == "overdue",
+            # Gated on Stripe too: a "Pay now" button that 503s the moment it is
+            # pressed is worse than no button at all.
+            is_payable=(
+                balance > 0 and not is_void and call_payment_service.is_payment_configured()
+            ),
+            client_name=client_name,
+            notes=invoice.notes,
+            terms=invoice.terms,
+            branding=PublicProposalBranding(
+                business_name=business_name,
+                logo_url=template.logo_url,
+                brand_color=template.brand_color,
+                accent_color=template.accent_color,
+                business_address=template.business_address,
+                business_phone=template.business_phone,
+                business_email=template.business_email,
+                footer=template.footer,
+            ),
+        )
+
+    async def get_public_invoice(self, token: str) -> PublicInvoice:
+        """Return the read-only, safe-fields-only invoice for a public token."""
+        return self._to_public(await self._load_by_public_token(token))
+
+    async def create_public_payment_checkout(self, token: str) -> PublicInvoicePaymentCheckout:
+        """Start a Stripe Checkout Session so the customer can pay their balance.
+
+        The amount is re-derived from the invoice server-side, so a customer
+        cannot influence what they are charged by editing the request.
+        """
+        invoice = await self._load_by_public_token(token)
+        return_url = f"{settings.frontend_url}/p/invoices/{token}"
+        _, url = await self._start_checkout(invoice, return_url=return_url)
+        if not url:
+            raise ServiceUnavailableError("Could not start the payment")
+        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        return PublicInvoicePaymentCheckout(url=url, amount=balance, currency=invoice.currency)
+
+    async def reconcile_public_payment(self, token: str) -> PublicInvoicePaymentStatus:
+        """Reconcile an invoice against Stripe on return from checkout.
+
+        A webhook backstop, mirroring the proposal deposit flow: when the
+        customer lands back on their invoice we ask Stripe about the stored
+        session and record the payment if Stripe confirms it, so a delayed or
+        dropped webhook never leaves a paid invoice reading unpaid. Idempotent
+        (``record_payment`` dedupes on the payment-intent id) and never raises
+        for a normal "not paid yet".
+        """
+        invoice = await self._load_by_public_token(token)
+        total = float(invoice.total or 0)
+        paid = float(invoice.amount_paid or 0)
+        balance = round(max(0.0, total - paid), 2)
+
+        session_id = invoice.stripe_checkout_session_id
+        if balance > 0 and session_id and call_payment_service.is_payment_configured():
+            try:
+                status = await call_payment_service.retrieve_session_status(session_id)
+            except Exception as exc:  # pragma: no cover - Stripe/network best-effort
+                self.log.warning(
+                    "invoice_payment_reconcile_failed",
+                    invoice_id=str(invoice.id),
+                    error=str(exc),
+                )
+            else:
+                if status.payment_status == "paid":
+                    await self.record_payment(
+                        invoice, balance, payment_intent_id=status.payment_intent_id
+                    )
+                    paid = float(invoice.amount_paid or 0)
+                    balance = round(max(0.0, total - paid), 2)
+
+        return PublicInvoicePaymentStatus(
+            is_paid=balance <= 0 and total > 0,
+            amount_paid=paid,
+            balance_due=balance,
+            currency=invoice.currency,
+        )
 
 
 async def handle_invoice_checkout_session_completed(

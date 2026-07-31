@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.proposal import PublicProposalBranding
+
 InvoiceStatus = Literal["draft", "sent", "paid", "partial", "void", "overdue"]
 
 
@@ -78,8 +80,16 @@ class InvoiceCreate(InvoiceBase):
 
 
 class InvoiceUpdate(BaseModel):
-    """Update invoice header fields (all optional). Line items have their own
-    sub-resource endpoints; ``status``/``number``/totals are server-derived."""
+    """Update invoice header fields (all optional); ``status``/``number``/totals
+    are server-derived.
+
+    ``line_items`` optionally **replaces the whole set** in the same transaction.
+    An editor that reorders, edits, and deletes rows in one save would otherwise
+    have to fan out across the per-item sub-resource endpoints, where a failure
+    halfway through leaves a financial record in a state neither the operator nor
+    the customer asked for. Omit the field to leave line items untouched; the
+    per-item endpoints remain for incremental edits.
+    """
 
     contact_id: int | None = None
     opportunity_id: uuid.UUID | None = None
@@ -90,6 +100,7 @@ class InvoiceUpdate(BaseModel):
     due_date: date | None = None
     notes: str | None = None
     terms: str | None = None
+    line_items: list[InvoiceLineItemCreate] | None = None
 
 
 class InvoiceResponse(BaseModel):
@@ -125,6 +136,25 @@ class InvoiceDetailResponse(InvoiceResponse):
     line_items: list[InvoiceLineItemResponse] = Field(default_factory=list)
 
 
+# How a send actually went. ``skipped_no_email`` is the common miss: an invoice
+# with no bill-to contact (or a contact with no email on file) can be marked sent
+# yet reach nobody, so the operator has to be told rather than shown a success.
+InvoiceDeliveryStatus = Literal["emailed", "skipped_no_email", "failed"]
+
+
+class InvoiceSendResponse(InvoiceDetailResponse):
+    """Invoice after a send, plus whether the customer was actually emailed.
+
+    Extends the detail response so callers keep every invoice field; ``delivery``
+    is what lets the UI warn instead of claiming a delivery that never happened.
+    """
+
+    delivery: InvoiceDeliveryStatus
+    # Address the invoice reached, when it reached anywhere. Echoed back so the
+    # operator can confirm *who* received it.
+    delivered_to: str | None = None
+
+
 class PaginatedInvoices(BaseModel):
     """Paginated list of invoices."""
 
@@ -140,3 +170,77 @@ class InvoicePaymentLinkResponse(BaseModel):
 
     session_id: str
     url: str | None
+
+
+# --------------------------------------------------------------------------- #
+# Public customer invoice (no auth, token-keyed)
+# --------------------------------------------------------------------------- #
+class PublicInvoiceLineItem(BaseModel):
+    """One billable line as the customer sees it."""
+
+    name: str
+    description: str | None = None
+    quantity: float
+    unit_price: float
+    discount: float
+    total: float
+
+
+class PublicInvoice(BaseModel):
+    """Read-only, allowlisted view of an invoice for its public page.
+
+    Deliberately **not** derived from ``InvoiceResponse``: this crosses an
+    unauthenticated boundary, so fields are listed explicitly rather than
+    inherited. Internal provenance (``workspace_id``, ``contact_id``,
+    ``opportunity_id``, ``created_by_id``, Stripe handles, ``external_*``) is
+    absent by construction -- a future column added to the model cannot leak
+    here by default.
+    """
+
+    token: str
+    number: str
+    status: InvoiceStatus
+    currency: str
+
+    line_items: list[PublicInvoiceLineItem] = Field(default_factory=list)
+    subtotal: float
+    tax_amount: float
+    discount_amount: float
+    total: float
+    # What has already been collected (a paid quote deposit lands here) and what
+    # is still owed. ``balance_due`` is server-computed so the page and the
+    # Stripe charge can never disagree about the amount.
+    amount_paid: float
+    balance_due: float
+
+    issue_date: date | None = None
+    due_date: date | None = None
+    is_paid: bool
+    is_void: bool
+    is_overdue: bool
+    # Whether a payment can be started right now: something is owed, the invoice
+    # is live, and Stripe is configured for this deployment.
+    is_payable: bool
+
+    client_name: str | None = None
+    notes: str | None = None
+    terms: str | None = None
+
+    branding: PublicProposalBranding
+
+
+class PublicInvoicePaymentCheckout(BaseModel):
+    """Hosted Stripe payment URL for the customer to pay their balance."""
+
+    url: str
+    amount: float
+    currency: str
+
+
+class PublicInvoicePaymentStatus(BaseModel):
+    """Reconciled payment state, polled on return from Stripe Checkout."""
+
+    is_paid: bool
+    amount_paid: float
+    balance_due: float
+    currency: str

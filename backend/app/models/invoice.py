@@ -7,6 +7,7 @@ request time in the payments service. ``status`` is derived by the service from
 ``amount_paid`` and ``due_date`` rather than set directly by clients.
 """
 
+import secrets
 import uuid
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
@@ -38,6 +39,17 @@ if TYPE_CHECKING:
 # Lifecycle of an invoice. Derived by the service from amount_paid + due_date;
 # not free-set by API clients.
 INVOICE_STATUSES = ("draft", "sent", "paid", "partial", "void", "overdue")
+
+
+def generate_invoice_token() -> str:
+    """Return a URL-safe token for the public customer invoice page.
+
+    Unguessable (192 bits of entropy) so an invoice link can be emailed without
+    auth yet not be enumerable -- the same construction as
+    :func:`app.models.quote.generate_quote_token`. Allocated lazily on first
+    ``send``; drafts have no token and never resolve.
+    """
+    return secrets.token_urlsafe(24)
 
 
 class Invoice(Base):
@@ -107,6 +119,13 @@ class Invoice(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Public customer-facing token (unguessable, indexed for O(1) lookup). Null
+    # until the invoice is first sent; the public ``/p/invoices/{token}`` page
+    # and its pay action are keyed on it. Drafts never resolve.
+    public_token: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True, index=True
+    )
 
     # Stripe reconciliation handles (looked up by the payment webhook).
     stripe_checkout_session_id: Mapped[str | None] = mapped_column(

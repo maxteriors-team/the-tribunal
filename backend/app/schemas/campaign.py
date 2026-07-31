@@ -5,6 +5,30 @@ from datetime import datetime, time
 
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
+from app.models.prebooking import PreBookingAmountType
+
+
+class CampaignPreBookingSummary(BaseModel):
+    """Headline pre-booking terms carried on a campaign response.
+
+    Enough for a list row to say "this one sells May–June at 15% off, 20 slots"
+    without a second request. The full offer (slot usage, lead time, audience)
+    lives under ``/campaigns/{id}/pre-booking``.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    service_description: str
+    service_season_start_month: int
+    service_season_end_month: int
+    service_season_year: int
+    incentive_type: PreBookingAmountType
+    incentive_value: float
+    deposit_type: PreBookingAmountType
+    deposit_value: float
+    slot_cap: int
+
 
 class CampaignCreate(BaseModel):
     """Schema for creating a campaign."""
@@ -94,6 +118,9 @@ class CampaignResponse(BaseModel):
     guarantee_target: int | None = None
     guarantee_window_days: int | None = None
     guarantee_status: str | None = None
+    # Present only on pre-booking campaigns. Eagerly loaded on the relationship,
+    # so this never triggers a lazy load inside serialization.
+    pre_booking: CampaignPreBookingSummary | None = None
     created_at: datetime
     updated_at: datetime
 

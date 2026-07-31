@@ -252,6 +252,12 @@ class ProposalCategorySection(BaseModel):
     Landscape keeps its rich tier cards and bistro its bespoke block; these
     sections carry the *new* per-linear-ft / decor lines so the client page can
     render any mix of product lines uniformly.
+
+    ``takedown``/``storage`` record the seasonal services the client actually
+    bought, so downstream dispatch reads a field instead of pattern-matching a
+    display label. Both are ``None`` on sections written before this existed and
+    on non-seasonal lines — a consumer must read ``None`` as "unknown", never as
+    "declined", or a season already sold silently loses its takedown crew.
     """
 
     key: str
@@ -262,6 +268,8 @@ class ProposalCategorySection(BaseModel):
     cash_savings: float = 0
     monthly_payment: float = 0
     min_applied: bool = False
+    takedown: bool | None = None
+    storage: bool | None = None
 
 
 class FulfillmentPart(BaseModel):

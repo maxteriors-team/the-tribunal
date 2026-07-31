@@ -16,6 +16,7 @@ from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
+from app.models.prebooking import PreBookingCampaignConfig
 from app.schemas.campaign import (
     CampaignAnalytics,
     CampaignContactAdd,
@@ -535,6 +536,30 @@ async def duplicate_campaign(
         max_follow_ups=campaign.max_follow_ups,
     )
     db.add(new_campaign)
+    await db.flush()
+
+    # A pre-booking campaign copied without its offer is a broken campaign: it
+    # would send "book next spring" with no season, no deposit and no cap. Slots
+    # sold by the original stay with the original — the copy starts empty.
+    if campaign.pre_booking is not None:
+        source = campaign.pre_booking
+        db.add(
+            PreBookingCampaignConfig(
+                workspace_id=workspace_id,
+                campaign_id=new_campaign.id,
+                service_season_start_month=source.service_season_start_month,
+                service_season_end_month=source.service_season_end_month,
+                service_season_year=source.service_season_year,
+                service_description=source.service_description,
+                incentive_type=source.incentive_type,
+                incentive_value=source.incentive_value,
+                deposit_type=source.deposit_type,
+                deposit_value=source.deposit_value,
+                slot_cap=source.slot_cap,
+                hold_hours=source.hold_hours,
+            )
+        )
+
     await db.commit()
     await db.refresh(new_campaign)
 
