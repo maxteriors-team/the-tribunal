@@ -160,6 +160,32 @@ revival sequence in both directions. The harness lives at
 coverage it produced is committed in `backend/tests/workers/` and
 `frontend/src/components/settings/quote-followup-settings-tab.test.tsx`.
 
+### D. The cadence counted no sends at all
+
+The direct-send path enforces opt-out, consent and quiet hours, but unlike
+`campaign_worker` it never reserved against the sending number. Enabling the
+cadence on a workspace with a backlog of in-window quotes would fire one SMS per
+quote on the first tick, from a single number, ignoring its per-second, hourly
+and daily limits and its warming schedule. The customer-facing harm is small;
+the carrier-reputation harm is not, and a filtered number degrades deliverability
+for every other message it sends.
+
+**Fix:** both workers now call `NumberPoolManager.reserve_number_for_send`
+before dispatch, exactly as `campaign_worker` does. A sender at capacity returns
+`None`, which writes no ledger row, so the touch stays due and is retried on a
+later tick rather than being silently consumed. `redis` is now declared in both
+workers' dependency tuples, since the allowance is Redis-backed.
+
+One deliberate hole: if the resolved sender is not a tracked `phone_numbers` row
+for that workspace, the send proceeds uncapped with a warning. In the local
+database 24 of 26 conversations reference such a sender, so refusing them would
+silently disable follow-up for most existing contacts — the same class of failure
+as §C, and worse than an uncapped send that is visible in the logs.
+
+With production defaults (1 msg/sec, 10/hour, 75/day per number) a workspace
+turning the cadence on now drains its backlog across many ticks instead of
+bursting.
+
 ## 5. Still open, deliberately not changed here
 
 The 5,000-row per-tick ceiling is now a genuine bound rather than a silent
@@ -168,3 +194,9 @@ still lose the tail of the ordering. Fixing that properly means per-workspace
 round-robin fairness rather than a global ordering, which is a larger design
 change than this audit warrants. The worker now logs a warning naming the
 ceiling when it is crossed, so the condition is observable rather than silent.
+
+The untracked-sender hole described in §D is bounded by logging rather than by
+enforcement. Closing it properly means reconciling `Conversation.workspace_phone`
+against `phone_numbers`, which is a data-quality question rather than a worker
+question, and touches every sender in the product rather than these two
+sequences.
