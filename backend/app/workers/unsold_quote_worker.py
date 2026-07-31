@@ -51,6 +51,7 @@ from app.services.quotes.revival_config import (
 from app.services.quotes.revival_config import (
     get_quote_revival_config,
 )
+from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.tags import TagService
 from app.services.telephony.text_provider import get_text_message_provider
@@ -182,6 +183,7 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         super().__init__()
         self.opt_out_manager = OptOutManager()
         self.compliance = OutboundComplianceService(self.opt_out_manager)
+        self.number_pool = NumberPoolManager()
 
     async def _process_items(self) -> None:
         """Load aged, undecided quotes and process the newest due touch for each."""
@@ -528,6 +530,9 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         if not from_number:
             self.logger.warning("No SMS sender for unsold-quote revival", quote_id=str(quote.id))
             return None
+        if not await self._reserve_sender(from_number, quote, db):
+            # No ledger row, so the touch stays due and retries on a later tick.
+            return None
 
         sms = get_text_message_provider()
         try:
@@ -650,6 +655,41 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         )
         phone = result.scalar_one_or_none()
         return str(phone) if phone else None
+
+    async def _reserve_sender(self, from_number: str, quote: Quote, db: AsyncSession) -> bool:
+        """Consume this number's send allowance, mirroring the campaign worker.
+
+        A 366-day revival window can hold far more due quotes than the
+        first-14-days cadence, so an uncapped tick here is the larger burst risk
+        of the two.
+        """
+        result = await db.execute(
+            select(PhoneNumber).where(
+                and_(
+                    PhoneNumber.workspace_id == quote.workspace_id,
+                    PhoneNumber.phone_number == from_number,
+                )
+            )
+        )
+        phone = result.scalar_one_or_none()
+        if phone is None:
+            # A thread can legitimately reference a sender this workspace no
+            # longer tracks. Refusing would silently disable revival for those
+            # contacts, which is a worse failure than an uncapped send we can see.
+            self.logger.warning(
+                "Revival sender is not a tracked number; sending uncapped",
+                quote_id=str(quote.id),
+            )
+            return True
+
+        if not await self.number_pool.reserve_number_for_send(phone, db):
+            self.logger.info(
+                "Revival touch deferred; sender at capacity",
+                quote_id=str(quote.id),
+                phone_number_id=str(phone.id),
+            )
+            return False
+        return True
 
     @staticmethod
     async def _load_contact(quote: Quote, db: AsyncSession) -> Contact | None:
