@@ -38,6 +38,11 @@ from app.schemas.pricing import (
     PricingSettings,
     SeasonalItem,
     SeasonalItemCost,
+    ServiceInclusionCost,
+    ServicePackage,
+    ServicePackageConfig,
+    ServicePackagePricing,
+    ServicePricing,
     TierPricing,
 )
 
@@ -735,3 +740,127 @@ def price_christmas_packages(
             )
         )
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Service packages (Good/Better/Best for roof, siding, gutters, …)
+# --------------------------------------------------------------------------- #
+def price_service_package(
+    config: PricingSettings,
+    category: ServicePackageConfig,
+    package: ServicePackage,
+    *,
+    units: float = 0,
+) -> ServicePricing:
+    """Price one non-seasonal tier from the category's measurement basis.
+
+    Deliberately the same shape as :func:`price_christmas`: every component is
+    grossed up individually so the display ``lines`` sum exactly to ``raw_total``,
+    and the category's job minimum lifts the final ``total`` the same way. What
+    differs is only the *inputs* — a measured quantity and a tier rate instead of
+    a roofline and decor selections.
+
+    On a ``flat`` category the measurement is ignored entirely (the tier sells at
+    ``base_price`` plus its flat inclusions), so an operator who prices whole jobs
+    rather than by the square never has to invent a unit count.
+    """
+    per_unit_basis = category.basis == "per_unit"
+    qty = max(0.0, units or 0.0) if per_unit_basis else 0.0
+    gross_minimum = gross_up_price(_d(category.minimum), config)
+
+    lines: list[CategoryLine] = []
+    base_cost = gross_up_price(_d(package.base_price), config) if package.base_price > 0 else _ZERO
+    if base_cost > 0:
+        lines.append(_category_line(package.label, 1, base_cost, detail=category.label))
+
+    units_net = _d(qty) * _d(package.per_unit_price)
+    units_cost = gross_up_price(units_net, config) if units_net > 0 else _ZERO
+    if units_cost > 0:
+        lines.append(_category_line(f"{qty:g} {category.unit_label}", qty, units_cost))
+
+    covered = set(package.inclusion_keys)
+    inclusion_costs: list[ServiceInclusionCost] = []
+    inclusions_gross = _ZERO
+    for inclusion in category.inclusions:
+        if inclusion.key not in covered:
+            continue
+        # A per-unit scope item on a flat category contributes nothing rather
+        # than silently billing against a measurement the operator never took.
+        quantity = qty if inclusion.per_unit else 1.0
+        net = _d(quantity) * _d(inclusion.price)
+        if net <= 0:
+            continue
+        cost = gross_up_price(net, config)
+        inclusions_gross += cost
+        label = (
+            f"{quantity:g} {category.unit_label} {inclusion.label}"
+            if inclusion.per_unit
+            else inclusion.label
+        )
+        lines.append(_category_line(label, quantity, cost))
+        inclusion_costs.append(
+            ServiceInclusionCost(key=inclusion.key, label=inclusion.label, cost=float(cost))
+        )
+
+    raw_total = base_cost + units_cost + inclusions_gross
+    total = max(raw_total, gross_minimum) if raw_total > 0 else _ZERO
+    return ServicePricing(
+        units=qty,
+        unit_label=category.unit_label,
+        base_cost=float(base_cost),
+        units_cost=float(units_cost),
+        inclusions=inclusion_costs,
+        minimum=float(gross_minimum),
+        raw_total=float(raw_total),
+        total=float(total),
+        min_applied=raw_total < gross_minimum,
+        lines=lines,
+    )
+
+
+def price_service_packages(
+    config: PricingSettings,
+    service_category: str,
+    *,
+    units: float = 0,
+) -> list[ServicePackagePricing]:
+    """Price every tier of one service category in ``package_order`` (low→high).
+
+    Returns ``[]`` for an unknown or disabled category, which is what every
+    workspace that has not configured one gets — the same "empty ladder means à
+    la carte" contract :func:`price_christmas_packages` already has. Category
+    lookup is case-insensitive because ``service_category`` is free-form text an
+    operator types (``"Gutters"`` and ``"gutters"`` are one category).
+    """
+    wanted = (service_category or "").strip().casefold()
+    category = next(
+        (
+            c
+            for c in config.service_packages
+            if c.enabled and c.service_category.strip().casefold() == wanted
+        ),
+        None,
+    )
+    if category is None or not wanted:
+        return []
+
+    by_key = {p.key: p for p in category.packages}
+    ordered_keys = [k for k in category.package_order if k in by_key]
+    ordered_keys += [p.key for p in category.packages if p.key not in ordered_keys]
+    return [
+        ServicePackagePricing(
+            key=by_key[key].key,
+            label=by_key[key].label,
+            name=by_key[key].name,
+            marker=by_key[key].marker,
+            experience=by_key[key].experience,
+            points=list(by_key[key].points),
+            value_tag=by_key[key].value_tag,
+            popular=by_key[key].popular,
+            recommended=by_key[key].recommended,
+            service_category=category.service_category,
+            inclusion_keys=list(by_key[key].inclusion_keys),
+            pricing=price_service_package(config, category, by_key[key], units=units),
+        )
+        for key in ordered_keys
+    ]

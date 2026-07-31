@@ -10,6 +10,10 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.message_template import MessageTemplate
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.schemas.attach_rules import (
+    AttachRulesSettings,
+    AttachRulesSettingsUpdate,
+)
 from app.schemas.lead_source import LeadSourceCaptureSettings
 from app.schemas.neighbor_outreach import (
     NeighborOutreachSettings,
@@ -56,6 +60,12 @@ from app.services.field_service.neighbor_outreach_config import (
 )
 from app.services.field_service.neighbor_outreach_config import (
     get_neighbor_outreach_config,
+)
+from app.services.quotes.attach_rules_config import (
+    SETTINGS_KEY as ATTACH_RULES_KEY,
+)
+from app.services.quotes.attach_rules_config import (
+    get_attach_rules_config,
 )
 from app.services.lead_sources.capture_settings import (
     SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
@@ -629,6 +639,44 @@ async def update_lead_source_capture_policy(
     await db.commit()
     await db.refresh(workspace)
     return get_lead_source_capture_settings(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/attach-rules",
+    response_model=AttachRulesSettings,
+)
+async def get_attach_rules_settings(
+    workspace: WorkspaceAccess,
+) -> AttachRulesSettings:
+    """Get the workspace's attach-rule config (the cross-sell prompt)."""
+    return get_attach_rules_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/attach-rules",
+    response_model=AttachRulesSettings,
+)
+async def update_attach_rules_settings(
+    update: AttachRulesSettingsUpdate,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> AttachRulesSettings:
+    """Update the attach-rule config (shallow top-level merge into ``settings``).
+
+    Only provided keys are written, so editing the prompt copy never clobbers the
+    rules. A provided ``rules`` list replaces the whole list (validated at the
+    edge), matching how the pricing config writes blocks wholesale.
+    """
+    current_settings = dict(workspace.settings)
+    config = dict(current_settings.get(ATTACH_RULES_KEY, {}))
+    config.update(update.model_dump(exclude_unset=True))
+    current_settings[ATTACH_RULES_KEY] = config
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+
+    return get_attach_rules_config(workspace)
 
 
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)

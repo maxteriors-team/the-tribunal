@@ -33,6 +33,7 @@ from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
+from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
 from app.schemas.estimate import (
     ChristmasEstimate,
     ComparisonDeliverResult,
@@ -52,9 +53,9 @@ from app.schemas.estimate import (
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
-    ChristmasPackagePricing,
     ChristmasPricing,
     FinancingEstimate,
+    PackagePricing,
     PermanentPricing,
     PricingSettings,
 )
@@ -91,6 +92,8 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import notify_workspace_event
 from app.services.quotes.attach_metrics import compute_attach_metrics
+from app.services.quotes.attach_rules import evaluate_attach_rules
+from app.services.quotes.attach_rules_config import get_attach_rules_config
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import (
     CatalogEntry,
@@ -114,16 +117,29 @@ from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProv
 logger = structlog.get_logger()
 
 
-def _resolve_recommended_package(
-    packages: list[ChristmasPackagePricing],
+# Generic over the concrete package type (bound to the presentation contract) so
+# a caller gets its own type back — seasonal in, seasonal out — rather than a
+# widened protocol it would have to narrow again to read a breakdown.
+def _resolve_recommended_package[PackageT: PackagePricing](
+    packages: Sequence[PackageT],
     selected_key: str | None,
-) -> ChristmasPackagePricing | None:
-    """The seasonal package to steer the client toward.
+) -> PackageT | None:
+    """The package to steer the client toward, for any service category.
 
-    Mirrors the frontend ``resolveSelectedPackage``: the rep's explicit pick when
-    it names a priced package, else the most-inclusive tier (last in
-    ``package_order``, which :func:`price_christmas_packages` emits low→high).
-    ``None`` when the workspace sells no seasonal packages.
+    Precedence — unchanged for seasonal lighting:
+
+    1. The rep's explicit pick, when it names a priced package.
+    2. A tier the operator flagged ``recommended``: how a good/better/best ladder
+       anchors on its middle option instead of its most expensive one. Seasonal
+       packages never set this (:attr:`ChristmasPackagePricing.recommended` is a
+       constant ``False``), so they fall straight through to (3) exactly as they
+       always have.
+    3. The most-inclusive tier — last in ``package_order``, which both
+       :func:`price_christmas_packages` and :func:`price_service_packages` emit
+       low→high.
+
+    Mirrors the frontend ``resolveSelectedPackage``. ``None`` when the workspace
+    sells no packages.
     """
     if not packages:
         return None
@@ -131,19 +147,26 @@ def _resolve_recommended_package(
         for pkg in packages:
             if pkg.key == selected_key:
                 return pkg
+    for pkg in packages:
+        if pkg.recommended:
+            return pkg
     return packages[-1]
 
 
 def build_public_comparison_packages(
-    packages: list[ChristmasPackagePricing],
+    packages: Sequence[PackagePricing],
     selected_key: str | None,
 ) -> list[PublicComparisonPackage]:
-    """Map priced seasonal packages to the feet-free public card payload.
+    """Map priced packages of any category to the measurement-free public cards.
 
-    Only each package's ``total`` crosses the public boundary — never the
-    :class:`ChristmasPricing` breakdown (which carries ``roofline_feet`` /
-    ``roofline_cost``), so a measurement cannot leak to the homeowner. The
-    recommended tier is flagged for a highlight, not a gate.
+    Only each package's ``total`` crosses the public boundary — never the pricing
+    breakdown behind it (seasonal carries ``roofline_feet`` / ``roofline_cost``,
+    a service tier carries its measured ``units``), so a measurement cannot leak
+    to the homeowner. :class:`~app.schemas.pricing.PackagePricing` is what makes
+    that structural rather than a habit: the protocol exposes ``total`` and no
+    other money, so there is no breakdown in scope here to leak by accident.
+
+    The recommended tier is flagged for a highlight, not a gate.
     """
     recommended = _resolve_recommended_package(packages, selected_key)
     return [
@@ -156,8 +179,11 @@ def build_public_comparison_packages(
             points=list(pkg.points),
             value_tag=pkg.value_tag,
             popular=pkg.popular,
-            includes_roofline=pkg.includes_roofline,
-            total=pkg.pricing.total,
+            # Seasonal packages report ``{"roofline": bool}``; a category with no
+            # roofline reports nothing and the flag stays at its default False,
+            # which is what the public card has always meant by "no roofline".
+            includes_roofline=pkg.includes.get("roofline", False),
+            total=pkg.total,
             recommended=recommended is not None and pkg.key == recommended.key,
         )
         for pkg in packages
@@ -436,6 +462,83 @@ class QuoteService:
     @staticmethod
     def _line_total(quantity: float, unit_price: float, discount: float) -> float:
         return round(quantity * unit_price - discount, 2)
+
+    def _apply_attach_rules(
+        self,
+        quote: Quote,
+        workspace: Workspace,
+        dismissal: AttachDismissalRequest | None,
+    ) -> AttachWarning | None:
+        """Enforce the workspace's attach rules on a quote about to be saved.
+
+        The cross-sell prompt: a roof job with no gutters on it is the single
+        biggest lever on average job value, and it only works if it fires while
+        the rep can still act on it. Returns the advisory warning to hand back on
+        the response, or ``None`` when there is nothing to say.
+
+        Called *before* the insert so a ``blocking`` rule genuinely rejects the
+        save rather than persisting a quote and complaining afterwards. Raises
+        :class:`ValidationError` (a 400 carrying the structured warning in
+        ``details``) in exactly two cases:
+
+        * a ``blocking`` rule matched and no dismissal was supplied;
+        * a dismissal was supplied without a reason while the workspace requires
+          one — in *any* mode, because a reason-less dismissal is not reportable
+          and an unreportable dismissal is the thing this feature exists to fix.
+
+        A dismissal for a quote that earned no warning is ignored rather than
+        recorded: the rep may have added the attach after the prompt appeared,
+        and inventing a "they declined" event for a quote that has the attach
+        would poison the very report it feeds.
+
+        Requires ``quote.line_items`` to be loaded and ``_recompute_totals`` to
+        have run (it derives ``primary_service``).
+        """
+        config = get_attach_rules_config(workspace)
+        warning = evaluate_attach_rules(
+            config,
+            primary_service=quote.primary_service,
+            present_categories=[li.service_category for li in quote.line_items],
+        )
+        if warning is None:
+            return None
+
+        if dismissal is None:
+            if warning.mode == "blocking":
+                raise ValidationError(
+                    f"{warning.message} Add one of: "
+                    f"{', '.join(warning.suggested_categories)} — or dismiss with a reason.",
+                    details=warning.model_dump(mode="json"),
+                )
+            return warning
+
+        reason = (dismissal.reason or "").strip() or None
+        if reason is None and config.require_dismissal_reason:
+            raise ValidationError(
+                "Choose a reason for skipping the add-on before saving.",
+                details=warning.model_dump(mode="json"),
+            )
+
+        # Reassign rather than append: SQLAlchemy does not track in-place
+        # mutation of a plain JSONB list, so an appended dismissal would be
+        # silently dropped on flush.
+        quote.attach_dismissals = [
+            *(quote.attach_dismissals or []),
+            AttachDismissal(
+                primary_service=warning.primary_service,
+                categories=list(warning.suggested_categories),
+                reason=reason,
+                dismissed_at=datetime.now(UTC),
+            ).model_dump(mode="json"),
+        ]
+        self.log.info(
+            "quote_attach_dismissed",
+            workspace_id=str(quote.workspace_id),
+            primary_service=warning.primary_service,
+            categories=warning.suggested_categories,
+            mode=warning.mode,
+        )
+        return None
 
     async def _catalog_categories(
         self,
@@ -718,15 +821,18 @@ class QuoteService:
             status="draft",
             created_by_id=created_by_id,
         )
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
         # Inherit the workspace's default deposit when the operator set none.
         if quote.deposit_percentage is None and quote.deposit_amount_fixed is None:
-            workspace = await get_or_404(self.db, Workspace, workspace_id)
             self._apply_default_deposit(quote, workspace)
         categories = await self._catalog_categories(workspace_id, quote_in.line_items)
         for item in quote_in.line_items:
             quote.line_items.append(self._build_line_item(item, categories))
 
         self._recompute_totals(quote)
+        # Before the insert: a blocking attach rule must reject the save, not
+        # persist a quote and then complain about it.
+        attach_warning = self._apply_attach_rules(quote, workspace, quote_in.attach_dismissal)
         self.db.add(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
@@ -738,7 +844,9 @@ class QuoteService:
             number=quote.number,
             total=float(quote.total),
         )
-        return await self._detail_response(quote)
+        response = await self._detail_response(quote)
+        response.attach_warning = attach_warning
+        return response
 
     async def get_quote(
         self,
@@ -924,6 +1032,7 @@ class QuoteService:
             raise ValidationError(
                 "No client phone on this proposal — add one or pass a destination."
             )
+
         first = (client.get("first_name") or "").strip()
         greeting = f"Hi {first}, " if first else ""
         await self._text_client_link(
@@ -1373,8 +1482,9 @@ class QuoteService:
             raise ValidationError(str(exc)) from exc
 
         quote.line_items.clear()
+        categories = await self._catalog_categories(quote.workspace_id, line_items)
         for item in line_items:
-            quote.line_items.append(self._build_line_item(item))
+            quote.line_items.append(self._build_line_item(item, categories))
         quote.proposal_document = updated.model_dump(mode="json")
         self._recompute_totals(quote)
         await self.db.commit()
@@ -1456,6 +1566,7 @@ class QuoteService:
                 unit_price=Decimal(str(item.unit_price)),
                 transformer=bool(attrs.get("transformer")),
                 components=list(item.components or []),
+                catalog_item_id=item.id,
             )
         return entries
 
@@ -1477,13 +1588,46 @@ class QuoteService:
 
         Same code path as save, so the previewed numbers are exactly what gets
         stored. The client submits only a selection; all money is server-computed.
+
+        The attach prompt is evaluated here too, through the same line-item
+        categorization the save path uses, so preview and save can never disagree
+        about whether a quote is missing its add-on. Surfacing it *during* the
+        build is what makes the prompt actionable: the rep can add the gutters,
+        or dismiss it with a reason that is recorded on the quote as it is
+        created, instead of hearing about it only once a quote already exists.
         """
         workspace = await get_or_404(self.db, Workspace, workspace_id)
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
-        document, _ = build_proposal_document(config, catalog, payload)
+        document, line_items = build_proposal_document(config, catalog, payload)
         self._attach_deposit_to_document(document, payload, config)
+        document.attach_warning = await self._preview_attach_warning(
+            workspace, workspace_id, line_items
+        )
         return document
+
+    async def _preview_attach_warning(
+        self,
+        workspace: Workspace,
+        workspace_id: uuid.UUID,
+        line_items: Sequence[QuoteLineItemCreate],
+    ) -> AttachWarning | None:
+        """Evaluate the attach rules against an unsaved wizard selection.
+
+        Builds throwaway line items with exactly the categorization the save path
+        applies, so the previewed prompt is the prompt the save would raise. This
+        is advisory only — the rule is *enforced* in
+        :meth:`_apply_attach_rules` on save, so a client that ignores the preview
+        still cannot slip a blocking rule.
+        """
+        categories = await self._catalog_categories(workspace_id, line_items)
+        lines = [self._build_line_item(item, categories) for item in line_items]
+        primary, _, _ = compute_attach_metrics(lines)
+        return evaluate_attach_rules(
+            get_attach_rules_config(workspace),
+            primary_service=primary,
+            present_categories=[line.service_category for line in lines],
+        )
 
     async def save_from_wizard(
         self,
@@ -1529,9 +1673,15 @@ class QuoteService:
             proposal_document=document.model_dump(mode="json"),
             created_by_id=created_by_id,
         )
+        # Fixture lines carry the price-book id the builder resolved them from,
+        # so a wizard quote is categorized exactly like a picker-built one and
+        # reports a real ``primary_service`` for attach metrics and attach rules.
+        categories = await self._catalog_categories(workspace_id, line_items)
         for item in line_items:
-            quote.line_items.append(self._build_line_item(item))
+            quote.line_items.append(self._build_line_item(item, categories))
         self._recompute_totals(quote)
+        # Before the insert, so a blocking attach rule rejects the save.
+        attach_warning = self._apply_attach_rules(quote, workspace, payload.attach_dismissal)
         # Persist the resolved deposit selection onto the quote (one column only).
         selection = self._wizard_deposit_selection(payload, config)
         if selection is not None:
@@ -1551,7 +1701,9 @@ class QuoteService:
             total=float(quote.total),
             selected_tier=document.selected_tier,
         )
-        return await self._detail_response(quote)
+        response = await self._detail_response(quote)
+        response.attach_warning = attach_warning
+        return response
 
     # ------------------------------------------------------------------
     # Roofline estimator + permanent-vs-temporary comparison
