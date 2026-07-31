@@ -1,8 +1,9 @@
 "use client";
 
-import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart, Star, Zap, FileText, DollarSign, CalendarClock, History, Home } from "lucide-react";
+import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, Layers, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
+import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
 import { FinancingSettingsCard } from "@/components/settings/financing-settings-card";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
@@ -16,6 +17,7 @@ import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab
 import { QuoteFollowupSettingsTab } from "@/components/settings/quote-followup-settings-tab";
 import { QuoteRevivalSettingsTab } from "@/components/settings/quote-revival-settings-tab";
 import { ReviewSettingsTab } from "@/components/settings/review-settings-tab";
+import { SalesTargetsSettingsTab } from "@/components/settings/sales-targets-settings-tab";
 import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
 import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-settings-tab";
 import { TeamSettingsTab } from "@/components/settings/team-settings-tab";
@@ -31,6 +33,8 @@ const settingsTabs = [
   { value: "reviews", label: "Reviews", icon: Star },
   { value: "proposals", label: "Proposals", icon: FileText },
   { value: "pricing", label: "Pricing", icon: DollarSign },
+  { value: "attach-rules", label: "Attach Rules", icon: Layers },
+  { value: "sales-targets", label: "Sales Targets", icon: Target },
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
   { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
   { value: "quote-revival", label: "Quote Revival", icon: History },
@@ -119,6 +123,18 @@ export function SettingsPage() {
               <PermanentPricingSettingsCard />
               <SeasonalPricingSettingsTab />
             </div>
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="attach-rules">
+          <QueryErrorBoundary message="Failed to load attach rules. Please try again.">
+            <AttachRulesSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="sales-targets">
+          <QueryErrorBoundary message="Failed to load sales targets. Please try again.">
+            <SalesTargetsSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

@@ -123,6 +123,7 @@ const opportunities = createResourceQueryKeys("opportunities");
 const pendingActions = createResourceQueryKeys("pending-actions");
 const phoneNumbers = createResourceQueryKeys("phone-numbers");
 const referralPartners = createResourceQueryKeys("referral-partners");
+const revenueTargets = createResourceQueryKeys("revenue-targets");
 const reviews = createResourceQueryKeys("reviews");
 const segments = createResourceQueryKeys("segments");
 const technicians = createResourceQueryKeys("technicians");
@@ -131,6 +132,12 @@ const technicians = createResourceQueryKeys("technicians");
 const salesWizard = {
   pricing: (workspaceId: string) => ["sales-wizard-pricing", workspaceId] as const,
   catalog: (workspaceId: string) => ["sales-wizard-catalog", workspaceId] as const,
+};
+
+// Attach rules: the workspace's cross-sell prompt config, read by the settings
+// editor and by the builder's dismissal UI.
+const attachRules = {
+  config: (workspaceId: string) => ["attach-rules", workspaceId] as const,
 };
 
 // Roofline estimator: a live permanent-vs-temporary price for a measured
@@ -159,6 +166,7 @@ const preBooking = {
 
 export const queryKeys = {
   salesWizard,
+  attachRules,
   estimator,
   adLibrary: {
     ...adAdvertisers,
@@ -435,6 +443,15 @@ export const queryKeys = {
       phoneNumbers.list(workspaceId, { active_only: false }),
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
+  revenueTargets: {
+    ...revenueTargets,
+    /** One calendar year of monthly targets — the seasonal planning screen. */
+    byYear: (workspaceId: string, year: number) =>
+      revenueTargets.list(workspaceId, { year }),
+    /** Month-pace report; `month` is any date in the month, null = this month. */
+    pace: (workspaceId: string, month?: string | null) =>
+      [...revenueTargets.all(workspaceId), "pace", month ?? null] as const,
+  },
   quotes: {
     ...quotes,
     byContact: (workspaceId: string, contactId: number | string | undefined) =>

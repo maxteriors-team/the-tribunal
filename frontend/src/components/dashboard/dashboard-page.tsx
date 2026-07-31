@@ -8,6 +8,7 @@ import { AppointmentPerformanceCard } from "@/components/dashboard/appointment-p
 import { DashboardStatsGrid } from "@/components/dashboard/dashboard-stats";
 import { KnowledgeBaseCard } from "@/components/dashboard/knowledge-base-card";
 import { LeadSourceRoiCard } from "@/components/dashboard/lead-source-roi-card";
+import { MonthPaceCard } from "@/components/dashboard/month-pace-card";
 import {
   ActiveCampaignsCard,
   AgentsCard,
@@ -72,6 +73,16 @@ export function DashboardPage() {
       </div>
 
       <DashboardStatsGrid stats={data?.stats} isPending={isPending} />
+
+      {workspaceId && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.11 }}
+        >
+          <MonthPaceCard workspaceId={workspaceId} />
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

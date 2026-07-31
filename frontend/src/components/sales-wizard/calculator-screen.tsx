@@ -10,6 +10,7 @@
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { AttachPrompt, useAttachPromptActions } from "./attach-prompt";
 import {
   ChristmasSection,
   GrandTotals,
@@ -270,13 +271,17 @@ export function CalculatorScreen({
     ? `${window.location.origin}/p/quotes/${wizard.savedQuote.public_token}`
     : null;
 
+  const attach = useAttachPromptActions(wizard);
+
   const handleSave = async () => {
     try {
       const quote = await wizard.save();
       toast.success("Proposal saved — client link ready");
       return quote;
-    } catch {
-      toast.error("Could not save the proposal. Please try again.");
+    } catch (err) {
+      // A blocking attach rule is not a failure to retry blindly: the prompt
+      // beside the button says exactly what to add or skip.
+      toast.error(attach.saveErrorMessage(err));
       return null;
     }
   };
@@ -663,6 +668,15 @@ export function CalculatorScreen({
                 </li>
               </ul>
             </div>
+
+            {wizard.attachWarning && (
+              <AttachPrompt
+                warning={wizard.attachWarning}
+                busy={wizard.isSaving}
+                onAdd={attach.add}
+                onDismiss={attach.dismiss}
+              />
+            )}
 
             <div className="action-row">
               <button type="button" className="present-btn" onClick={onPresent}>
