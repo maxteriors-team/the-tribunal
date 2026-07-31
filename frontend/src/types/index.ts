@@ -22,6 +22,7 @@ export * from "./conversation";
 export * from "./appointment";
 export * from "./offer";
 export * from "./campaign";
+export * from "./pre-booking";
 export * from "./nudge";
 export * from "./review";
 export * from "./roleplay";

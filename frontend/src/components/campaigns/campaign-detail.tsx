@@ -16,6 +16,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 import { GuaranteeProgress } from "@/components/campaigns/guarantee-progress";
+import { PreBookingPanel } from "@/components/campaigns/pre-booking-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -327,6 +328,10 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
           <GuaranteeProgress campaignId={campaignId} campaignType={campaign.campaign_type} />
         )}
       </div>
+
+      {/* Only pre-booking campaigns carry an offer; for everything else this
+          section does not exist rather than rendering empty. */}
+      {campaign.pre_booking ? <PreBookingPanel campaignId={campaignId} /> : null}
 
       {/* Scheduling info */}
       {(campaign.sending_hours_start ||

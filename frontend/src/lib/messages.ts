@@ -29,6 +29,15 @@ export const messages = {
     voiceCreateFailed: "Failed to create campaign",
     emailCreated: "Email campaign created successfully!",
     emailCreateFailed: "Failed to create email campaign",
+    // Pre-booking toasts lead with the audience size: "created" is not the news,
+    // "it is going to 214 warm contacts" is.
+    preBookingCreated: (enrolled: number) =>
+      `Pre-booking campaign started — ${enrolled} warm contacts enrolled`,
+    preBookingScheduled: (enrolled: number) =>
+      `Pre-booking campaign scheduled — ${enrolled} warm contacts enrolled`,
+    preBookingOptOutsExcluded: (excluded: number) =>
+      `${excluded} warm contacts were held back because they opted out`,
+    preBookingCreateFailed: "Failed to create pre-booking campaign",
   },
 
   offers: {
