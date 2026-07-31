@@ -216,9 +216,11 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
                             anchor_expr > now.date() - timedelta(days=MAX_QUOTE_AGE_DAYS),
                             # Disabled workspaces are discarded below anyway;
                             # excluding them in SQL stops them consuming pages.
-                            Workspace.settings[REVIVAL_SETTINGS_KEY]["enabled"]
-                            .as_boolean()
-                            .is_(True),
+                            # Text comparison, not a boolean cast: a cast raises
+                            # on a hand-edited value, and this predicate spans
+                            # every workspace, so one bad row would kill the
+                            # fetch for all of them.
+                            Workspace.settings[REVIVAL_SETTINGS_KEY]["enabled"].astext == "true",
                         )
                     )
                     .order_by(anchor_expr, Quote.id)

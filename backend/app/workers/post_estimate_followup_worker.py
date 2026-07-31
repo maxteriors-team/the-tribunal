@@ -230,7 +230,15 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
                             # excluding them in SQL stops them consuming pages.
                             # ``enabled`` defaults to False, so a workspace with
                             # no config block is correctly out of scope.
-                            Workspace.settings[SETTINGS_KEY]["enabled"].as_boolean().is_(True),
+                            #
+                            # Compared as text rather than cast to boolean: a
+                            # cast raises on a hand-edited value like "yes", and
+                            # because this predicate spans every workspace, one
+                            # bad row would kill the fetch for all of them. The
+                            # validated PUT endpoint only ever writes a real JSON
+                            # boolean, so anything else is out of contract and
+                            # correctly reads as not-enabled.
+                            Workspace.settings[SETTINGS_KEY]["enabled"].astext == "true",
                         )
                     )
                     .order_by(Quote.sent_at, Quote.id)
