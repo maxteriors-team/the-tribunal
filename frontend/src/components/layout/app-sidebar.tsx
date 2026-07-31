@@ -369,25 +369,34 @@ export function AppSidebar({ children }: AppSidebarProps) {
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               {breadcrumbs.map((crumb, index) => (
-                <BreadcrumbItem
-                  key={crumb.href}
-                  className={crumb.isLast ? "min-w-0" : "hidden sm:inline-flex"}
-                >
-                  {crumb.isLast ? (
-                    <BreadcrumbPage className="gradient-heading truncate">
-                      {crumb.label}
-                    </BreadcrumbPage>
-                  ) : (
-                    <>
+                // The separator is a sibling of the item, never a child.
+                // BreadcrumbSeparator renders an <li>, and BreadcrumbItem is
+                // also an <li>, so nesting them produced invalid HTML and a
+                // React hydration mismatch that discarded the server-rendered
+                // header. It only surfaced once a route had three crumbs, since
+                // a single-crumb page renders no separator at all.
+                <Fragment key={crumb.href}>
+                  <BreadcrumbItem
+                    className={crumb.isLast ? "min-w-0" : "hidden sm:inline-flex"}
+                  >
+                    {crumb.isLast ? (
+                      <BreadcrumbPage className="gradient-heading truncate">
+                        {crumb.label}
+                      </BreadcrumbPage>
+                    ) : (
                       <BreadcrumbLink asChild>
                         <Link href={crumb.href} className="whitespace-nowrap">
                           {crumb.label}
                         </Link>
                       </BreadcrumbLink>
-                      {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
-                    </>
+                    )}
+                  </BreadcrumbItem>
+                  {index < breadcrumbs.length - 1 && (
+                    // Hidden in lockstep with the ancestor crumb it follows, so
+                    // a narrow screen shows neither a stray chevron nor a gap.
+                    <BreadcrumbSeparator className="hidden sm:inline-flex" />
                   )}
-                </BreadcrumbItem>
+                </Fragment>
               ))}
             </BreadcrumbList>
           </Breadcrumb>
