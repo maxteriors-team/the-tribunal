@@ -45,6 +45,7 @@ from app.workers.outbound_improvement_suggestion_worker import (
 from app.workers.post_estimate_followup_worker import (
     _registry as post_estimate_followup_registry,
 )
+from app.workers.prebooking_worker import _registry as prebooking_registry
 from app.workers.prompt_improvement_worker import _registry as prompt_improvement_registry
 from app.workers.prompt_stats_worker import _registry as prompt_stats_registry
 from app.workers.prospect_enrichment_worker import (
@@ -314,6 +315,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
             "text_message_provider",
             "resend",
         ),
+    ),
+    WorkerSpec(
+        name="prebooking_worker",
+        registry=prebooking_registry,
+        dependencies=("postgres",),
     ),
 )
 

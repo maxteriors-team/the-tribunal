@@ -7406,6 +7406,64 @@
         "title": "CampaignCreate",
         "type": "object"
       },
+      "CampaignPreBookingSummary": {
+        "description": "Headline pre-booking terms carried on a campaign response.\n\nEnough for a list row to say \"this one sells May–June at 15% off, 20 slots\"\nwithout a second request. The full offer (slot usage, lead time, audience)\nlives under ``/campaigns/{id}/pre-booking``.",
+        "properties": {
+          "deposit_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType"
+          },
+          "deposit_value": {
+            "title": "Deposit Value",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incentive_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType"
+          },
+          "incentive_value": {
+            "title": "Incentive Value",
+            "type": "number"
+          },
+          "service_description": {
+            "title": "Service Description",
+            "type": "string"
+          },
+          "service_season_end_month": {
+            "title": "Service Season End Month",
+            "type": "integer"
+          },
+          "service_season_start_month": {
+            "title": "Service Season Start Month",
+            "type": "integer"
+          },
+          "service_season_year": {
+            "title": "Service Season Year",
+            "type": "integer"
+          },
+          "slot_cap": {
+            "title": "Slot Cap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "service_description",
+          "service_season_start_month",
+          "service_season_end_month",
+          "service_season_year",
+          "incentive_type",
+          "incentive_value",
+          "deposit_type",
+          "deposit_value",
+          "slot_cap"
+        ],
+        "title": "CampaignPreBookingSummary",
+        "type": "object"
+      },
       "CampaignReportListResponse": {
         "description": "Paginated report list.",
         "properties": {
@@ -7908,6 +7966,16 @@
               }
             ],
             "title": "Offer Id"
+          },
+          "pre_booking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CampaignPreBookingSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "qualification_criteria": {
             "anyOf": [
@@ -17401,8 +17469,210 @@
         "title": "InvoiceResponse",
         "type": "object"
       },
+      "InvoiceSendResponse": {
+        "description": "Invoice after a send, plus whether the customer was actually emailed.\n\nExtends the detail response so callers keep every invoice field; ``delivery``\nis what lets the UI warn instead of claiming a delivery that never happened.",
+        "properties": {
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "number"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "delivered_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered To"
+          },
+          "delivery": {
+            "enum": [
+              "emailed",
+              "skipped_no_email",
+              "failed"
+            ],
+            "title": "Delivery",
+            "type": "string"
+          },
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItemResponse"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "partial",
+              "void",
+              "overdue"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_amount": {
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "number",
+          "status",
+          "subtotal",
+          "tax_amount",
+          "discount_amount",
+          "total",
+          "amount_paid",
+          "currency",
+          "created_at",
+          "updated_at",
+          "delivery"
+        ],
+        "title": "InvoiceSendResponse",
+        "type": "object"
+      },
       "InvoiceUpdate": {
-        "description": "Update invoice header fields (all optional). Line items have their own\nsub-resource endpoints; ``status``/``number``/totals are server-derived.",
+        "description": "Update invoice header fields (all optional); ``status``/``number``/totals\nare server-derived.\n\n``line_items`` optionally **replaces the whole set** in the same transaction.\nAn editor that reorders, edits, and deletes rows in one save would otherwise\nhave to fan out across the per-item sub-resource endpoints, where a failure\nhalfway through leaves a financial record in a state neither the operator nor\nthe customer asked for. Omit the field to leave line items untouched; the\nper-item endpoints remain for incremental edits.",
         "properties": {
           "contact_id": {
             "anyOf": [
@@ -17461,6 +17731,20 @@
               }
             ],
             "title": "Issue Date"
+          },
+          "line_items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/InvoiceLineItemCreate"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Items"
           },
           "notes": {
             "anyOf": [
@@ -29794,6 +30078,757 @@
         "title": "PortalResponse",
         "type": "object"
       },
+      "PreBookingAmountType": {
+        "description": "How a money field is read: a percentage of the job, or a flat amount.\n\nShared by the booking incentive and the deposit so the two read the same way\non screen and in the API, and so the deposit maps 1:1 onto the quote's\nexisting ``deposit_percentage`` / ``deposit_amount_fixed`` pair.",
+        "enum": [
+          "percentage",
+          "fixed"
+        ],
+        "title": "PreBookingAmountType",
+        "type": "string"
+      },
+      "PreBookingAudienceEnrollResponse": {
+        "description": "Result of enrolling the warm audience into the campaign.",
+        "properties": {
+          "enrolled": {
+            "title": "Enrolled",
+            "type": "integer"
+          },
+          "excluded_opted_out": {
+            "title": "Excluded Opted Out",
+            "type": "integer"
+          },
+          "skipped_already_enrolled": {
+            "title": "Skipped Already Enrolled",
+            "type": "integer"
+          },
+          "total_contacts": {
+            "title": "Total Contacts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrolled",
+          "skipped_already_enrolled",
+          "excluded_opted_out",
+          "total_contacts"
+        ],
+        "title": "PreBookingAudienceEnrollResponse",
+        "type": "object"
+      },
+      "PreBookingAudiencePreview": {
+        "description": "Counts behind a pre-booking audience, before anyone is enrolled.",
+        "properties": {
+          "excluded_already_enrolled": {
+            "title": "Excluded Already Enrolled",
+            "type": "integer"
+          },
+          "excluded_opted_out": {
+            "title": "Excluded Opted Out",
+            "type": "integer"
+          },
+          "past_customers": {
+            "title": "Past Customers",
+            "type": "integer"
+          },
+          "prior_season_christmas": {
+            "default": 0,
+            "title": "Prior Season Christmas",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unsold_quotes": {
+            "title": "Unsold Quotes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "past_customers",
+          "unsold_quotes",
+          "excluded_opted_out",
+          "excluded_already_enrolled"
+        ],
+        "title": "PreBookingAudiencePreview",
+        "type": "object"
+      },
+      "PreBookingConfigCreate": {
+        "additionalProperties": false,
+        "description": "Payload for attaching a pre-booking offer to a campaign.",
+        "properties": {
+          "deposit_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType",
+            "default": "percentage"
+          },
+          "deposit_value": {
+            "exclusiveMinimum": 0.0,
+            "title": "Deposit Value",
+            "type": "number"
+          },
+          "hold_hours": {
+            "default": 72,
+            "exclusiveMinimum": 0.0,
+            "maximum": 720.0,
+            "title": "Hold Hours",
+            "type": "integer"
+          },
+          "incentive_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType",
+            "default": "percentage"
+          },
+          "incentive_value": {
+            "exclusiveMinimum": 0.0,
+            "title": "Incentive Value",
+            "type": "number"
+          },
+          "service_description": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Service Description",
+            "type": "string"
+          },
+          "service_season_end_month": {
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Service Season End Month",
+            "type": "integer"
+          },
+          "service_season_start_month": {
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Service Season Start Month",
+            "type": "integer"
+          },
+          "service_season_year": {
+            "maximum": 2100.0,
+            "minimum": 2000.0,
+            "title": "Service Season Year",
+            "type": "integer"
+          },
+          "slot_cap": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000.0,
+            "title": "Slot Cap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "service_season_start_month",
+          "service_season_end_month",
+          "service_season_year",
+          "service_description",
+          "incentive_value",
+          "deposit_value",
+          "slot_cap"
+        ],
+        "title": "PreBookingConfigCreate",
+        "type": "object"
+      },
+      "PreBookingConfigResponse": {
+        "description": "A campaign's pre-booking offer plus its live slot and lead-time state.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deposit_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType"
+          },
+          "deposit_value": {
+            "title": "Deposit Value",
+            "type": "number"
+          },
+          "hold_hours": {
+            "title": "Hold Hours",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incentive_type": {
+            "$ref": "#/components/schemas/PreBookingAmountType"
+          },
+          "incentive_value": {
+            "title": "Incentive Value",
+            "type": "number"
+          },
+          "is_full": {
+            "description": "True when no further slot may be held.",
+            "readOnly": true,
+            "title": "Is Full",
+            "type": "boolean"
+          },
+          "lead_time_days": {
+            "description": "Days between the scheduled launch (or today) and the season opening.",
+            "readOnly": true,
+            "title": "Lead Time Days",
+            "type": "integer"
+          },
+          "lead_time_message": {
+            "description": "One-line operator guidance about the runway.",
+            "readOnly": true,
+            "title": "Lead Time Message",
+            "type": "string"
+          },
+          "lead_time_status": {
+            "description": "``ample`` / ``tight`` / ``late`` grading of the runway.",
+            "enum": [
+              "ample",
+              "tight",
+              "late"
+            ],
+            "readOnly": true,
+            "title": "Lead Time Status",
+            "type": "string"
+          },
+          "scheduled_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start"
+          },
+          "season_end_date": {
+            "description": "Last day the work could be performed.",
+            "format": "date",
+            "readOnly": true,
+            "title": "Season End Date",
+            "type": "string"
+          },
+          "season_label": {
+            "description": "Operator-facing season name, e.g. ``\"March–May 2027\"``.",
+            "readOnly": true,
+            "title": "Season Label",
+            "type": "string"
+          },
+          "season_start_date": {
+            "description": "First day the work could be performed.",
+            "format": "date",
+            "readOnly": true,
+            "title": "Season Start Date",
+            "type": "string"
+          },
+          "service_description": {
+            "title": "Service Description",
+            "type": "string"
+          },
+          "service_season_end_month": {
+            "title": "Service Season End Month",
+            "type": "integer"
+          },
+          "service_season_start_month": {
+            "title": "Service Season Start Month",
+            "type": "integer"
+          },
+          "service_season_year": {
+            "title": "Service Season Year",
+            "type": "integer"
+          },
+          "slot_cap": {
+            "title": "Slot Cap",
+            "type": "integer"
+          },
+          "slots_confirmed": {
+            "default": 0,
+            "title": "Slots Confirmed",
+            "type": "integer"
+          },
+          "slots_held": {
+            "default": 0,
+            "title": "Slots Held",
+            "type": "integer"
+          },
+          "slots_remaining": {
+            "description": "Slots still sellable right now.",
+            "readOnly": true,
+            "title": "Slots Remaining",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "campaign_id",
+          "service_season_start_month",
+          "service_season_end_month",
+          "service_season_year",
+          "service_description",
+          "incentive_type",
+          "incentive_value",
+          "deposit_type",
+          "deposit_value",
+          "slot_cap",
+          "hold_hours",
+          "created_at",
+          "updated_at",
+          "season_start_date",
+          "season_end_date",
+          "season_label",
+          "slots_remaining",
+          "is_full",
+          "lead_time_days",
+          "lead_time_status",
+          "lead_time_message"
+        ],
+        "title": "PreBookingConfigResponse",
+        "type": "object"
+      },
+      "PreBookingConfigUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update of an existing pre-booking offer.",
+        "properties": {
+          "deposit_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreBookingAmountType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deposit_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Value"
+          },
+          "hold_hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 720.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Hours"
+          },
+          "incentive_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreBookingAmountType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "incentive_value": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incentive Value"
+          },
+          "service_description": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Description"
+          },
+          "service_season_end_month": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Season End Month"
+          },
+          "service_season_start_month": {
+            "anyOf": [
+              {
+                "maximum": 12.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Season Start Month"
+          },
+          "service_season_year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 2000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Season Year"
+          },
+          "slot_cap": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot Cap"
+          }
+        },
+        "title": "PreBookingConfigUpdate",
+        "type": "object"
+      },
+      "PreBookingLaunchRequest": {
+        "additionalProperties": false,
+        "description": "Schedule a pre-booking campaign to launch on a future date.",
+        "properties": {
+          "scheduled_start": {
+            "format": "date-time",
+            "title": "Scheduled Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scheduled_start"
+        ],
+        "title": "PreBookingLaunchRequest",
+        "type": "object"
+      },
+      "PreBookingReservationResponse": {
+        "description": "One contact's claim on a season slot.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "config_id": {
+            "format": "uuid",
+            "title": "Config Id",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "held_at": {
+            "format": "date-time",
+            "title": "Held At",
+            "type": "string"
+          },
+          "hold_expires_at": {
+            "format": "date-time",
+            "title": "Hold Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incentive_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incentive Amount"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Id"
+          },
+          "quoted_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quoted Total"
+          },
+          "release_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Reason"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PreBookingReservationStatus"
+          },
+          "target_end_date": {
+            "format": "date",
+            "title": "Target End Date",
+            "type": "string"
+          },
+          "target_start_date": {
+            "format": "date",
+            "title": "Target Start Date",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "campaign_id",
+          "config_id",
+          "contact_id",
+          "quote_id",
+          "job_id",
+          "status",
+          "target_start_date",
+          "target_end_date",
+          "quoted_total",
+          "incentive_amount",
+          "deposit_amount",
+          "held_at",
+          "hold_expires_at",
+          "confirmed_at",
+          "released_at",
+          "release_reason",
+          "created_at"
+        ],
+        "title": "PreBookingReservationResponse",
+        "type": "object"
+      },
+      "PreBookingReservationStatus": {
+        "description": "Lifecycle of one contact's claim on a season slot.\n\n``held``      — a quote was issued and the deposit is outstanding. Occupies a\n                slot until ``hold_expires_at`` passes.\n``confirmed`` — the deposit landed. Occupies a slot until the work is done.\n``released``  — the hold lapsed (or was released) without payment; the slot\n                went back to the pool.\n``cancelled`` — an operator or customer called the booking off after it was\n                confirmed.",
+        "enum": [
+          "held",
+          "confirmed",
+          "released",
+          "cancelled"
+        ],
+        "title": "PreBookingReservationStatus",
+        "type": "string"
+      },
+      "PreBookingReserveRequest": {
+        "additionalProperties": false,
+        "description": "Accept the pre-booking offer for one contact.",
+        "properties": {
+          "base_amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Amount"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "service_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Location Id"
+          },
+          "source_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote Id"
+          }
+        },
+        "required": [
+          "contact_id"
+        ],
+        "title": "PreBookingReserveRequest",
+        "type": "object"
+      },
+      "PreBookingReserveResponse": {
+        "description": "A held slot plus the link the customer pays their deposit through.",
+        "properties": {
+          "deposit_amount": {
+            "title": "Deposit Amount",
+            "type": "number"
+          },
+          "proposal_url": {
+            "title": "Proposal Url",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_number": {
+            "title": "Quote Number",
+            "type": "string"
+          },
+          "reservation": {
+            "$ref": "#/components/schemas/PreBookingReservationResponse"
+          },
+          "slots_remaining": {
+            "title": "Slots Remaining",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reservation",
+          "quote_id",
+          "quote_number",
+          "deposit_amount",
+          "proposal_url",
+          "slots_remaining"
+        ],
+        "title": "PreBookingReserveResponse",
+        "type": "object"
+      },
       "PricingSettings": {
         "description": "The full sales-pricing config for a workspace (read view, lenient).\n\nMirrors the uploaded wizard's ``CONFIG`` minus the fixture catalog. Sensible\nlighting defaults so a brand-new workspace prices before customization; the\nseed script overwrites tiers/care-plan/savings/bistro with real data.",
         "properties": {
@@ -30603,7 +31638,7 @@
         "type": "object"
       },
       "ProposalCategorySection": {
-        "description": "One priced product-line section (permanent / christmas) in a quote.\n\nLandscape keeps its rich tier cards and bistro its bespoke block; these\nsections carry the *new* per-linear-ft / decor lines so the client page can\nrender any mix of product lines uniformly.",
+        "description": "One priced product-line section (permanent / christmas) in a quote.\n\nLandscape keeps its rich tier cards and bistro its bespoke block; these\nsections carry the *new* per-linear-ft / decor lines so the client page can\nrender any mix of product lines uniformly.\n\n``takedown``/``storage`` record the seasonal services the client actually\nbought, so downstream dispatch reads a field instead of pattern-matching a\ndisplay label. Both are ``None`` on sections written before this existed and\non non-seasonal lines — a consumer must read ``None`` as \"unknown\", never as\n\"declined\", or a season already sold silently loses its takedown crew.",
         "properties": {
           "cash_savings": {
             "default": 0,
@@ -30644,6 +31679,28 @@
             "default": 0,
             "title": "Monthly Payment",
             "type": "number"
+          },
+          "storage": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage"
+          },
+          "takedown": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takedown"
           }
         },
         "required": [
@@ -32229,6 +33286,259 @@
           "body"
         ],
         "title": "PublicFeedbackSubmit",
+        "type": "object"
+      },
+      "PublicInvoice": {
+        "description": "Read-only, allowlisted view of an invoice for its public page.\n\nDeliberately **not** derived from ``InvoiceResponse``: this crosses an\nunauthenticated boundary, so fields are listed explicitly rather than\ninherited. Internal provenance (``workspace_id``, ``contact_id``,\n``opportunity_id``, ``created_by_id``, Stripe handles, ``external_*``) is\nabsent by construction -- a future column added to the model cannot leak\nhere by default.",
+        "properties": {
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "number"
+          },
+          "balance_due": {
+            "title": "Balance Due",
+            "type": "number"
+          },
+          "branding": {
+            "$ref": "#/components/schemas/PublicProposalBranding"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "discount_amount": {
+            "title": "Discount Amount",
+            "type": "number"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "is_overdue": {
+            "title": "Is Overdue",
+            "type": "boolean"
+          },
+          "is_paid": {
+            "title": "Is Paid",
+            "type": "boolean"
+          },
+          "is_payable": {
+            "title": "Is Payable",
+            "type": "boolean"
+          },
+          "is_void": {
+            "title": "Is Void",
+            "type": "boolean"
+          },
+          "issue_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Date"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicInvoiceLineItem"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "sent",
+              "paid",
+              "partial",
+              "void",
+              "overdue"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subtotal": {
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_amount": {
+            "title": "Tax Amount",
+            "type": "number"
+          },
+          "terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "token",
+          "number",
+          "status",
+          "currency",
+          "subtotal",
+          "tax_amount",
+          "discount_amount",
+          "total",
+          "amount_paid",
+          "balance_due",
+          "is_paid",
+          "is_void",
+          "is_overdue",
+          "is_payable",
+          "branding"
+        ],
+        "title": "PublicInvoice",
+        "type": "object"
+      },
+      "PublicInvoiceLineItem": {
+        "description": "One billable line as the customer sees it.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "discount": {
+            "title": "Discount",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "unit_price",
+          "discount",
+          "total"
+        ],
+        "title": "PublicInvoiceLineItem",
+        "type": "object"
+      },
+      "PublicInvoicePaymentCheckout": {
+        "description": "Hosted Stripe payment URL for the customer to pay their balance.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "amount",
+          "currency"
+        ],
+        "title": "PublicInvoicePaymentCheckout",
+        "type": "object"
+      },
+      "PublicInvoicePaymentStatus": {
+        "description": "Reconciled payment state, polled on return from Stripe Checkout.",
+        "properties": {
+          "amount_paid": {
+            "title": "Amount Paid",
+            "type": "number"
+          },
+          "balance_due": {
+            "title": "Balance Due",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "is_paid": {
+            "title": "Is Paid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_paid",
+          "amount_paid",
+          "balance_due",
+          "currency"
+        ],
+        "title": "PublicInvoicePaymentStatus",
         "type": "object"
       },
       "PublicOfferResponse": {
@@ -45806,6 +47116,135 @@
         ]
       }
     },
+    "/api/v1/p/invoices/{token}": {
+      "get": {
+        "description": "Render a customer's invoice from its share token. Drafts/unknown 404.",
+        "operationId": "get_public_invoice_api_v1_p_invoices__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInvoice"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Public Invoice",
+        "tags": [
+          "Public Invoices"
+        ]
+      }
+    },
+    "/api/v1/p/invoices/{token}/pay": {
+      "post": {
+        "description": "Start a Stripe Checkout Session so the customer can pay their balance.\n\nReturns the hosted payment URL for the frontend to redirect to. The charged\namount is re-derived from the invoice server-side, never taken from the\nrequest. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces\nthrough the service's own error mapping.",
+        "operationId": "create_public_invoice_payment_api_v1_p_invoices__token__pay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInvoicePaymentCheckout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Public Invoice Payment",
+        "tags": [
+          "Public Invoices"
+        ]
+      }
+    },
+    "/api/v1/p/invoices/{token}/payment-status": {
+      "post": {
+        "description": "Reconcile the invoice against Stripe on return from checkout.\n\nA webhook backstop so a delayed or dropped webhook never leaves a paid\ninvoice reading unpaid. Idempotent.",
+        "operationId": "reconcile_public_invoice_payment_api_v1_p_invoices__token__payment_status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInvoicePaymentStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Public Invoice Payment",
+        "tags": [
+          "Public Invoices"
+        ]
+      }
+    },
     "/api/v1/p/leads/{public_key}": {
       "options": {
         "description": "Handle CORS preflight for lead form submissions.",
@@ -54718,6 +56157,692 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking": {
+      "get": {
+        "description": "Read a campaign's pre-booking offer, slot usage and lead time.",
+        "operationId": "get_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Pre Booking Offer",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      },
+      "post": {
+        "description": "Attach a pre-booking offer to a campaign.",
+        "operationId": "create_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreBookingConfigCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Pre Booking Offer",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      },
+      "put": {
+        "description": "Update the offer terms. Lowering the cap below what is already sold is\nallowed — it stops further sales without cancelling anyone.",
+        "operationId": "update_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreBookingConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Pre Booking Offer",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/audience": {
+      "get": {
+        "description": "Count the warm database this offer would reach.",
+        "operationId": "preview_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_past_customers",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Past Customers",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unsold_quotes",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Unsold Quotes",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_prior_season_christmas",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Prior Season Christmas",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seasons_back",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 10,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seasons Back"
+            }
+          },
+          {
+            "in": "query",
+            "name": "segment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Segment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingAudiencePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Pre Booking Audience",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/audience/enroll": {
+      "post": {
+        "description": "Enroll the warm audience into the campaign, skipping opted-out contacts.",
+        "operationId": "enroll_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_enroll_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_past_customers",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Past Customers",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unsold_quotes",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Unsold Quotes",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_prior_season_christmas",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Prior Season Christmas",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seasons_back",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 10,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seasons Back"
+            }
+          },
+          {
+            "in": "query",
+            "name": "segment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Segment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 5000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingAudienceEnrollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Enroll Pre Booking Audience",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/launch": {
+      "post": {
+        "description": "Arm the campaign to start sending on a future date.\n\nThe whole point of pre-booking is building the January campaign in\nSeptember, so the launch date is a first-class setting rather than a\nreminder in someone's phone: the campaign parks in ``scheduled`` and\n:class:`~app.workers.prebooking_worker.PreBookingWorker` starts it when the\ndate arrives.",
+        "operationId": "schedule_pre_booking_launch_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_launch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreBookingLaunchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Schedule Pre Booking Launch",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/reservations": {
+      "get": {
+        "description": "List the slots sold by this campaign.",
+        "operationId": "list_pre_booking_reservations_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status_filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status Filter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PreBookingReservationResponse"
+                  },
+                  "title": "Response List Pre Booking Reservations Api V1 Workspaces  Workspace Id  Campaigns  Campaign Id  Pre Booking Reservations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Pre Booking Reservations",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      },
+      "post": {
+        "description": "Hold a season slot for a contact and issue the deposit-bearing proposal.\n\nReturns the public proposal link. Paying its deposit — through the existing\nStripe checkout, not a second payment path — is what confirms the booking and\nputs a provisional job into backlog.",
+        "operationId": "reserve_pre_booking_slot_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreBookingReserveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingReserveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reserve Pre Booking Slot",
+        "tags": [
+          "Pre-Booking Campaigns"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/resume": {
       "post": {
         "description": "Resume a paused campaign.",
@@ -60506,7 +62631,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/send": {
       "post": {
-        "description": "Mark an invoice as sent (email delivery is wired in a later phase).",
+        "description": "Mark an invoice as sent and email it to the bill-to contact.\n\n``delivery`` reports whether the customer was actually emailed: an invoice\nwith no bill-to contact still transitions to ``sent`` but returns\n``skipped_no_email`` so the UI can say so instead of claiming success.",
         "operationId": "send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post",
         "parameters": [
           {
@@ -60535,7 +62660,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                  "$ref": "#/components/schemas/InvoiceSendResponse"
                 }
               }
             },
@@ -70060,6 +72185,120 @@
         "summary": "Update Phone Number",
         "tags": [
           "Phone Numbers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/pre-booking/audience": {
+      "get": {
+        "description": "Size the warm database before a pre-booking campaign is created.",
+        "operationId": "preview_workspace_pre_booking_audience_api_v1_workspaces__workspace_id__pre_booking_audience_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_past_customers",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Past Customers",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unsold_quotes",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Unsold Quotes",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_prior_season_christmas",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Prior Season Christmas",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seasons_back",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 10,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seasons Back"
+            }
+          },
+          {
+            "in": "query",
+            "name": "segment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Segment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreBookingAudiencePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Workspace Pre Booking Audience",
+        "tags": [
+          "Pre-Booking Campaigns"
         ]
       }
     },

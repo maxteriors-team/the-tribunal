@@ -610,6 +610,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/invoices/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Invoice
+         * @description Render a customer's invoice from its share token. Drafts/unknown 404.
+         */
+        get: operations["get_public_invoice_api_v1_p_invoices__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/invoices/{token}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Public Invoice Payment
+         * @description Start a Stripe Checkout Session so the customer can pay their balance.
+         *
+         *     Returns the hosted payment URL for the frontend to redirect to. The charged
+         *     amount is re-derived from the invoice server-side, never taken from the
+         *     request. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces
+         *     through the service's own error mapping.
+         */
+        post: operations["create_public_invoice_payment_api_v1_p_invoices__token__pay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/invoices/{token}/payment-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Public Invoice Payment
+         * @description Reconcile the invoice against Stripe on return from checkout.
+         *
+         *     A webhook backstop so a delayed or dropped webhook never leaves a paid
+         *     invoice reading unpaid. Idempotent.
+         */
+        post: operations["reconcile_public_invoice_payment_api_v1_p_invoices__token__payment_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/leads/{public_key}": {
         parameters: {
             query?: never;
@@ -2917,6 +2985,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pre Booking Offer
+         * @description Read a campaign's pre-booking offer, slot usage and lead time.
+         */
+        get: operations["get_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_get"];
+        /**
+         * Update Pre Booking Offer
+         * @description Update the offer terms. Lowering the cap below what is already sold is
+         *     allowed — it stops further sales without cancelling anyone.
+         */
+        put: operations["update_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_put"];
+        /**
+         * Create Pre Booking Offer
+         * @description Attach a pre-booking offer to a campaign.
+         */
+        post: operations["create_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/audience": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Pre Booking Audience
+         * @description Count the warm database this offer would reach.
+         */
+        get: operations["preview_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/audience/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Pre Booking Audience
+         * @description Enroll the warm audience into the campaign, skipping opted-out contacts.
+         */
+        post: operations["enroll_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Schedule Pre Booking Launch
+         * @description Arm the campaign to start sending on a future date.
+         *
+         *     The whole point of pre-booking is building the January campaign in
+         *     September, so the launch date is a first-class setting rather than a
+         *     reminder in someone's phone: the campaign parks in ``scheduled`` and
+         *     :class:`~app.workers.prebooking_worker.PreBookingWorker` starts it when the
+         *     date arrives.
+         */
+        post: operations["schedule_pre_booking_launch_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_launch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking/reservations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pre Booking Reservations
+         * @description List the slots sold by this campaign.
+         */
+        get: operations["list_pre_booking_reservations_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_get"];
+        put?: never;
+        /**
+         * Reserve Pre Booking Slot
+         * @description Hold a season slot for a contact and issue the deposit-bearing proposal.
+         *
+         *     Returns the public proposal link. Paying its deposit — through the existing
+         *     Stripe checkout, not a second payment path — is what confirms the booking and
+         *     puts a provisional job into backlog.
+         */
+        post: operations["reserve_pre_booking_slot_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/campaigns/{campaign_id}/resume": {
         parameters: {
             query?: never;
@@ -4394,7 +4585,11 @@ export interface paths {
         put?: never;
         /**
          * Send Invoice
-         * @description Mark an invoice as sent (email delivery is wired in a later phase).
+         * @description Mark an invoice as sent and email it to the bill-to contact.
+         *
+         *     ``delivery`` reports whether the customer was actually emailed: an invoice
+         *     with no bill-to contact still transitions to ``sent`` but returns
+         *     ``skipped_no_email`` so the UI can say so instead of claiming success.
          */
         post: operations["send_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__send_post"];
         delete?: never;
@@ -6570,6 +6765,26 @@ export interface paths {
          * @description Release a phone number back to Telnyx.
          */
         delete: operations["release_phone_number_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/pre-booking/audience": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Workspace Pre Booking Audience
+         * @description Size the warm database before a pre-booking campaign is created.
+         */
+        get: operations["preview_workspace_pre_booking_audience_api_v1_workspaces__workspace_id__pre_booking_audience_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -11709,6 +11924,37 @@ export interface components {
             timezone: string;
         };
         /**
+         * CampaignPreBookingSummary
+         * @description Headline pre-booking terms carried on a campaign response.
+         *
+         *     Enough for a list row to say "this one sells May–June at 15% off, 20 slots"
+         *     without a second request. The full offer (slot usage, lead time, audience)
+         *     lives under ``/campaigns/{id}/pre-booking``.
+         */
+        CampaignPreBookingSummary: {
+            deposit_type: components["schemas"]["PreBookingAmountType"];
+            /** Deposit Value */
+            deposit_value: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            incentive_type: components["schemas"]["PreBookingAmountType"];
+            /** Incentive Value */
+            incentive_value: number;
+            /** Service Description */
+            service_description: string;
+            /** Service Season End Month */
+            service_season_end_month: number;
+            /** Service Season Start Month */
+            service_season_start_month: number;
+            /** Service Season Year */
+            service_season_year: number;
+            /** Slot Cap */
+            slot_cap: number;
+        };
+        /**
          * CampaignReportListResponse
          * @description Paginated report list.
          */
@@ -11885,6 +12131,7 @@ export interface components {
             name: string;
             /** Offer Id */
             offer_id: string | null;
+            pre_booking?: components["schemas"]["CampaignPreBookingSummary"] | null;
             /** Qualification Criteria */
             qualification_criteria: string | null;
             /** Replies Received */
@@ -15605,9 +15852,89 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * InvoiceSendResponse
+         * @description Invoice after a send, plus whether the customer was actually emailed.
+         *
+         *     Extends the detail response so callers keep every invoice field; ``delivery``
+         *     is what lets the UI warn instead of claiming a delivery that never happened.
+         */
+        InvoiceSendResponse: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Contact Id */
+            contact_id?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Delivered To */
+            delivered_to?: string | null;
+            /**
+             * Delivery
+             * @enum {string}
+             */
+            delivery: "emailed" | "skipped_no_email" | "failed";
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Sent At */
+            sent_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * InvoiceUpdate
-         * @description Update invoice header fields (all optional). Line items have their own
-         *     sub-resource endpoints; ``status``/``number``/totals are server-derived.
+         * @description Update invoice header fields (all optional); ``status``/``number``/totals
+         *     are server-derived.
+         *
+         *     ``line_items`` optionally **replaces the whole set** in the same transaction.
+         *     An editor that reorders, edits, and deletes rows in one save would otherwise
+         *     have to fan out across the per-item sub-resource endpoints, where a failure
+         *     halfway through leaves a financial record in a state neither the operator nor
+         *     the customer asked for. Omit the field to leave line items untouched; the
+         *     per-item endpoints remain for incremental edits.
          */
         InvoiceUpdate: {
             /** Contact Id */
@@ -15620,6 +15947,8 @@ export interface components {
             due_date?: string | null;
             /** Issue Date */
             issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["InvoiceLineItemCreate"][] | null;
             /** Notes */
             notes?: string | null;
             /** Opportunity Id */
@@ -20157,6 +20486,339 @@ export interface components {
             portal_url: string;
         };
         /**
+         * PreBookingAmountType
+         * @description How a money field is read: a percentage of the job, or a flat amount.
+         *
+         *     Shared by the booking incentive and the deposit so the two read the same way
+         *     on screen and in the API, and so the deposit maps 1:1 onto the quote's
+         *     existing ``deposit_percentage`` / ``deposit_amount_fixed`` pair.
+         * @enum {string}
+         */
+        PreBookingAmountType: "percentage" | "fixed";
+        /**
+         * PreBookingAudienceEnrollResponse
+         * @description Result of enrolling the warm audience into the campaign.
+         */
+        PreBookingAudienceEnrollResponse: {
+            /** Enrolled */
+            enrolled: number;
+            /** Excluded Opted Out */
+            excluded_opted_out: number;
+            /** Skipped Already Enrolled */
+            skipped_already_enrolled: number;
+            /** Total Contacts */
+            total_contacts: number;
+        };
+        /**
+         * PreBookingAudiencePreview
+         * @description Counts behind a pre-booking audience, before anyone is enrolled.
+         */
+        PreBookingAudiencePreview: {
+            /** Excluded Already Enrolled */
+            excluded_already_enrolled: number;
+            /** Excluded Opted Out */
+            excluded_opted_out: number;
+            /** Past Customers */
+            past_customers: number;
+            /**
+             * Prior Season Christmas
+             * @default 0
+             */
+            prior_season_christmas: number;
+            /** Total */
+            total: number;
+            /** Unsold Quotes */
+            unsold_quotes: number;
+        };
+        /**
+         * PreBookingConfigCreate
+         * @description Payload for attaching a pre-booking offer to a campaign.
+         */
+        PreBookingConfigCreate: {
+            /** @default percentage */
+            deposit_type: components["schemas"]["PreBookingAmountType"];
+            /** Deposit Value */
+            deposit_value: number;
+            /**
+             * Hold Hours
+             * @default 72
+             */
+            hold_hours: number;
+            /** @default percentage */
+            incentive_type: components["schemas"]["PreBookingAmountType"];
+            /** Incentive Value */
+            incentive_value: number;
+            /** Service Description */
+            service_description: string;
+            /** Service Season End Month */
+            service_season_end_month: number;
+            /** Service Season Start Month */
+            service_season_start_month: number;
+            /** Service Season Year */
+            service_season_year: number;
+            /** Slot Cap */
+            slot_cap: number;
+        };
+        /**
+         * PreBookingConfigResponse
+         * @description A campaign's pre-booking offer plus its live slot and lead-time state.
+         */
+        PreBookingConfigResponse: {
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            deposit_type: components["schemas"]["PreBookingAmountType"];
+            /** Deposit Value */
+            deposit_value: number;
+            /** Hold Hours */
+            hold_hours: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            incentive_type: components["schemas"]["PreBookingAmountType"];
+            /** Incentive Value */
+            incentive_value: number;
+            /**
+             * Is Full
+             * @description True when no further slot may be held.
+             */
+            readonly is_full: boolean;
+            /**
+             * Lead Time Days
+             * @description Days between the scheduled launch (or today) and the season opening.
+             */
+            readonly lead_time_days: number;
+            /**
+             * Lead Time Message
+             * @description One-line operator guidance about the runway.
+             */
+            readonly lead_time_message: string;
+            /**
+             * Lead Time Status
+             * @description ``ample`` / ``tight`` / ``late`` grading of the runway.
+             * @enum {string}
+             */
+            readonly lead_time_status: "ample" | "tight" | "late";
+            /** Scheduled Start */
+            scheduled_start?: string | null;
+            /**
+             * Season End Date
+             * Format: date
+             * @description Last day the work could be performed.
+             */
+            readonly season_end_date: string;
+            /**
+             * Season Label
+             * @description Operator-facing season name, e.g. ``"March–May 2027"``.
+             */
+            readonly season_label: string;
+            /**
+             * Season Start Date
+             * Format: date
+             * @description First day the work could be performed.
+             */
+            readonly season_start_date: string;
+            /** Service Description */
+            service_description: string;
+            /** Service Season End Month */
+            service_season_end_month: number;
+            /** Service Season Start Month */
+            service_season_start_month: number;
+            /** Service Season Year */
+            service_season_year: number;
+            /** Slot Cap */
+            slot_cap: number;
+            /**
+             * Slots Confirmed
+             * @default 0
+             */
+            slots_confirmed: number;
+            /**
+             * Slots Held
+             * @default 0
+             */
+            slots_held: number;
+            /**
+             * Slots Remaining
+             * @description Slots still sellable right now.
+             */
+            readonly slots_remaining: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * PreBookingConfigUpdate
+         * @description Partial update of an existing pre-booking offer.
+         */
+        PreBookingConfigUpdate: {
+            deposit_type?: components["schemas"]["PreBookingAmountType"] | null;
+            /** Deposit Value */
+            deposit_value?: number | null;
+            /** Hold Hours */
+            hold_hours?: number | null;
+            incentive_type?: components["schemas"]["PreBookingAmountType"] | null;
+            /** Incentive Value */
+            incentive_value?: number | null;
+            /** Service Description */
+            service_description?: string | null;
+            /** Service Season End Month */
+            service_season_end_month?: number | null;
+            /** Service Season Start Month */
+            service_season_start_month?: number | null;
+            /** Service Season Year */
+            service_season_year?: number | null;
+            /** Slot Cap */
+            slot_cap?: number | null;
+        };
+        /**
+         * PreBookingLaunchRequest
+         * @description Schedule a pre-booking campaign to launch on a future date.
+         */
+        PreBookingLaunchRequest: {
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+        };
+        /**
+         * PreBookingReservationResponse
+         * @description One contact's claim on a season slot.
+         */
+        PreBookingReservationResponse: {
+            /**
+             * Campaign Id
+             * Format: uuid
+             */
+            campaign_id: string;
+            /**
+             * Config Id
+             * Format: uuid
+             */
+            config_id: string;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Deposit Amount */
+            deposit_amount: number | null;
+            /**
+             * Held At
+             * Format: date-time
+             */
+            held_at: string;
+            /**
+             * Hold Expires At
+             * Format: date-time
+             */
+            hold_expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incentive Amount */
+            incentive_amount: number | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Quote Id */
+            quote_id: string | null;
+            /** Quoted Total */
+            quoted_total: number | null;
+            /** Release Reason */
+            release_reason: string | null;
+            /** Released At */
+            released_at: string | null;
+            status: components["schemas"]["PreBookingReservationStatus"];
+            /**
+             * Target End Date
+             * Format: date
+             */
+            target_end_date: string;
+            /**
+             * Target Start Date
+             * Format: date
+             */
+            target_start_date: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * PreBookingReservationStatus
+         * @description Lifecycle of one contact's claim on a season slot.
+         *
+         *     ``held``      — a quote was issued and the deposit is outstanding. Occupies a
+         *                     slot until ``hold_expires_at`` passes.
+         *     ``confirmed`` — the deposit landed. Occupies a slot until the work is done.
+         *     ``released``  — the hold lapsed (or was released) without payment; the slot
+         *                     went back to the pool.
+         *     ``cancelled`` — an operator or customer called the booking off after it was
+         *                     confirmed.
+         * @enum {string}
+         */
+        PreBookingReservationStatus: "held" | "confirmed" | "released" | "cancelled";
+        /**
+         * PreBookingReserveRequest
+         * @description Accept the pre-booking offer for one contact.
+         */
+        PreBookingReserveRequest: {
+            /** Base Amount */
+            base_amount?: number | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Notes */
+            notes?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /** Source Quote Id */
+            source_quote_id?: string | null;
+        };
+        /**
+         * PreBookingReserveResponse
+         * @description A held slot plus the link the customer pays their deposit through.
+         */
+        PreBookingReserveResponse: {
+            /** Deposit Amount */
+            deposit_amount: number;
+            /** Proposal Url */
+            proposal_url: string;
+            /**
+             * Quote Id
+             * Format: uuid
+             */
+            quote_id: string;
+            /** Quote Number */
+            quote_number: string;
+            reservation: components["schemas"]["PreBookingReservationResponse"];
+            /** Slots Remaining */
+            slots_remaining: number;
+        };
+        /**
          * PricingSettings
          * @description The full sales-pricing config for a workspace (read view, lenient).
          *
@@ -20417,6 +21079,12 @@ export interface components {
          *     Landscape keeps its rich tier cards and bistro its bespoke block; these
          *     sections carry the *new* per-linear-ft / decor lines so the client page can
          *     render any mix of product lines uniformly.
+         *
+         *     ``takedown``/``storage`` record the seasonal services the client actually
+         *     bought, so downstream dispatch reads a field instead of pattern-matching a
+         *     display label. Both are ``None`` on sections written before this existed and
+         *     on non-seasonal lines — a consumer must read ``None`` as "unknown", never as
+         *     "declined", or a season already sold silently loses its takedown crew.
          */
         ProposalCategorySection: {
             /**
@@ -20450,6 +21118,10 @@ export interface components {
              * @default 0
              */
             monthly_payment: number;
+            /** Storage */
+            storage?: boolean | null;
+            /** Takedown */
+            takedown?: boolean | null;
         };
         /**
          * ProposalCharge
@@ -21012,6 +21684,107 @@ export interface components {
             body: string;
             /** Reviewer Name */
             reviewer_name?: string | null;
+        };
+        /**
+         * PublicInvoice
+         * @description Read-only, allowlisted view of an invoice for its public page.
+         *
+         *     Deliberately **not** derived from ``InvoiceResponse``: this crosses an
+         *     unauthenticated boundary, so fields are listed explicitly rather than
+         *     inherited. Internal provenance (``workspace_id``, ``contact_id``,
+         *     ``opportunity_id``, ``created_by_id``, Stripe handles, ``external_*``) is
+         *     absent by construction -- a future column added to the model cannot leak
+         *     here by default.
+         */
+        PublicInvoice: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Balance Due */
+            balance_due: number;
+            branding: components["schemas"]["PublicProposalBranding"];
+            /** Client Name */
+            client_name?: string | null;
+            /** Currency */
+            currency: string;
+            /** Discount Amount */
+            discount_amount: number;
+            /** Due Date */
+            due_date?: string | null;
+            /** Is Overdue */
+            is_overdue: boolean;
+            /** Is Paid */
+            is_paid: boolean;
+            /** Is Payable */
+            is_payable: boolean;
+            /** Is Void */
+            is_void: boolean;
+            /** Issue Date */
+            issue_date?: string | null;
+            /** Line Items */
+            line_items?: components["schemas"]["PublicInvoiceLineItem"][];
+            /** Notes */
+            notes?: string | null;
+            /** Number */
+            number: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+            /** Subtotal */
+            subtotal: number;
+            /** Tax Amount */
+            tax_amount: number;
+            /** Terms */
+            terms?: string | null;
+            /** Token */
+            token: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * PublicInvoiceLineItem
+         * @description One billable line as the customer sees it.
+         */
+        PublicInvoiceLineItem: {
+            /** Description */
+            description?: string | null;
+            /** Discount */
+            discount: number;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number;
+            /** Total */
+            total: number;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * PublicInvoicePaymentCheckout
+         * @description Hosted Stripe payment URL for the customer to pay their balance.
+         */
+        PublicInvoicePaymentCheckout: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * PublicInvoicePaymentStatus
+         * @description Reconciled payment state, polled on return from Stripe Checkout.
+         */
+        PublicInvoicePaymentStatus: {
+            /** Amount Paid */
+            amount_paid: number;
+            /** Balance Due */
+            balance_due: number;
+            /** Currency */
+            currency: string;
+            /** Is Paid */
+            is_paid: boolean;
         };
         /**
          * PublicOfferResponse
@@ -26746,6 +27519,99 @@ export interface operations {
             };
         };
     };
+    get_public_invoice_api_v1_p_invoices__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicInvoice"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_public_invoice_payment_api_v1_p_invoices__token__pay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicInvoicePaymentCheckout"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_public_invoice_payment_api_v1_p_invoices__token__payment_status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicInvoicePaymentStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_lead_api_v1_p_leads__public_key__post: {
         parameters: {
             query?: never;
@@ -31677,6 +32543,294 @@ export interface operations {
             };
         };
     };
+    get_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreBookingConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pre_booking_offer_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreBookingConfigCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_get: {
+        parameters: {
+            query?: {
+                include_past_customers?: boolean;
+                include_unsold_quotes?: boolean;
+                include_prior_season_christmas?: boolean;
+                seasons_back?: number | null;
+                segment_id?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingAudiencePreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_pre_booking_audience_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_audience_enroll_post: {
+        parameters: {
+            query?: {
+                include_past_customers?: boolean;
+                include_unsold_quotes?: boolean;
+                include_prior_season_christmas?: boolean;
+                seasons_back?: number | null;
+                segment_id?: string | null;
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingAudienceEnrollResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_pre_booking_launch_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_launch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreBookingLaunchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pre_booking_reservations_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_get: {
+        parameters: {
+            query?: {
+                status_filter?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingReservationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reserve_pre_booking_slot_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreBookingReserveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingReserveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     resume_campaign_api_v1_workspaces__workspace_id__campaigns__campaign_id__resume_post: {
         parameters: {
             query?: never;
@@ -34622,7 +35776,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                    "application/json": components["schemas"]["InvoiceSendResponse"];
                 };
             };
             /** @description Validation Error */
@@ -39321,6 +40475,43 @@ export interface operations {
                     "application/json": {
                         [key: string]: boolean;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_workspace_pre_booking_audience_api_v1_workspaces__workspace_id__pre_booking_audience_get: {
+        parameters: {
+            query?: {
+                include_past_customers?: boolean;
+                include_unsold_quotes?: boolean;
+                include_prior_season_christmas?: boolean;
+                seasons_back?: number | null;
+                segment_id?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreBookingAudiencePreview"];
                 };
             };
             /** @description Validation Error */

@@ -14,12 +14,13 @@ from datetime import date, timedelta
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
-from app.models.invoice import Invoice
+from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.workspace import Workspace
 from app.schemas.invoice import (
     InvoiceCreate,
@@ -27,9 +28,10 @@ from app.schemas.invoice import (
     InvoiceLineItemUpdate,
     InvoiceUpdate,
 )
-from app.services.exceptions import ConflictError, ServiceUnavailableError
+from app.services.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
 from app.services.invoices import InvoiceService
 from app.services.invoices.invoice_service import handle_invoice_checkout_session_completed
+from app.services.payments import call_payment_service
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -321,9 +323,18 @@ async def test_updated_tax_rederives_paid_state() -> None:
         assert updated.status == "partial"
 
 
-async def test_payment_link_requires_stripe_configured() -> None:
-    # Stripe is not configured in the test env, so the guard must fire (503 path)
-    # rather than attempting a live Checkout Session call.
+async def test_payment_link_requires_stripe_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With Stripe unconfigured the guard must fire (503) instead of calling out.
+
+    Stripe state is pinned rather than inherited: a developer with a real
+    ``STRIPE_SECRET_KEY`` in ``backend/.env`` would otherwise sail past the guard
+    and have this test open a **live** Checkout Session against their account.
+    Same convention as ``tests/services/quotes/test_quote_deposit.py``.
+    """
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
+
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         svc = InvoiceService(db)
@@ -410,7 +421,12 @@ async def test_webhook_no_match_is_noop() -> None:
 
 
 async def test_mark_sent_emails_contact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A sent invoice emails the bill-to contact and reports the delivery."""
     import app.services.email as email_mod
+
+    # Pinned, not inherited: with a real key in ``backend/.env`` this test would
+    # otherwise open a live Stripe Checkout Session just to build the pay link.
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
 
     sent_calls: list[dict[str, object]] = []
 
@@ -439,8 +455,78 @@ async def test_mark_sent_emails_contact(monkeypatch: pytest.MonkeyPatch) -> None
         assert call["to_email"] == "customer@example.com"
         assert call["invoice_number"] == "INV-000001"
         assert call["amount_str"] == "200.00 USD"
-        # Stripe is unconfigured in tests, so no pay link is attached.
-        assert call["pay_url"] is None
+        # The customer really was emailed, and the caller is told so.
+        assert sent.delivery == "emailed"
+        assert sent.delivered_to == "customer@example.com"
+        # The link is the customer's own invoice page (asserted in detail by
+        # ``test_sent_invoice_emails_a_stable_page_link_not_a_stripe_session``).
+        assert "/p/invoices/" in str(call["pay_url"])
+
+
+async def test_public_pay_action_opens_a_checkout_for_the_balance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The billing path that matters: the customer's "Pay now" reaches Stripe.
+
+    Checkout is created when the customer actually presses pay -- not at send
+    time -- so the session cannot expire before they open the email. Stripe is
+    faked (never called for real) so this stays hermetic.
+    """
+    import app.services.email as email_mod
+    from app.services.payments.call_payment_service import CheckoutSessionResult
+
+    charged: list[float] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        return True
+
+    async def _fake_session(**kwargs: object) -> CheckoutSessionResult:
+        charged.append(float(kwargs["amount"]))  # type: ignore[arg-type]
+        # ``payment_intent_id`` stays None: the service deliberately leaves the
+        # intent unset until the webhook records the payment (pre-storing it
+        # would make ``record_payment`` a no-op on the completion callback).
+        return CheckoutSessionResult(
+            session_id="cs_fake_123",
+            url="https://pay.example/cs_fake",
+            payment_intent_id=None,
+        )
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+    monkeypatch.setattr(call_payment_service, "create_payment_checkout_session", _fake_session)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="payer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=200.0)],
+            ),
+            # A deposit already collected on the quote.
+            amount_paid=50.0,
+        )
+        sent = await svc.mark_sent(ws.id, inv.id)
+        assert sent.delivery == "emailed"
+
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        assert stored.public_token is not None
+        # No Stripe session exists yet -- nothing was charged at send time.
+        assert charged == []
+
+        checkout = await svc.create_public_payment_checkout(stored.public_token)
+        assert checkout.url == "https://pay.example/cs_fake"
+        # Charged the *remaining* balance, not the full total.
+        assert charged == [150.0]
+        assert checkout.amount == 150.0
+
+        # The checkout session id is persisted so the completion webhook can
+        # resolve this invoice from Stripe's callback.
+        await db.refresh(stored)
+        assert stored.stripe_checkout_session_id == "cs_fake_123"
 
 
 async def test_mark_sent_without_contact_email_skips_send(
@@ -472,12 +558,21 @@ async def test_mark_sent_without_contact_email_skips_send(
         # Transition still succeeds; no email attempted without a recipient.
         assert sent.status == "sent"
         assert sent_calls == []
+        # ...and the caller is told the customer got nothing, so the UI cannot
+        # report a delivery that never happened.
+        assert sent.delivery == "skipped_no_email"
+        assert sent.delivered_to is None
 
 
 async def test_mark_sent_email_failure_does_not_break_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.services.email as email_mod
+
+    # Pinned off for the same reason as the sibling send tests: otherwise
+    # building the pay link opens a live Stripe Checkout Session on any machine
+    # with a real key in ``backend/.env``.
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
 
     async def _boom(**kwargs: object) -> bool:
         raise RuntimeError("resend down")
@@ -498,3 +593,342 @@ async def test_mark_sent_email_failure_does_not_break_transition(
         # A delivery failure must not undo the sent transition.
         sent = await svc.mark_sent(ws.id, inv.id)
         assert sent.status == "sent"
+        # But it is reported rather than swallowed.
+        assert sent.delivery == "failed"
+        assert sent.delivered_to is None
+
+
+async def test_mark_sent_reports_no_email_when_invoice_has_no_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The regression that made invoices vanish: no bill-to contact at all.
+
+    An invoice created without a contact still transitions to ``sent`` but is
+    delivered to nobody, so the send has to report ``skipped_no_email``.
+    """
+    import app.services.email as email_mod
+
+    sent_calls: list[dict[str, object]] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        sent_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=75.0)],
+            ),
+        )
+        assert inv.contact_id is None
+
+        sent = await svc.mark_sent(ws.id, inv.id)
+        assert sent.status == "sent"
+        assert sent_calls == []
+        assert sent.delivery == "skipped_no_email"
+
+
+async def test_create_invoice_opening_credit_is_clamped_to_total() -> None:
+    """A deposit larger than the invoice can never bank a negative balance."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+            amount_paid=250.0,
+        )
+        assert float(inv.total) == 100.0
+        assert float(inv.amount_paid) == 100.0
+        assert inv.status == "paid"
+
+
+# --------------------------------------------------------------------------- #
+# Public customer invoice page
+# --------------------------------------------------------------------------- #
+async def test_public_invoice_is_unreachable_until_the_invoice_is_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A draft has no token, so a customer link cannot resolve to work-in-progress."""
+    import app.services.email as email_mod
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
+
+    async def _fake_send(**kwargs: object) -> bool:
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=400.0)],
+            ),
+        )
+        # Draft: no token allocated at all.
+        draft = await db.get(Invoice, inv.id)
+        assert draft is not None
+        assert draft.public_token is None
+
+        await svc.mark_sent(ws.id, inv.id)
+        await db.refresh(draft)
+        token = draft.public_token
+        assert token
+
+        public = await svc.get_public_invoice(token)
+        assert public.number == inv.number
+        assert public.total == 400.0
+
+        with pytest.raises(NotFoundError):
+            await svc.get_public_invoice("not-a-real-token")
+
+
+async def test_public_invoice_shows_the_deposit_credit_and_remaining_balance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole chain, from the customer's side.
+
+    Quote deposit -> converted invoice -> what the customer actually sees. The
+    page must show the full total, the deposit already credited, and only the
+    remainder as due -- otherwise the customer is asked to pay twice.
+    """
+    import app.services.email as email_mod
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
+
+    async def _fake_send(**kwargs: object) -> bool:
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Wash", unit_price=2000.0)],
+            ),
+            # As convert_quote does when a deposit was already collected.
+            amount_paid=500.0,
+        )
+        await svc.mark_sent(ws.id, inv.id)
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        assert stored.public_token is not None
+
+        public = await svc.get_public_invoice(stored.public_token)
+        assert public.total == 2000.0
+        assert public.amount_paid == 500.0
+        assert public.balance_due == 1500.0
+        assert public.is_paid is False
+        # Stripe is off in this test, so nothing offers a dead "Pay" button.
+        assert public.is_payable is False
+
+
+async def test_public_invoice_never_exposes_internal_fields() -> None:
+    """The public projection is an allowlist, not a filtered model dump."""
+    from app.schemas.invoice import PublicInvoice
+
+    leaky = {
+        "workspace_id",
+        "contact_id",
+        "opportunity_id",
+        "created_by_id",
+        "stripe_checkout_session_id",
+        "stripe_payment_intent_id",
+        "external_source",
+        "external_id",
+    }
+    assert leaky.isdisjoint(PublicInvoice.model_fields.keys())
+
+
+async def test_sent_invoice_emails_a_stable_page_link_not_a_stripe_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The emailed link must survive re-sends and Stripe session expiry."""
+    import app.services.email as email_mod
+    from app.core.config import settings
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+
+    sent_calls: list[dict[str, object]] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        sent_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=300.0)],
+            ),
+        )
+        await svc.mark_sent(ws.id, inv.id)
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        token = stored.public_token
+        assert token
+
+        pay_url = sent_calls[0]["pay_url"]
+        assert pay_url == f"{settings.frontend_url}/p/invoices/{token}"
+        # Emphatically not a Stripe Checkout URL: those expire.
+        assert "checkout.stripe.com" not in str(pay_url)
+
+        # Re-sending a reminder keeps the same link alive.
+        await svc.mark_sent(ws.id, inv.id)
+        await db.refresh(stored)
+        assert stored.public_token == token
+        assert sent_calls[1]["pay_url"] == pay_url
+
+
+# --------------------------------------------------------------------------- #
+# Editing an existing invoice
+# --------------------------------------------------------------------------- #
+async def test_update_replaces_line_items_atomically_and_rederives_totals() -> None:
+    """A whole-set line-item edit lands in one transaction.
+
+    The operator corrects a mis-billed invoice: one line edited, one dropped, one
+    added. The totals must reflect exactly the submitted set -- no leftovers from
+    the previous version.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[
+                    InvoiceLineItemCreate(name="Wash", quantity=1, unit_price=100.0),
+                    InvoiceLineItemCreate(name="Typo line", quantity=1, unit_price=999.0),
+                ],
+            ),
+        )
+        assert float(inv.total) == 1099.0
+
+        updated = await svc.update_invoice(
+            ws.id,
+            inv.id,
+            InvoiceUpdate(
+                line_items=[
+                    InvoiceLineItemCreate(name="Wash", quantity=2, unit_price=100.0),
+                    InvoiceLineItemCreate(name="Gutter clear", quantity=1, unit_price=50.0),
+                ],
+            ),
+        )
+
+        assert len(updated.line_items) == 2
+        assert {li.name for li in updated.line_items} == {"Wash", "Gutter clear"}
+        assert float(updated.total) == 250.0
+        # The dropped row is really gone, not orphaned.
+        remaining = (
+            (await db.execute(select(InvoiceLineItem).where(InvoiceLineItem.invoice_id == inv.id)))
+            .scalars()
+            .all()
+        )
+        assert len(remaining) == 2
+
+
+async def test_editing_a_sent_invoice_keeps_the_customers_link_working() -> None:
+    """A change order must not orphan the link the customer already has.
+
+    Editing re-prices the invoice; the token stays the same so the email the
+    customer received still opens the (now corrected) invoice.
+    """
+    import app.services.email as email_mod
+
+    async def _fake_send(**kwargs: object) -> bool:
+        return True
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        original_send = email_mod.send_invoice_email
+        email_mod.send_invoice_email = _fake_send  # type: ignore[assignment]
+        try:
+            inv = await svc.create_invoice(
+                ws.id,
+                InvoiceCreate(
+                    contact_id=contact.id,
+                    line_items=[InvoiceLineItemCreate(name="Wash", unit_price=100.0)],
+                ),
+            )
+            await svc.mark_sent(ws.id, inv.id)
+        finally:
+            email_mod.send_invoice_email = original_send  # type: ignore[assignment]
+
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        token = stored.public_token
+        assert token
+
+        # Change order: the crew also cleared the gutters.
+        await svc.update_invoice(
+            ws.id,
+            inv.id,
+            InvoiceUpdate(
+                line_items=[
+                    InvoiceLineItemCreate(name="Wash", unit_price=100.0),
+                    InvoiceLineItemCreate(name="Gutter clear", unit_price=50.0),
+                ],
+            ),
+        )
+
+        await db.refresh(stored)
+        assert stored.public_token == token
+        public = await svc.get_public_invoice(token)
+        assert public.total == 150.0
+        assert public.balance_due == 150.0
+
+
+async def test_a_settled_invoice_is_history_not_a_draft() -> None:
+    """Paid invoices reject line-item edits through the bulk path too.
+
+    The per-item endpoints already guard this; the bulk replace has to enforce
+    the same rule or it becomes a way around it.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)]),
+            amount_paid=100.0,
+        )
+        assert inv.status == "paid"
+
+        with pytest.raises(ConflictError):
+            await svc.update_invoice(
+                ws.id,
+                inv.id,
+                InvoiceUpdate(line_items=[InvoiceLineItemCreate(name="Sneaky", unit_price=5000.0)]),
+            )
+
+        # Header fields stay editable, so a note can still be added.
+        updated = await svc.update_invoice(
+            ws.id, inv.id, InvoiceUpdate(notes="Paid in cash on site.")
+        )
+        assert updated.notes == "Paid in cash on site."
+        assert float(updated.total) == 100.0
