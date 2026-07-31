@@ -299,6 +299,8 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         registry=post_estimate_followup_registry,
         dependencies=(
             "postgres",
+            # Redis backs the per-number send allowance consumed before each SMS.
+            "redis",
             "text_message_provider",
             "resend",
         ),
@@ -308,6 +310,7 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         registry=unsold_quote_registry,
         dependencies=(
             "postgres",
+            "redis",
             "text_message_provider",
             "resend",
         ),
