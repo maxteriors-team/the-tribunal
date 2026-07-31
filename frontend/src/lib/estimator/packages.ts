@@ -9,6 +9,12 @@ import type { ChristmasPackagePricing } from "@/types/estimate";
  * Resolve the rep's selected seasonal package: their explicit pick when it names
  * a priced package, else the most-inclusive one (last in server `package_order`).
  * Returns `null` when the workspace isn't selling packages (empty list).
+ *
+ * The server's `_resolve_recommended_package` has one extra step between those
+ * two — an operator-flagged `recommended` tier, so a non-seasonal ladder can
+ * anchor on its middle option. Seasonal packages carry no such flag (there is no
+ * field for it on `ChristmasPackagePricing`), so the two resolvers agree here and
+ * the rep preview always matches the shared public page.
  */
 export function resolveSelectedPackage(
   packages: ChristmasPackagePricing[],
