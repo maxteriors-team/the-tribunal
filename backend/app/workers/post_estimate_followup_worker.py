@@ -11,10 +11,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 
 from app.core.config import settings
 from app.core.encryption import InvalidToken, hash_phone
@@ -27,6 +27,7 @@ from app.models.message_template import MessageTemplate
 from app.models.phone_number import PhoneNumber
 from app.models.quote import Quote
 from app.models.quote_followup_touch import SEQUENCE_POST_ESTIMATE, QuoteFollowupTouch
+from app.models.workspace import Workspace
 from app.schemas.quote_followup import (
     POST_ESTIMATE_MAX_OFFSET_DAYS,
     QuoteFollowupSettings,
@@ -39,14 +40,19 @@ from app.services.compliance.outbound_compliance import (
 )
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
-from app.services.quotes.followup_config import get_quote_followup_config
+from app.services.quotes.followup_config import SETTINGS_KEY, get_quote_followup_config
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import get_text_message_provider
 from app.utils.phone import normalize_phone_safe
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
-MAX_QUOTES_PER_TICK = 100
+# Rows fetched per keyset page. The tick keeps paging until the due set is
+# exhausted, so this is a memory bound, not a work ceiling.
+QUOTE_PAGE_SIZE = 100
+# Absolute per-tick ceiling, purely so a pathological dataset cannot spin
+# forever. Crossing it is logged loudly because it means quotes went unworked.
+MAX_QUOTES_PER_TICK = 5_000
 # Offset 14 remains eligible through its calendar-day window, then this worker
 # permanently leaves the quote alone. The next known revival window begins day 30.
 ACTIVE_WINDOW_DAYS = POST_ESTIMATE_MAX_OFFSET_DAYS + 1
@@ -191,41 +197,76 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         self.compliance = OutboundComplianceService(self.opt_out_manager)
 
     async def _process_items(self) -> None:
-        """Load recent open quotes and process the latest due touch for each."""
-        now = datetime.now(UTC)
-        async with AsyncSessionLocal() as db:
-            # Only the workspace is eager-loaded. Contact columns are encrypted,
-            # and one row written under a retired key raises while the result set
-            # is materialized — which would abort the whole tick before any
-            # per-quote error handling could contain it.
-            result = await db.execute(
-                select(Quote)
-                .options(joinedload(Quote.workspace))
-                .where(
-                    and_(
-                        Quote.status == "sent",
-                        Quote.sent_at.is_not(None),
-                        Quote.sent_at <= now,
-                        Quote.sent_at > now - timedelta(days=ACTIVE_WINDOW_DAYS),
-                    )
-                )
-                .order_by(Quote.sent_at)
-                .limit(MAX_QUOTES_PER_TICK)
-            )
-            quotes = list(result.unique().scalars().all())
+        """Work every due quote in the window, oldest first, in keyset pages.
 
-            for quote in quotes:
-                config = get_quote_followup_config(quote.workspace)
-                if not config.enabled or quote.sent_at is None:
-                    continue
-                await self.execute_with_retry(
-                    self._process_quote,
-                    quote,
-                    config,
-                    now,
-                    db,
-                    item_key=derive_worker_retry_key("post_estimate_followup", quote.id),
+        A single ``LIMIT`` here would silently starve the newest quotes: ordered
+        by ``sent_at`` ascending, a one-day-old quote sits behind every older one
+        in the window, so on a busy workspace its day-1 and day-3 touches — the
+        highest-value touches in the whole cadence — would never run.
+        """
+        now = datetime.now(UTC)
+        processed = 0
+        cursor: tuple[datetime, uuid.UUID] | None = None
+
+        async with AsyncSessionLocal() as db:
+            while processed < MAX_QUOTES_PER_TICK:
+                # Only the workspace is eager-loaded. Contact columns are
+                # encrypted, and one row written under a retired key raises while
+                # the result set is materialized — which would abort the whole
+                # tick before any per-quote error handling could contain it.
+                statement = (
+                    select(Quote)
+                    .join(Quote.workspace)
+                    .options(contains_eager(Quote.workspace))
+                    .where(
+                        and_(
+                            Quote.status == "sent",
+                            Quote.sent_at.is_not(None),
+                            Quote.sent_at <= now,
+                            Quote.sent_at > now - timedelta(days=ACTIVE_WINDOW_DAYS),
+                            # Disabled workspaces are discarded below anyway;
+                            # excluding them in SQL stops them consuming pages.
+                            # ``enabled`` defaults to False, so a workspace with
+                            # no config block is correctly out of scope.
+                            Workspace.settings[SETTINGS_KEY]["enabled"].as_boolean().is_(True),
+                        )
+                    )
+                    .order_by(Quote.sent_at, Quote.id)
+                    .limit(QUOTE_PAGE_SIZE)
                 )
+                if cursor is not None:
+                    statement = statement.where(tuple_(Quote.sent_at, Quote.id) > cursor)
+
+                quotes = list((await db.execute(statement)).unique().scalars().all())
+                if not quotes:
+                    return
+
+                for quote in quotes:
+                    config = get_quote_followup_config(quote.workspace)
+                    if not config.enabled or quote.sent_at is None:
+                        continue
+                    await self.execute_with_retry(
+                        self._process_quote,
+                        quote,
+                        config,
+                        now,
+                        db,
+                        item_key=derive_worker_retry_key("post_estimate_followup", quote.id),
+                    )
+
+                last = quotes[-1]
+                if last.sent_at is None:
+                    return
+                cursor = (last.sent_at, last.id)
+                processed += len(quotes)
+                if len(quotes) < QUOTE_PAGE_SIZE:
+                    return
+
+        self.logger.warning(
+            "Post-estimate tick hit its ceiling; some due quotes went unworked",
+            processed=processed,
+            ceiling=MAX_QUOTES_PER_TICK,
+        )
 
     async def _process_quote(
         self,

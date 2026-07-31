@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -15,6 +15,7 @@ from app.schemas.quote_followup import (
 )
 from app.services.compliance.outbound_compliance import OutboundComplianceService
 from app.workers.post_estimate_followup_worker import (
+    QUOTE_PAGE_SIZE,
     PostEstimateFollowupWorker,
     QuoteRecipient,
     due_touches,
@@ -314,6 +315,102 @@ async def test_quote_without_a_contact_never_queries_for_one() -> None:
 
     assert contact is None
     db.get.assert_not_awaited()
+
+
+# --- fetch fairness ---------------------------------------------------------
+#
+# Quotes are ordered by ``sent_at`` ascending, so the NEWEST quote in the window
+# sorts last. A single ``LIMIT`` therefore starves exactly the quotes whose
+# day-1 and day-3 touches matter most. These tests pin the paging contract.
+
+
+def _enabled_quote() -> SimpleNamespace:
+    """A quote whose workspace actually has the cadence switched on."""
+    quote = _quote()
+    quote.workspace.settings = {
+        "timezone": "UTC",
+        "post_estimate_followup": QuoteFollowupSettings(enabled=True).model_dump(mode="json"),
+    }
+    return quote
+
+
+def _paging_session(pages: list[list[SimpleNamespace]]) -> MagicMock:
+    """Fake session returning ``pages`` from successive ``execute`` calls."""
+    db = MagicMock()
+    db.__aenter__ = AsyncMock(return_value=db)
+    db.__aexit__ = AsyncMock(return_value=None)
+    db.commit = AsyncMock()
+
+    def _result(page: list[SimpleNamespace]) -> MagicMock:
+        result = MagicMock()
+        result.unique.return_value.scalars.return_value.all.return_value = page
+        return result
+
+    db.execute = AsyncMock(side_effect=[_result(page) for page in pages])
+    return db
+
+
+async def test_tick_pages_past_the_first_batch_to_reach_the_newest_quotes() -> None:
+    full_page = [_enabled_quote() for _ in range(QUOTE_PAGE_SIZE)]
+    newest = _enabled_quote()
+    db = _paging_session([full_page, [newest]])
+    worker = PostEstimateFollowupWorker()
+    seen: list[object] = []
+
+    async def record(quote, config, now, db_):  # type: ignore[no-untyped-def]
+        seen.append(quote.id)
+
+    # The retry layer is not what this test is about; run the callable directly.
+    async def straight_through(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        await func(*args)
+
+    worker._process_quote = record  # type: ignore[method-assign]
+    worker.execute_with_retry = straight_through  # type: ignore[method-assign]
+
+    with patch(
+        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        return_value=db,
+    ):
+        await worker._process_items()
+
+    assert db.execute.await_count == 2, "a full page must trigger another fetch"
+    assert newest.id in seen, "the newest quote must not be starved by older ones"
+    assert len(seen) == QUOTE_PAGE_SIZE + 1
+
+
+async def test_tick_stops_on_a_short_page() -> None:
+    db = _paging_session([[_enabled_quote()]])
+    worker = PostEstimateFollowupWorker()
+    worker._process_quote = AsyncMock()  # type: ignore[method-assign]
+    worker.execute_with_retry = AsyncMock()  # type: ignore[method-assign]
+
+    with patch(
+        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        return_value=db,
+    ):
+        await worker._process_items()
+
+    assert db.execute.await_count == 1
+
+
+async def test_fetch_excludes_workspaces_with_the_cadence_disabled() -> None:
+    """Disabled workspaces must not consume a page; ``enabled`` defaults to False.
+
+    Filtering them in Python after the fetch let unrelated workspaces fill every
+    page, so an enabled workspace could receive no touches at all.
+    """
+    db = _paging_session([[]])
+    worker = PostEstimateFollowupWorker()
+
+    with patch(
+        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        return_value=db,
+    ):
+        await worker._process_items()
+
+    sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "post_estimate_followup" in sql
+    assert "enabled" in sql
 
 
 async def test_processed_offset_prevents_double_message() -> None:
