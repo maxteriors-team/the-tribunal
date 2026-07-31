@@ -30,7 +30,7 @@ from app.models.conversation import Conversation, Message, MessageDirection, Mes
 from app.models.human_nudge import HumanNudge
 from app.models.message_template import MessageTemplate
 from app.models.phone_number import PhoneNumber
-from app.models.quote import Quote
+from app.models.quote import UNSOLD_QUOTE_STATUSES, Quote
 from app.models.quote_followup_touch import SEQUENCE_UNSOLD_REVIVAL, QuoteFollowupTouch
 from app.schemas.quote_revival import (
     REVIVAL_MAX_OFFSET_DAYS,
@@ -51,7 +51,11 @@ from app.services.telephony.text_provider import get_text_message_provider
 from app.utils.phone import normalize_phone_safe
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.post_estimate_followup_worker import (
+    ACTIVE_WINDOW_DAYS as POST_ESTIMATE_WINDOW_DAYS,
+)
+from app.workers.post_estimate_followup_worker import (
     QuoteRecipient,
+    post_estimate_window_is_open,
     render_quote_followup_template,
     resolve_quote_recipient,
 )
@@ -59,11 +63,18 @@ from app.workers.retryable import RetryableWorker
 
 MAX_QUOTES_PER_TICK = 100
 # Only these two statuses mean "issued and undecided". ``draft`` was never
-# presented; ``approved``/``declined`` are settled outcomes.
-REVIVABLE_STATUSES = ("sent", "expired")
+# presented; ``approved``/``declined`` are settled outcomes. Defined on the model
+# so pre-booking audience selection shares one definition of "unsold".
+REVIVABLE_STATUSES = UNSOLD_QUOTE_STATUSES
 # A quote whose anchor is older than this is out of scope for every workspace,
 # so the broad fetch stays bounded regardless of per-workspace configuration.
 MAX_QUOTE_AGE_DAYS = REVIVAL_MAX_OFFSET_DAYS + 1
+# The configured ``offset_days`` floor is not enough to keep the two quote
+# sequences apart: revival counts from the document's issue date while the
+# first-14-days cadence counts from ``sent_at``, and a back-dated quote is
+# already "30 days old" the day it is presented. This rail is measured from
+# presentation, so a quote the other sequence still owns is never touched.
+POST_ESTIMATE_WINDOW_STOP_REASON = "post_estimate_window_open"
 # With no revival touch recorded yet, an inbound message inside this window
 # means a live conversation the worker must not interrupt.
 FRESH_REPLY_WINDOW_DAYS = 14
@@ -121,6 +132,22 @@ def due_touches(
     ]
 
 
+def eligibility_stop_reason(quote: Quote, *, now: datetime) -> str | None:
+    """Return why this quote is out of scope, judged from its own columns alone.
+
+    DB-free and cheap, so it runs before any opt-out, conversation, or
+    appointment lookup. The window rail lives here rather than in the offset
+    validator because the two sequences count from different anchors.
+    """
+    if quote.status in {"approved", "declined"}:
+        return f"quote_{quote.status}"
+    if quote.status not in REVIVABLE_STATUSES:
+        return "quote_not_revivable"
+    if post_estimate_window_is_open(quote.sent_at, now=now):
+        return POST_ESTIMATE_WINDOW_STOP_REASON
+    return None
+
+
 def resolve_template_id(
     touch: QuoteRevivalTouchSettings,
     *,
@@ -165,6 +192,9 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
                     and_(
                         Quote.status.in_(REVIVABLE_STATUSES),
                         Quote.sent_at.is_not(None),
+                        # Presented long enough ago that the first-14-days
+                        # cadence has finished with it, whatever it is dated.
+                        Quote.sent_at <= now - timedelta(days=POST_ESTIMATE_WINDOW_DAYS),
                         anchor_expr.is_not(None),
                         anchor_expr <= now.date(),
                         anchor_expr > now.date() - timedelta(days=MAX_QUOTE_AGE_DAYS),
@@ -299,10 +329,9 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         db: AsyncSession,
     ) -> str | None:
         """Return the first reason this quote must be left alone."""
-        if quote.status in {"approved", "declined"}:
-            return f"quote_{quote.status}"
-        if quote.status not in REVIVABLE_STATUSES:
-            return "quote_not_revivable"
+        eligibility_reason = eligibility_stop_reason(quote, now=now)
+        if eligibility_reason:
+            return eligibility_reason
 
         if recipient.phone and await self.opt_out_manager.check_opt_out(
             quote.workspace_id, recipient.phone, db

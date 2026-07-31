@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
-from app.core.encryption import hash_phone
+from app.core.encryption import InvalidToken, hash_phone
 from app.db.session import AsyncSessionLocal
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.contact import Contact
@@ -71,6 +71,21 @@ class TouchDeliveryResult:
     reason: str | None = None
     message_id: uuid.UUID | None = None
     human_nudge_id: uuid.UUID | None = None
+
+
+def post_estimate_window_is_open(sent_at: datetime | None, *, now: datetime) -> bool:
+    """Return whether this cadence still owns the quote and no other may touch it.
+
+    Measured from ``sent_at`` — the moment the customer actually received the
+    estimate — because the long-range revival sequence is anchored to the
+    document's ``issue_date``, which legitimately predates presentation (a quote
+    written on-site and sent later, or a pre-booking hold converted months on).
+    Comparing the two ladders by configured offset alone is not enough: the
+    offsets are counted from different instants, so the rail has to live here.
+    """
+    if sent_at is None:
+        return False
+    return now < sent_at + timedelta(days=ACTIVE_WINDOW_DAYS)
 
 
 def due_touches(
@@ -179,12 +194,13 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         """Load recent open quotes and process the latest due touch for each."""
         now = datetime.now(UTC)
         async with AsyncSessionLocal() as db:
+            # Only the workspace is eager-loaded. Contact columns are encrypted,
+            # and one row written under a retired key raises while the result set
+            # is materialized — which would abort the whole tick before any
+            # per-quote error handling could contain it.
             result = await db.execute(
                 select(Quote)
-                .options(
-                    joinedload(Quote.contact),
-                    joinedload(Quote.workspace),
-                )
+                .options(joinedload(Quote.workspace))
                 .where(
                     and_(
                         Quote.status == "sent",
@@ -223,7 +239,15 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         sent_at = quote.sent_at
         if sent_at is None:
             return
-        recipient = self._recipient(quote)
+
+        try:
+            contact = await self._load_contact(quote, db)
+        except InvalidToken:
+            # Encrypted under a key this deployment no longer holds. Retrying
+            # cannot help, so skip this quote loudly and keep the tick alive.
+            log.warning("Skipping quote whose contact cannot be decrypted")
+            return
+        recipient = resolve_quote_recipient(quote, contact=contact)
 
         stop_reason = await self._get_stop_reason(quote, recipient, db)
         if stop_reason:
@@ -608,6 +632,13 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def _load_contact(quote: Quote, db: AsyncSession) -> Contact | None:
+        """Materialize the encrypted contact row for exactly one quote."""
+        if quote.contact_id is None:
+            return None
+        return await db.get(Contact, quote.contact_id)
+
+    @staticmethod
     async def _completed_offsets(quote_id: uuid.UUID, db: AsyncSession) -> set[int]:
         """Read only this sequence's rows; revival shares the ledger table."""
         result = await db.execute(
@@ -650,10 +681,6 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
             .on_conflict_do_nothing(constraint="uq_quote_followup_touches_quote_sequence_offset")
         )
         await db.execute(statement)
-
-    @staticmethod
-    def _recipient(quote: Quote) -> QuoteRecipient:
-        return resolve_quote_recipient(quote, contact=quote.contact)
 
 
 _registry = WorkerRegistry(PostEstimateFollowupWorker)
