@@ -145,13 +145,24 @@ def _care_plan_document(selected: str | None, *, visits: int = 4) -> dict[str, A
     }
 
 
-def _christmas_document(label: str = "Holiday Lighting") -> dict[str, Any]:
-    return {
-        "categories": ["christmas"],
-        "category_sections": [
-            {"key": "christmas", "label": label, "lines": [], "financed_total": 2400}
-        ],
+def _christmas_document(
+    label: str = "Holiday Lighting",
+    **section_overrides: Any,
+) -> dict[str, Any]:
+    """A seasonal signup snapshot.
+
+    ``section_overrides`` sets the seasonal service flags (``takedown`` /
+    ``storage``). Omitting them mirrors a document written before those fields
+    existed, which must keep provisioning exactly as it always did.
+    """
+    section: dict[str, Any] = {
+        "key": "christmas",
+        "label": label,
+        "lines": [],
+        "financed_total": 2400,
     }
+    section.update(section_overrides)
+    return {"categories": ["christmas"], "category_sections": [section]}
 
 
 async def _plans(db: AsyncSession, quote_id: uuid.UUID) -> list[RecurringJobTemplate]:
@@ -254,6 +265,79 @@ async def test_christmas_install_rolls_to_next_year_when_the_season_has_passed()
         install, takedown = sorted(created, key=lambda plan: plan.next_run_at)
         assert install.next_run_at.date() == datetime(2027, 10, 20, tzinfo=UTC).date()
         assert takedown.next_run_at.date() == datetime(2028, 2, 3, tzinfo=UTC).date()
+
+
+async def test_declining_takedown_provisions_only_the_install() -> None:
+    """A crew must not be dispatched every January for work nobody bought."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(db, ws.id, contact.id, _christmas_document(takedown=False))
+
+        created = await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW)
+
+        assert [plan.title for plan in created] == ["Holiday Lighting — Install"]
+        assert created[0].next_run_at.date() == datetime(2026, 10, 20, tzinfo=UTC).date()
+
+
+async def test_buying_takedown_still_provisions_the_pair() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(db, ws.id, contact.id, _christmas_document(takedown=True))
+
+        created = await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW)
+
+        assert sorted(plan.title for plan in created) == [
+            "Holiday Lighting — Install",
+            "Holiday Lighting — Takedown",
+        ]
+
+
+async def test_a_signup_sold_before_the_flag_existed_keeps_its_takedown() -> None:
+    """An absent flag means unknown, never declined.
+
+    Quotes approved before the seasonal service flags shipped record nothing.
+    Reading that silence as "declined" would quietly strip the takedown crew off
+    every season already sold.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(db, ws.id, contact.id, _christmas_document())
+
+        created = await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW)
+
+        assert len(created) == 2
+
+
+async def test_selling_storage_tells_both_crews_about_the_bins() -> None:
+    """Storage is billed; the crews holding the decor have to know it."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(
+            db, ws.id, contact.id, _christmas_document(takedown=True, storage=True)
+        )
+
+        created = await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW)
+
+        install, takedown = sorted(created, key=lambda plan: plan.next_run_at)
+        assert "pull their decor before the visit" in (install.description or "")
+        assert "bring bins" in (takedown.description or "")
+
+
+async def test_without_storage_the_descriptions_stay_unchanged() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(
+            db, ws.id, contact.id, _christmas_document(takedown=True, storage=False)
+        )
+
+        created = await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW)
+
+        assert all("bins" not in (plan.description or "") for plan in created)
 
 
 async def test_christmas_season_falls_back_to_defaults_without_pricing_config() -> None:

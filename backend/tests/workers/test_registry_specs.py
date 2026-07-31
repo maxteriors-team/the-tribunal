@@ -51,6 +51,7 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "webhook_signature_cleanup",
         "post_estimate_followup_worker",
         "unsold_quote_worker",
+        "prebooking_worker",
     ]
     assert [spec.registry for spec in WORKER_SPECS] == ALL_REGISTRIES
 

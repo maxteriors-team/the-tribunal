@@ -83,3 +83,15 @@ export interface InvoicePaymentLink {
   session_id: string;
   url: string | null;
 }
+
+/**
+ * What actually happened when an invoice was sent. `skipped_no_email` means the
+ * invoice moved to `sent` but reached nobody — no bill-to contact, or a contact
+ * with no email on file — so the UI must warn instead of reporting success.
+ */
+export type InvoiceDeliveryStatus = "emailed" | "skipped_no_email" | "failed";
+
+export interface InvoiceSendResult extends Invoice {
+  delivery: InvoiceDeliveryStatus;
+  delivered_to?: string | null;
+}

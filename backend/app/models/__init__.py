@@ -108,6 +108,12 @@ from app.models.phone_message import (
 from app.models.phone_number import PhoneNumber, PhoneNumberProvider
 from app.models.phone_number_stats import PhoneNumberDailyStats
 from app.models.pipeline import Pipeline, PipelineStage
+from app.models.prebooking import (
+    PreBookingAmountType,
+    PreBookingCampaignConfig,
+    PreBookingReservation,
+    PreBookingReservationStatus,
+)
 from app.models.prompt_version import PromptVersion
 from app.models.prompt_version_stats import PromptVersionStats
 from app.models.prospect_signal import (
@@ -171,6 +177,10 @@ __all__ = [
     "Appointment",
     "BookableStaff",
     "PhoneNumber",
+    "PreBookingAmountType",
+    "PreBookingCampaignConfig",
+    "PreBookingReservation",
+    "PreBookingReservationStatus",
     "PhoneNumberProvider",
     "PhoneNumberDailyStats",
     "GlobalOptOut",

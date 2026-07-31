@@ -472,6 +472,10 @@ async def test_mark_sent_without_contact_email_skips_send(
         # Transition still succeeds; no email attempted without a recipient.
         assert sent.status == "sent"
         assert sent_calls == []
+        # ...and the caller is told the customer got nothing, so the UI cannot
+        # report a delivery that never happened.
+        assert sent.delivery == "skipped_no_email"
+        assert sent.delivered_to is None
 
 
 async def test_mark_sent_email_failure_does_not_break_transition(
@@ -498,3 +502,58 @@ async def test_mark_sent_email_failure_does_not_break_transition(
         # A delivery failure must not undo the sent transition.
         sent = await svc.mark_sent(ws.id, inv.id)
         assert sent.status == "sent"
+        # But it is reported rather than swallowed.
+        assert sent.delivery == "failed"
+        assert sent.delivered_to is None
+
+
+async def test_mark_sent_reports_no_email_when_invoice_has_no_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The regression that made invoices vanish: no bill-to contact at all.
+
+    An invoice created without a contact still transitions to ``sent`` but is
+    delivered to nobody, so the send has to report ``skipped_no_email``.
+    """
+    import app.services.email as email_mod
+
+    sent_calls: list[dict[str, object]] = []
+
+    async def _fake_send(**kwargs: object) -> bool:
+        sent_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=75.0)],
+            ),
+        )
+        assert inv.contact_id is None
+
+        sent = await svc.mark_sent(ws.id, inv.id)
+        assert sent.status == "sent"
+        assert sent_calls == []
+        assert sent.delivery == "skipped_no_email"
+
+
+async def test_create_invoice_opening_credit_is_clamped_to_total() -> None:
+    """A deposit larger than the invoice can never bank a negative balance."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+            amount_paid=250.0,
+        )
+        assert float(inv.total) == 100.0
+        assert float(inv.amount_paid) == 100.0
+        assert inv.status == "paid"

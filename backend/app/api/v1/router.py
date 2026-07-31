@@ -47,6 +47,7 @@ from app.api.v1 import (
     outbound_missions,
     pending_actions,
     phone_numbers,
+    prebooking,
     prompt_versions,
     prospects,
     quotes,
@@ -136,6 +137,18 @@ api_router.include_router(
     campaigns.router,
     prefix="/workspaces/{workspace_id}/campaigns",
     tags=["Campaigns"],
+)
+# Pre-booking rides on top of an existing campaign rather than beside it: same
+# campaign row, same SMS/email delivery, plus an offer for next season's work.
+api_router.include_router(
+    prebooking.router,
+    prefix="/workspaces/{workspace_id}/campaigns/{campaign_id}/pre-booking",
+    tags=["Pre-Booking Campaigns"],
+)
+api_router.include_router(
+    prebooking.workspace_router,
+    prefix="/workspaces/{workspace_id}/pre-booking",
+    tags=["Pre-Booking Campaigns"],
 )
 api_router.include_router(
     voice_campaigns.router,

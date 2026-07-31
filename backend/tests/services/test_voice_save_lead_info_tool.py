@@ -248,6 +248,39 @@ async def test_low_confidence_source_answer_stays_raw_and_unattributed() -> None
     session.commit.assert_awaited_once()
 
 
+async def test_manual_source_requirement_never_blocks_webhook_ingestion() -> None:
+    """``require_lead_source_on_manual_create`` governs operator typing only.
+
+    This call arrives through the Telnyx webhook, so there is no operator to
+    answer "how did you hear about us?". Enforcing the manual-intake policy here
+    would drop a real inbound lead on the floor -- strictly worse than the
+    missing attribution it is trying to prevent.
+    """
+    conversation = _Conversation(contact_id=None, contact_phone="+15125557009")
+    workspace = SimpleNamespace(
+        id=conversation.workspace_id,
+        settings={
+            "lead_source_capture": {"require_lead_source_on_manual_create": True},
+            # Off so the assertions stay on the contact write, not pipeline setup.
+            "auto_pipeline": {"enabled": False},
+        },
+    )
+    session = _SequencedSession([_CallMessage(conversation), None], workspace=workspace)
+
+    with patch.object(db_session_module, "AsyncSessionLocal", lambda: session):
+        result = await _executor(conversation.workspace_id)._execute_save_lead_info(
+            first_name="Robin",
+        )
+
+    assert result["success"] is True
+    created = [obj for obj in session.added if isinstance(obj, Contact)]
+    assert len(created) == 1
+    # Captured without a structured source rather than rejected; the gap report
+    # is what surfaces it, and the queue is where an operator fixes it.
+    assert created[0].first_touch_lead_source_id is None
+    session.commit.assert_awaited_once()
+
+
 async def test_updates_existing_contact_without_blanking_or_replacing() -> None:
     conversation = _Conversation(contact_id=42, contact_phone="+15125557002")
     existing = Contact(

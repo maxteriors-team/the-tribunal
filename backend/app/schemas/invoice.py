@@ -125,6 +125,25 @@ class InvoiceDetailResponse(InvoiceResponse):
     line_items: list[InvoiceLineItemResponse] = Field(default_factory=list)
 
 
+# How a send actually went. ``skipped_no_email`` is the common miss: an invoice
+# with no bill-to contact (or a contact with no email on file) can be marked sent
+# yet reach nobody, so the operator has to be told rather than shown a success.
+InvoiceDeliveryStatus = Literal["emailed", "skipped_no_email", "failed"]
+
+
+class InvoiceSendResponse(InvoiceDetailResponse):
+    """Invoice after a send, plus whether the customer was actually emailed.
+
+    Extends the detail response so callers keep every invoice field; ``delivery``
+    is what lets the UI warn instead of claiming a delivery that never happened.
+    """
+
+    delivery: InvoiceDeliveryStatus
+    # Address the invoice reached, when it reached anywhere. Echoed back so the
+    # operator can confirm *who* received it.
+    delivered_to: str | None = None
+
+
 class PaginatedInvoices(BaseModel):
     """Paginated list of invoices."""
 

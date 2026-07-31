@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { invoicesApi } from "@/lib/api/invoices";
+import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 import { formatDate } from "@/lib/utils/date";
@@ -72,7 +73,13 @@ export function InvoicesList() {
   const sendMutation = useMutation({
     mutationFn: (id: string) => invoicesApi.send(workspaceId ?? "", id),
     onSuccess: (inv) => {
-      toast.success(`Invoice ${inv.number} sent`);
+      // Report what actually reached the customer, not just the transition.
+      const notice = describeInvoiceDelivery(inv);
+      if (notice.tone === "success") {
+        toast.success(notice.message);
+      } else {
+        toast.warning(notice.message, { description: notice.description });
+      }
       invalidate();
     },
     onError: (err: unknown) =>

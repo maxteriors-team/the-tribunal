@@ -29,10 +29,12 @@ from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.opportunity import Opportunity
 from app.schemas.invoice import (
     InvoiceCreate,
+    InvoiceDeliveryStatus,
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
     InvoiceResponse,
+    InvoiceSendResponse,
     InvoiceUpdate,
     PaginatedInvoices,
 )
@@ -184,8 +186,20 @@ class InvoiceService:
         invoice_in: InvoiceCreate,
         *,
         created_by_id: int | None = None,
+        amount_paid: float = 0.0,
+        payment_intent_id: str | None = None,
     ) -> InvoiceDetailResponse:
-        """Create a draft invoice with its initial line items and computed totals."""
+        """Create a draft invoice with its initial line items and computed totals.
+
+        ``amount_paid``/``payment_intent_id`` open the invoice with money already
+        collected -- today only a quote deposit the client paid on the public
+        proposal page (see :meth:`QuoteService.convert_quote`). They are
+        **service-internal on purpose**: ``InvoiceCreate`` does not carry them, so
+        an API client still cannot declare an invoice pre-paid and mark itself
+        settled without money moving. The opening credit is clamped to the
+        invoice total so a stale deposit can never create a negative balance, and
+        ``status`` is derived from it (a fully-covering deposit opens ``paid``).
+        """
         await self._validate_refs(
             workspace_id,
             contact_id=invoice_in.contact_id,
@@ -206,6 +220,7 @@ class InvoiceService:
             amount_paid=0,
             status="draft",
             created_by_id=created_by_id,
+            stripe_payment_intent_id=payment_intent_id,
         )
         for item in invoice_in.line_items:
             invoice.line_items.append(
@@ -219,7 +234,14 @@ class InvoiceService:
                 )
             )
 
+        # Totals first: the opening credit clamps against the computed total.
         self._recompute_totals(invoice)
+        opening_credit = round(max(0.0, min(float(amount_paid), float(invoice.total or 0))), 2)
+        if opening_credit > 0:
+            invoice.amount_paid = opening_credit
+            invoice.status = self.derive_status(invoice)
+            if invoice.status == "paid":
+                invoice.paid_at = datetime.now(UTC)
         self.db.add(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
@@ -230,6 +252,7 @@ class InvoiceService:
             workspace_id=str(workspace_id),
             number=invoice.number,
             total=float(invoice.total),
+            amount_paid=float(invoice.amount_paid),
         )
         return InvoiceDetailResponse.model_validate(invoice)
 
@@ -312,9 +335,14 @@ class InvoiceService:
         self,
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
-    ) -> InvoiceDetailResponse:
+    ) -> InvoiceSendResponse:
         """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
-        email the invoice to the bill-to contact (best-effort)."""
+        email the invoice to the bill-to contact.
+
+        Emailing stays best-effort -- a bounce must not undo the ``sent``
+        transition -- but the outcome is *reported* rather than swallowed, so an
+        operator is never told a contactless invoice reached the customer.
+        """
         invoice = await get_or_404(
             self.db,
             Invoice,
@@ -349,15 +377,25 @@ class InvoiceService:
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
 
-        await self._email_invoice(workspace_id, invoice)
-        return InvoiceDetailResponse.model_validate(invoice)
+        delivery, delivered_to = await self._email_invoice(workspace_id, invoice)
+        detail = InvoiceDetailResponse.model_validate(invoice)
+        return InvoiceSendResponse(
+            **detail.model_dump(),
+            delivery=delivery,
+            delivered_to=delivered_to,
+        )
 
-    async def _email_invoice(self, workspace_id: uuid.UUID, invoice: Invoice) -> None:
+    async def _email_invoice(
+        self, workspace_id: uuid.UUID, invoice: Invoice
+    ) -> tuple[InvoiceDeliveryStatus, str | None]:
         """Email the invoice to its bill-to contact (best-effort).
 
         Never raises: a delivery failure must not undo the ``sent`` transition,
         mirroring ``notify_payment_operators``. Includes a Stripe "Pay now" link
         when Stripe is configured; otherwise the summary email still goes out.
+
+        Returns ``(delivery, delivered_to)`` so the caller can surface what really
+        happened instead of assuming success.
         """
         from app.services.email import send_invoice_email
         from app.services.idempotency import derive_outbound_key
@@ -365,7 +403,7 @@ class InvoiceService:
         contact_email = invoice.contact.email if invoice.contact else None
         if not contact_email:
             self.log.info("invoice_email_skipped_no_contact", invoice_id=str(invoice.id))
-            return
+            return "skipped_no_email", None
 
         workspace_name = invoice.workspace.name if invoice.workspace else ""
         balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
@@ -382,7 +420,7 @@ class InvoiceService:
                 )
 
         try:
-            await send_invoice_email(
+            accepted = await send_invoice_email(
                 to_email=contact_email,
                 workspace_name=workspace_name,
                 invoice_number=invoice.number,
@@ -394,6 +432,14 @@ class InvoiceService:
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("invoice_email_failed", invoice_id=str(invoice.id), error=str(exc))
+            return "failed", None
+
+        # ``send_invoice_email`` returns True only when the provider accepted it,
+        # so a False here (unconfigured provider, rejected send) is a real miss.
+        if not accepted:
+            self.log.warning("invoice_email_not_accepted", invoice_id=str(invoice.id))
+            return "failed", None
+        return "emailed", contact_email
 
     async def void_invoice(
         self,

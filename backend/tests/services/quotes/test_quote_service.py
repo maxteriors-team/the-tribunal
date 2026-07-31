@@ -462,6 +462,48 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         assert again.invoice_id == result.invoice_id
 
 
+async def test_convert_credits_paid_deposit_to_invoice() -> None:
+    """A deposit already collected on the quote must not be billed twice.
+
+    The client paid the deposit on the public proposal page, so the converted
+    invoice has to open with that amount already credited and only the remaining
+    balance outstanding.
+    """
+    from app.services.payments.quote_deposit_service import mark_deposit_paid
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+
+        created = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Roof wash",
+                deposit_percentage=25.0,
+                line_items=[
+                    QuoteLineItemCreate(name="Wash", quantity=1, unit_price=2000.0),
+                ],
+            ),
+        )
+        quote = await db.get(Quote, created.id)
+        assert quote is not None
+        await svc.approve_quote(ws.id, quote.id)
+        # Client paid 25% of 2000 = 500 on the public proposal page.
+        await mark_deposit_paid(db, quote, payment_intent_id="pi_deposit_test")
+
+        result = await svc.convert_quote(ws.id, quote.id, create_job=False)
+        assert result.invoice_id is not None
+
+        invoice = await db.get(Invoice, result.invoice_id)
+        assert invoice is not None
+        assert float(invoice.total) == 2000.0
+        # The 500 deposit is already collected -> only 1500 is still owed.
+        assert float(invoice.amount_paid) == 500.0
+        assert invoice.status == "partial"
+
+
 async def test_convert_schedules_job_when_window_supplied() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

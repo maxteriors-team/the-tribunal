@@ -41,6 +41,7 @@ from app.services.compliance.outbound_compliance import (
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.quotes.followup_config import SETTINGS_KEY, get_quote_followup_config
+from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import get_text_message_provider
 from app.utils.phone import normalize_phone_safe
@@ -195,6 +196,7 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         super().__init__()
         self.opt_out_manager = OptOutManager()
         self.compliance = OutboundComplianceService(self.opt_out_manager)
+        self.number_pool = NumberPoolManager()
 
     async def _process_items(self) -> None:
         """Work every due quote in the window, oldest first, in keyset pages.
@@ -524,6 +526,10 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
         if not from_number:
             self.logger.warning("No SMS sender for quote follow-up", quote_id=str(quote.id))
             return None
+        if not await self._reserve_sender(from_number, quote, db):
+            # Returning None writes no ledger row, so the touch stays due and is
+            # retried on a later tick rather than being silently consumed.
+            return None
 
         sms = get_text_message_provider()
         try:
@@ -671,6 +677,44 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
             )
         )
         return result.scalar_one_or_none()
+
+    async def _reserve_sender(self, from_number: str, quote: Quote, db: AsyncSession) -> bool:
+        """Consume this number's send allowance, mirroring the campaign worker.
+
+        Enabling the cadence on a workspace with a backlog of in-window quotes
+        would otherwise send one message per quote on the first tick, from a
+        single number, ignoring its per-second/hourly/daily limits and warming
+        schedule. The customer-facing harm is small; the carrier-reputation harm
+        is not, and it degrades deliverability for every other message that
+        number sends.
+        """
+        result = await db.execute(
+            select(PhoneNumber).where(
+                and_(
+                    PhoneNumber.workspace_id == quote.workspace_id,
+                    PhoneNumber.phone_number == from_number,
+                )
+            )
+        )
+        phone = result.scalar_one_or_none()
+        if phone is None:
+            # A thread can legitimately reference a sender this workspace no
+            # longer tracks. Refusing would silently disable follow-up for those
+            # contacts, which is a worse failure than an uncapped send we can see.
+            self.logger.warning(
+                "Quote follow-up sender is not a tracked number; sending uncapped",
+                quote_id=str(quote.id),
+            )
+            return True
+
+        if not await self.number_pool.reserve_number_for_send(phone, db):
+            self.logger.info(
+                "Quote follow-up deferred; sender at capacity",
+                quote_id=str(quote.id),
+                phone_number_id=str(phone.id),
+            )
+            return False
+        return True
 
     @staticmethod
     async def _load_contact(quote: Quote, db: AsyncSession) -> Contact | None:

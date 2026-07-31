@@ -181,11 +181,19 @@ def financing_is_eligible(
 ) -> bool:
     """Whether a quote qualifies for an estimated financing presentation.
 
-    A category qualifies only when its own positive subtotal reaches that
-    category's configured minimum. The overall total must also fit beneath the
-    provider cap. This presentation gate is intentionally separate from
-    :func:`price_buffer`: category settings can hide a noisy payment estimate,
-    but can never silently remove the margin-protecting fee gross-up.
+    A category qualifies when its own subtotal reaches that category's
+    configured minimum *and* the quote total clears the same floor. The overall
+    total must also fit beneath the provider cap. This presentation gate is
+    intentionally separate from :func:`price_buffer`: category settings can hide
+    a noisy payment estimate, but can never silently remove the
+    margin-protecting fee gross-up.
+
+    A minimum of ``0`` means "no floor", which is what preserves the historical
+    lighting behavior exactly: before financing was category-aware, every quote
+    on a financing-enabled workspace showed an estimate, including a landscape
+    package with no priced fixtures sold purely through add-on charges. Those
+    categories ship with a zero minimum, so they still qualify on a subtotal of
+    ``0``; only a category with a *positive* floor has to earn its estimate.
     """
     financing = config.financing
     total_d = _d(total)
@@ -195,15 +203,10 @@ def financing_is_eligible(
     minimums = financing.category_minimums
     for raw_category, raw_subtotal in category_totals.items():
         category = str(raw_category).strip().lower()
-        minimum = minimums.get(category)
-        subtotal = _d(raw_subtotal)
-        minimum_d = _d(minimum) if minimum is not None else None
-        if (
-            minimum_d is not None
-            and subtotal > 0
-            and subtotal >= minimum_d
-            and total_d >= minimum_d
-        ):
+        if category not in minimums:
+            continue
+        minimum_d = _d(minimums[category])
+        if _d(raw_subtotal) >= minimum_d and total_d >= minimum_d:
             return True
     return False
 

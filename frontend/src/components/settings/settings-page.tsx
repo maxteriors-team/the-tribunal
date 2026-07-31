@@ -4,6 +4,7 @@ import { User, Bell, Webhook, CreditCard, Building2, Tags, FileInput, HandHeart,
 import { useSearchParams } from "next/navigation";
 
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
+import { FinancingSettingsCard } from "@/components/settings/financing-settings-card";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
 import { NeighborOutreachSettingsTab } from "@/components/settings/neighbor-outreach-settings-tab";
@@ -114,6 +115,7 @@ export function SettingsPage() {
         <TabsContent value="pricing">
           <QueryErrorBoundary message="Failed to load pricing settings. Please try again.">
             <div className="space-y-6">
+              <FinancingSettingsCard />
               <PermanentPricingSettingsCard />
               <SeasonalPricingSettingsTab />
             </div>

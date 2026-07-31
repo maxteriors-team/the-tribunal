@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.conversation import Conversation
     from app.models.offer import Offer
+    from app.models.prebooking import PreBookingCampaignConfig
     from app.models.workspace import Workspace
 
 
@@ -254,6 +255,18 @@ class Campaign(Base):
     offer: Mapped["Offer | None"] = relationship("Offer", back_populates="campaigns")
     campaign_contacts: Mapped[list["CampaignContact"]] = relationship(
         "CampaignContact", back_populates="campaign", cascade="all, delete-orphan"
+    )
+    # Optional pre-booking offer that turns this campaign into a sell-next-season
+    # push. Eager by default (``selectin``) because every campaign response
+    # reports whether it carries one, and a lazy load inside an async response
+    # serializer raises rather than querying; one extra indexed lookup against a
+    # tiny table is the cheaper trade.
+    pre_booking: Mapped["PreBookingCampaignConfig | None"] = relationship(
+        "PreBookingCampaignConfig",
+        back_populates="campaign",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     appointments: Mapped[list["Appointment"]] = relationship(
         "Appointment", back_populates="campaign"

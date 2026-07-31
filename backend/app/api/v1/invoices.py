@@ -22,6 +22,7 @@ from app.schemas.invoice import (
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
     InvoicePaymentLinkResponse,
+    InvoiceSendResponse,
     InvoiceUpdate,
     PaginatedInvoices,
 )
@@ -106,15 +107,20 @@ async def delete_invoice(
 
 
 # Lifecycle transitions
-@router.post("/{invoice_id}/send", response_model=InvoiceDetailResponse)
+@router.post("/{invoice_id}/send", response_model=InvoiceSendResponse)
 async def send_invoice(
     workspace_id: uuid.UUID,
     invoice_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteBilling,
-) -> InvoiceDetailResponse:
-    """Mark an invoice as sent (email delivery is wired in a later phase)."""
+) -> InvoiceSendResponse:
+    """Mark an invoice as sent and email it to the bill-to contact.
+
+    ``delivery`` reports whether the customer was actually emailed: an invoice
+    with no bill-to contact still transitions to ``sent`` but returns
+    ``skipped_no_email`` so the UI can say so instead of claiming success.
+    """
     service = InvoiceService(db)
     return await service.mark_sent(workspace_id, invoice_id)
 

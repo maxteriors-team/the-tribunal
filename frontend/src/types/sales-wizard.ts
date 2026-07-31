@@ -11,6 +11,7 @@ export type PricingSettings = Schemas["PricingSettings"];
 export type PricingSettingsUpdate = Schemas["PricingSettingsUpdate"];
 export type TierConfig = Schemas["TierConfig"];
 export type CatalogItemResponse = Schemas["CatalogItemResponse"];
+export type FinancingConfig = Schemas["FinancingConfig"];
 export type PermanentConfig = Schemas["PermanentConfig"];
 export type ChristmasConfig = Schemas["ChristmasConfig"];
 export type ChristmasPackage = Schemas["ChristmasPackage"];

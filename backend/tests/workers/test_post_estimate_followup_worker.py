@@ -413,6 +413,78 @@ async def test_fetch_excludes_workspaces_with_the_cadence_disabled() -> None:
     assert "enabled" in sql
 
 
+# --- per-number send allowance ------------------------------------------------
+#
+# The direct-send path enforces opt-out, consent and quiet hours but counted no
+# sends. Enabling the cadence on a workspace with a backlog would fire one SMS
+# per in-window quote from one number on the first tick, ignoring its warming
+# schedule and daily limit, which is how a number's carrier reputation dies.
+
+
+def _sender_session(phone: object | None) -> AsyncMock:
+    """Session whose sender lookup resolves to ``phone`` (None = untracked)."""
+    db = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = phone
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+async def test_sender_at_capacity_defers_instead_of_sending() -> None:
+    worker = PostEstimateFollowupWorker()
+    phone = SimpleNamespace(id=uuid.uuid4())
+    worker.number_pool.reserve_number_for_send = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    allowed = await worker._reserve_sender("+12485550100", _quote(), _sender_session(phone))  # type: ignore[arg-type]
+
+    assert allowed is False
+
+
+async def test_deferred_touch_writes_no_ledger_row_so_it_retries() -> None:
+    """A capacity defer must not consume the touch: no row means still due."""
+    worker = PostEstimateFollowupWorker()
+    worker._resolve_sms_number = AsyncMock(return_value="+12485550100")  # type: ignore[method-assign]
+    worker._reserve_sender = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    db = AsyncMock()
+
+    result = await worker._send_sms(
+        _quote(),  # type: ignore[arg-type]
+        _recipient(),
+        QuoteFollowupTouchSettings(offset_days=1, channel="sms", template_id=uuid.uuid4()),
+        "Hi Jamie",
+        db,
+    )
+
+    assert result is None, "None means _process_quote records nothing and retries later"
+
+
+async def test_untracked_sender_still_sends() -> None:
+    """Threads can reference a sender the workspace no longer tracks.
+
+    Refusing those would silently disable follow-up for most existing
+    conversations, which is a worse failure than an uncapped send we can see.
+    """
+    worker = PostEstimateFollowupWorker()
+    worker.number_pool.reserve_number_for_send = AsyncMock()  # type: ignore[method-assign]
+
+    allowed = await worker._reserve_sender("+12485550100", _quote(), _sender_session(None))  # type: ignore[arg-type]
+
+    assert allowed is True
+    worker.number_pool.reserve_number_for_send.assert_not_awaited()
+
+
+async def test_tracked_sender_with_capacity_reserves_then_sends() -> None:
+    worker = PostEstimateFollowupWorker()
+    phone = SimpleNamespace(id=uuid.uuid4())
+    worker.number_pool.reserve_number_for_send = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    allowed = await worker._reserve_sender("+12485550100", _quote(), _sender_session(phone))  # type: ignore[arg-type]
+
+    assert allowed is True
+    worker.number_pool.reserve_number_for_send.assert_awaited_once()
+    assert worker.number_pool.reserve_number_for_send.await_args.args[0] is phone
+
+
 async def test_processed_offset_prevents_double_message() -> None:
     worker = PostEstimateFollowupWorker()
     worker._get_stop_reason = AsyncMock(return_value=None)  # type: ignore[method-assign]

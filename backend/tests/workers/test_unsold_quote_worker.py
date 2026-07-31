@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
@@ -176,6 +176,47 @@ def test_future_dated_quote_is_not_yet_aged() -> None:
 def test_offsets_cannot_enter_the_post_estimate_window(offset: int) -> None:
     with pytest.raises(ValidationError):
         QuoteRevivalTouchSettings(offset_days=offset, channel="sms")
+
+
+# --- per-number send allowance ------------------------------------------------
+#
+# A 366-day window holds far more due quotes than the first-14-days cadence, so
+# an uncapped tick here is the larger burst risk of the two sequences.
+
+
+def _sender_session(phone: object | None) -> AsyncMock:
+    db = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = phone
+    db.execute = AsyncMock(return_value=result)
+    return db
+
+
+async def test_sender_at_capacity_defers_instead_of_sending() -> None:
+    worker = UnsoldQuoteWorker()
+    worker.number_pool.reserve_number_for_send = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    allowed = await worker._reserve_sender(
+        "+12485550100",
+        _quote(),  # type: ignore[arg-type]
+        _sender_session(SimpleNamespace(id=uuid.uuid4())),
+    )
+
+    assert allowed is False
+
+
+async def test_untracked_sender_still_sends() -> None:
+    worker = UnsoldQuoteWorker()
+    worker.number_pool.reserve_number_for_send = AsyncMock()  # type: ignore[method-assign]
+
+    allowed = await worker._reserve_sender(
+        "+12485550100",
+        _quote(),  # type: ignore[arg-type]
+        _sender_session(None),
+    )
+
+    assert allowed is True
+    worker.number_pool.reserve_number_for_send.assert_not_awaited()
 
 
 def test_offset_15_is_the_first_legal_revival_day() -> None:
