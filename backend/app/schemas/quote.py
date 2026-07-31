@@ -20,7 +20,6 @@ from pydantic import (
 )
 
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
-
 from app.schemas.pricing import FinancingEstimate
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]

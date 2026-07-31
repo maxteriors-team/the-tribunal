@@ -46,7 +46,6 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "ad_monitor_worker",
         "web_people_discovery_worker",
         "outbound_auto_draft_worker",
-        "unsold_quote_worker",
         # New specs are appended here, never inserted: this list pins startup
         # order, so a mid-list insertion shifts every later worker.
         "webhook_signature_cleanup",

@@ -61,16 +61,16 @@ from app.services.field_service.neighbor_outreach_config import (
 from app.services.field_service.neighbor_outreach_config import (
     get_neighbor_outreach_config,
 )
+from app.services.lead_sources.capture_settings import (
+    SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
+)
+from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
 from app.services.quotes.attach_rules_config import (
     SETTINGS_KEY as ATTACH_RULES_KEY,
 )
 from app.services.quotes.attach_rules_config import (
     get_attach_rules_config,
 )
-from app.services.lead_sources.capture_settings import (
-    SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
-)
-from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
 from app.services.quotes.followup_config import (
     SETTINGS_KEY as QUOTE_FOLLOWUP_KEY,
 )
