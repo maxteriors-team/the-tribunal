@@ -43,3 +43,22 @@ export function getApiErrorCode(err: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Extracts the structured `details` payload from the canonical backend error
+ * envelope (`{ code, message, details, request_id }`) on an Axios-style error.
+ *
+ * Returns `null` when the error carries no structured detail. Use this when a
+ * rejection is meant to be *acted on* rather than only read: a blocking attach
+ * rule rejects the save with the same warning object the advisory path returns
+ * on success, so the builder can offer "Add gutters" instead of only reporting
+ * a 400. Callers narrow the result themselves — it is server data, not a
+ * guarantee.
+ */
+export function getApiErrorDetails(err: unknown): unknown {
+  if (typeof err === "object" && err !== null && "response" in err) {
+    const axErr = err as { response?: { data?: { details?: unknown } } };
+    return axErr.response?.data?.details ?? null;
+  }
+  return null;
+}
