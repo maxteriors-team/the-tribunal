@@ -37,6 +37,7 @@ from app.schemas.job_costing import (
     TimeEntryResponse,
 )
 from app.services.exceptions import ConflictError
+from app.services.inventory.cogs_service import COGSService
 
 logger = structlog.get_logger()
 
@@ -300,7 +301,7 @@ class JobCostingService:
     async def get_profitability(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID
     ) -> JobProfitability:
-        """Compute revenue (linked invoice) minus labor and expense costs."""
+        """Revenue (linked invoice) minus labor, expenses, and materials."""
         job = await self._assert_job(job_id, workspace_id)
 
         revenue = 0.0
@@ -351,9 +352,16 @@ class JobCostingService:
         )
         expense_cost = sum(float(amount or 0) for amount in expense_rows)
 
+        # Materials come from the inventory ledger, never from a JobExpense, so
+        # a workspace that tracks stock cannot count the same bucket twice.
+        material_cost = (
+            await COGSService(self.db).material_cost_by_job(workspace_id, [job_id])
+        ).get(job_id, 0.0)
+
         labor_cost = round(labor_cost, 2)
         expense_cost = round(expense_cost, 2)
-        total_cost = round(labor_cost + expense_cost, 2)
+        material_cost = round(material_cost, 2)
+        total_cost = round(labor_cost + expense_cost + material_cost, 2)
         profit = round(revenue - total_cost, 2)
         margin = round(profit / revenue, 4) if revenue else None
 
@@ -363,6 +371,7 @@ class JobCostingService:
             revenue=round(revenue, 2),
             labor_cost=labor_cost,
             expense_cost=expense_cost,
+            material_cost=material_cost,
             total_cost=total_cost,
             profit=profit,
             margin=margin,

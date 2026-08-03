@@ -1658,6 +1658,74 @@
         "title": "AddToMissionResponse",
         "type": "object"
       },
+      "AdjustStockRequest": {
+        "description": "Reconcile to a counted quantity, or write off shrinkage.\n\n``quantity_on_hand`` is the **absolute** counted number; the service posts\nthe signed delta. ``write_off_quantity`` instead removes a known amount as\n``shrinkage`` so waste is reported apart from cost of goods sold. Exactly\none of the two must be supplied.",
+        "properties": {
+          "location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "quantity_on_hand": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absolute counted quantity at this location",
+            "title": "Quantity On Hand"
+          },
+          "write_off_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Quantity to remove as shrinkage",
+            "title": "Write Off Quantity"
+          }
+        },
+        "title": "AdjustStockRequest",
+        "type": "object"
+      },
       "AdvertiserBulkPromoteRequest": {
         "description": "Promote many advertisers at once.",
         "properties": {
@@ -6109,6 +6177,125 @@
           "query"
         ],
         "title": "BusinessSearchResponse",
+        "type": "object"
+      },
+      "COGSBreakdownRow": {
+        "description": "One grouped slice of cost of goods sold.",
+        "properties": {
+          "cogs": {
+            "title": "Cogs",
+            "type": "number"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Grouping id (item/job UUID, or category name)",
+            "title": "Key"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "cogs",
+          "quantity"
+        ],
+        "title": "COGSBreakdownRow",
+        "type": "object"
+      },
+      "COGSReport": {
+        "description": "Cost of goods sold over a window, recognized when stock is consumed.\n\nValued at the weighted-average cost at posting time (snapshotted on the\nledger row), so the report never recomputes history. ``shrinkage_cost`` is\nreported separately so waste never hides inside gross margin.",
+        "properties": {
+          "breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/COGSBreakdownRow"
+            },
+            "title": "Breakdown",
+            "type": "array"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "ending_inventory_value": {
+            "title": "Ending Inventory Value",
+            "type": "number"
+          },
+          "gross_margin": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "(revenue - total_cogs) / revenue, or null when revenue is 0",
+            "title": "Gross Margin"
+          },
+          "group_by": {
+            "enum": [
+              "item",
+              "service_category",
+              "job"
+            ],
+            "title": "Group By",
+            "type": "string"
+          },
+          "revenue": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Invoice revenue in the window, when available",
+            "title": "Revenue"
+          },
+          "shrinkage_cost": {
+            "title": "Shrinkage Cost",
+            "type": "number"
+          },
+          "total_cogs": {
+            "title": "Total Cogs",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "currency",
+          "total_cogs",
+          "shrinkage_cost",
+          "ending_inventory_value",
+          "group_by",
+          "breakdown"
+        ],
+        "title": "COGSReport",
         "type": "object"
       },
       "CSVPreviewResponse": {
@@ -16862,6 +17049,872 @@
         "title": "IntegrationsResponse",
         "type": "object"
       },
+      "InventoryItemCreate": {
+        "description": "Create a tracked item.",
+        "properties": {
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional link to a price-book item in the same workspace",
+            "title": "Catalog Item Id"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "reorder_point": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Point"
+          },
+          "reorder_quantity": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Quantity"
+          },
+          "safety_stock": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Safety Stock",
+            "type": "number"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "supplier_sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Sku"
+          },
+          "unit_of_measure": {
+            "default": "each",
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Unit Of Measure",
+            "type": "string"
+          },
+          "valuation_method": {
+            "const": "weighted_average",
+            "default": "weighted_average",
+            "title": "Valuation Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "InventoryItemCreate",
+        "type": "object"
+      },
+      "InventoryItemResponse": {
+        "description": "A tracked item as returned by the API, with its rolled-up stock position.\n\n``quantity_on_hand`` sums every location; ``total_value``/``avg_unit_cost``\nare redacted to 0 for callers without ``billing:read``.",
+        "properties": {
+          "avg_unit_cost": {
+            "default": 0.0,
+            "title": "Avg Unit Cost",
+            "type": "number"
+          },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional link to a price-book item in the same workspace",
+            "title": "Catalog Item Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_low_stock": {
+            "default": false,
+            "title": "Is Low Stock",
+            "type": "boolean"
+          },
+          "last_movement_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Movement At"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "quantity_on_hand": {
+            "default": 0.0,
+            "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "reorder_point": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Point"
+          },
+          "reorder_quantity": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Quantity"
+          },
+          "safety_stock": {
+            "default": 0.0,
+            "minimum": 0.0,
+            "title": "Safety Stock",
+            "type": "number"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "supplier_sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Sku"
+          },
+          "total_value": {
+            "default": 0.0,
+            "title": "Total Value",
+            "type": "number"
+          },
+          "unit_of_measure": {
+            "default": "each",
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Unit Of Measure",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "valuation_method": {
+            "const": "weighted_average",
+            "default": "weighted_average",
+            "title": "Valuation Method",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "workspace_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InventoryItemResponse",
+        "type": "object"
+      },
+      "InventoryItemUpdate": {
+        "description": "Update a tracked item (all fields optional).\n\n``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and\n``catalog_item_id`` are cleared by an explicit ``null`` (the service checks\n``model_fields_set``); nothing else could un-manage an item once managed.",
+        "properties": {
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "reorder_point": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Point"
+          },
+          "reorder_quantity": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Quantity"
+          },
+          "safety_stock": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safety Stock"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "supplier_sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Sku"
+          },
+          "unit_of_measure": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Of Measure"
+          },
+          "valuation_method": {
+            "anyOf": [
+              {
+                "const": "weighted_average",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Method"
+          }
+        },
+        "title": "InventoryItemUpdate",
+        "type": "object"
+      },
+      "InventoryLedgerEntryResponse": {
+        "description": "One posted movement.\n\n``unit_cost``/``value_delta``/``value_after``/``unit_cost_after`` are\nredacted to 0 for callers without ``billing:read``; quantities always serve.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Name"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "location_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "quantity_after": {
+            "title": "Quantity After",
+            "type": "number"
+          },
+          "quantity_delta": {
+            "title": "Quantity Delta",
+            "type": "number"
+          },
+          "reason": {
+            "enum": [
+              "receipt",
+              "job_usage",
+              "sale",
+              "adjustment",
+              "shrinkage",
+              "return_to_stock",
+              "transfer_in",
+              "transfer_out",
+              "opening_balance"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Id"
+          },
+          "reference_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Type"
+          },
+          "unit_cost": {
+            "title": "Unit Cost",
+            "type": "number"
+          },
+          "unit_cost_after": {
+            "title": "Unit Cost After",
+            "type": "number"
+          },
+          "value_after": {
+            "title": "Value After",
+            "type": "number"
+          },
+          "value_delta": {
+            "title": "Value Delta",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "item_id",
+          "location_id",
+          "quantity_delta",
+          "unit_cost",
+          "value_delta",
+          "reason",
+          "occurred_at",
+          "quantity_after",
+          "value_after",
+          "unit_cost_after",
+          "created_at"
+        ],
+        "title": "InventoryLedgerEntryResponse",
+        "type": "object"
+      },
+      "InventoryLedgerPage": {
+        "description": "Paginated movement history for one item.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "InventoryLedgerPage",
+        "type": "object"
+      },
+      "InventoryLocationCreate": {
+        "description": "Create a stock location.",
+        "properties": {
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning crew when this location is a truck",
+            "title": "Crew Id"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_default": {
+            "default": false,
+            "description": "Fallback location used when a movement names none",
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "warehouse",
+            "enum": [
+              "warehouse",
+              "truck",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "InventoryLocationCreate",
+        "type": "object"
+      },
+      "InventoryLocationResponse": {
+        "description": "A stock location as returned by the API.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning crew when this location is a truck",
+            "title": "Crew Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_default": {
+            "default": false,
+            "description": "Fallback location used when a movement names none",
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "warehouse",
+            "enum": [
+              "warehouse",
+              "truck",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "workspace_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InventoryLocationResponse",
+        "type": "object"
+      },
+      "InventoryLocationUpdate": {
+        "description": "Update a stock location (all fields optional).",
+        "properties": {
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crew Id"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Default"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "warehouse",
+                  "truck",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "InventoryLocationUpdate",
+        "type": "object"
+      },
       "InvitationAcceptResponse": {
         "description": "Schema for invitation accept response.",
         "properties": {
@@ -18478,8 +19531,81 @@
         "title": "JobListResponse",
         "type": "object"
       },
+      "JobMaterialCreate": {
+        "description": "Consume stock on a job. No cost field: the server values it.",
+        "properties": {
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item_id",
+          "quantity"
+        ],
+        "title": "JobMaterialCreate",
+        "type": "object"
+      },
+      "JobMaterialsResponse": {
+        "description": "Materials consumed on one job, with the total cost they contributed.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "total_material_cost": {
+            "default": 0.0,
+            "description": "Sum of consumption cost, net of returns (0 without billing:read)",
+            "title": "Total Material Cost",
+            "type": "number"
+          }
+        },
+        "required": [
+          "job_id",
+          "items"
+        ],
+        "title": "JobMaterialsResponse",
+        "type": "object"
+      },
       "JobPnLSummary": {
-        "description": "Aggregate job profitability over a period.\n\nRevenue is the sum of the distinct invoices linked to the jobs in range\n(so two jobs sharing one invoice are not double-counted); cost is tracked\nlabor (hours x rate) plus logged expenses.",
+        "description": "Aggregate job profitability over a period.\n\nRevenue is the sum of the distinct invoices linked to the jobs in range\n(so two jobs sharing one invoice are not double-counted); cost is tracked\nlabor (hours x rate) plus logged expenses plus materials consumed.",
         "properties": {
           "billable_job_count": {
             "description": "Jobs with a linked invoice",
@@ -18539,6 +19665,11 @@
             "description": "profit / revenue, or null when revenue is 0",
             "title": "Margin"
           },
+          "material_cost": {
+            "default": 0.0,
+            "title": "Material Cost",
+            "type": "number"
+          },
           "profit": {
             "title": "Profit",
             "type": "number"
@@ -18573,7 +19704,7 @@
         "type": "object"
       },
       "JobProfitability": {
-        "description": "Computed P&L for a single job.\n\n``revenue`` comes from the linked invoice's total (0 when unlinked).\n``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``\nsums expenses. ``margin`` is ``profit / revenue`` (null when revenue is 0).",
+        "description": "Computed P&L for a single job.\n\n``revenue`` comes from the linked invoice's total (0 when unlinked).\n``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``\nsums expenses; ``material_cost`` sums stock consumed on the job from the\ninventory ledger (net of anything returned). ``margin`` is\n``profit / revenue`` (null when revenue is 0).",
         "properties": {
           "currency": {
             "title": "Currency",
@@ -18602,6 +19733,11 @@
               }
             ],
             "title": "Margin"
+          },
+          "material_cost": {
+            "default": 0.0,
+            "title": "Material Cost",
+            "type": "number"
           },
           "open_timer": {
             "title": "Open Timer",
@@ -28379,6 +29515,43 @@
         "title": "PaginatedConversations",
         "type": "object"
       },
+      "PaginatedInventoryItems": {
+        "description": "Paginated list of tracked items.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "PaginatedInventoryItems",
+        "type": "object"
+      },
       "PaginatedInvoices": {
         "description": "Paginated list of invoices.",
         "properties": {
@@ -37261,6 +38434,94 @@
         "title": "RealtimeTokenResponse",
         "type": "object"
       },
+      "ReceiveStockRequest": {
+        "description": "Bring stock in at a known cost (the only movement that sets one).",
+        "properties": {
+          "location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Defaults to the workspace's default location",
+            "title": "Location Id"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Id"
+          },
+          "reference_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "job",
+                  "invoice",
+                  "quote",
+                  "manual",
+                  "transfer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Type"
+          },
+          "unit_cost": {
+            "default": 0.0,
+            "description": "Cost per unit in major units",
+            "minimum": 0.0,
+            "title": "Unit Cost",
+            "type": "number"
+          }
+        },
+        "required": [
+          "quantity"
+        ],
+        "title": "ReceiveStockRequest",
+        "type": "object"
+      },
       "RecentActivity": {
         "description": "Recent activity item.",
         "properties": {
@@ -38960,6 +40221,242 @@
           }
         },
         "title": "RejectSuggestionRequest",
+        "type": "object"
+      },
+      "ReorderReport": {
+        "description": "Items needing a purchase, most urgent first.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReorderRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "lookback_days": {
+            "title": "Lookback Days",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "generated_at",
+          "lookback_days"
+        ],
+        "title": "ReorderReport",
+        "type": "object"
+      },
+      "ReorderRow": {
+        "description": "One item at or below its reorder point, aggregated across locations.",
+        "properties": {
+          "avg_daily_usage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Daily Usage"
+          },
+          "days_of_cover": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Of Cover"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_name": {
+            "title": "Item Name",
+            "type": "string"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "quantity_on_hand": {
+            "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "reorder_point": {
+            "title": "Reorder Point",
+            "type": "number"
+          },
+          "reorder_quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Quantity"
+          },
+          "safety_stock": {
+            "title": "Safety Stock",
+            "type": "number"
+          },
+          "shortfall": {
+            "title": "Shortfall",
+            "type": "number"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "suggested_reorder_point": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "avg daily usage x lead time + safety stock; never applied automatically",
+            "title": "Suggested Reorder Point"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "supplier_sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Sku"
+          },
+          "unit_of_measure": {
+            "title": "Unit Of Measure",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "item_name",
+          "unit_of_measure",
+          "quantity_on_hand",
+          "reorder_point",
+          "safety_stock",
+          "shortfall"
+        ],
+        "title": "ReorderRow",
+        "type": "object"
+      },
+      "ReorderSuggestion": {
+        "description": "The computed reorder point for one item, alongside the stored value.",
+        "properties": {
+          "avg_daily_usage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Daily Usage"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "lead_time_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Time Days"
+          },
+          "lookback_days": {
+            "title": "Lookback Days",
+            "type": "integer"
+          },
+          "safety_stock": {
+            "title": "Safety Stock",
+            "type": "number"
+          },
+          "stored_reorder_point": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored Reorder Point"
+          },
+          "suggested_reorder_point": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Reorder Point"
+          }
+        },
+        "required": [
+          "item_id",
+          "safety_stock",
+          "lookback_days"
+        ],
+        "title": "ReorderSuggestion",
         "type": "object"
       },
       "ReputationSummary": {
@@ -42316,6 +43813,124 @@
         "title": "SpeedToLeadStats",
         "type": "object"
       },
+      "StockLevelListResponse": {
+        "description": "Every tracked on-hand position, plus the workspace's total value.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StockLevelRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_value": {
+            "default": 0.0,
+            "description": "Sum of on-hand value (0 without billing:read)",
+            "title": "Total Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "StockLevelListResponse",
+        "type": "object"
+      },
+      "StockLevelRow": {
+        "description": "On-hand position for one item at one location.",
+        "properties": {
+          "avg_unit_cost": {
+            "title": "Avg Unit Cost",
+            "type": "number"
+          },
+          "is_low_stock": {
+            "default": false,
+            "title": "Is Low Stock",
+            "type": "boolean"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_name": {
+            "title": "Item Name",
+            "type": "string"
+          },
+          "last_movement_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Movement At"
+          },
+          "location_id": {
+            "format": "uuid",
+            "title": "Location Id",
+            "type": "string"
+          },
+          "location_name": {
+            "title": "Location Name",
+            "type": "string"
+          },
+          "quantity_on_hand": {
+            "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "reorder_point": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reorder Point"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
+          "total_value": {
+            "title": "Total Value",
+            "type": "number"
+          },
+          "unit_of_measure": {
+            "title": "Unit Of Measure",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "item_name",
+          "unit_of_measure",
+          "location_id",
+          "location_name",
+          "quantity_on_hand",
+          "total_value",
+          "avg_unit_cost"
+        ],
+        "title": "StockLevelRow",
+        "type": "object"
+      },
       "TagCreate": {
         "description": "Schema for creating a tag.",
         "properties": {
@@ -43907,6 +45522,62 @@
           "status"
         ],
         "title": "TranscriptResponse",
+        "type": "object"
+      },
+      "TransferStockRequest": {
+        "description": "Move stock between two locations at the source's weighted-average cost.",
+        "properties": {
+          "from_location_id": {
+            "format": "uuid",
+            "title": "From Location Id",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "to_location_id": {
+            "format": "uuid",
+            "title": "To Location Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "from_location_id",
+          "to_location_id",
+          "quantity"
+        ],
+        "title": "TransferStockRequest",
         "type": "object"
       },
       "UnattributedLeadResponse": {
@@ -62823,6 +64494,1067 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/inventory/items": {
+      "get": {
+        "description": "List tracked items with their on-hand position (costs need billing:read).",
+        "operationId": "list_inventory_items_api_v1_workspaces__workspace_id__inventory_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "description": "Only items at or below reorder point",
+            "in": "query",
+            "name": "low_stock",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only items at or below reorder point",
+              "title": "Low Stock",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedInventoryItems"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Inventory Items",
+        "tags": [
+          "Inventory"
+        ]
+      },
+      "post": {
+        "description": "Create a tracked item. Stock arrives later, through a receipt.",
+        "operationId": "create_inventory_item_api_v1_workspaces__workspace_id__inventory_items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Inventory Item",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}": {
+      "delete": {
+        "description": "Delete an item that never moved; archive one that has stock history.",
+        "operationId": "delete_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Inventory Item",
+        "tags": [
+          "Inventory"
+        ]
+      },
+      "get": {
+        "description": "Get one tracked item with its rolled-up position.",
+        "operationId": "get_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Inventory Item",
+        "tags": [
+          "Inventory"
+        ]
+      },
+      "put": {
+        "description": "Update an item's details or its reorder settings.",
+        "operationId": "update_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryItemResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Inventory Item",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/adjustments": {
+      "post": {
+        "description": "Reconcile to a physical count, or write stock off as shrinkage.",
+        "operationId": "adjust_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__adjustments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Adjust Stock",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/ledger": {
+      "get": {
+        "description": "Movement history for one item, newest first (costs need billing:read).",
+        "operationId": "list_item_ledger_api_v1_workspaces__workspace_id__inventory_items__item_id__ledger_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLedgerPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Item Ledger",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/receipts": {
+      "post": {
+        "description": "Receive stock at a known unit cost (this is what sets the average).",
+        "operationId": "receive_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__receipts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiveStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Receive Stock",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/reorder-suggestion": {
+      "get": {
+        "description": "Suggest a reorder point from trailing usage. Never applies it.",
+        "operationId": "suggest_item_reorder_point_api_v1_workspaces__workspace_id__inventory_items__item_id__reorder_suggestion_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderSuggestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Suggest Item Reorder Point",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/locations": {
+      "get": {
+        "description": "List stock locations, default first.",
+        "operationId": "list_inventory_locations_api_v1_workspaces__workspace_id__inventory_locations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryLocationResponse"
+                  },
+                  "title": "Response List Inventory Locations Api V1 Workspaces  Workspace Id  Inventory Locations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Inventory Locations",
+        "tags": [
+          "Inventory"
+        ]
+      },
+      "post": {
+        "description": "Create a warehouse or truck.",
+        "operationId": "create_inventory_location_api_v1_workspaces__workspace_id__inventory_locations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryLocationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLocationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Inventory Location",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/locations/{location_id}": {
+      "delete": {
+        "description": "Delete a location that never held stock (409 once it has history).",
+        "operationId": "delete_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "location_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Location Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Inventory Location",
+        "tags": [
+          "Inventory"
+        ]
+      },
+      "put": {
+        "description": "Rename a location, reassign its crew, or make it the default.",
+        "operationId": "update_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "location_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Location Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InventoryLocationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLocationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Inventory Location",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/reorder-report": {
+      "get": {
+        "description": "Items at or below their reorder point, most urgent first.",
+        "operationId": "reorder_report_api_v1_workspaces__workspace_id__inventory_reorder_report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lookback_days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 365,
+              "minimum": 7,
+              "title": "Lookback Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reorder Report",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/stock": {
+      "get": {
+        "description": "On-hand positions per item and location.",
+        "operationId": "list_stock_levels_api_v1_workspaces__workspace_id__inventory_stock_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "location_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Location Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "low_stock",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Low Stock",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockLevelListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Stock Levels",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/inventory/transfers": {
+      "post": {
+        "description": "Move stock between locations (warehouse to truck), value included.\n\n``jobs:write``, not ``billing:write``: loading a van is dispatch work and\nthe transfer cannot change what the workspace's stock is worth.",
+        "operationId": "transfer_stock_api_v1_workspaces__workspace_id__inventory_transfers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferStockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+                  },
+                  "title": "Response Transfer Stock Api V1 Workspaces  Workspace Id  Inventory Transfers Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Transfer Stock",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/invitations": {
       "get": {
         "description": "List all pending invitations for a workspace.",
@@ -64565,6 +67297,201 @@
           }
         ],
         "summary": "Delete Expense",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials": {
+      "get": {
+        "description": "Materials consumed on a job (costs redacted below billing:read).",
+        "operationId": "list_job_materials_api_v1_workspaces__workspace_id__jobs__job_id__materials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobMaterialsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Job Materials",
+        "tags": [
+          "Field Service"
+        ]
+      },
+      "post": {
+        "description": "Consume stock on a job, valued at the item's current average cost.",
+        "operationId": "add_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobMaterialCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Add Job Material",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials/{entry_id}": {
+      "delete": {
+        "description": "Undo a material line by returning it to stock (never deletes history).",
+        "operationId": "remove_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Remove Job Material",
         "tags": [
           "Field Service"
         ]
@@ -75976,6 +78903,110 @@
           }
         ],
         "summary": "Backlog",
+        "tags": [
+          "Reporting"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/reports/cogs": {
+      "get": {
+        "description": "Cost of goods sold: stock consumed in the window, valued at posting cost.\n\nShrinkage is reported on its own line rather than inside the total — waste\nhidden in gross margin is waste nobody fixes.",
+        "operationId": "cogs_api_v1_workspaces__workspace_id__reports_cogs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stock consumed on or after this date (defaults to the 1st of this month)",
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stock consumed on or after this date (defaults to the 1st of this month)",
+              "title": "Date From"
+            }
+          },
+          {
+            "description": "Stock consumed on or before this date (defaults to today)",
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stock consumed on or before this date (defaults to today)",
+              "title": "Date To"
+            }
+          },
+          {
+            "description": "Breakdown dimension",
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "item",
+              "description": "Breakdown dimension",
+              "enum": [
+                "item",
+                "service_category",
+                "job"
+              ],
+              "title": "Group By",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/COGSReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cogs",
         "tags": [
           "Reporting"
         ]

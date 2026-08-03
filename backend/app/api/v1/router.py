@@ -32,6 +32,7 @@ from app.api.v1 import (
     human_profiles,
     improvement_suggestions,
     integrations,
+    inventory,
     invitations,
     invoices,
     jobs,
@@ -235,6 +236,11 @@ api_router.include_router(
     catalog.router,
     prefix="/workspaces/{workspace_id}/catalog-items",
     tags=["Catalog"],
+)
+api_router.include_router(
+    inventory.router,
+    prefix="/workspaces/{workspace_id}/inventory",
+    tags=["Inventory"],
 )
 # Public client-facing proposal page (no auth, token-keyed)
 api_router.include_router(

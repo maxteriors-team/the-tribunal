@@ -89,6 +89,7 @@ const profitability: JobProfitability = {
   revenue: 600,
   labor_cost: 135,
   expense_cost: 38.5,
+  material_cost: 0,
   total_cost: 173.5,
   profit: 426.5,
   margin: 0.71,

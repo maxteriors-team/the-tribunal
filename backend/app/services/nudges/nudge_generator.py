@@ -16,6 +16,7 @@ from app.services.nudges.strategies import (
     DealStallNudgeStrategy,
     FollowUpNudgeStrategy,
     HotLeadNudgeStrategy,
+    InventoryLowStockNudgeStrategy,
     MonitorIdleNudgeStrategy,
     NoShowRecoveryNudgeStrategy,
     NudgeContext,
@@ -52,6 +53,7 @@ ALL_NUDGE_TYPES = [
     "outbound_batch_ready",
     "approvals_waiting",
     "monitor_idle",
+    "inventory_low_stock",
 ]
 
 # Order matters: the orchestrator preserves legacy query ordering for tests
@@ -70,6 +72,7 @@ _STRATEGY_REGISTRY: list[tuple[str, type[NudgeStrategy]]] = [
     ("outbound_batch_ready", OutboundBatchReadyNudgeStrategy),
     ("approvals_waiting", ApprovalsWaitingNudgeStrategy),
     ("monitor_idle", MonitorIdleNudgeStrategy),
+    ("inventory_low_stock", InventoryLowStockNudgeStrategy),
 ]
 
 _DATE_NUDGE_TYPES = frozenset({"birthday", "anniversary", "custom"})

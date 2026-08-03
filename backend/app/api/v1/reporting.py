@@ -15,10 +15,13 @@ from app.schemas.reporting import (
     ARAgingReport,
     AttributionGapReport,
     BacklogReport,
+    COGSGroupBy,
+    COGSReport,
     EstimateCapacityReport,
     JobPnLSummary,
     SalesPerformanceReport,
 )
+from app.services.inventory import COGSService
 from app.services.reporting import CapacityService, ReportingService, SalesPerformanceService
 from app.services.reporting.capacity_service import DEFAULT_JOB_HOURS
 
@@ -45,6 +48,33 @@ async def job_pnl(
     """Aggregate job profitability (revenue minus labor and expenses) over a period."""
     return await ReportingService(db).job_pnl_summary(
         membership.workspace_id, date_from=date_from, date_to=date_to
+    )
+
+
+@router.get("/cogs", response_model=COGSReport)
+async def cogs(
+    membership: CanViewReports,
+    db: DB,
+    date_from: date | None = Query(
+        None,
+        description="Stock consumed on or after this date (defaults to the 1st of this month)",
+    ),
+    date_to: date | None = Query(
+        None, description="Stock consumed on or before this date (defaults to today)"
+    ),
+    group_by: COGSGroupBy = Query("item", description="Breakdown dimension"),
+) -> COGSReport:
+    """Cost of goods sold: stock consumed in the window, valued at posting cost.
+
+    Shrinkage is reported on its own line rather than inside the total — waste
+    hidden in gross margin is waste nobody fixes.
+    """
+    today = date.today()
+    return await COGSService(db).cogs(
+        membership.workspace_id,
+        date_from=date_from or today.replace(day=1),
+        date_to=date_to or today,
+        group_by=group_by,
     )
 
 
