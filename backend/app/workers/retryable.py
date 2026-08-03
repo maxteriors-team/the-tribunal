@@ -16,8 +16,10 @@ from datetime import UTC, datetime
 from typing import Any, ClassVar, TypeVar
 
 import structlog
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.state import InstanceState
 
 from app.db.session import AsyncSessionLocal
 from app.models.failed_job import FAILED_JOB_STATUS_PENDING, FailedJob
@@ -30,6 +32,20 @@ T = TypeVar("T")
 # DLQ row. The full failure is still in logs; the DB copy is for triage.
 _MAX_PAYLOAD_REPR = 4_000
 _MAX_ERROR_LEN = 4_000
+
+
+def _describe_exception(exc: BaseException | None) -> str | None:
+    """Render an exception for logs/DLQ, never returning an empty string.
+
+    Some exception types carry no message at all. ``cryptography.fernet``'s
+    ``InvalidToken`` is the one that hurt here: ``str(exc)`` is ``""``, so both
+    the backoff warning and the DLQ row recorded a blank error and the only
+    clue that a column had been encrypted under a different key was lost.
+    Falling back to the type name keeps a failed job triageable.
+    """
+    if exc is None:
+        return None
+    return str(exc) or type(exc).__name__
 
 
 def _safe_jsonable(value: Any) -> Any:
@@ -118,7 +134,7 @@ class RetryableWorker:
                 # ``PendingRollbackError`` instead of actually retrying — turning
                 # the retry into a no-op for exactly the transient DB errors it
                 # exists to handle. Reset any session so the retry starts clean.
-                await self._rollback_sessions(args, kwargs)
+                await self._reset_sessions(args, kwargs)
                 delay = self.backoff_base_seconds * (2**attempt) + random.uniform(
                     0, self.backoff_base_seconds
                 )
@@ -128,7 +144,7 @@ class RetryableWorker:
                     attempt=attempt + 1,
                     max_retries=self.max_retries,
                     delay_seconds=round(delay, 3),
-                    error=str(exc),
+                    error=_describe_exception(exc),
                 )
                 await asyncio.sleep(delay)
                 attempt += 1
@@ -136,17 +152,49 @@ class RetryableWorker:
         await self._dead_letter(fn, args, kwargs, last_exc, item_key=item_key)
         return None
 
-    @staticmethod
-    async def _rollback_sessions(args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
-        """Roll back any ``AsyncSession`` passed to a retried function.
+    @classmethod
+    async def _reset_sessions(cls, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        """Roll back any ``AsyncSession`` passed to a retried function, then
+        revive the ORM instances passed alongside it.
 
         Best-effort: a rollback failure is swallowed so it can't mask the
         original error or abort the backoff loop.
+
+        ``rollback()`` **expires every ORM instance in the session**. The next
+        attribute touch on one of them — even the primary key — emits a lazy
+        refresh ``SELECT``, which under the async engine raises
+        ``MissingGreenlet``. Workers overwhelmingly call this helper as
+        ``execute_with_retry(self._handle, row, db)``, so without the refresh
+        below every retry died on the expired ``row`` with a greenlet error
+        that both masked the real failure and made the DLQ row useless for
+        triage. Refreshing inside this awaited context puts the passed rows
+        back into a live, fully-populated state so a retry actually retries.
         """
-        for candidate in (*args, *kwargs.values()):
-            if isinstance(candidate, AsyncSession) and candidate.in_transaction():
+        candidates = (*args, *kwargs.values())
+        sessions = [c for c in candidates if isinstance(c, AsyncSession)]
+
+        for session in sessions:
+            if session.in_transaction():
                 with contextlib.suppress(Exception):
-                    await candidate.rollback()
+                    await session.rollback()
+
+        for session in sessions:
+            for candidate in candidates:
+                await cls._revive_instance(session, candidate)
+
+    @staticmethod
+    async def _revive_instance(session: AsyncSession, candidate: Any) -> None:
+        """Re-populate one expired ORM instance belonging to ``session``.
+
+        Non-ORM values, instances owned by another session, and rows deleted
+        underneath us are skipped — the retry itself reports those failures.
+        """
+        state = sa_inspect(candidate, raiseerr=False)
+        if not isinstance(state, InstanceState) or not state.persistent:
+            return
+        with contextlib.suppress(Exception):
+            if candidate in session:
+                await session.refresh(candidate)
 
     def _resolve_worker_name(self) -> str:
         """Pick the ``worker_name`` value written to the DLQ row."""
@@ -175,7 +223,7 @@ class RetryableWorker:
         fn_name = getattr(fn, "__name__", repr(fn))
         worker_name = self._resolve_worker_name()
         resolved_item_key = item_key or fn_name
-        error_text = str(exc) if exc else None
+        error_text = _describe_exception(exc)
         if error_text and len(error_text) > _MAX_ERROR_LEN:
             error_text = error_text[:_MAX_ERROR_LEN] + "…(truncated)"
 
