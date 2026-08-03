@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,26 @@ function toNumberOrNull(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** The form state an item opens with. Blank thresholds stay blank. */
+function seedFrom(item: InventoryItem | null | undefined): FormState {
+  if (!item) return EMPTY;
+  const optional = (value: number | null | undefined) =>
+    value === null || value === undefined ? "" : String(value);
+  return {
+    name: item.name,
+    sku: item.sku ?? "",
+    unit_of_measure: item.unit_of_measure,
+    reorder_point: optional(item.reorder_point),
+    reorder_quantity: optional(item.reorder_quantity),
+    safety_stock: String(item.safety_stock ?? 0),
+    lead_time_days: optional(item.lead_time_days),
+    supplier_name: item.supplier_name ?? "",
+    supplier_sku: item.supplier_sku ?? "",
+    notes: item.notes ?? "",
+    is_active: item.is_active,
+  };
+}
+
 export function InventoryItemDialog({
   workspaceId,
   item,
@@ -75,37 +95,10 @@ export function InventoryItemDialog({
 }: InventoryItemDialogProps) {
   const queryClient = useQueryClient();
   const isEdit = Boolean(item);
-  const [values, setValues] = useState<FormState>(EMPTY);
-
-  useEffect(() => {
-    if (!open) return;
-    setValues(
-      item
-        ? {
-            name: item.name,
-            sku: item.sku ?? "",
-            unit_of_measure: item.unit_of_measure,
-            reorder_point:
-              item.reorder_point === null || item.reorder_point === undefined
-                ? ""
-                : String(item.reorder_point),
-            reorder_quantity:
-              item.reorder_quantity === null || item.reorder_quantity === undefined
-                ? ""
-                : String(item.reorder_quantity),
-            safety_stock: String(item.safety_stock ?? 0),
-            lead_time_days:
-              item.lead_time_days === null || item.lead_time_days === undefined
-                ? ""
-                : String(item.lead_time_days),
-            supplier_name: item.supplier_name ?? "",
-            supplier_sku: item.supplier_sku ?? "",
-            notes: item.notes ?? "",
-            is_active: item.is_active,
-          }
-        : EMPTY,
-    );
-  }, [open, item]);
+  // Seeded once per mount. The parent keys this dialog on the item id, so
+  // opening a different item mounts a fresh form instead of syncing props into
+  // state through an effect.
+  const [values, setValues] = useState<FormState>(() => seedFrom(item));
 
   // The suggestion is advisory. It is shown next to the operator's own number
   // and applied only when they click — a threshold that silently retunes itself
@@ -163,14 +156,16 @@ export function InventoryItemDialog({
       ? null
       : Math.round(rawSuggestion * 100) / 100;
 
+  const handleOpenChange = (next: boolean) => {
+    if (!next && save.isPending) return;
+    // Back to the seed on close, so a second "Track item" starts blank even
+    // though the component stays mounted.
+    if (!next) setValues(seedFrom(item));
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && save.isPending) return;
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? `Edit ${item?.name}` : "Track a new item"}</DialogTitle>
