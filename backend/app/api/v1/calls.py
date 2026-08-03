@@ -27,6 +27,7 @@ from app.services.calls.live_call_registry import get_live_call_registry
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.services.telephony.user_call import (
     RepNumberNotAllowedError,
+    VoiceProviderUnavailableError,
     resolve_rep_callback_number,
     start_user_call,
 )
@@ -164,18 +165,24 @@ async def initiate_call(
                     detail=str(exc),
                 ) from exc
 
-            message = await start_user_call(
-                db=db,
-                voice_service=voice_service,
-                workspace_id=workspace_id,
-                user_id=current_user.id,
-                to_number=call_data.to_number,
-                from_number=call_data.from_phone_number,
-                rep_number=rep_number,
-                contact_phone=call_data.contact_phone,
-                connection_id=connection_id,
-                webhook_url=webhook_url,
-            )
+            try:
+                message = await start_user_call(
+                    db=db,
+                    voice_service=voice_service,
+                    workspace_id=workspace_id,
+                    user_id=current_user.id,
+                    to_number=call_data.to_number,
+                    from_number=call_data.from_phone_number,
+                    rep_number=rep_number,
+                    contact_phone=call_data.contact_phone,
+                    connection_id=connection_id,
+                    webhook_url=webhook_url,
+                )
+            except VoiceProviderUnavailableError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=str(exc),
+                ) from exc
         else:
             # An AI call with no agent starts no audio stream, so the contact
             # answers to dead air. Refuse the call instead of burning the lead.

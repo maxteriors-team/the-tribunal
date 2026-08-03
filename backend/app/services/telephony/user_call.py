@@ -208,6 +208,15 @@ async def pop_pending_user_call(call_control_id: str) -> PendingUserCall | None:
         return None
 
 
+class VoiceProviderUnavailableError(RuntimeError):
+    """Telnyx could not give us a connection to originate legs on.
+
+    Raised instead of letting the provider's ``ValueError`` escape as a 500:
+    a misconfigured Call Control Application is an operator problem with a
+    clear fix, not an unexpected server fault.
+    """
+
+
 class RepNumberNotAllowedError(ValueError):
     """The requested rep callback number is not on the workspace allowlist.
 
@@ -334,7 +343,13 @@ async def start_user_call(
     log = logger.bind(service="user_call", to=to_number, from_=from_number)
 
     if not connection_id:
-        connection_id = await voice_service.get_call_control_application_id(webhook_url)
+        try:
+            connection_id = await voice_service.get_call_control_application_id(webhook_url)
+        except ValueError as exc:
+            log.error("user_call_connection_lookup_failed", error=str(exc))
+            raise VoiceProviderUnavailableError(
+                "Voice calling is not configured with Telnyx yet."
+            ) from exc
 
     conversation = await voice_service.get_or_create_voice_conversation(
         db=db,
