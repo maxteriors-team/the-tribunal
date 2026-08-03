@@ -298,6 +298,9 @@ export function InventoryList() {
       {workspaceId && (
         <>
           <InventoryItemDialog
+            // Keyed on the item so opening a different one mounts a fresh form
+            // rather than syncing props into state.
+            key={selected?.id ?? "new-item"}
             workspaceId={workspaceId}
             item={dialog === "edit" ? selected : null}
             open={dialog === "edit"}

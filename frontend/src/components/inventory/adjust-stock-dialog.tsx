@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -69,14 +69,6 @@ export function AdjustStockDialog({
     enabled: open && Boolean(workspaceId),
   });
 
-  useEffect(() => {
-    if (!open) return;
-    setMode("count");
-    setAmount("");
-    setLocationId("");
-    setNote("");
-  }, [open, item?.id]);
-
   const adjust = useMutation({
     mutationFn: () => {
       if (!item) throw new Error("No item selected");
@@ -115,14 +107,20 @@ export function AdjustStockDialog({
 
   const unit = item?.unit_of_measure ?? "each";
 
+  // Cleared on close, so the dialog always opens on a fresh count.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && adjust.isPending) return;
+    if (!next) {
+      setMode("count");
+      setAmount("");
+      setLocationId("");
+      setNote("");
+    }
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && adjust.isPending) return;
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Adjust {item?.name ?? "stock"}</DialogTitle>

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -59,13 +59,6 @@ export function ReceiveStockDialog({
     enabled: open && Boolean(workspaceId),
   });
 
-  useEffect(() => {
-    if (!open) return;
-    setQuantity("");
-    setUnitCost("");
-    setLocationId("");
-  }, [open, item?.id]);
-
   const receive = useMutation({
     mutationFn: () => {
       if (!item) throw new Error("No item selected");
@@ -107,14 +100,21 @@ export function ReceiveStockDialog({
     costValue >= 0;
   const total = valid ? quantityValue * costValue : null;
 
+  // Reset on close rather than on open: the next item to be received is picked
+  // while this dialog is shut, so clearing here means it always opens blank
+  // without a state-syncing effect.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && receive.isPending) return;
+    if (!next) {
+      setQuantity("");
+      setUnitCost("");
+      setLocationId("");
+    }
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && receive.isPending) return;
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Receive {item?.name ?? "stock"}</DialogTitle>
