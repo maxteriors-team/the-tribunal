@@ -4,7 +4,6 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -12,38 +11,41 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KanbanSquare, MoreVertical, Plus, Settings2 } from "lucide-react";
+import { KanbanSquare, Plus, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
+import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appointment-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   PageEmptyState,
   PageErrorState,
   PageLoadingState,
 } from "@/components/ui/page-state";
+import { useContact } from "@/hooks/useContacts";
+import { useOutboundCall } from "@/hooks/useOutboundCall";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import { formatCurrency } from "@/lib/utils/number";
 import type { Opportunity, Pipeline, PipelineStage } from "@/types";
 
 import { ManageStagesDialog } from "./manage-stages-dialog";
+import { OpportunityCard, OpportunityCardSummary } from "./opportunity-card";
 import { OpportunityCreateSheet } from "./opportunity-create-sheet";
 import { OpportunityDetailSheet } from "./opportunity-detail-sheet";
 
 const BOARD_PAGE_SIZE = 200;
+
+/**
+ * The board renders a lead's name, phone, and lifecycle status straight from
+ * the list payload, so a stale card would offer to dial a number the contact no
+ * longer uses. Keep it fresh on focus/mount rather than trusting cache age.
+ */
+const BOARD_STALE_TIME_MS = 30_000;
 
 const STAGE_ACCENT: Record<string, string> = {
   active: "bg-blue-500",
@@ -114,6 +116,23 @@ function PipelineBoard({
   const [createOpen, setCreateOpen] = useState(false);
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
+  const [scheduleContactId, setScheduleContactId] = useState<number | null>(null);
+
+  const {
+    callTarget,
+    callDialogOpen,
+    setCallDialogOpen,
+    startCall,
+    submitCall,
+    initiateCallMutation,
+  } = useOutboundCall(workspaceId);
+
+  // The board payload carries only a contact summary; the appointment dialog
+  // needs the full record, so fetch it once the operator asks to book.
+  const { data: scheduleContact } = useContact(
+    workspaceId,
+    scheduleContactId ?? undefined,
+  );
 
   const sensors = useSensors(
     // Require a small drag distance so a plain click still opens the card.
@@ -141,6 +160,7 @@ function PipelineBoard({
         page_size: BOARD_PAGE_SIZE,
       }),
     enabled: !!workspaceId,
+    staleTime: BOARD_STALE_TIME_MS,
   });
 
   const moveMutation = useMutation({
@@ -225,6 +245,18 @@ function PipelineBoard({
     setCreateOpen(true);
   }
 
+  function callContact(opportunity: Opportunity) {
+    const contact = opportunity.primary_contact;
+    if (!contact) return;
+    startCall({ name: contact.full_name, phone: contact.phone_number });
+  }
+
+  function scheduleContactFor(opportunity: Opportunity) {
+    const contact = opportunity.primary_contact;
+    if (!contact) return;
+    setScheduleContactId(contact.id);
+  }
+
   if (isPending) {
     return <PageLoadingState message="Loading opportunities…" />;
   }
@@ -279,13 +311,15 @@ function PipelineBoard({
                 onMove={(opportunityId, stageId) =>
                   moveMutation.mutate({ opportunityId, stageId })
                 }
+                onCall={callContact}
+                onSchedule={scheduleContactFor}
               />
             ))}
           </div>
 
           <DragOverlay>
             {activeOpportunity ? (
-              <OpportunityCardBody opportunity={activeOpportunity} dragging />
+              <OpportunityCardSummary opportunity={activeOpportunity} dragging />
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -314,6 +348,26 @@ function PipelineBoard({
         open={manageStagesOpen}
         onOpenChange={setManageStagesOpen}
       />
+
+      <OutboundCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        workspaceId={workspaceId}
+        contactName={callTarget?.name}
+        contactPhone={callTarget?.phone}
+        onSubmit={submitCall}
+        isSubmitting={initiateCallMutation.isPending}
+      />
+
+      {scheduleContact ? (
+        <ScheduleAppointmentDialog
+          contact={scheduleContact}
+          open={!!scheduleContactId}
+          onOpenChange={(open) => {
+            if (!open) setScheduleContactId(null);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -325,6 +379,8 @@ function StageColumn({
   onOpen,
   onAdd,
   onMove,
+  onCall,
+  onSchedule,
 }: {
   stage: PipelineStage;
   stages: PipelineStage[];
@@ -332,6 +388,8 @@ function StageColumn({
   onOpen: (opportunityId: string) => void;
   onAdd: () => void;
   onMove: (opportunityId: string, stageId: string) => void;
+  onCall: (opportunity: Opportunity) => void;
+  onSchedule: (opportunity: Opportunity) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
@@ -382,6 +440,8 @@ function StageColumn({
               stages={stages}
               onOpen={onOpen}
               onMove={onMove}
+              onCall={onCall}
+              onSchedule={onSchedule}
             />
           ))
         )}
@@ -390,89 +450,3 @@ function StageColumn({
   );
 }
 
-function OpportunityCard({
-  opportunity,
-  stages,
-  onOpen,
-  onMove,
-}: {
-  opportunity: Opportunity;
-  stages: PipelineStage[];
-  onOpen: (opportunityId: string) => void;
-  onMove: (opportunityId: string, stageId: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: opportunity.id,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn("relative", isDragging && "opacity-50")}
-      data-testid={`opportunity-card-${opportunity.id}`}
-    >
-      <button
-        type="button"
-        className="w-full cursor-pointer text-left"
-        onClick={() => onOpen(opportunity.id)}
-        {...attributes}
-        {...listeners}
-      >
-        <OpportunityCardBody opportunity={opportunity} />
-      </button>
-
-      <div className="absolute right-1.5 top-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Opportunity actions"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Move to</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {stages
-              .filter((s) => s.id !== opportunity.stage_id)
-              .map((stage) => (
-                <DropdownMenuItem
-                  key={stage.id}
-                  onClick={() => onMove(opportunity.id, stage.id)}
-                >
-                  {stage.name}
-                </DropdownMenuItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-}
-
-function OpportunityCardBody({
-  opportunity,
-  dragging,
-}: {
-  opportunity: Opportunity;
-  dragging?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border bg-background p-3 pr-7 shadow-sm transition-colors hover:border-primary/50",
-        dragging && "w-64 shadow-md"
-      )}
-    >
-      <p className="line-clamp-2 text-sm font-medium">{opportunity.name}</p>
-      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{opportunity.probability}%</span>
-        {opportunity.amount != null ? (
-          <span className="font-medium text-foreground">
-            {formatCurrency(opportunity.amount, opportunity.currency)}
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}

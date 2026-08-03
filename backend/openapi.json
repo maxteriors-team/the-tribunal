@@ -25965,6 +25965,68 @@
         "title": "OpportunityActivityResponse",
         "type": "object"
       },
+      "OpportunityContactSummary": {
+        "description": "Minimal primary-contact detail embedded in opportunity responses.\n\nThe pipeline board renders the lead behind each card and dials it in place,\nso it needs a name and a phone number per opportunity. Fetching those\nper-card would be one request per opportunity; embedding this summary keeps\nthe board a single query.\n\nDeliberately narrow: name, phone, email, lifecycle status. Address, notes,\nscoring, and enrichment stay on the contact endpoints — a board card has no\nuse for them, and every extra PII field here widens the blast radius of the\nlist endpoint.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "first_name": {
+            "title": "First Name",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "full_name",
+          "status"
+        ],
+        "title": "OpportunityContactSummary",
+        "type": "object"
+      },
       "OpportunityCreate": {
         "description": "Create opportunity schema.",
         "properties": {
@@ -26291,6 +26353,16 @@
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "primary_contact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpportunityContactSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "primary_contact_id": {
             "anyOf": [
@@ -26714,6 +26786,16 @@
             "format": "uuid",
             "title": "Pipeline Id",
             "type": "string"
+          },
+          "primary_contact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpportunityContactSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "primary_contact_id": {
             "anyOf": [

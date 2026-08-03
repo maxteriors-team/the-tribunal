@@ -1,8 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import {
   useContactAppointments,
@@ -13,12 +12,9 @@ import {
   useToggleContactAI,
   useDeleteContact,
 } from "@/hooks/useContacts";
-import { callsApi, type InitiateCallRequest } from "@/lib/api/calls";
+import { useOutboundCall } from "@/hooks/useOutboundCall";
 import { conversationsApi } from "@/lib/api/conversations";
-import { phoneNumbersApi } from "@/lib/api/phone-numbers";
-import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Contact } from "@/types";
 
 interface UseContactSidebarDataArgs {
@@ -47,21 +43,6 @@ export function useContactSidebarData({
     workspaceId,
     contact?.id,
   );
-
-  const { data: phoneNumbersData } = useQuery({
-    queryKey: queryKeys.phoneNumbers.all(workspaceId ?? ""),
-    queryFn: () =>
-      workspaceId
-        ? phoneNumbersApi.list(workspaceId, { active_only: true })
-        : Promise.resolve({
-            items: [],
-            total: 0,
-            page: 1,
-            page_size: 50,
-            pages: 0,
-          }),
-    enabled: !!workspaceId,
-  });
 
   const { data: conversationsData } = useQuery({
     queryKey: queryKeys.conversations.byContact(workspaceId ?? "", contact?.id),
@@ -99,58 +80,30 @@ export function useContactSidebarData({
   const setAiEnabled = (value: boolean) =>
     setAiState((prev) => ({ ...prev, optimistic: value }));
 
-  const [callDialogOpen, setCallDialogOpen] = useState(false);
-
-  const initiateCallMutation = useMutation({
-    mutationFn: (data: InitiateCallRequest) => {
-      if (!workspaceId) throw new Error("Workspace not loaded");
-      return callsApi.initiate(workspaceId, data);
-    },
-    onSuccess: (_data, variables) => {
-      setCallDialogOpen(false);
-      toast.success(
-        variables.mode === "user"
-          ? "Calling your phone — answer to connect the contact."
-          : "Call initiated successfully!",
-      );
-    },
-    onError: (error) => {
-      toast.error(
-        getApiErrorMessage(error, "Failed to initiate call. Please try again."),
-      );
-    },
-  });
-
   const toggleAIMutation = useToggleContactAI(workspaceId ?? "");
   const deleteContactMutation = useDeleteContact(workspaceId ?? "");
 
-  const phoneNumbers = phoneNumbersData?.items ?? [];
+  const {
+    phoneNumbers,
+    callDialogOpen,
+    setCallDialogOpen,
+    startCall,
+    submitCall,
+    initiateCallMutation,
+  } = useOutboundCall(workspaceId);
 
   /**
    * Open the outbound-call dialog for this contact. The dialog picks who talks
-   * (AI agent or the operator's own phone) — firing the call straight from this
-   * button used to dial the contact with no agent and no human leg, which the
-   * customer experienced as dead air. Shared by the contact rail and the
-   * contact detail page so both fail the same way when the contact or the
-   * workspace has no usable number.
+   * (AI agent or the operator's own phone); see :func:`useOutboundCall` for why
+   * no surface may skip it.
    */
   const callContact = () => {
-    if (!contact?.phone_number) {
-      toast.error(messages.contacts.noPhoneNumber);
-      return;
-    }
-
-    const voiceEnabledNumbers = phoneNumbers.filter((p) => p.voice_enabled);
-    if (voiceEnabledNumbers.length === 0) {
-      toast.error(messages.phoneNumbers.noneVoiceEnabled);
-      return;
-    }
-
-    setCallDialogOpen(true);
-  };
-
-  const submitCall = (request: InitiateCallRequest) => {
-    initiateCallMutation.mutate(request);
+    startCall({
+      name:
+        [contact?.first_name, contact?.last_name].filter(Boolean).join(" ") ||
+        "contact",
+      phone: contact?.phone_number,
+    });
   };
 
   return {

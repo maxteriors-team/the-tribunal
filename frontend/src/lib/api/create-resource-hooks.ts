@@ -66,7 +66,12 @@ export interface CreateResourceHooksOptions<T, CreateData, UpdateData> {
 export interface ResourceHooks<T, CreateData, UpdateData> {
   queryKeys: ResourceQueryKeys;
   useList: (workspaceId: string, params?: Record<string, unknown>) => UseQueryResult<PaginatedResponse<T>>;
-  useGet: (workspaceId: string, id: ResourceId) => UseQueryResult<T>;
+  /**
+   * `id` accepts nullish so callers can fetch on demand (a record chosen by a
+   * dialog, a row expanded later) without inventing a placeholder id — the
+   * query stays disabled until one arrives.
+   */
+  useGet: (workspaceId: string, id: ResourceId | null | undefined) => UseQueryResult<T>;
   useCreate: (workspaceId: string) => ReturnType<typeof useMutation<T, Error, CreateData>>;
   useUpdate: (workspaceId: string) => ReturnType<typeof useMutation<T, Error, { id: ResourceId; data: UpdateData }>>;
   useDelete: (workspaceId: string) => ReturnType<typeof useMutation<void, Error, ResourceId>>;
@@ -125,12 +130,16 @@ export function createResourceHooks<T, CreateData, UpdateData>(
       });
     },
 
-    useGet: (workspaceId: string, id: ResourceId): UseQueryResult<T> => {
+    useGet: (workspaceId: string, id: ResourceId | null | undefined): UseQueryResult<T> => {
       return useQuery({
-        queryKey: queryKeys.detail(workspaceId, id),
+        queryKey: queryKeys.detail(workspaceId, id ?? ""),
         queryFn: () => {
           if (!apiClient.get) {
             throw new Error(`API client for ${resourceKey} does not have a 'get' method`);
+          }
+          // Unreachable while `enabled` is false; narrows the nullish id.
+          if (id === undefined || id === null) {
+            throw new Error(`Cannot fetch ${resourceKey} without an id`);
           }
           return apiClient.get(workspaceId, id);
         },

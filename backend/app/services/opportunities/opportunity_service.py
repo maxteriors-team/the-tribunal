@@ -252,9 +252,14 @@ class OpportunityService:
             query = query.where(Opportunity.assigned_user_id == restrict_to_user_id)
         query = query.order_by(Opportunity.created_at.desc())
 
-        # Eager-load line_items: OpportunityResponse serializes them, and a lazy
-        # load during async serialization raises MissingGreenlet.
-        query = query.options(selectinload(Opportunity.line_items))
+        # Eager-load line_items and primary_contact: OpportunityResponse
+        # serializes both, and a lazy load during async serialization raises
+        # MissingGreenlet. selectinload keeps this two extra queries for the
+        # whole page rather than one per row.
+        query = query.options(
+            selectinload(Opportunity.line_items),
+            selectinload(Opportunity.primary_contact),
+        )
 
         result = await paginate(self.db, query, page=page, page_size=page_size, unique=True)
         return result.build_response(
@@ -311,9 +316,9 @@ class OpportunityService:
             },
         )
         await self.db.commit()
-        # Refresh line_items so the response can serialize the (empty) collection
-        # without triggering a lazy load outside the async greenlet.
-        await self.db.refresh(opportunity, ["line_items"])
+        # Refresh line_items and primary_contact so the response can serialize
+        # them without triggering a lazy load outside the async greenlet.
+        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
 
         return OpportunityResponse.model_validate(opportunity)
 
@@ -332,6 +337,7 @@ class OpportunityService:
             options=[
                 selectinload(Opportunity.line_items),
                 selectinload(Opportunity.activities),
+                selectinload(Opportunity.primary_contact),
             ],
         )
         self._enforce_owner(opportunity, restrict_to_user_id)
@@ -490,7 +496,7 @@ class OpportunityService:
             opportunity.closed_by_id = user_id if is_closed else None
 
         await self.db.commit()
-        await self.db.refresh(opportunity, ["line_items"])
+        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
 
         return OpportunityResponse.model_validate(opportunity)
 
