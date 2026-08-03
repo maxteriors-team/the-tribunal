@@ -656,7 +656,40 @@ class InvoiceService:
             amount_paid=float(invoice.amount_paid),
             status=invoice.status,
         )
+        # Tell the company money arrived. Fires on every real payment, including
+        # a partial one -- a customer paying part of the balance is still news the
+        # operator needs. The early return above makes webhook replays no-ops.
+        await self._notify_payment_received(invoice, float(amount))
         return True
+
+    async def _notify_payment_received(self, invoice: Invoice, amount: float) -> None:
+        """Push + email the workspace that a customer paid (best-effort).
+
+        Never raises: the payment is already banked and Stripe is waiting on a
+        2xx, so a mail outage must not turn a successful charge into an event
+        Stripe retries forever.
+        """
+        from app.services.payments.customer_payment_notifications import (
+            notify_customer_payment,
+        )
+
+        try:
+            await notify_customer_payment(
+                self.db,
+                workspace_id=invoice.workspace_id,
+                amount=amount,
+                currency=invoice.currency,
+                description=f"Payment on invoice {invoice.number}",
+                idempotency_scope="invoice_payment_operator_email",
+                idempotency_id=invoice.id,
+                deep_link="/(tabs)/invoices",
+            )
+        except Exception as exc:  # pragma: no cover - best-effort notification
+            self.log.warning(
+                "invoice_payment_notify_failed",
+                invoice_id=str(invoice.id),
+                error=str(exc),
+            )
 
     # ------------------------------------------------------------------
     # Line items
