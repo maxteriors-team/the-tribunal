@@ -1070,3 +1070,103 @@ async def test_delivering_by_email_to_an_override_address(
         )
         assert result.to == "accounting@example.com"
         assert sent[0]["to_email"] == "accounting@example.com"
+
+
+# --------------------------------------------------------------------------- #
+# Telling the company money arrived
+# --------------------------------------------------------------------------- #
+async def test_a_customer_payment_notifies_the_company(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Money landing must reach a human, not just the database.
+
+    Self-serve payments used to notify nobody: the row updated and the only way
+    to find out was to open the dashboard and look.
+    """
+    import app.services.payments.customer_payment_notifications as notif
+
+    calls: list[dict[str, object]] = []
+
+    async def _fake_notify(db: object, **kwargs: object) -> int:
+        calls.append(kwargs)
+        return 1
+
+    monkeypatch.setattr(notif, "notify_customer_payment", _fake_notify)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=500.0)]),
+        )
+        invoice = await db.get(Invoice, inv.id)
+        assert invoice is not None
+
+        applied = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_notify_1")
+
+        assert applied is True
+        assert len(calls) == 1
+        assert calls[0]["amount"] == 500.0
+        assert "INV-" in str(calls[0]["description"])
+
+
+async def test_a_webhook_replay_does_not_re_notify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stripe retries the same event; the company must not be told twice."""
+    import app.services.payments.customer_payment_notifications as notif
+
+    calls: list[dict[str, object]] = []
+
+    async def _fake_notify(db: object, **kwargs: object) -> int:
+        calls.append(kwargs)
+        return 1
+
+    monkeypatch.setattr(notif, "notify_customer_payment", _fake_notify)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=500.0)]),
+        )
+        invoice = await db.get(Invoice, inv.id)
+        assert invoice is not None
+
+        await svc.record_payment(invoice, 500.0, payment_intent_id="pi_replay")
+        # Same intent id arrives again (Stripe retry).
+        applied_again = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_replay")
+
+        assert applied_again is False
+        assert len(calls) == 1
+
+
+async def test_a_notification_outage_never_undoes_a_payment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The money is banked and Stripe wants a 2xx; mail failure must not raise."""
+    import app.services.payments.customer_payment_notifications as notif
+
+    async def _boom(db: object, **kwargs: object) -> int:
+        raise RuntimeError("resend down")
+
+    monkeypatch.setattr(notif, "notify_customer_payment", _boom)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=500.0)]),
+        )
+        invoice = await db.get(Invoice, inv.id)
+        assert invoice is not None
+
+        applied = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_boom")
+
+        assert applied is True
+        await db.refresh(invoice)
+        assert invoice.status == "paid"
+        assert float(invoice.amount_paid) == 500.0

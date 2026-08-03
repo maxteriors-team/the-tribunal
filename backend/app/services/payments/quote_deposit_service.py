@@ -235,7 +235,38 @@ async def mark_deposit_paid(
         workspace_id=str(quote.workspace_id),
     )
     await _confirm_prebooking(db, quote)
+    await _notify_deposit_paid(db, quote)
     return True
+
+
+async def _notify_deposit_paid(db: AsyncSession, quote: Quote) -> None:
+    """Tell the company a customer just paid their deposit.
+
+    Hung off the single paid transition (guarded by ``deposit_paid_at``), so the
+    Stripe webhook and the return-from-checkout backstop both land here exactly
+    once. Best-effort: the money is already taken, so a notification failure must
+    never turn a successful payment into a webhook Stripe retries forever.
+    """
+    from app.services.payments.customer_payment_notifications import (
+        notify_customer_payment,
+    )
+
+    amount = deposit_amount(quote) or 0.0
+    if amount <= 0:
+        return
+    try:
+        await notify_customer_payment(
+            db,
+            workspace_id=quote.workspace_id,
+            amount=amount,
+            currency=quote.currency,
+            description=f"Deposit on {quote.number}",
+            idempotency_scope="quote_deposit_operator_email",
+            idempotency_id=quote.id,
+            deep_link="/(tabs)/quotes",
+        )
+    except Exception as exc:  # pragma: no cover - best-effort notification
+        logger.warning("quote_deposit_notify_failed", quote_id=str(quote.id), error=str(exc))
 
 
 async def _confirm_prebooking(db: AsyncSession, quote: Quote) -> None:
