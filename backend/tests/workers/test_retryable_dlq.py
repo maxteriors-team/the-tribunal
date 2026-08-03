@@ -454,3 +454,24 @@ async def test_terminal_failure_always_writes_one_dlq_row(retries: int) -> None:
 
     await worker.execute_with_retry(always_fail, item_key=f"k-{retries}")
     assert len(recorder.calls) == 1
+
+
+async def test_messageless_exception_still_records_a_triageable_error() -> None:
+    """An exception with an empty ``str()`` must not produce a blank DLQ row.
+
+    ``cryptography.fernet.InvalidToken`` carries no message, so the failed job
+    landed with ``error=''`` — the operator saw a dead job with no cause and no
+    hint that a column had been encrypted under a different key.
+    """
+    recorder = _Recorder()
+    worker = _make_worker(max_retries=0, recorder=recorder)
+
+    class _MessagelessError(Exception):
+        pass
+
+    async def always_fail() -> None:
+        raise _MessagelessError()
+
+    await worker.execute_with_retry(always_fail, item_key="k")
+
+    assert recorder.calls[0]["error"] == "_MessagelessError"

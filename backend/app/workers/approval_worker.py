@@ -6,10 +6,11 @@ Runs every 30 seconds to:
 3. Auto-approve actions past their timeout, expire old ones
 """
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,32 +40,65 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
         self.gate_service = ApprovalGateService()
 
     async def _process_items(self) -> None:
-        """Main cycle. Open a session and run all sub-tasks."""
+        """Main cycle. Open a session and run all sub-tasks.
+
+        Each phase is isolated: a failure in one must not skip the others.
+        ``_handle_timeouts`` running last made this a self-sustaining deadlock —
+        an undeliverable notification raised out of the first phase, so expired
+        actions were never auto-rejected, so they stayed ``pending`` and were
+        re-notified (with the full retry backoff) on every 30s tick forever.
+        Observed in dev at ~38k retries on a single month-old action, with each
+        tick spending most of its 30s budget asleep in backoff.
+        """
         from app.db.session import AsyncSessionLocal
 
         async with AsyncSessionLocal() as db:
-            await self._send_pending_notifications(db)
-            await self._execute_approved_actions(db)
-            await self._handle_timeouts(db)
+            for phase in (
+                self._send_pending_notifications,
+                self._execute_approved_actions,
+                self._handle_timeouts,
+            ):
+                try:
+                    await phase(db)
+                except Exception:
+                    self.logger.exception("Approval phase failed", phase=phase.__name__)
+                    with contextlib.suppress(Exception):
+                        await db.rollback()
 
     async def _send_pending_notifications(self, db: AsyncSession) -> None:
-        """Find pending actions where notification has not been sent and notify."""
+        """Find pending actions where notification has not been sent and notify.
+
+        Selects **ids only**: a failed notification rolls the shared session
+        back, expiring every ORM instance in it, so iterating live rows meant
+        the next ``action.id`` raised ``MissingGreenlet``/``DetachedInstance``
+        and killed the rest of the tick.
+
+        Already-expired actions are skipped — ``_handle_timeouts`` is about to
+        reject them, and notifying an operator about a request that can no
+        longer be approved is both useless and, before this filter, the source
+        of an unbounded retry loop.
+        """
+        now = datetime.now(UTC)
         result = await db.execute(
-            select(PendingAction).where(
+            select(PendingAction.id).where(
                 and_(
                     PendingAction.status == "pending",
                     PendingAction.notification_sent.is_(False),
+                    or_(
+                        PendingAction.expires_at.is_(None),
+                        PendingAction.expires_at > now,
+                    ),
                 )
             )
         )
-        actions = result.scalars().all()
+        action_ids = list(result.scalars().all())
 
-        for action in actions:
+        for action_id in action_ids:
             await self.execute_with_retry(
                 self._notify_pending_action,
                 db,
-                action.id,
-                item_key=derive_worker_retry_key("notify", action.id),
+                action_id,
+                item_key=derive_worker_retry_key("notify", action_id),
             )
 
     async def _notify_pending_action(self, db: AsyncSession, action_id: UUID) -> None:
@@ -91,16 +125,22 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
             raise
 
     async def _execute_approved_actions(self, db: AsyncSession) -> None:
-        """Find approved actions and execute them."""
-        result = await db.execute(select(PendingAction).where(PendingAction.status == "approved"))
-        actions = result.scalars().all()
+        """Find approved actions and execute them.
 
-        for action in actions:
+        Ids only, for the same rollback-expiry reason as
+        :meth:`_send_pending_notifications`.
+        """
+        result = await db.execute(
+            select(PendingAction.id).where(PendingAction.status == "approved")
+        )
+        action_ids = list(result.scalars().all())
+
+        for action_id in action_ids:
             await self.execute_with_retry(
                 self._execute_single_action,
                 db,
-                action.id,
-                item_key=derive_worker_retry_key("execute", action.id),
+                action_id,
+                item_key=derive_worker_retry_key("execute", action_id),
             )
 
     async def _execute_single_action(self, db: AsyncSession, action_id: UUID) -> None:

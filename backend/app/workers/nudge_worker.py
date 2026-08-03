@@ -6,6 +6,7 @@ For each active workspace with nudge_settings enabled:
 2. NudgeDeliveryService delivers pending nudges via SMS/push to workspace members
 """
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, select, update
@@ -59,39 +60,61 @@ class NudgeWorker(RetryableWorker, BaseWorker):
         return count
 
     async def _process_workspaces(self, db: AsyncSession) -> None:
-        """Iterate active workspaces and run nudge generation + delivery."""
+        """Iterate active workspaces and run nudge generation + delivery.
+
+        Only the workspace **ids** are materialized up front, deliberately.
+        A per-workspace failure rolls the shared session back, which expires
+        every ORM instance in it; iterating live ``Workspace`` rows meant the
+        next loop turn touched an expired instance and raised
+        ``MissingGreenlet``/``DetachedInstanceError`` out of the whole tick, so
+        one bad workspace silently skipped every workspace behind it. Plain
+        UUIDs carry no session state and survive a rollback.
+        """
         # Un-snooze expired nudges first
         await self._expire_snoozed_nudges(db)
 
-        result = await db.execute(select(Workspace).where(Workspace.is_active.is_(True)))
-        workspaces = result.scalars().all()
+        result = await db.execute(select(Workspace.id).where(Workspace.is_active.is_(True)))
+        workspace_ids = list(result.scalars().all())
 
-        for workspace in workspaces:
-            nudge_settings = workspace.settings.get("nudge_settings", {})
-            if not nudge_settings.get("enabled", True):
-                continue
+        for workspace_id in workspace_ids:
+            await self.execute_with_retry(
+                self._process_single_workspace,
+                db,
+                workspace_id,
+                item_key=f"workspace:{workspace_id}",
+            )
 
-            await self.execute_with_retry(self._process_single_workspace, db, workspace)
+    async def _process_single_workspace(self, db: AsyncSession, workspace_id: uuid.UUID) -> None:
+        """Generate and deliver nudges for a single workspace.
 
-    async def _process_single_workspace(self, db: AsyncSession, workspace: Workspace) -> None:
-        """Generate and deliver nudges for a single workspace."""
+        Re-loads the workspace by id so every retry attempt starts from a live
+        row rather than one expired by the previous attempt's rollback.
+        """
+        workspace = await db.get(Workspace, workspace_id)
+        if workspace is None:
+            return
+
+        nudge_settings = workspace.settings.get("nudge_settings", {})
+        if isinstance(nudge_settings, dict) and not nudge_settings.get("enabled", True):
+            return
+
         # Phase 1: Generate nudges
         generated = await self.generator.generate_for_workspace(db, workspace)
         if generated:
             self.record_items_processed(generated)
             self.logger.info(
                 "Nudges generated",
-                workspace_id=str(workspace.id),
+                workspace_id=str(workspace_id),
                 count=generated,
             )
 
         # Phase 2: Deliver pending nudges
-        delivered = await self.delivery.deliver_pending_nudges(db, workspace.id)
+        delivered = await self.delivery.deliver_pending_nudges(db, workspace_id)
         if delivered:
             self.record_items_processed(delivered)
             self.logger.info(
                 "Nudges delivered",
-                workspace_id=str(workspace.id),
+                workspace_id=str(workspace_id),
                 count=delivered,
             )
 
