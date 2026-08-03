@@ -28,7 +28,12 @@ from app.schemas.invoice import (
     InvoiceLineItemUpdate,
     InvoiceUpdate,
 )
-from app.services.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.services.invoices import InvoiceService
 from app.services.invoices.invoice_service import handle_invoice_checkout_session_completed
 from app.services.payments import call_payment_service
@@ -932,3 +937,139 @@ async def test_a_settled_invoice_is_history_not_a_draft() -> None:
         )
         assert updated.notes == "Paid in cash on site."
         assert float(updated.total) == 100.0
+
+
+# --------------------------------------------------------------------------- #
+# Texting an invoice
+# --------------------------------------------------------------------------- #
+async def test_texting_an_invoice_sends_the_link_and_the_balance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A texted invoice carries the amount owed and the stable page link."""
+    import app.services.invoices.invoice_service as svc_mod
+    from app.core.config import settings
+
+    sent: list[dict[str, object]] = []
+
+    async def _fake_sms(db: object, workspace_id: object, **kwargs: object) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr("app.services.messaging.client_sms.send_client_link_sms", _fake_sms)
+    assert svc_mod  # module imported for the patch target above
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        contact.first_name = "Dana"
+        await db.commit()
+
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Wash", unit_price=2000.0)],
+            ),
+            amount_paid=500.0,
+        )
+
+        result = await svc.deliver_invoice(ws.id, inv.id, channel="sms")
+
+        assert result.ok is True
+        assert result.channel == "sms"
+        assert len(sent) == 1
+        body = str(sent[0]["body"])
+        # The remaining balance, not the full total -- the deposit is credited.
+        assert "1,500.00 USD" in body
+        assert "2,000.00" not in body
+        assert "Hi Dana," in body
+
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        assert stored.public_token is not None
+        assert f"{settings.frontend_url.rstrip('/')}/p/invoices/{stored.public_token}" in body
+        # Texting transitions the invoice exactly like emailing does.
+        assert stored.status == "partial"
+        assert stored.sent_at is not None
+
+
+async def test_texting_an_invoice_does_not_also_email_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Choosing SMS must not fire the email rail as a side effect."""
+    import app.services.email as email_mod
+
+    emails: list[dict[str, object]] = []
+
+    async def _fake_email(**kwargs: object) -> bool:
+        emails.append(kwargs)
+        return True
+
+    async def _fake_sms(db: object, workspace_id: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_email)
+    monkeypatch.setattr("app.services.messaging.client_sms.send_client_link_sms", _fake_sms)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+        )
+
+        await svc.deliver_invoice(ws.id, inv.id, channel="sms")
+        assert emails == []
+
+
+async def test_texting_without_a_phone_number_names_the_fix() -> None:
+    """A refusal an operator can act on, not a generic failure."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)]),
+        )
+
+        with pytest.raises(ValidationError, match="No phone number"):
+            await svc.deliver_invoice(ws.id, inv.id, channel="sms")
+
+
+async def test_delivering_by_email_to_an_override_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`to` redirects the invoice without editing the contact record."""
+    import app.services.email as email_mod
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
+    sent: list[dict[str, object]] = []
+
+    async def _fake_email(**kwargs: object) -> bool:
+        sent.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_email)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="onfile@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+        )
+
+        result = await svc.deliver_invoice(
+            ws.id, inv.id, channel="email", to="accounting@example.com"
+        )
+        assert result.to == "accounting@example.com"
+        assert sent[0]["to_email"] == "accounting@example.com"

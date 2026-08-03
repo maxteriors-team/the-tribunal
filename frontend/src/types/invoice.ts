@@ -96,6 +96,13 @@ export interface InvoicePaymentLink {
  */
 export type InvoiceDeliveryStatus = "emailed" | "skipped_no_email" | "failed";
 
+/** Outcome of sending an invoice on a specific channel. */
+export interface InvoiceDeliverResult {
+  ok: boolean;
+  channel: "email" | "sms";
+  to: string;
+}
+
 export interface InvoiceSendResult extends Invoice {
   delivery: InvoiceDeliveryStatus;
   delivered_to?: string | null;

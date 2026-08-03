@@ -17152,6 +17152,64 @@
         "title": "InvoiceCreate",
         "type": "object"
       },
+      "InvoiceDeliverRequest": {
+        "description": "Send the customer's invoice link by email or SMS.\n\n``to`` overrides the destination; otherwise the bill-to contact's email or\nphone is used. Mirrors ``QuoteDeliverRequest`` so both customer-facing\nsurfaces are driven the same way.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "title": "InvoiceDeliverRequest",
+        "type": "object"
+      },
+      "InvoiceDeliverResult": {
+        "description": "Outcome of an invoice delivery attempt.\n\nUnlike the bulk ``/send``, a failed delivery here surfaces as an error rather\nthan a status field: the operator picked a channel and a recipient, so a miss\nis actionable, not informational.",
+        "properties": {
+          "channel": {
+            "enum": [
+              "email",
+              "sms"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "channel",
+          "to"
+        ],
+        "title": "InvoiceDeliverResult",
+        "type": "object"
+      },
       "InvoiceDetailResponse": {
         "description": "Invoice with its line items.",
         "properties": {
@@ -63039,6 +63097,75 @@
           }
         ],
         "summary": "Update Invoice",
+        "tags": [
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/deliver": {
+      "post": {
+        "description": "Send the customer their invoice link by email or SMS.\n\nMarks the invoice sent (allocating its share token) and delivers to the\nbill-to contact's email/phone, or an explicit ``to`` override. A rail that\nisn't ready (no destination, Telnyx unconfigured, opted out) fails with a\nmessage naming the fix.",
+        "operationId": "deliver_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__deliver_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceDeliverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDeliverResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deliver Invoice",
         "tags": [
           "Invoices"
         ]

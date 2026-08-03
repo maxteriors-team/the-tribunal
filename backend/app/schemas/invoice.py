@@ -142,6 +142,31 @@ class InvoiceDetailResponse(InvoiceResponse):
 InvoiceDeliveryStatus = Literal["emailed", "skipped_no_email", "failed"]
 
 
+class InvoiceDeliverRequest(BaseModel):
+    """Send the customer's invoice link by email or SMS.
+
+    ``to`` overrides the destination; otherwise the bill-to contact's email or
+    phone is used. Mirrors ``QuoteDeliverRequest`` so both customer-facing
+    surfaces are driven the same way.
+    """
+
+    channel: Literal["email", "sms"]
+    to: str | None = Field(default=None, max_length=320)
+
+
+class InvoiceDeliverResult(BaseModel):
+    """Outcome of an invoice delivery attempt.
+
+    Unlike the bulk ``/send``, a failed delivery here surfaces as an error rather
+    than a status field: the operator picked a channel and a recipient, so a miss
+    is actionable, not informational.
+    """
+
+    ok: bool
+    channel: Literal["email", "sms"]
+    to: str
+
+
 class InvoiceSendResponse(InvoiceDetailResponse):
     """Invoice after a send, plus whether the customer was actually emailed.
 

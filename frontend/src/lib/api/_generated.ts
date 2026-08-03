@@ -4538,6 +4538,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver Invoice
+         * @description Send the customer their invoice link by email or SMS.
+         *
+         *     Marks the invoice sent (allocating its share token) and delivers to the
+         *     bill-to contact's email/phone, or an explicit ``to`` override. A rail that
+         *     isn't ready (no destination, Telnyx unconfigured, opted out) fails with a
+         *     message naming the fix.
+         */
+        post: operations["deliver_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/line-items": {
         parameters: {
             query?: never;
@@ -15796,6 +15821,42 @@ export interface components {
             tax_amount: number;
             /** Terms */
             terms?: string | null;
+        };
+        /**
+         * InvoiceDeliverRequest
+         * @description Send the customer's invoice link by email or SMS.
+         *
+         *     ``to`` overrides the destination; otherwise the bill-to contact's email or
+         *     phone is used. Mirrors ``QuoteDeliverRequest`` so both customer-facing
+         *     surfaces are driven the same way.
+         */
+        InvoiceDeliverRequest: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "sms";
+            /** To */
+            to?: string | null;
+        };
+        /**
+         * InvoiceDeliverResult
+         * @description Outcome of an invoice delivery attempt.
+         *
+         *     Unlike the bulk ``/send``, a failed delivery here surfaces as an error rather
+         *     than a status field: the operator picked a channel and a recipient, so a miss
+         *     is actionable, not informational.
+         */
+        InvoiceDeliverResult: {
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "sms";
+            /** Ok */
+            ok: boolean;
+            /** To */
+            to: string;
         };
         /**
          * InvoiceDetailResponse
@@ -35986,6 +36047,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deliver_invoice_api_v1_workspaces__workspace_id__invoices__invoice_id__deliver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceDeliverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDeliverResult"];
+                };
             };
             /** @description Validation Error */
             422: {
