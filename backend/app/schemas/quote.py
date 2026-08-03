@@ -241,16 +241,31 @@ class QuoteResponse(BaseModel):
     # Recorded dismissals of the attach prompt, oldest first. Server-written.
     attach_dismissals: list[AttachDismissal] = Field(default_factory=list)
 
+    @field_validator("view_count", "attach_count", "attach_value", mode="before")
+    @classmethod
+    def _null_counter_is_zero(cls, value: object) -> object:
+        """Read a null counter as zero.
+
+        These columns are NOT NULL with a ``'0'`` server default, but a column
+        default only lands on flush — an in-memory ``Quote`` that has not been
+        inserted yet still reads ``None`` for every one of them. Serializing such
+        a quote is legitimate (the approve path does it with the object it just
+        mutated), and "nothing counted yet" is the truthful answer, so coerce
+        rather than 500 on a response the caller did nothing wrong to ask for.
+
+        A pydantic field default does **not** cover this: a default applies when
+        the attribute is *missing*, not when it is present and null.
+        """
+        return 0 if value is None else value
+
     @field_validator("attach_dismissals", mode="before")
     @classmethod
     def _empty_dismissals(cls, value: object) -> object:
         """Read a null dismissal list as an empty one.
 
-        The column is NOT NULL with a ``'[]'`` server default, but a column
-        default only lands on flush — an in-memory ``Quote`` that has not been
-        inserted yet still reads ``None``. Serializing one is legitimate (the
-        approval notifier does it), and "nobody dismissed anything" is the
-        truthful answer, so coerce rather than 500.
+        Same flush-timing reason as :meth:`_null_counter_is_zero`; the column is
+        NOT NULL with a ``'[]'`` server default, and "nobody dismissed anything"
+        is the truthful reading of an uninserted row.
         """
         return [] if value is None else value
 
