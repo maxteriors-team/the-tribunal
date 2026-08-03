@@ -18,6 +18,8 @@ from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
 from app.api.service_errors import ServiceErrorRoute
 from app.schemas.invoice import (
     InvoiceCreate,
+    InvoiceDeliverRequest,
+    InvoiceDeliverResult,
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
@@ -112,6 +114,28 @@ async def delete_invoice(
 
 
 # Lifecycle transitions
+@router.post("/{invoice_id}/deliver", response_model=InvoiceDeliverResult)
+async def deliver_invoice(
+    workspace_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    payload: InvoiceDeliverRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> InvoiceDeliverResult:
+    """Send the customer their invoice link by email or SMS.
+
+    Marks the invoice sent (allocating its share token) and delivers to the
+    bill-to contact's email/phone, or an explicit ``to`` override. A rail that
+    isn't ready (no destination, Telnyx unconfigured, opted out) fails with a
+    message naming the fix.
+    """
+    service = InvoiceService(db)
+    return await service.deliver_invoice(
+        workspace_id, invoice_id, channel=payload.channel, to=payload.to
+    )
+
+
 @router.post("/{invoice_id}/send", response_model=InvoiceSendResponse)
 async def send_invoice(
     workspace_id: uuid.UUID,

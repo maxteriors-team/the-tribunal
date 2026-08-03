@@ -18,6 +18,7 @@ vi.mock("@/lib/api/invoices", () => ({
     update: vi.fn(),
     delete: vi.fn(),
     send: vi.fn(),
+    deliver: vi.fn(),
     void: vi.fn(),
   },
 }));
@@ -30,10 +31,11 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
-function invoice(status: InvoiceStatus): Invoice {
+function invoice(status: InvoiceStatus, contactId: number | null = 42): Invoice {
   return {
     id: `inv-${status}`,
     workspace_id: "ws-1",
+    contact_id: contactId ?? undefined,
     number: `INV-${status}`,
     status,
     subtotal: 100,
@@ -47,10 +49,13 @@ function invoice(status: InvoiceStatus): Invoice {
   } as Invoice;
 }
 
-async function openMenuFor(status: InvoiceStatus) {
+async function openMenuFor(
+  status: InvoiceStatus,
+  contactId: number | null = 42
+) {
   useWorkspaceIdMock.mockReturnValue("ws-1");
   listMock.mockResolvedValue({
-    items: [invoice(status)],
+    items: [invoice(status, contactId)],
     total: 1,
     page: 1,
     page_size: 100,
@@ -109,6 +114,36 @@ describe("invoice row actions", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: /delete/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers texting once there is a customer to text", async () => {
+    await openMenuFor("sent");
+
+    expect(
+      await screen.findByRole("menuitem", { name: /text invoice/i })
+    ).toBeInTheDocument();
+  });
+
+  it("hides texting when the invoice has no bill-to contact", async () => {
+    await openMenuFor("sent", null);
+
+    expect(
+      await screen.findByRole("menuitem", { name: /resend invoice/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /text invoice/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("never offers to text a settled invoice", async () => {
+    await openMenuFor("paid");
+
+    expect(
+      await screen.findByRole("menuitem", { name: /edit notes/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitem", { name: /text invoice/i })
     ).not.toBeInTheDocument();
   });
 

@@ -3,6 +3,7 @@ import type {
   CreateInvoiceRequest,
   Invoice,
   InvoiceLineItemInput,
+  InvoiceDeliverResult,
   InvoicePaymentLink,
   InvoiceSendResult,
   UpdateInvoiceRequest,
@@ -45,6 +46,20 @@ export const invoicesApi = {
   ): Promise<InvoiceSendResult> => {
     return apiPost<InvoiceSendResult>(
       `${invoicePath(workspaceId, invoiceId)}/send`
+    );
+  },
+
+  // Send the customer their invoice link on a chosen channel. Unlike `send`,
+  // a failed delivery throws (the operator picked a channel and a recipient),
+  // so callers surface the message instead of reading a status field.
+  deliver: async (
+    workspaceId: string,
+    invoiceId: string,
+    body: { channel: "email" | "sms"; to?: string }
+  ): Promise<InvoiceDeliverResult> => {
+    return apiPost<InvoiceDeliverResult>(
+      `${invoicePath(workspaceId, invoiceId)}/deliver`,
+      body
     );
   },
 

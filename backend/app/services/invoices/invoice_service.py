@@ -40,6 +40,7 @@ from app.models.invoice import Invoice, InvoiceLineItem, generate_invoice_token
 from app.models.opportunity import Opportunity
 from app.schemas.invoice import (
     InvoiceCreate,
+    InvoiceDeliverResult,
     InvoiceDeliveryStatus,
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
@@ -59,7 +60,12 @@ from app.services.automations.events import (
     EVENT_INVOICE_SENT,
     emit_automation_event,
 )
-from app.services.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.services.payments import call_payment_service
 
 logger = structlog.get_logger()
@@ -368,19 +374,9 @@ class InvoiceService:
     # Lifecycle transitions
     # ------------------------------------------------------------------
 
-    async def mark_sent(
-        self,
-        workspace_id: uuid.UUID,
-        invoice_id: uuid.UUID,
-    ) -> InvoiceSendResponse:
-        """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
-        email the invoice to the bill-to contact.
-
-        Emailing stays best-effort -- a bounce must not undo the ``sent``
-        transition -- but the outcome is *reported* rather than swallowed, so an
-        operator is never told a contactless invoice reached the customer.
-        """
-        invoice = await get_or_404(
+    async def _load_for_send(self, workspace_id: uuid.UUID, invoice_id: uuid.UUID) -> Invoice:
+        """Load an invoice with everything a delivery needs (items, contact, brand)."""
+        return await get_or_404(
             self.db,
             Invoice,
             invoice_id,
@@ -391,6 +387,14 @@ class InvoiceService:
                 selectinload(Invoice.workspace),
             ],
         )
+
+    async def _transition_to_sent(self, workspace_id: uuid.UUID, invoice: Invoice) -> None:
+        """Move an invoice into ``sent`` and allocate its public token.
+
+        Split out of :meth:`mark_sent` so a *text* delivery can put the invoice
+        in the same state without also emailing it -- otherwise texting an
+        invoice would silently send an email too.
+        """
         if invoice.status == "void":
             raise ConflictError("Cannot send a voided invoice")
         was_sent = invoice.sent_at is not None
@@ -419,6 +423,21 @@ class InvoiceService:
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
 
+    async def mark_sent(
+        self,
+        workspace_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+    ) -> InvoiceSendResponse:
+        """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
+        email the invoice to the bill-to contact.
+
+        Emailing stays best-effort -- a bounce must not undo the ``sent``
+        transition -- but the outcome is *reported* rather than swallowed, so an
+        operator is never told a contactless invoice reached the customer.
+        """
+        invoice = await self._load_for_send(workspace_id, invoice_id)
+        await self._transition_to_sent(workspace_id, invoice)
+
         delivery, delivered_to = await self._email_invoice(workspace_id, invoice)
         detail = InvoiceDetailResponse.model_validate(invoice)
         return InvoiceSendResponse(
@@ -427,8 +446,84 @@ class InvoiceService:
             delivered_to=delivered_to,
         )
 
+    async def deliver_invoice(
+        self,
+        workspace_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        *,
+        channel: str,
+        to: str | None = None,
+    ) -> InvoiceDeliverResult:
+        """Send the customer their invoice link by ``email`` or ``sms``.
+
+        Transitions the invoice to ``sent`` first (allocating its share token),
+        then delivers. Destination precedence: explicit ``to`` -> the bill-to
+        contact's email/phone. Mirrors ``QuoteService.deliver_quote`` so the two
+        customer-facing rails behave the same way.
+
+        Texting matters for home services: a homeowner who ignores email will
+        open a text, and the link is the same stable invoice page.
+        """
+        invoice = await self._load_for_send(workspace_id, invoice_id)
+        await self._transition_to_sent(workspace_id, invoice)
+
+        if channel == "email":
+            override = (to or "").strip() or None
+            delivery, delivered_to = await self._email_invoice(
+                workspace_id, invoice, override_email=override
+            )
+            if delivery != "emailed":
+                # Unlike ``mark_sent`` (a bulk action where a bounce must not
+                # undo the transition), this is a deliberate one-shot "send it
+                # to this person" -- so a miss is an error the operator sees.
+                raise ValidationError(
+                    "No email address for this customer — add one or pass a destination."
+                    if delivery == "skipped_no_email"
+                    else "The invoice email could not be sent. Please try again."
+                )
+            self.log.info("invoice_delivered", invoice_id=str(invoice.id), channel="email")
+            return InvoiceDeliverResult(ok=True, channel="email", to=delivered_to or "")
+
+        if channel != "sms":
+            raise ValidationError(f"Unknown delivery channel: {channel!r}")
+
+        phone = (to or "").strip() or (invoice.contact.phone_number if invoice.contact else None)
+        if not phone:
+            raise ValidationError(
+                "No phone number for this customer — add one or pass a destination."
+            )
+
+        from app.services.messaging.client_sms import send_client_link_sms
+
+        business = invoice.workspace.name if invoice.workspace else "our team"
+        first = (invoice.contact.first_name or "").strip() if invoice.contact else ""
+        greeting = f"Hi {first}, " if first else ""
+        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        link = f"{settings.frontend_url.rstrip('/')}/p/invoices/{invoice.public_token}"
+        # Lead with the amount owed: a text is glanced at, so the number and the
+        # link have to survive a two-second read.
+        amount = f"{balance:,.2f} {invoice.currency}"
+        await send_client_link_sms(
+            self.db,
+            workspace_id,
+            phone=phone,
+            contact_id=invoice.contact_id,
+            body=(
+                f"{greeting}your invoice {invoice.number} from {business} is ready — "
+                f"{amount} due. View and pay here: {link}"
+            ),
+            idempotency_scope="invoice_sms",
+            idempotency_id=invoice.id,
+        )
+        self.log.info("invoice_delivered", invoice_id=str(invoice.id), channel="sms")
+        return InvoiceDeliverResult(ok=True, channel="sms", to=phone)
+
     async def _email_invoice(
-        self, workspace_id: uuid.UUID, invoice: Invoice
+        self,
+        workspace_id: uuid.UUID,
+        invoice: Invoice,
+        *,
+        override_email: str | None = None,
     ) -> tuple[InvoiceDeliveryStatus, str | None]:
         """Email the invoice to its bill-to contact (best-effort).
 
@@ -448,7 +543,7 @@ class InvoiceService:
         from app.services.email import send_invoice_email
         from app.services.idempotency import derive_outbound_key
 
-        contact_email = invoice.contact.email if invoice.contact else None
+        contact_email = override_email or (invoice.contact.email if invoice.contact else None)
         if not contact_email:
             self.log.info("invoice_email_skipped_no_contact", invoice_id=str(invoice.id))
             return "skipped_no_email", None

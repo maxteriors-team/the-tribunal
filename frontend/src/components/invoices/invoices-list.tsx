@@ -109,6 +109,19 @@ export function InvoicesList() {
       toast.error(getApiErrorMessage(err, "Failed to void invoice")),
   });
 
+  const textMutation = useMutation({
+    mutationFn: (invoice: Invoice) =>
+      invoicesApi.deliver(workspaceId ?? "", invoice.id, { channel: "sms" }),
+    onSuccess: (result) => {
+      toast.success(`Invoice texted to ${result.to}`);
+      invalidate();
+    },
+    // The API refuses with an actionable reason (no phone on file, opted out,
+    // no SMS number in the workspace) — show it rather than a generic failure.
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to text invoice")),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (invoice: Invoice) =>
       invoicesApi.delete(workspaceId ?? "", invoice.id),
@@ -185,9 +198,14 @@ export function InvoicesList() {
                     invoice={invoice}
                     onEdit={() => setEditing(invoice)}
                     onSend={() => sendMutation.mutate(invoice.id)}
+                    onText={() => textMutation.mutate(invoice)}
                     onVoid={() => voidMutation.mutate(invoice.id)}
                     onDelete={() => setPendingDelete(invoice)}
-                    busy={sendMutation.isPending || voidMutation.isPending}
+                    busy={
+                      sendMutation.isPending ||
+                      voidMutation.isPending ||
+                      textMutation.isPending
+                    }
                   />
                 </TableCell>
               </TableRow>
@@ -254,6 +272,7 @@ interface RowActionsProps {
   invoice: Invoice;
   onEdit: () => void;
   onSend: () => void;
+  onText: () => void;
   onVoid: () => void;
   onDelete: () => void;
   busy: boolean;
@@ -269,6 +288,7 @@ function RowActions({
   invoice,
   onEdit,
   onSend,
+  onText,
   onVoid,
   onDelete,
   busy,
@@ -279,6 +299,9 @@ function RowActions({
   // its line items locked, matching the service's own guard).
   const canEdit = !isVoid;
   const canSend = !isVoid && invoice.status !== "paid";
+  // Texting needs someone to text. Whether that contact actually has a phone
+  // isn't on the list row, so the API decides and returns a reason we surface.
+  const canText = canSend && invoice.contact_id != null;
   const canVoid = !isVoid && invoice.status !== "paid";
   // Issued invoices are accounting records: void, never delete.
   const canDelete = isDraft;
@@ -301,6 +324,9 @@ function RowActions({
           <DropdownMenuItem onClick={onSend}>
             {isDraft ? "Send invoice" : "Resend invoice"}
           </DropdownMenuItem>
+        )}
+        {canText && (
+          <DropdownMenuItem onClick={onText}>Text invoice</DropdownMenuItem>
         )}
         {canVoid && (
           <DropdownMenuItem variant="destructive" onClick={onVoid}>

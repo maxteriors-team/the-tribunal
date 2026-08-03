@@ -1061,76 +1061,21 @@ class QuoteService:
     ) -> None:
         """Text a client-facing link, or raise ``ValidationError`` saying why not.
 
-        Shared by proposal and estimate delivery so both honour the same rails:
-        Telnyx configured, the number hasn't opted out, and the workspace owns an
-        SMS-capable sender. Every refusal names the fix, because a rep watching a
-        button fail can act on "add a number under Settings" and cannot act on a
-        generic send error.
-
-        The sender follows the contact's own conversation when there is one, so a
-        homeowner sees the number that has been texting them all along rather
-        than a stranger's.
+        Thin delegate to :func:`app.services.messaging.client_sms.send_client_link_sms`,
+        which invoices share, so proposal and invoice texts honour identical
+        rails (Telnyx configured, opt-out respected, SMS-capable sender).
         """
-        from app.core.config import settings
-        from app.services.calendar.reminder_service import resolve_from_number
-        from app.services.idempotency import derive_outbound_key
-        from app.services.rate_limiting.opt_out_manager import OptOutManager
-        from app.services.telephony.telnyx import TelnyxSMSService
+        from app.services.messaging.client_sms import send_client_link_sms
 
-        if not settings.telnyx_api_key:
-            raise ValidationError("Texting isn't configured (Telnyx API key missing).")
-
-        if await OptOutManager().check_opt_out(workspace_id, phone, self.db):
-            raise ValidationError("This phone number has opted out of texts.")
-
-        from_number = None
-        if contact_id is not None:
-            from_number = await resolve_from_number(self.db, contact_id, workspace_id, None)
-        if not from_number:
-            from_number = await self._any_sms_number(workspace_id)
-        if not from_number:
-            raise ValidationError(
-                "No SMS-enabled phone number in this workspace — add one under Settings."
-            )
-
-        sms = TelnyxSMSService(settings.telnyx_api_key)
-        try:
-            await sms.send_message(
-                to_number=phone,
-                from_number=from_number,
-                body=body,
-                db=self.db,
-                workspace_id=workspace_id,
-                idempotency_key=derive_outbound_key(
-                    idempotency_scope,
-                    idempotency_id,
-                    phone,
-                    datetime.now(UTC).isoformat(),
-                ),
-            )
-        finally:
-            await sms.close()
-
-    async def _any_sms_number(self, workspace_id: uuid.UUID) -> str | None:
-        """Oldest active SMS-enabled workspace number (agentless fallback)."""
-        from sqlalchemy import and_
-
-        from app.models.phone_number import PhoneNumber
-
-        result = await self.db.execute(
-            select(PhoneNumber.phone_number)
-            .where(
-                and_(
-                    PhoneNumber.workspace_id == workspace_id,
-                    PhoneNumber.is_active.is_(True),
-                    PhoneNumber.sms_enabled.is_(True),
-                )
-            )
-            .order_by(PhoneNumber.created_at)
-            .limit(1)
+        await send_client_link_sms(
+            self.db,
+            workspace_id,
+            phone=phone,
+            contact_id=contact_id,
+            body=body,
+            idempotency_scope=idempotency_scope,
+            idempotency_id=idempotency_id,
         )
-        phone = result.scalar_one_or_none()
-        return str(phone) if phone else None
 
     async def approve_quote(
         self,
