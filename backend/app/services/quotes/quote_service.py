@@ -20,6 +20,7 @@ from decimal import Decimal
 
 import structlog
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -1547,8 +1548,15 @@ class QuoteService:
         inline send would let anyone holding a public link trigger outbound spend.
 
         ``dedup_key`` is per quote, not per view, so re-reads never produce a
-        second alert. The unique index on that column is the real guard; this
-        pre-check just avoids a doomed INSERT.
+        second alert.
+
+        The insert is ``ON CONFLICT DO NOTHING`` rather than a read-then-add.
+        Unlike the polling nudge strategies -- which run single-threaded in a
+        worker, so a check-then-insert is safe there -- this runs on a public
+        endpoint with arbitrary concurrency: two tabs opened at once would both
+        pass a pre-check and the second INSERT would raise on the unique index,
+        turning ordinary customer behaviour into a 500 and losing that request's
+        view increment. Letting Postgres arbitrate makes the race a no-op.
         """
         dedup_key = f"{quote.id}:quote_viewed"
         if await dedup_exists(self.db, dedup_key):
@@ -1559,8 +1567,10 @@ class QuoteService:
             client_name = quote.contact.full_name or quote.contact.first_name
         who = client_name or "Your client"
 
-        self.db.add(
-            HumanNudge(
+        await self.db.execute(
+            pg_insert(HumanNudge)
+            .values(
+                id=uuid.uuid4(),
                 workspace_id=quote.workspace_id,
                 contact_id=quote.contact_id,
                 nudge_type="quote_viewed",
@@ -1573,10 +1583,11 @@ class QuoteService:
                 suggested_action="call",
                 priority="high",
                 due_date=now,
-                source_date_field=None,
                 status="pending",
                 dedup_key=dedup_key,
+                created_at=now,
             )
+            .on_conflict_do_nothing(index_elements=["dedup_key"])
         )
 
     async def decline_public(
