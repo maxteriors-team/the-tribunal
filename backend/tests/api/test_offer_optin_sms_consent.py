@@ -60,6 +60,10 @@ def _result(scalar: object = None, scalars_all: list | None = None) -> MagicMock
     result = MagicMock()
     result.scalar_one_or_none.return_value = scalar
     result.scalars.return_value.all.return_value = scalars_all or []
+    # The contact lookup uses ``scalars().first()``. Without stubbing it, the
+    # bare MagicMock is truthy, so the route believes it matched an existing
+    # contact and never creates one — a green test proving nothing.
+    result.scalars.return_value.first.return_value = scalar
     return result
 
 
