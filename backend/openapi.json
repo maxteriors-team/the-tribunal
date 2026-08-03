@@ -6428,7 +6428,7 @@
         "type": "object"
       },
       "CallCreate": {
-        "description": "Request to initiate a call.",
+        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -6440,6 +6440,7 @@
                 "type": "null"
               }
             ],
+            "description": "Voice agent for mode='ai'. Ignored when mode='user'.",
             "title": "Agent Id"
           },
           "contact_phone": {
@@ -6457,9 +6458,30 @@
             "title": "From Phone Number",
             "type": "string"
           },
+          "mode": {
+            "default": "ai",
+            "enum": [
+              "ai",
+              "user"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "to_number": {
             "title": "To Number",
             "type": "string"
+          },
+          "user_phone_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number to ring for mode='user'. Must be the caller's profile phone, the workspace transfer destination, or a workspace phone number. Defaults to the first of those that is configured.",
+            "title": "User Phone Number"
           }
         },
         "required": [
@@ -55369,7 +55391,7 @@
         ]
       },
       "post": {
-        "description": "Initiate outbound voice call.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n\nReturns:\n    Created Message record for the call",
+        "description": "Initiate an outbound voice call, handled by an AI agent or by the user.\n\n``mode=\"ai\"`` dials the contact and streams the call to a voice agent.\n``mode=\"user\"`` rings the operator's own phone first and bridges the contact\nin once they pick up, so nobody is ever dialed into silence.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n    membership: Caller's workspace membership (comms-send capability)\n    workspace: Workspace the call is billed to\n\nReturns:\n    Created Message record for the call",
         "operationId": "initiate_call_api_v1_workspaces__workspace_id__calls_post",
         "parameters": [
           {

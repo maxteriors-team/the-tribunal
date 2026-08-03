@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact-files-media";
@@ -109,7 +110,13 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
     refetch,
   } = useContact(workspaceId ?? "", contactId);
 
-  const { callContact, initiateCallMutation } = useContactSidebarData({
+  const {
+    callContact,
+    callDialogOpen,
+    setCallDialogOpen,
+    submitCall,
+    initiateCallMutation,
+  } = useContactSidebarData({
     workspaceId,
     contact: contact ?? null,
   });
@@ -260,6 +267,15 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
         contact={contact}
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
+      />
+      <OutboundCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        workspaceId={workspaceId}
+        contactName={displayName}
+        contactPhone={contact.phone_number}
+        onSubmit={submitCall}
+        isSubmitting={initiateCallMutation.isPending}
       />
     </div>
   );

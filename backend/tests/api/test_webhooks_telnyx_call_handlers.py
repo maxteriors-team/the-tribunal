@@ -1126,3 +1126,248 @@ async def test_recording_saved_answered_call_skips_followup(
 
     process.assert_awaited_once()
     assert process.await_args.kwargs["run_followup"] is False
+
+
+# --------------------------------------------------------------------------- #
+# User-mode calls (operator dials the rep first, then bridges the contact)
+# --------------------------------------------------------------------------- #
+
+REP_CCID = "v3:user-call-rep-leg"
+CONTACT_CCID = "v3:user-call-contact-leg"
+
+
+def _pending_user_call(**overrides: Any) -> Any:
+    from app.services.telephony.user_call import PendingUserCall
+
+    defaults: dict[str, Any] = {
+        "rep_call_control_id": REP_CCID,
+        "contact_call_control_id": None,
+        "message_id": str(uuid.uuid4()),
+        "workspace_id": str(uuid.uuid4()),
+        "user_id": "1",
+        "contact_number": "+14155552672",
+        "from_number": "+12125550100",
+        "stage": "dialing_rep",
+        "created_at": "2026-05-15T18:00:00+00:00",
+    }
+    defaults.update(overrides)
+    return PendingUserCall(**defaults)
+
+
+@pytest.fixture
+def user_call_redis(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Deterministic in-memory stand-in for the user-call Redis helpers."""
+    from app.services.telephony import user_call as user_call_module
+
+    state: dict[str, Any] = {"pending": None, "stored": [], "popped": []}
+
+    async def _peek(call_control_id: str) -> Any:
+        return state["pending"]
+
+    async def _store(pending: Any) -> None:
+        state["stored"].append(pending)
+        state["pending"] = pending
+
+    async def _pop(call_control_id: str) -> Any:
+        pending = state["pending"]
+        if pending is not None:
+            state["popped"].append(call_control_id)
+            state["pending"] = None
+        return pending
+
+    monkeypatch.setattr(user_call_module, "peek_pending_user_call", _peek)
+    monkeypatch.setattr(user_call_module, "store_pending_user_call", _store)
+    monkeypatch.setattr(user_call_module, "pop_pending_user_call", _pop)
+    return state
+
+
+@pytest.fixture
+def voice_service_calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
+    """Stub every Telnyx Call Control command the user-call flow can issue."""
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    stubs = {
+        "dial_transfer_leg": AsyncMock(return_value=CONTACT_CCID),
+        "bridge_calls": AsyncMock(return_value=True),
+        "hangup_call": AsyncMock(return_value=True),
+        "start_recording": AsyncMock(return_value=True),
+        "close": AsyncMock(return_value=None),
+    }
+    for name, stub in stubs.items():
+        monkeypatch.setattr(TelnyxVoiceService, name, stub)
+    monkeypatch.setattr(app_settings, "telnyx_api_key", "test-key")
+    monkeypatch.setattr(app_settings, "telnyx_connection_id", "conn-123")
+    monkeypatch.setattr(app_settings, "api_base_url", "https://api.example.com")
+    return stubs
+
+
+async def test_user_call_rep_answered_dials_the_contact(
+    monkeypatch: pytest.MonkeyPatch,
+    call_answered: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """Rep picks up → contact is dialed and the Message re-anchors on that leg."""
+    pending = _pending_user_call()
+    user_call_redis["pending"] = pending
+
+    message = MagicMock()
+    message.provider_message_id = REP_CCID
+    db = _make_db(execute_returns=[])
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+
+    payload = {**call_answered, "call_control_id": REP_CCID}
+    await handlers.handle_call_answered(payload, _make_log())
+
+    dial = voice_service_calls["dial_transfer_leg"]
+    dial.assert_awaited_once()
+    assert dial.await_args.kwargs["to_number"] == pending.contact_number
+    assert dial.await_args.kwargs["timeout_secs"] == 30
+
+    # Message now tracks the contact leg so hangup/duration/recording match AI calls.
+    assert message.provider_message_id == CONTACT_CCID
+    assert user_call_redis["pending"].contact_call_control_id == CONTACT_CCID
+    assert user_call_redis["pending"].stage == "dialing_contact"
+    # No AI streaming was attempted for a human-operated call.
+    db.execute.assert_not_awaited()
+
+
+async def test_user_call_contact_answered_bridges_the_legs(
+    monkeypatch: pytest.MonkeyPatch,
+    call_answered: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """Contact picks up → the two legs we control are bridged together."""
+    user_call_redis["pending"] = _pending_user_call(
+        contact_call_control_id=CONTACT_CCID,
+        stage="dialing_contact",
+    )
+
+    message = MagicMock()
+    workspace = MagicMock()
+    workspace.settings = {}
+
+    async def _get(model: Any, _pk: Any) -> Any:
+        return workspace if model.__name__ == "Workspace" else message
+
+    db = _make_db(execute_returns=[])
+    db.get = AsyncMock(side_effect=_get)
+    _patch_session_local(monkeypatch, db)
+
+    payload = {**call_answered, "call_control_id": CONTACT_CCID}
+    await handlers.handle_call_answered(payload, _make_log())
+
+    bridge = voice_service_calls["bridge_calls"]
+    bridge.assert_awaited_once()
+    assert bridge.await_args.kwargs["call_control_id"] == CONTACT_CCID
+    assert bridge.await_args.kwargs["other_call_control_id"] == REP_CCID
+    assert message.status == MessageStatus.ANSWERED
+    assert user_call_redis["pending"].stage == "bridged"
+    # Recording is opt-in per workspace; the stub workspace has no settings.
+    voice_service_calls["start_recording"].assert_not_awaited()
+
+
+async def test_user_call_rep_hangup_before_bridge_drops_contact_leg(
+    monkeypatch: pytest.MonkeyPatch,
+    hangup_normal: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """Rep bails while the contact rings → the contact leg is torn down."""
+    user_call_redis["pending"] = _pending_user_call(
+        contact_call_control_id=CONTACT_CCID,
+        stage="dialing_contact",
+    )
+
+    message = MagicMock()
+    message.status = MessageStatus.RINGING
+    db = _make_db(execute_returns=[_Result(scalar=None)])
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+
+    payload = {**hangup_normal, "call_control_id": REP_CCID}
+    await handlers.handle_call_hangup(payload, _make_log())
+
+    voice_service_calls["hangup_call"].assert_awaited_once_with(CONTACT_CCID)
+    assert message.status == MessageStatus.FAILED
+    assert message.error_code == "USER_CALL_REP_HUNG_UP"
+    assert user_call_redis["popped"] == [REP_CCID]
+
+
+async def test_user_call_contact_hangup_drops_rep_leg(
+    monkeypatch: pytest.MonkeyPatch,
+    hangup_normal: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """Contact hangs up a bridged call → the rep's leg is hung up too."""
+    user_call_redis["pending"] = _pending_user_call(
+        contact_call_control_id=CONTACT_CCID,
+        stage="bridged",
+    )
+
+    db = _make_db(execute_returns=[_Result(scalar=None)])
+    _patch_session_local(monkeypatch, db)
+
+    payload = {**hangup_normal, "call_control_id": CONTACT_CCID}
+    await handlers.handle_call_hangup(payload, _make_log())
+
+    voice_service_calls["hangup_call"].assert_awaited_once_with(REP_CCID)
+    assert user_call_redis["popped"] == [CONTACT_CCID]
+
+
+async def test_user_call_leg_with_lost_state_is_hung_up(
+    monkeypatch: pytest.MonkeyPatch,
+    call_answered: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """Redis state gone: the client_state marker still stops a silent live leg."""
+    from app.services.telephony.user_call import make_user_call_leg_client_state
+
+    user_call_redis["pending"] = None
+    db = _make_db(execute_returns=[])
+    _patch_session_local(monkeypatch, db)
+
+    payload = {
+        **call_answered,
+        "call_control_id": CONTACT_CCID,
+        "client_state": make_user_call_leg_client_state(uuid.uuid4()),
+    }
+    await handlers.handle_call_answered(payload, _make_log())
+
+    voice_service_calls["hangup_call"].assert_awaited_once_with(CONTACT_CCID)
+    voice_service_calls["bridge_calls"].assert_not_awaited()
+    db.execute.assert_not_awaited()
+
+
+async def test_user_call_records_when_workspace_opts_in(
+    monkeypatch: pytest.MonkeyPatch,
+    call_answered: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+) -> None:
+    """``record_user_calls`` in workspace settings records the bridged leg."""
+    from app.services.telephony.user_call import USER_CALL_RECORDING_SETTINGS_KEY
+
+    user_call_redis["pending"] = _pending_user_call(
+        contact_call_control_id=CONTACT_CCID,
+        stage="dialing_contact",
+    )
+
+    workspace = MagicMock()
+    workspace.settings = {USER_CALL_RECORDING_SETTINGS_KEY: True}
+
+    async def _get(model: Any, _pk: Any) -> Any:
+        return workspace if model.__name__ == "Workspace" else MagicMock()
+
+    db = _make_db(execute_returns=[])
+    db.get = AsyncMock(side_effect=_get)
+    _patch_session_local(monkeypatch, db)
+
+    payload = {**call_answered, "call_control_id": CONTACT_CCID}
+    await handlers.handle_call_answered(payload, _make_log())
+
+    voice_service_calls["start_recording"].assert_awaited_once_with(CONTACT_CCID)
