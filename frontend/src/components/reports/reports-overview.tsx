@@ -131,6 +131,101 @@ function StatRow({
   );
 }
 
+/**
+ * Cost of goods sold, recognized when stock is consumed and valued at the cost
+ * it carried at that moment.
+ *
+ * Shrinkage gets its own line rather than being folded into the total: waste
+ * hidden inside gross margin is waste nobody goes and fixes.
+ */
+function COGSCard() {
+  const workspaceId = useWorkspaceId();
+  const query = useQuery({
+    queryKey: queryKeys.reports.cogs(workspaceId ?? ""),
+    queryFn: () => reportingApi.cogs(workspaceId ?? ""),
+    enabled: Boolean(workspaceId),
+    ...POLL_60S,
+  });
+
+  const data = query.data;
+  const marginPct =
+    data?.gross_margin === null || data?.gross_margin === undefined
+      ? "—"
+      : `${(data.gross_margin * 100).toFixed(1)}%`;
+  const breakdown = (data?.breakdown ?? []).slice(0, 5);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Cost of Goods Sold</CardTitle>
+        <CardDescription>
+          Stock consumed on jobs and sales this period
+          {data ? ` · ${data.date_from} to ${data.date_to}` : ""}.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!workspaceId || query.isLoading ? (
+          <PageLoadingState message="Loading COGS..." />
+        ) : query.isError ? (
+          <PageErrorState
+            message={getApiErrorMessage(query.error, "Failed to load COGS")}
+            onRetry={() => void query.refetch()}
+          />
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <div className="text-2xl font-semibold">
+                {formatCurrency(data?.total_cogs ?? 0, data?.currency)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                cost of goods sold · {marginPct} gross margin
+              </div>
+            </div>
+            <div className="divide-y">
+              <StatRow
+                label="Shrinkage (waste, not sold)"
+                value={`${formatCurrency(data?.shrinkage_cost ?? 0, data?.currency)}`}
+                tone={data?.shrinkage_cost ? "negative" : undefined}
+              />
+              <StatRow
+                label="Inventory on hand"
+                value={formatCurrency(
+                  data?.ending_inventory_value ?? 0,
+                  data?.currency,
+                )}
+              />
+            </div>
+            {breakdown.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-right">Used</TableHead>
+                    <TableHead className="text-right">Cost</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {breakdown.map((row) => (
+                    <TableRow key={row.key ?? row.label}>
+                      <TableCell>{row.label}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {row.quantity}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(row.cogs, data?.currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function JobPnLCard() {
   const workspaceId = useWorkspaceId();
   const query = useQuery({
@@ -152,7 +247,8 @@ function JobPnLCard() {
       <CardHeader>
         <CardTitle>Job Profitability</CardTitle>
         <CardDescription>
-          Revenue from linked invoices minus tracked labor and expenses
+          Revenue from linked invoices minus tracked labor, expenses, and
+          materials
           {data ? ` · ${data.job_count} jobs` : ""}.
         </CardDescription>
       </CardHeader>
@@ -195,6 +291,11 @@ function JobPnLCard() {
                 tone="negative"
               />
               <StatRow
+                label="Materials"
+                value={`−${formatCurrency(data?.material_cost ?? 0, data?.currency)}`}
+                tone="negative"
+              />
+              <StatRow
                 label="Billable jobs"
                 value={`${data?.billable_job_count ?? 0} of ${data?.job_count ?? 0}`}
               />
@@ -224,6 +325,7 @@ export function ReportsOverview() {
     <div className="grid gap-6 lg:grid-cols-2">
       <ARAgingCard />
       <JobPnLCard />
+      <COGSCard />
     </div>
   );
 }

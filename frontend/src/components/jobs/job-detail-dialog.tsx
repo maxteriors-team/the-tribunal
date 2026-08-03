@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
+import { JobMaterialsPanel } from "@/components/jobs/job-materials-panel";
 import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import {
@@ -338,8 +339,18 @@ export function JobDetailDialog({
             </>
           )}
           </TabsContent>
-          <TabsContent value="field-work" className="pt-2">
+          <TabsContent value="field-work" className="space-y-5 pt-2">
             <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
+            {/* Materials sit beside time and expenses: same tab, separate
+                section, because stock consumption moves real inventory rather
+                than just recording a number. */}
+            <div className="border-t pt-4">
+              <JobMaterialsPanel
+                workspaceId={workspaceId}
+                jobId={job.id}
+                readOnly={readOnly}
+              />
+            </div>
           </TabsContent>
           {showNeighbors && (
             <TabsContent value="neighbors" className="pt-2">

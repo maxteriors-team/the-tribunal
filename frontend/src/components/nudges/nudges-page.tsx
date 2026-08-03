@@ -43,6 +43,7 @@ const NUDGE_TYPE_EMOJI: Record<string, string> = {
   outbound_batch_ready: "📦",
   approvals_waiting: "⏳",
   monitor_idle: "🛰️",
+  inventory_low_stock: "📦",
 };
 
 const SUGGESTED_ACTION_LABELS: Record<SuggestedAction, string> = {

@@ -146,7 +146,20 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                 <span className="text-right tabular-nums">
                   −{formatCurrency(pnl.data.expense_cost, currency)}
                 </span>
+                {/* Materials come from the inventory ledger, never from an
+                    expense row, so both lines can be non-zero without either
+                    double-counting the other. */}
+                <span className="text-muted-foreground">Materials</span>
+                <span className="text-right tabular-nums">
+                  −{formatCurrency(pnl.data.material_cost, currency)}
+                </span>
               </div>
+              {pnl.data.material_cost > 0 && pnl.data.expense_cost > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Materials are stock pulled from inventory; expenses are costs
+                  entered by hand. They are counted separately.
+                </p>
+              )}
               <div className="mt-2 flex items-center justify-between border-t pt-2">
                 <span className="text-sm font-medium">Profit</span>
                 <span
