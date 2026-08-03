@@ -946,7 +946,6 @@ async def test_texting_an_invoice_sends_the_link_and_the_balance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A texted invoice carries the amount owed and the stable page link."""
-    import app.services.invoices.invoice_service as svc_mod
     from app.core.config import settings
 
     sent: list[dict[str, object]] = []
@@ -955,8 +954,6 @@ async def test_texting_an_invoice_sends_the_link_and_the_balance(
         sent.append(kwargs)
 
     monkeypatch.setattr("app.services.messaging.client_sms.send_client_link_sms", _fake_sms)
-    assert svc_mod  # module imported for the patch target above
-
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id, email="customer@example.com")
