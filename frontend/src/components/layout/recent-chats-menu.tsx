@@ -48,6 +48,12 @@ export function RecentChatsMenu() {
     0,
   );
 
+  /** Operators recognize people, not phone numbers — fall back only when unnamed. */
+  const chatLabel = (conversation: Conversation) =>
+    conversation.contact_name?.trim() ||
+    formatPhoneNumber(conversation.contact_phone) ||
+    "Unknown contact";
+
   const openConversation = (conversation: Conversation) => {
     setOpen(false);
     if (conversation.contact_id != null) {
@@ -109,7 +115,7 @@ export function RecentChatsMenu() {
                             : "font-medium",
                         )}
                       >
-                        {formatPhoneNumber(conversation.contact_phone)}
+                        {chatLabel(conversation)}
                       </span>
                       {conversation.last_message_at ? (
                         <span className="shrink-0 text-[11px] text-muted-foreground">

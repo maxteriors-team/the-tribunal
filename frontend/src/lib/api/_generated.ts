@@ -13803,6 +13803,8 @@ export interface components {
             channel: string;
             /** Contact Id */
             contact_id: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /** Contact Phone */
             contact_phone: string;
             /**
@@ -13846,6 +13848,8 @@ export interface components {
             channel: string;
             /** Contact Id */
             contact_id: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /** Contact Phone */
             contact_phone: string;
             /**

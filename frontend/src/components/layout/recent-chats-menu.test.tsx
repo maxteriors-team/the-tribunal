@@ -67,6 +67,7 @@ describe("RecentChatsMenu", () => {
         conversation({
           id: "conv-newest",
           contact_id: 101,
+          contact_name: "Robin Stevanovich",
           contact_phone: "+15551110001",
           last_message_preview: "Freshest thread",
           unread_count: 2,
@@ -74,6 +75,7 @@ describe("RecentChatsMenu", () => {
         conversation({
           id: "conv-older",
           contact_id: 202,
+          contact_name: "Casey Nguyen",
           contact_phone: "+15551110002",
           last_message_preview: "Older thread",
         }),
@@ -89,13 +91,40 @@ describe("RecentChatsMenu", () => {
 
     const items = await screen.findAllByRole("listitem");
     expect(items).toHaveLength(2);
+    // Threads are labelled by contact name, not the raw phone number.
+    expect(within(items[0]).getByText("Robin Stevanovich")).toBeInTheDocument();
+    expect(within(items[0]).queryByText(/555/)).not.toBeInTheDocument();
     expect(within(items[0]).getByText("Freshest thread")).toBeInTheDocument();
+    expect(within(items[1]).getByText("Casey Nguyen")).toBeInTheDocument();
     expect(within(items[1]).getByText("Older thread")).toBeInTheDocument();
     // Unread total surfaces in the header.
     expect(screen.getByText("2 unread")).toBeInTheDocument();
 
     await userEvent.click(within(items[0]).getByRole("button"));
     expect(pushMock).toHaveBeenCalledWith("/contacts/101");
+  });
+
+  it("falls back to the phone number when the thread has no contact name", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        conversation({
+          contact_id: null,
+          contact_name: null,
+          contact_phone: "+15551110003",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: "Recent chats" }));
+
+    expect(
+      await screen.findByText("+1 (555) 111-0003"),
+    ).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no conversations", async () => {

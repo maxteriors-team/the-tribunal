@@ -36,6 +36,9 @@ class ConversationResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     contact_id: int | None
+    # Display name of the linked contact, resolved by the service layer. ``None``
+    # when the thread has no contact yet, so clients fall back to the phone.
+    contact_name: str | None = None
     workspace_phone: str
     contact_phone: str
     status: str
