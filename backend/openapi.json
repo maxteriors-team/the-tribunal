@@ -12554,6 +12554,17 @@
             ],
             "title": "Contact Id"
           },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
           "contact_phone": {
             "title": "Contact Phone",
             "type": "string"
@@ -12665,6 +12676,17 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
           },
           "contact_phone": {
             "title": "Contact Phone",

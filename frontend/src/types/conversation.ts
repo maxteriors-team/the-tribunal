@@ -34,6 +34,8 @@ export interface Conversation {
   workspace_id?: string;
   contact_id: number | null;
   contact?: Contact;
+  /** Contact's display name; null when the thread isn't linked to a contact yet. */
+  contact_name?: string | null;
   workspace_phone: string;
   contact_phone: string;
   channel: string;

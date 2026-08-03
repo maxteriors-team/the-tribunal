@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +37,22 @@ def _preferred_provider_for_conversation(conversation: Conversation) -> str | No
     return None
 
 
+def serialize_conversation(conversation: Conversation) -> ConversationResponse:
+    """Serialize a conversation, adding the linked contact's display name.
+
+    ``Conversation.contact`` lazy-loads by default, and a lazy load on an async
+    session raises ``MissingGreenlet``. Callers that want the name must eager
+    load the relationship (``selectinload(Conversation.contact)``); when it is
+    not loaded we return ``None`` rather than blowing up a whole response over
+    a display label.
+    """
+    response = ConversationResponse.model_validate(conversation)
+    if "contact" not in inspect(conversation).unloaded:
+        contact = conversation.contact
+        response.contact_name = contact.full_name if contact else None
+    return response
+
+
 class ConversationService:
     """High-level conversation service for orchestrating business logic."""
 
@@ -49,14 +65,20 @@ class ConversationService:
         self,
         conversation_id: uuid.UUID,
         workspace_id: uuid.UUID,
+        load_contact: bool = False,
     ) -> Conversation:
-        """Fetch a conversation or raise 404."""
-        result = await self.db.execute(
-            select(Conversation).where(
-                Conversation.id == conversation_id,
-                Conversation.workspace_id == workspace_id,
-            )
+        """Fetch a conversation or raise 404.
+
+        ``load_contact`` eager loads the contact for callers that serialize the
+        thread for the UI; senders and workers skip the extra SELECT.
+        """
+        query = select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.workspace_id == workspace_id,
         )
+        if load_contact:
+            query = query.options(selectinload(Conversation.contact))
+        result = await self.db.execute(query)
         conversation = result.scalar_one_or_none()
         if not conversation:
             raise HTTPException(
@@ -75,7 +97,11 @@ class ConversationService:
         unread_only: bool = False,
     ) -> PaginatedConversations:
         """List conversations in a workspace with batch campaign sync."""
-        query = select(Conversation).where(Conversation.workspace_id == workspace_id)
+        query = (
+            select(Conversation)
+            .options(selectinload(Conversation.contact))
+            .where(Conversation.workspace_id == workspace_id)
+        )
 
         if status_filter:
             query = query.where(Conversation.status == status_filter)
@@ -122,7 +148,7 @@ class ConversationService:
                 await self.db.commit()
 
         return PaginatedConversations(
-            items=[ConversationResponse.model_validate(c) for c in conversations],
+            items=[serialize_conversation(c) for c in conversations],
             total=result.total,
             page=result.page,
             page_size=result.page_size,
@@ -136,7 +162,9 @@ class ConversationService:
         limit: int = 50,
     ) -> ConversationWithMessages:
         """Get a conversation with its messages."""
-        conversation = await self._get_conversation(conversation_id, workspace_id)
+        conversation = await self._get_conversation(
+            conversation_id, workspace_id, load_contact=True
+        )
 
         # Sync campaign agent (campaign always takes precedence)
         await self._syncer.sync_conversation(self.db, conversation, self.log)
@@ -155,7 +183,7 @@ class ConversationService:
         await self.db.commit()
 
         return ConversationWithMessages(
-            **ConversationResponse.model_validate(conversation).model_dump(),
+            **serialize_conversation(conversation).model_dump(),
             messages=[MessageResponse.model_validate(m) for m in messages],
         )
 
