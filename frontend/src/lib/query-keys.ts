@@ -109,6 +109,7 @@ const dripCampaigns = createResourceQueryKeys("drip-campaigns");
 const improvementSuggestions = createResourceQueryKeys("suggestions");
 const integrations = createResourceQueryKeys("integrations");
 const invitations = createResourceQueryKeys("invitations");
+const inventoryItems = createResourceQueryKeys("inventory-items");
 const invoices = createResourceQueryKeys("invoices");
 const jobs = createResourceQueryKeys("jobs");
 const servicePlans = createResourceQueryKeys("service-plans");
@@ -349,9 +350,28 @@ export const queryKeys = {
     ...invitations,
     byToken: (token: string) => ["invitation", token] as const,
   },
+  inventory: {
+    ...inventoryItems,
+    ledger: (workspaceId: string, itemId: string, params?: QueryKeyParams | null) =>
+      [
+        ...inventoryItems.detail(workspaceId, itemId),
+        "ledger",
+        normalizeQueryKeyParams(params),
+      ] as const,
+    reorderSuggestion: (workspaceId: string, itemId: string) =>
+      [...inventoryItems.detail(workspaceId, itemId), "reorder-suggestion"] as const,
+    stock: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["inventory-stock", workspaceId, normalizeQueryKeyParams(params)] as const,
+    reorderReport: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["inventory-reorder-report", workspaceId, normalizeQueryKeyParams(params)] as const,
+    locations: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["inventory-locations", workspaceId, normalizeQueryKeyParams(params)] as const,
+  },
   invoices,
   jobs: {
     ...jobs,
+    materials: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "materials"] as const,
     mine: (workspaceId: string, params?: QueryKeyParams | null) =>
       [...jobs.all(workspaceId), "mine", normalizeQueryKeyParams(params)] as const,
     timeEntries: (workspaceId: string, jobId: string) =>
@@ -385,6 +405,8 @@ export const queryKeys = {
         "sales-performance",
         normalizeQueryKeyParams(params),
       ] as const,
+    cogs: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["reports", workspaceId, "cogs", normalizeQueryKeyParams(params)] as const,
   },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,

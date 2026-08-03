@@ -37,7 +37,8 @@ export type NudgeType =
   // Workspace-level operator nudges (contact_id is null)
   | "outbound_batch_ready"
   | "approvals_waiting"
-  | "monitor_idle";
+  | "monitor_idle"
+  | "inventory_low_stock";
 export type NudgeStatus = "pending" | "sent" | "acted" | "dismissed" | "snoozed";
 export type NudgePriority = "low" | "medium" | "high";
 export type SuggestedAction = "send_card" | "call" | "text" | "email";

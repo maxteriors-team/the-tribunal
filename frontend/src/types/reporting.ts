@@ -45,6 +45,8 @@ export interface JobPnLSummary {
   revenue: number;
   labor_cost: number;
   expense_cost: number;
+  /** Stock consumed from inventory. Never overlaps `expense_cost`. */
+  material_cost: number;
   total_cost: number;
   profit: number;
   margin?: number | null;

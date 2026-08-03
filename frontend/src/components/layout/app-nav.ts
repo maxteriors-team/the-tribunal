@@ -25,6 +25,7 @@ import {
   Magnet,
   MapPin,
   Megaphone,
+  Package,
   Phone,
   PhoneCall,
   Receipt,
@@ -380,6 +381,17 @@ export const toolsNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
+    title: "Inventory",
+    url: "/inventory",
+    icon: Package,
+    sidebar: true,
+    commandPalette: true,
+    // jobs:read, not billing:read: a crew lead checking what is left on the
+    // truck is an operational question. The API redacts every cost field for
+    // callers below billing:read, and the table drops those columns entirely.
+    requires: "jobs:read",
+  },
+  {
     title: "Price Book",
     url: "/catalog",
     icon: BookMarked,
@@ -463,6 +475,7 @@ export const breadcrumbLabels: Record<string, string> = {
   jobs: "Jobs",
   "service-plans": "Service Plans",
   catalog: "Price Book",
+  inventory: "Inventory",
   billing: "Billing",
   settings: "Settings",
   "find-leads": "Find Leads",

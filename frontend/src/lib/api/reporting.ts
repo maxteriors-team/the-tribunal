@@ -3,6 +3,8 @@ import { apiClient } from "@/lib/api/_client";
 import type {
   ARAgingReport,
   AttributionGapReport,
+  COGSGroupBy,
+  COGSReport,
   JobPnLSummary,
   SalesPerformanceReport,
 } from "@/types";
@@ -47,6 +49,17 @@ export const reportingApi = {
     params: { date_from?: string; date_to?: string } = {}
   ): Promise<SalesPerformanceReport> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/reports/sales-performance", {
+      path: { workspace_id: workspaceId },
+      query: params,
+    }),
+
+  // Cost of goods sold from the inventory ledger. Shrinkage comes back on its
+  // own field, deliberately outside `total_cogs`.
+  cogs: (
+    workspaceId: string,
+    params: { date_from?: string; date_to?: string; group_by?: COGSGroupBy } = {}
+  ): Promise<COGSReport> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/reports/cogs", {
       path: { workspace_id: workspaceId },
       query: params,
     }),
