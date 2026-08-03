@@ -345,6 +345,65 @@ def _validate_security_key(
         )
 
 
+def _validate_public_urls(log: structlog.stdlib.BoundLogger) -> None:
+    """Refuse to serve a deployed environment with unreachable customer links.
+
+    ``PUBLIC_BASE_URL`` prefixes every tracked short link in an outbound SMS and
+    ``FRONTEND_URL`` every link in an outbound email. A wrong value here fails
+    *silently and completely*: the send succeeds, the provider reports
+    ``delivered``, the operator sees success -- and the customer receives a link
+    their phone cannot open. Nothing downstream notices, because as far as the
+    system is concerned the message went out fine.
+
+    That already happened here: ``PUBLIC_BASE_URL`` was never set in Railway, so
+    it kept its localhost development default and real proposals went out with
+    ``http://localhost:8000/r/...``. Hence a hard failure rather than a warning --
+    in a deployed environment, a boot that stops and names the variable is much
+    cheaper than dead links in a customer's text messages.
+
+    Three ways to get this wrong, all caught here, because the likeliest moment
+    to break it is a **domain migration** -- exactly when these values change:
+
+    * left at / pointed to localhost (the original bug),
+    * blank, which yields a schemeless ``/r/abc`` that resolves nowhere,
+    * missing its scheme (``example.com``), which yields ``example.com/r/abc``:
+      phones often refuse to linkify it, and the shortener's "already our
+      domain" check reads an empty netloc and re-shortens its own links.
+    """
+    if settings.environment.lower() in {"development", "local", "test", "testing"}:
+        return
+
+    localhost_markers = ("localhost", "127.0.0.1", "0.0.0.0")
+    for name, value, used_for in (
+        ("PUBLIC_BASE_URL", settings.public_base_url, "short links in outbound SMS"),
+        ("FRONTEND_URL", settings.frontend_url, "links in outbound email"),
+    ):
+        problem: str | None = None
+        if not value.strip():
+            problem = "is empty"
+        elif any(marker in value.lower() for marker in localhost_markers):
+            problem = "points at localhost"
+        elif not value.lower().startswith(("http://", "https://")):
+            problem = "is missing its https:// scheme"
+
+        if problem is not None:
+            log.error(
+                "unreachable_public_url",
+                severity="critical",
+                setting=name,
+                problem=problem,
+                environment=settings.environment,
+                message=f"{name} {problem} in a deployed environment",
+            )
+            raise RuntimeError(
+                f"{name} {problem} (got {value!r}) while "
+                f"ENVIRONMENT={settings.environment!r}. This value prefixes "
+                f"{used_for}, so customers would receive links that cannot "
+                f"resolve. Set it to the deployment's public URL, scheme included "
+                f"(e.g. https://api.example.com)."
+            )
+
+
 def _validate_startup_config() -> None:
     """Validate required configuration at startup.
 
@@ -352,6 +411,9 @@ def _validate_startup_config() -> None:
     Logs warnings for incomplete integrations.
     """
     log = logger.bind(context="startup_validation")
+
+    # Customer-facing URLs must be reachable from a customer's device.
+    _validate_public_urls(log)
 
     # Check required API keys
     if not is_openai_configured():
