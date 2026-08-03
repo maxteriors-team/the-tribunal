@@ -223,6 +223,15 @@ class QuoteResponse(BaseModel):
     terms: str | None = None
     converted_job_id: uuid.UUID | None = None
     converted_invoice_id: uuid.UUID | None = None
+    # Client-view tracking, written only by the public view beacon
+    # (``POST /p/quotes/{token}/view``). Read-only here and absent from
+    # ``QuoteCreate``/``QuoteUpdate`` on purpose: accepting these from a request
+    # body would let a client forge "the customer opened it", which is the one
+    # claim this whole signal exists to make honestly. ``view_count`` counts
+    # throttled visits, not raw beacon hits.
+    first_viewed_at: datetime | None = None
+    last_viewed_at: datetime | None = None
+    view_count: int = 0
     # Denormalized attach metrics, re-derived from the line items on every save.
     # Read-only: setting them from a request would let a client rewrite its own
     # attach rate. ``primary_service`` is null on an uncategorized quote.

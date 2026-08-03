@@ -96,6 +96,12 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
         ) : null}
 
         <header className="present-hero">
+          {/* Same logo block the proposal leads with — a customer who approved a
+              branded proposal should not receive an unbranded invoice. */}
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- workspace-uploaded logo URL
+            <img src={branding.logo_url} alt={brandName} className="pp-logo" />
+          ) : null}
           <div className="present-eyebrow">Invoice {data.number}</div>
           {data.client_name ? (
             <div className="present-hi">

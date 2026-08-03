@@ -41,6 +41,13 @@ ALL_NUDGE_TYPES = [
     "unresponsive",
     "hot_lead",
     "referral_ask",
+    # Created inline by ``QuoteService.record_public_view`` the moment a client
+    # opens their proposal, not by a polling strategy — a "call them while it's
+    # still on their screen" alert is worthless an hour later, and there is
+    # nothing to scan for since the event has no queryable trace of its own.
+    # Listed here so it is a recognized type for settings-driven filtering and
+    # delivery; deliberately absent from ``_STRATEGY_REGISTRY``.
+    "quote_viewed",
     # Workspace-level operator nudges (contact_id is NULL).
     "outbound_batch_ready",
     "approvals_waiting",

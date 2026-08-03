@@ -75,6 +75,23 @@ export default function PublicProposalPage({
     },
   });
 
+  // Tell the operator a human is reading this right now. Fires once per mount
+  // (the ref survives React's StrictMode double-invoke in dev) and never from a
+  // staff "Preview client proposal", which opens the exact customer URL with
+  // `?preview=1` appended — without that skip, every internal peek would fire a
+  // false "your client just opened it" alert.
+  //
+  // The flag is client-controlled and is not a security boundary. It does not
+  // need to be: forging it only makes a real view go *unrecorded*, which costs a
+  // notification, not a leak or a spoofed alert.
+  const viewRecordedRef = useRef(false);
+  useEffect(() => {
+    if (viewRecordedRef.current || !token) return;
+    viewRecordedRef.current = true;
+    if (new URLSearchParams(window.location.search).get("preview") === "1") return;
+    void publicProposalsApi.recordView(token);
+  }, [token]);
+
   // Reliable deposit capture: on return from Stripe (``?deposit=paid``) the
   // webhook may not have landed yet. Reconcile against Stripe directly and poll
   // a few times with backoff until the deposit reads paid, so a delayed or

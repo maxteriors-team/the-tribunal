@@ -183,6 +183,22 @@ class Quote(Base):
     declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # --- Client-view tracking ---------------------------------------------
+    # Stamped by ``QuoteService.record_public_view`` from an explicit beacon the
+    # public proposal page fires on mount. The page is a client component, so a
+    # recorded view means a real browser executed JS — link scanners (Outlook
+    # Safe Links, Gmail's image proxy) never reach the API. Server-written only.
+    #
+    # First genuine client view; never overwritten, so "they finally opened it"
+    # stays answerable after a hundred re-reads.
+    first_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Most recent view — drives the "opened 10 minutes ago" signal operators act on.
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # *Throttled* view count, not raw beacon hits: repeats inside
+    # ``VIEW_THROTTLE_MINUTES`` don't increment. Without that, one customer
+    # leaving a tab open reads as 40 views and the number stops meaning anything.
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms: Mapped[str | None] = mapped_column(Text, nullable=True)
 

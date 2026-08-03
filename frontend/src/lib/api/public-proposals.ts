@@ -24,6 +24,24 @@ export const publicProposalsApi = {
       selected_tier: selectedTier ?? null,
     }),
 
+  /**
+   * Tell the backend a human opened this proposal, so the operator can call
+   * while it is still on the client's screen.
+   *
+   * A separate beacon rather than a side effect of `get` on purpose: the read
+   * stays pure, and React Query's retries/refetches never amplify into writes
+   * on an unauthenticated endpoint. Errors are swallowed — analytics must never
+   * degrade the page the customer came here to read.
+   */
+  recordView: async (token: string): Promise<void> => {
+    try {
+      await apiPost<void>(`/api/v1/p/quotes/${token}/view`);
+    } catch {
+      // Intentionally silent: a missed view is a missed notification, not a
+      // broken proposal.
+    }
+  },
+
   decline: (
     token: string,
     reason?: string,

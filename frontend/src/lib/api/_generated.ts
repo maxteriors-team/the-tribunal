@@ -884,6 +884,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/quotes/{token}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Public Proposal View
+         * @description Record that the client opened their proposal (fire-and-forget beacon).
+         *
+         *     Deliberately a POST rather than a write inside the GET: the read stays pure
+         *     and cacheable, every retry/refetch does not amplify into a write on an
+         *     unauthenticated path, and there is exactly one narrow, throttled write
+         *     surface. Repeat beacons inside the service's throttle window are a no-op,
+         *     and an unknown token 404s before anything is written.
+         */
+        post: operations["record_public_proposal_view_api_v1_p_quotes__token__view_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/reviews/{token}": {
         parameters: {
             query?: never;
@@ -22706,6 +22732,8 @@ export interface components {
             /** Expiry Date */
             expiry_date?: string | null;
             financing?: components["schemas"]["FinancingEstimate"] | null;
+            /** First Viewed At */
+            first_viewed_at?: string | null;
             /**
              * Id
              * Format: uuid
@@ -22713,6 +22741,8 @@ export interface components {
             id: string;
             /** Issue Date */
             issue_date?: string | null;
+            /** Last Viewed At */
+            last_viewed_at?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["QuoteLineItemResponse"][];
             /** Notes */
@@ -22753,6 +22783,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * View Count
+             * @default 0
+             */
+            view_count: number;
             /**
              * Workspace Id
              * Format: uuid
@@ -22973,6 +23008,8 @@ export interface components {
             /** Expiry Date */
             expiry_date?: string | null;
             financing?: components["schemas"]["FinancingEstimate"] | null;
+            /** First Viewed At */
+            first_viewed_at?: string | null;
             /**
              * Id
              * Format: uuid
@@ -22980,6 +23017,8 @@ export interface components {
             id: string;
             /** Issue Date */
             issue_date?: string | null;
+            /** Last Viewed At */
+            last_viewed_at?: string | null;
             /** Notes */
             notes?: string | null;
             /** Number */
@@ -23014,6 +23053,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * View Count
+             * @default 0
+             */
+            view_count: number;
             /**
              * Workspace Id
              * Format: uuid
@@ -28330,6 +28374,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PublicProposalDepositStatus"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_public_proposal_view_api_v1_p_quotes__token__view_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
