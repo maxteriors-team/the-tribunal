@@ -16,6 +16,14 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+# Cost of goods sold is computed from the inventory ledger, so its schemas are
+# defined in :mod:`app.schemas.inventory` and re-exported here: ``/reports/cogs``
+# sits next to ar-aging and job-pnl, but there must be exactly one COGSReport
+# model in the OpenAPI contract.
+from app.schemas.inventory import COGSBreakdownRow as COGSBreakdownRow
+from app.schemas.inventory import COGSGroupBy as COGSGroupBy
+from app.schemas.inventory import COGSReport as COGSReport
+
 
 class ARAgingBucket(BaseModel):
     """One aging bucket of outstanding receivables."""
@@ -40,7 +48,7 @@ class JobPnLSummary(BaseModel):
 
     Revenue is the sum of the distinct invoices linked to the jobs in range
     (so two jobs sharing one invoice are not double-counted); cost is tracked
-    labor (hours x rate) plus logged expenses.
+    labor (hours x rate) plus logged expenses plus materials consumed.
     """
 
     date_from: date | None
@@ -51,6 +59,10 @@ class JobPnLSummary(BaseModel):
     revenue: float
     labor_cost: float
     expense_cost: float
+    # Stock consumed on the period's jobs, from the inventory ledger. Distinct
+    # from an expense categorized "materials" — consuming stock never writes a
+    # JobExpense, so the two cannot double-count.
+    material_cost: float = 0.0
     total_cost: float
     profit: float
     margin: float | None = Field(None, description="profit / revenue, or null when revenue is 0")

@@ -7,7 +7,7 @@ Two read-only roll-ups, both tenant-scoped through :mod:`app.db.scope`:
   ``as_of`` date. Draft/void/paid invoices are excluded (nothing to collect).
 - :meth:`job_pnl_summary` — aggregate job profitability over a period: revenue
   from the distinct invoices linked to the period's jobs, minus tracked labor
-  (hours × rate) and logged expenses.
+  (hours × rate), logged expenses, and materials consumed from inventory.
 
 Money math uses ``float`` rounded to two decimals, matching the invoice/quote
 and job-costing services.
@@ -33,6 +33,7 @@ from app.schemas.reporting import (
     AttributionGapReport,
     JobPnLSummary,
 )
+from app.services.inventory.cogs_service import COGSService
 
 # Invoice statuses with a collectable balance (issued but not settled/cancelled).
 _OUTSTANDING_STATUSES = ("sent", "partial", "overdue")
@@ -236,6 +237,7 @@ class ReportingService:
         labor_cost = 0.0
         total_hours = 0.0
         expense_cost = 0.0
+        material_cost = 0.0
         if job_ids:
             entries = (
                 (
@@ -268,10 +270,17 @@ class ReportingService:
             )
             expense_cost = sum(float(a or 0) for a in expense_amounts)
 
+            # Stock consumed on these jobs, straight from the inventory ledger.
+            # Never a JobExpense, so materials cannot be counted twice.
+            material_cost = sum(
+                (await COGSService(self.db).material_cost_by_job(workspace_id, job_ids)).values()
+            )
+
         revenue = round(revenue, 2)
         labor_cost = round(labor_cost, 2)
         expense_cost = round(expense_cost, 2)
-        total_cost = round(labor_cost + expense_cost, 2)
+        material_cost = round(material_cost, 2)
+        total_cost = round(labor_cost + expense_cost + material_cost, 2)
         profit = round(revenue - total_cost, 2)
         margin = round(profit / revenue, 4) if revenue else None
 
@@ -284,6 +293,7 @@ class ReportingService:
             revenue=revenue,
             labor_cost=labor_cost,
             expense_cost=expense_cost,
+            material_cost=material_cost,
             total_cost=total_cost,
             profit=profit,
             margin=margin,

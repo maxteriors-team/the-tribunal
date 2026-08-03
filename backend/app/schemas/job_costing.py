@@ -108,7 +108,9 @@ class JobProfitability(BaseModel):
 
     ``revenue`` comes from the linked invoice's total (0 when unlinked).
     ``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``
-    sums expenses. ``margin`` is ``profit / revenue`` (null when revenue is 0).
+    sums expenses; ``material_cost`` sums stock consumed on the job from the
+    inventory ledger (net of anything returned). ``margin`` is
+    ``profit / revenue`` (null when revenue is 0).
     """
 
     job_id: uuid.UUID
@@ -116,6 +118,10 @@ class JobProfitability(BaseModel):
     revenue: float
     labor_cost: float
     expense_cost: float
+    # Stock consumed on the job, valued from the inventory ledger. Kept distinct
+    # from an expense in the free-form "materials" category: consuming stock
+    # never writes a JobExpense, so the two never double-count.
+    material_cost: float = 0.0
     total_cost: float
     profit: float
     margin: float | None = None

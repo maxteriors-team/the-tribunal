@@ -4474,6 +4474,249 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/inventory/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inventory Items
+         * @description List tracked items with their on-hand position (costs need billing:read).
+         */
+        get: operations["list_inventory_items_api_v1_workspaces__workspace_id__inventory_items_get"];
+        put?: never;
+        /**
+         * Create Inventory Item
+         * @description Create a tracked item. Stock arrives later, through a receipt.
+         */
+        post: operations["create_inventory_item_api_v1_workspaces__workspace_id__inventory_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inventory Item
+         * @description Get one tracked item with its rolled-up position.
+         */
+        get: operations["get_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__get"];
+        /**
+         * Update Inventory Item
+         * @description Update an item's details or its reorder settings.
+         */
+        put: operations["update_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__put"];
+        post?: never;
+        /**
+         * Delete Inventory Item
+         * @description Delete an item that never moved; archive one that has stock history.
+         */
+        delete: operations["delete_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adjust Stock
+         * @description Reconcile to a physical count, or write stock off as shrinkage.
+         */
+        post: operations["adjust_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Item Ledger
+         * @description Movement history for one item, newest first (costs need billing:read).
+         */
+        get: operations["list_item_ledger_api_v1_workspaces__workspace_id__inventory_items__item_id__ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive Stock
+         * @description Receive stock at a known unit cost (this is what sets the average).
+         */
+        post: operations["receive_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__receipts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/items/{item_id}/reorder-suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Item Reorder Point
+         * @description Suggest a reorder point from trailing usage. Never applies it.
+         */
+        get: operations["suggest_item_reorder_point_api_v1_workspaces__workspace_id__inventory_items__item_id__reorder_suggestion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inventory Locations
+         * @description List stock locations, default first.
+         */
+        get: operations["list_inventory_locations_api_v1_workspaces__workspace_id__inventory_locations_get"];
+        put?: never;
+        /**
+         * Create Inventory Location
+         * @description Create a warehouse or truck.
+         */
+        post: operations["create_inventory_location_api_v1_workspaces__workspace_id__inventory_locations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/locations/{location_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Inventory Location
+         * @description Rename a location, reassign its crew, or make it the default.
+         */
+        put: operations["update_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__put"];
+        post?: never;
+        /**
+         * Delete Inventory Location
+         * @description Delete a location that never held stock (409 once it has history).
+         */
+        delete: operations["delete_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/reorder-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reorder Report
+         * @description Items at or below their reorder point, most urgent first.
+         */
+        get: operations["reorder_report_api_v1_workspaces__workspace_id__inventory_reorder_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Stock Levels
+         * @description On-hand positions per item and location.
+         */
+        get: operations["list_stock_levels_api_v1_workspaces__workspace_id__inventory_stock_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/inventory/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transfer Stock
+         * @description Move stock between locations (warehouse to truck), value included.
+         *
+         *     ``jobs:write``, not ``billing:write``: loading a van is dispatch work and
+         *     the transfer cannot change what the workspace's stock is worth.
+         */
+        post: operations["transfer_stock_api_v1_workspaces__workspace_id__inventory_transfers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/invitations": {
         parameters: {
             query?: never;
@@ -4866,6 +5109,50 @@ export interface paths {
          * @description Delete an expense.
          */
         delete: operations["delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Job Materials
+         * @description Materials consumed on a job (costs redacted below billing:read).
+         */
+        get: operations["list_job_materials_api_v1_workspaces__workspace_id__jobs__job_id__materials_get"];
+        put?: never;
+        /**
+         * Add Job Material
+         * @description Consume stock on a job, valued at the item's current average cost.
+         */
+        post: operations["add_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Job Material
+         * @description Undo a material line by returning it to stock (never deletes history).
+         */
+        delete: operations["remove_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials__entry_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7526,6 +7813,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/reports/cogs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cogs
+         * @description Cost of goods sold: stock consumed in the window, valued at posting cost.
+         *
+         *     Shrinkage is reported on its own line rather than inside the total — waste
+         *     hidden in gross margin is waste nobody fixes.
+         */
+        get: operations["cogs_api_v1_workspaces__workspace_id__reports_cogs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/reports/estimate-capacity": {
         parameters: {
             query?: never;
@@ -9636,6 +9946,33 @@ export interface components {
             skipped: number;
         };
         /**
+         * AdjustStockRequest
+         * @description Reconcile to a counted quantity, or write off shrinkage.
+         *
+         *     ``quantity_on_hand`` is the **absolute** counted number; the service posts
+         *     the signed delta. ``write_off_quantity`` instead removes a known amount as
+         *     ``shrinkage`` so waste is reported apart from cost of goods sold. Exactly
+         *     one of the two must be supplied.
+         */
+        AdjustStockRequest: {
+            /** Location Id */
+            location_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /**
+             * Quantity On Hand
+             * @description Absolute counted quantity at this location
+             */
+            quantity_on_hand?: number | null;
+            /**
+             * Write Off Quantity
+             * @description Quantity to remove as shrinkage
+             */
+            write_off_quantity?: number | null;
+        };
+        /**
          * AdvertiserBulkPromoteRequest
          * @description Promote many advertisers at once.
          */
@@ -11537,6 +11874,68 @@ export interface components {
              * @default 0
              */
             total_found: number;
+        };
+        /**
+         * COGSBreakdownRow
+         * @description One grouped slice of cost of goods sold.
+         */
+        COGSBreakdownRow: {
+            /** Cogs */
+            cogs: number;
+            /**
+             * Key
+             * @description Grouping id (item/job UUID, or category name)
+             */
+            key?: string | null;
+            /** Label */
+            label: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /**
+         * COGSReport
+         * @description Cost of goods sold over a window, recognized when stock is consumed.
+         *
+         *     Valued at the weighted-average cost at posting time (snapshotted on the
+         *     ledger row), so the report never recomputes history. ``shrinkage_cost`` is
+         *     reported separately so waste never hides inside gross margin.
+         */
+        COGSReport: {
+            /** Breakdown */
+            breakdown: components["schemas"]["COGSBreakdownRow"][];
+            /** Currency */
+            currency: string;
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /** Ending Inventory Value */
+            ending_inventory_value: number;
+            /**
+             * Gross Margin
+             * @description (revenue - total_cogs) / revenue, or null when revenue is 0
+             */
+            gross_margin?: number | null;
+            /**
+             * Group By
+             * @enum {string}
+             */
+            group_by: "item" | "service_category" | "job";
+            /**
+             * Revenue
+             * @description Invoice revenue in the window, when available
+             */
+            revenue?: number | null;
+            /** Shrinkage Cost */
+            shrinkage_cost: number;
+            /** Total Cogs */
+            total_cogs: number;
         };
         /**
          * CSVPreviewResponse
@@ -15746,6 +16145,356 @@ export interface components {
             integrations: components["schemas"]["IntegrationStatus"][];
         };
         /**
+         * InventoryItemCreate
+         * @description Create a tracked item.
+         */
+        InventoryItemCreate: {
+            /**
+             * Catalog Item Id
+             * @description Optional link to a price-book item in the same workspace
+             */
+            catalog_item_id?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Reorder Point */
+            reorder_point?: number | null;
+            /** Reorder Quantity */
+            reorder_quantity?: number | null;
+            /**
+             * Safety Stock
+             * @default 0
+             */
+            safety_stock: number;
+            /** Sku */
+            sku?: string | null;
+            /** Supplier Name */
+            supplier_name?: string | null;
+            /** Supplier Sku */
+            supplier_sku?: string | null;
+            /**
+             * Unit Of Measure
+             * @default each
+             */
+            unit_of_measure: string;
+            /**
+             * Valuation Method
+             * @default weighted_average
+             * @constant
+             */
+            valuation_method: "weighted_average";
+        };
+        /**
+         * InventoryItemResponse
+         * @description A tracked item as returned by the API, with its rolled-up stock position.
+         *
+         *     ``quantity_on_hand`` sums every location; ``total_value``/``avg_unit_cost``
+         *     are redacted to 0 for callers without ``billing:read``.
+         */
+        InventoryItemResponse: {
+            /**
+             * Avg Unit Cost
+             * @default 0
+             */
+            avg_unit_cost: number;
+            /**
+             * Catalog Item Id
+             * @description Optional link to a price-book item in the same workspace
+             */
+            catalog_item_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Low Stock
+             * @default false
+             */
+            is_low_stock: boolean;
+            /** Last Movement At */
+            last_movement_at?: string | null;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Quantity On Hand
+             * @default 0
+             */
+            quantity_on_hand: number;
+            /** Reorder Point */
+            reorder_point?: number | null;
+            /** Reorder Quantity */
+            reorder_quantity?: number | null;
+            /**
+             * Safety Stock
+             * @default 0
+             */
+            safety_stock: number;
+            /** Sku */
+            sku?: string | null;
+            /** Supplier Name */
+            supplier_name?: string | null;
+            /** Supplier Sku */
+            supplier_sku?: string | null;
+            /**
+             * Total Value
+             * @default 0
+             */
+            total_value: number;
+            /**
+             * Unit Of Measure
+             * @default each
+             */
+            unit_of_measure: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Valuation Method
+             * @default weighted_average
+             * @constant
+             */
+            valuation_method: "weighted_average";
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * InventoryItemUpdate
+         * @description Update a tracked item (all fields optional).
+         *
+         *     ``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and
+         *     ``catalog_item_id`` are cleared by an explicit ``null`` (the service checks
+         *     ``model_fields_set``); nothing else could un-manage an item once managed.
+         */
+        InventoryItemUpdate: {
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Reorder Point */
+            reorder_point?: number | null;
+            /** Reorder Quantity */
+            reorder_quantity?: number | null;
+            /** Safety Stock */
+            safety_stock?: number | null;
+            /** Sku */
+            sku?: string | null;
+            /** Supplier Name */
+            supplier_name?: string | null;
+            /** Supplier Sku */
+            supplier_sku?: string | null;
+            /** Unit Of Measure */
+            unit_of_measure?: string | null;
+            /** Valuation Method */
+            valuation_method?: "weighted_average" | null;
+        };
+        /**
+         * InventoryLedgerEntryResponse
+         * @description One posted movement.
+         *
+         *     ``unit_cost``/``value_delta``/``value_after``/``unit_cost_after`` are
+         *     redacted to 0 for callers without ``billing:read``; quantities always serve.
+         */
+        InventoryLedgerEntryResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Name */
+            item_name?: string | null;
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Location Name */
+            location_name?: string | null;
+            /** Note */
+            note?: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Quantity After */
+            quantity_after: number;
+            /** Quantity Delta */
+            quantity_delta: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "receipt" | "job_usage" | "sale" | "adjustment" | "shrinkage" | "return_to_stock" | "transfer_in" | "transfer_out" | "opening_balance";
+            /** Reference Id */
+            reference_id?: string | null;
+            /** Reference Type */
+            reference_type?: string | null;
+            /** Unit Cost */
+            unit_cost: number;
+            /** Unit Cost After */
+            unit_cost_after: number;
+            /** Value After */
+            value_after: number;
+            /** Value Delta */
+            value_delta: number;
+        };
+        /**
+         * InventoryLedgerPage
+         * @description Paginated movement history for one item.
+         */
+        InventoryLedgerPage: {
+            /** Items */
+            items: components["schemas"]["InventoryLedgerEntryResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * InventoryLocationCreate
+         * @description Create a stock location.
+         */
+        InventoryLocationCreate: {
+            /**
+             * Crew Id
+             * @description Owning crew when this location is a truck
+             */
+            crew_id?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Default
+             * @description Fallback location used when a movement names none
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Kind
+             * @default warehouse
+             * @enum {string}
+             */
+            kind: "warehouse" | "truck" | "other";
+            /** Name */
+            name: string;
+        };
+        /**
+         * InventoryLocationResponse
+         * @description A stock location as returned by the API.
+         */
+        InventoryLocationResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Crew Id
+             * @description Owning crew when this location is a truck
+             */
+            crew_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /**
+             * Is Default
+             * @description Fallback location used when a movement names none
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Kind
+             * @default warehouse
+             * @enum {string}
+             */
+            kind: "warehouse" | "truck" | "other";
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * InventoryLocationUpdate
+         * @description Update a stock location (all fields optional).
+         */
+        InventoryLocationUpdate: {
+            /** Crew Id */
+            crew_id?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Kind */
+            kind?: ("warehouse" | "truck" | "other") | null;
+            /** Name */
+            name?: string | null;
+        };
+        /**
          * InvitationAcceptResponse
          * @description Schema for invitation accept response.
          */
@@ -16396,12 +17145,48 @@ export interface components {
             total: number;
         };
         /**
+         * JobMaterialCreate
+         * @description Consume stock on a job. No cost field: the server values it.
+         */
+        JobMaterialCreate: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Location Id */
+            location_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Quantity */
+            quantity: number;
+        };
+        /**
+         * JobMaterialsResponse
+         * @description Materials consumed on one job, with the total cost they contributed.
+         */
+        JobMaterialsResponse: {
+            /** Items */
+            items: components["schemas"]["InventoryLedgerEntryResponse"][];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Total Material Cost
+             * @description Sum of consumption cost, net of returns (0 without billing:read)
+             * @default 0
+             */
+            total_material_cost: number;
+        };
+        /**
          * JobPnLSummary
          * @description Aggregate job profitability over a period.
          *
          *     Revenue is the sum of the distinct invoices linked to the jobs in range
          *     (so two jobs sharing one invoice are not double-counted); cost is tracked
-         *     labor (hours x rate) plus logged expenses.
+         *     labor (hours x rate) plus logged expenses plus materials consumed.
          */
         JobPnLSummary: {
             /**
@@ -16429,6 +17214,11 @@ export interface components {
              * @description profit / revenue, or null when revenue is 0
              */
             margin?: number | null;
+            /**
+             * Material Cost
+             * @default 0
+             */
+            material_cost: number;
             /** Profit */
             profit: number;
             /** Revenue */
@@ -16444,7 +17234,9 @@ export interface components {
          *
          *     ``revenue`` comes from the linked invoice's total (0 when unlinked).
          *     ``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``
-         *     sums expenses. ``margin`` is ``profit / revenue`` (null when revenue is 0).
+         *     sums expenses; ``material_cost`` sums stock consumed on the job from the
+         *     inventory ledger (net of anything returned). ``margin`` is
+         *     ``profit / revenue`` (null when revenue is 0).
          */
         JobProfitability: {
             /** Currency */
@@ -16460,6 +17252,11 @@ export interface components {
             labor_cost: number;
             /** Margin */
             margin?: number | null;
+            /**
+             * Material Cost
+             * @default 0
+             */
+            material_cost: number;
             /** Open Timer */
             open_timer: boolean;
             /** Profit */
@@ -19968,6 +20765,22 @@ export interface components {
             total: number;
         };
         /**
+         * PaginatedInventoryItems
+         * @description Paginated list of tracked items.
+         */
+        PaginatedInventoryItems: {
+            /** Items */
+            items: components["schemas"]["InventoryItemResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * PaginatedInvoices
          * @description Paginated list of invoices.
          */
@@ -23282,6 +24095,33 @@ export interface components {
             }[];
         };
         /**
+         * ReceiveStockRequest
+         * @description Bring stock in at a known cost (the only movement that sets one).
+         */
+        ReceiveStockRequest: {
+            /**
+             * Location Id
+             * @description Defaults to the workspace's default location
+             */
+            location_id?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Quantity */
+            quantity: number;
+            /** Reference Id */
+            reference_id?: string | null;
+            /** Reference Type */
+            reference_type?: ("job" | "invoice" | "quote" | "manual" | "transfer") | null;
+            /**
+             * Unit Cost
+             * @description Cost per unit in major units
+             * @default 0
+             */
+            unit_cost: number;
+        };
+        /**
          * RecentActivity
          * @description Recent activity item.
          */
@@ -23918,6 +24758,88 @@ export interface components {
         RejectSuggestionRequest: {
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * ReorderReport
+         * @description Items needing a purchase, most urgent first.
+         */
+        ReorderReport: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["ReorderRow"][];
+            /** Lookback Days */
+            lookback_days: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * ReorderRow
+         * @description One item at or below its reorder point, aggregated across locations.
+         */
+        ReorderRow: {
+            /** Avg Daily Usage */
+            avg_daily_usage?: number | null;
+            /** Days Of Cover */
+            days_of_cover?: number | null;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Name */
+            item_name: string;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
+            /** Quantity On Hand */
+            quantity_on_hand: number;
+            /** Reorder Point */
+            reorder_point: number;
+            /** Reorder Quantity */
+            reorder_quantity?: number | null;
+            /** Safety Stock */
+            safety_stock: number;
+            /** Shortfall */
+            shortfall: number;
+            /** Sku */
+            sku?: string | null;
+            /**
+             * Suggested Reorder Point
+             * @description avg daily usage x lead time + safety stock; never applied automatically
+             */
+            suggested_reorder_point?: number | null;
+            /** Supplier Name */
+            supplier_name?: string | null;
+            /** Supplier Sku */
+            supplier_sku?: string | null;
+            /** Unit Of Measure */
+            unit_of_measure: string;
+        };
+        /**
+         * ReorderSuggestion
+         * @description The computed reorder point for one item, alongside the stored value.
+         */
+        ReorderSuggestion: {
+            /** Avg Daily Usage */
+            avg_daily_usage?: number | null;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Lead Time Days */
+            lead_time_days?: number | null;
+            /** Lookback Days */
+            lookback_days: number;
+            /** Safety Stock */
+            safety_stock: number;
+            /** Stored Reorder Point */
+            stored_reorder_point?: number | null;
+            /** Suggested Reorder Point */
+            suggested_reorder_point?: number | null;
         };
         /**
          * ReputationSummary
@@ -25396,6 +26318,61 @@ export interface components {
             within_sla: number;
         };
         /**
+         * StockLevelListResponse
+         * @description Every tracked on-hand position, plus the workspace's total value.
+         */
+        StockLevelListResponse: {
+            /** Items */
+            items: components["schemas"]["StockLevelRow"][];
+            /** Total */
+            total: number;
+            /**
+             * Total Value
+             * @description Sum of on-hand value (0 without billing:read)
+             * @default 0
+             */
+            total_value: number;
+        };
+        /**
+         * StockLevelRow
+         * @description On-hand position for one item at one location.
+         */
+        StockLevelRow: {
+            /** Avg Unit Cost */
+            avg_unit_cost: number;
+            /**
+             * Is Low Stock
+             * @default false
+             */
+            is_low_stock: boolean;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Name */
+            item_name: string;
+            /** Last Movement At */
+            last_movement_at?: string | null;
+            /**
+             * Location Id
+             * Format: uuid
+             */
+            location_id: string;
+            /** Location Name */
+            location_name: string;
+            /** Quantity On Hand */
+            quantity_on_hand: number;
+            /** Reorder Point */
+            reorder_point?: number | null;
+            /** Sku */
+            sku?: string | null;
+            /** Total Value */
+            total_value: number;
+            /** Unit Of Measure */
+            unit_of_measure: string;
+        };
+        /**
          * TagCreate
          * @description Schema for creating a tag.
          */
@@ -26101,6 +27078,33 @@ export interface components {
         TranscriptResponse: {
             /** Status */
             status: string;
+        };
+        /**
+         * TransferStockRequest
+         * @description Move stock between two locations at the source's weighted-average cost.
+         */
+        TransferStockRequest: {
+            /**
+             * From Location Id
+             * Format: uuid
+             */
+            from_location_id: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Note */
+            note?: string | null;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Quantity */
+            quantity: number;
+            /**
+             * To Location Id
+             * Format: uuid
+             */
+            to_location_id: string;
         };
         /**
          * UnattributedLeadResponse
@@ -35933,6 +36937,552 @@ export interface operations {
             };
         };
     };
+    list_inventory_items_api_v1_workspaces__workspace_id__inventory_items_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                /** @description Only items at or below reorder point */
+                low_stock?: boolean;
+                include_inactive?: boolean;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedInventoryItems"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_inventory_item_api_v1_workspaces__workspace_id__inventory_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InventoryItemCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InventoryItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_inventory_item_api_v1_workspaces__workspace_id__inventory_items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adjust_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustStockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_item_ledger_api_v1_workspaces__workspace_id__inventory_items__item_id__ledger_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_stock_api_v1_workspaces__workspace_id__inventory_items__item_id__receipts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiveStockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_item_reorder_point_api_v1_workspaces__workspace_id__inventory_items__item_id__reorder_suggestion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReorderSuggestion"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inventory_locations_api_v1_workspaces__workspace_id__inventory_locations_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLocationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_inventory_location_api_v1_workspaces__workspace_id__inventory_locations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InventoryLocationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                location_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InventoryLocationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_inventory_location_api_v1_workspaces__workspace_id__inventory_locations__location_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                location_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_report_api_v1_workspaces__workspace_id__inventory_reorder_report_get: {
+        parameters: {
+            query?: {
+                lookback_days?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReorderReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_stock_levels_api_v1_workspaces__workspace_id__inventory_stock_get: {
+        parameters: {
+            query?: {
+                location_id?: string | null;
+                low_stock?: boolean;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockLevelListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transfer_stock_api_v1_workspaces__workspace_id__inventory_transfers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferStockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_invitations_api_v1_workspaces__workspace_id__invitations_get: {
         parameters: {
             query?: never;
@@ -36800,6 +38350,107 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_job_materials_api_v1_workspaces__workspace_id__jobs__job_id__materials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobMaterialsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobMaterialCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_job_material_api_v1_workspaces__workspace_id__jobs__job_id__materials__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                entry_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLedgerEntryResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -42500,6 +44151,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BacklogReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cogs_api_v1_workspaces__workspace_id__reports_cogs_get: {
+        parameters: {
+            query?: {
+                /** @description Stock consumed on or after this date (defaults to the 1st of this month) */
+                date_from?: string | null;
+                /** @description Stock consumed on or before this date (defaults to today) */
+                date_to?: string | null;
+                /** @description Breakdown dimension */
+                group_by?: "item" | "service_category" | "job";
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["COGSReport"];
                 };
             };
             /** @description Validation Error */

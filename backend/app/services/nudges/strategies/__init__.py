@@ -9,6 +9,9 @@ from app.services.nudges.strategies.custom_date import CustomDateNudgeStrategy
 from app.services.nudges.strategies.deal_stall import DealStallNudgeStrategy
 from app.services.nudges.strategies.follow_up import FollowUpNudgeStrategy
 from app.services.nudges.strategies.hot_lead import HotLeadNudgeStrategy
+from app.services.nudges.strategies.inventory_low_stock import (
+    InventoryLowStockNudgeStrategy,
+)
 from app.services.nudges.strategies.monitor_idle import MonitorIdleNudgeStrategy
 from app.services.nudges.strategies.noshow_recovery import NoShowRecoveryNudgeStrategy
 from app.services.nudges.strategies.outbound_batch_ready import (
@@ -26,6 +29,7 @@ __all__ = [
     "DealStallNudgeStrategy",
     "FollowUpNudgeStrategy",
     "HotLeadNudgeStrategy",
+    "InventoryLowStockNudgeStrategy",
     "MonitorIdleNudgeStrategy",
     "NoShowRecoveryNudgeStrategy",
     "NudgeContext",

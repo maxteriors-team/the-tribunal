@@ -18,6 +18,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import (
     DB,
     CanReadBilling,
+    CanWriteJobs,
     CurrentMembership,
     CurrentUser,
     TransactionalDB,
@@ -28,6 +29,11 @@ from app.api.service_errors import ServiceErrorRoute
 from app.core.permissions import Capability, role_can
 from app.models.field_service import JobStatus
 from app.models.workspace import WorkspaceMembership
+from app.schemas.inventory import (
+    InventoryLedgerEntryResponse,
+    JobMaterialCreate,
+    JobMaterialsResponse,
+)
 from app.schemas.job import (
     JobAssignRequest,
     JobCreate,
@@ -54,7 +60,7 @@ from app.schemas.neighbor_outreach import (
     NeighborOutreachGenerateRequest,
 )
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
-from app.services.jobs import JobCostingService, JobService
+from app.services.jobs import JobCostingService, JobMaterialsService, JobService
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -451,4 +457,73 @@ async def enroll_job_neighbors_in_campaign(
     """
     return await NeighborOutreachService(db).enroll_in_campaign(
         job_id, membership.workspace_id, payload
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Job materials: stock consumed delivering the job.
+#
+# Posting a material writes an inventory ledger row (``reason='job_usage'``,
+# ``reference_type='job'``) — it does **not** create a ``JobExpense``. That is
+# the one rule that keeps materials from being counted twice, since job expenses
+# already have a free-form "materials" category. The cost is the server-side
+# weighted average at posting time; the request has no cost field at all.
+#
+# Deleting a material posts a compensating ``return_to_stock`` row at the cost
+# it left with. The ledger is an audit trail: an undo is a new entry, never a
+# deletion.
+# --------------------------------------------------------------------------- #
+@router.get("/{job_id}/materials", response_model=JobMaterialsResponse)
+async def list_job_materials(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    db: DB,
+) -> JobMaterialsResponse:
+    """Materials consumed on a job (costs redacted below billing:read)."""
+    return await JobMaterialsService(db).list_for_job(
+        job_id, workspace.id, include_costs=_can_see_costs(membership)
+    )
+
+
+@router.post(
+    "/{job_id}/materials",
+    response_model=InventoryLedgerEntryResponse,
+    status_code=201,
+)
+async def add_job_material(
+    job_id: uuid.UUID,
+    payload: JobMaterialCreate,
+    membership: CanWriteJobs,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> InventoryLedgerEntryResponse:
+    """Consume stock on a job, valued at the item's current average cost."""
+    return await JobMaterialsService(db).consume_for_job(
+        job_id,
+        membership.workspace_id,
+        payload,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
+    )
+
+
+@router.delete(
+    "/{job_id}/materials/{entry_id}",
+    response_model=InventoryLedgerEntryResponse,
+)
+async def remove_job_material(
+    job_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    membership: CanWriteJobs,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> InventoryLedgerEntryResponse:
+    """Undo a material line by returning it to stock (never deletes history)."""
+    return await JobMaterialsService(db).return_for_job(
+        job_id,
+        membership.workspace_id,
+        entry_id,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
     )

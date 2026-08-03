@@ -44,6 +44,16 @@ from app.models.field_service import (
 )
 from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
+from app.models.inventory import (
+    INVENTORY_LEDGER_REASONS,
+    INVENTORY_LOCATION_KINDS,
+    INVENTORY_REFERENCE_TYPES,
+    INVENTORY_VALUATION_METHODS,
+    InventoryItem,
+    InventoryLedgerEntry,
+    InventoryLocation,
+    InventoryStockLevel,
+)
 from app.models.invitation import WorkspaceInvitation
 from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.job_costing import JobExpense, TimeEntry
@@ -222,6 +232,14 @@ __all__ = [
     "OpportunityLineItem",
     "OpportunityActivity",
     "CatalogItem",
+    "InventoryItem",
+    "InventoryLedgerEntry",
+    "InventoryLocation",
+    "InventoryStockLevel",
+    "INVENTORY_LEDGER_REASONS",
+    "INVENTORY_LOCATION_KINDS",
+    "INVENTORY_REFERENCE_TYPES",
+    "INVENTORY_VALUATION_METHODS",
     "Invoice",
     "InvoiceLineItem",
     "TimeEntry",

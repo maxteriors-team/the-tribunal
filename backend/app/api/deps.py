@@ -472,6 +472,8 @@ CanSendComms = Annotated[WorkspaceMembership, Depends(require_capability(Capabil
 CanManageComms = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.COMMS_MANAGE))
 ]
+CanReadJobs = Annotated[WorkspaceMembership, Depends(require_capability(Capability.JOBS_READ))]
+CanWriteJobs = Annotated[WorkspaceMembership, Depends(require_capability(Capability.JOBS_WRITE))]
 CanReadBilling = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.BILLING_READ))
 ]
