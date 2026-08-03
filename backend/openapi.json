@@ -35646,6 +35646,18 @@
               }
             ]
           },
+          "first_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Viewed At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -35662,6 +35674,18 @@
               }
             ],
             "title": "Issue Date"
+          },
+          "last_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Viewed At"
           },
           "line_items": {
             "items": {
@@ -35804,6 +35828,11 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "view_count": {
+            "default": 0,
+            "title": "View Count",
+            "type": "integer"
           },
           "workspace_id": {
             "format": "uuid",
@@ -36400,6 +36429,18 @@
               }
             ]
           },
+          "first_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Viewed At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -36416,6 +36457,18 @@
               }
             ],
             "title": "Issue Date"
+          },
+          "last_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Viewed At"
           },
           "notes": {
             "anyOf": [
@@ -36539,6 +36592,11 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "view_count": {
+            "default": 0,
+            "title": "View Count",
+            "type": "integer"
           },
           "workspace_id": {
             "format": "uuid",
@@ -48393,6 +48451,42 @@
           }
         },
         "summary": "Reconcile Deposit Status",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/view": {
+      "post": {
+        "description": "Record that the client opened their proposal (fire-and-forget beacon).\n\nDeliberately a POST rather than a write inside the GET: the read stays pure\nand cacheable, every retry/refetch does not amplify into a write on an\nunauthenticated path, and there is exactly one narrow, throttled write\nsurface. Repeat beacons inside the service's throttle window are a no-op,\nand an unknown token 404s before anything is written.",
+        "operationId": "record_public_proposal_view_api_v1_p_quotes__token__view_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Public Proposal View",
         "tags": [
           "Public Proposals"
         ]

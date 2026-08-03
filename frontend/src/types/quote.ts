@@ -56,6 +56,12 @@ export interface Quote {
   terms?: string | null;
   converted_job_id?: string | null;
   converted_invoice_id?: string | null;
+  /** First time a client opened the public proposal; null = never opened. */
+  first_viewed_at?: string | null;
+  /** Most recent client open — the "call them now" signal. */
+  last_viewed_at?: string | null;
+  /** Throttled visit count (repeat opens inside a short window don't count). */
+  view_count?: number;
   /** Client-proposal share token; null until the quote is first sent. */
   public_token?: string | null;
   created_at: string;

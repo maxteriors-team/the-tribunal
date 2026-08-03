@@ -431,6 +431,19 @@ async def decline_public_proposal(
     return await QuoteService(db).decline_public(token, reason=payload.reason)
 
 
+@public_router.post("/{token}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def record_public_proposal_view(token: str, db: DB) -> None:
+    """Record that the client opened their proposal (fire-and-forget beacon).
+
+    Deliberately a POST rather than a write inside the GET: the read stays pure
+    and cacheable, every retry/refetch does not amplify into a write on an
+    unauthenticated path, and there is exactly one narrow, throttled write
+    surface. Repeat beacons inside the service's throttle window are a no-op,
+    and an unknown token 404s before anything is written.
+    """
+    await QuoteService(db).record_public_view(token)
+
+
 @public_router.post("/{token}/deposit-checkout", response_model=PublicProposalDepositCheckout)
 async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCheckout:
     """Start a Stripe Checkout Session so the client can pay the deposit.

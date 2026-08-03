@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, FileText, MoreHorizontal, Plus, X } from "lucide-react";
+import { Check, Copy, Eye, ExternalLink, FileText, MoreHorizontal, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { quotesApi } from "@/lib/api/quotes";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
-import { formatDate } from "@/lib/utils/date";
+import { formatDate, formatRelative } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { Quote, QuoteStatus } from "@/types";
@@ -119,9 +119,14 @@ export function QuotesList() {
       .catch(() => toast.error("Couldn't copy link"));
   };
 
+  // Staff preview opens the exact customer URL, so it must announce itself:
+  // `?preview=1` tells the public page to skip its view beacon. Without it every
+  // internal peek would register as a client view and fire a false "your client
+  // just opened it" alert. Deliberately not added by `copyClientLink` — the link
+  // the customer receives must never carry the flag.
   const openClientProposal = (quote: Quote) => {
     const url = clientProposalUrl(quote);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    if (url) window.open(`${url}?preview=1`, "_blank", "noopener,noreferrer");
   };
 
   // Consolidated entry point: every new quote is built in the sales wizard (the
@@ -186,6 +191,14 @@ export function QuotesList() {
                       </Badge>
                     )}
                   </div>
+                  {/* The buying signal: they have it open, call them. Muted so
+                      it reads as context under the status, not a second badge. */}
+                  {quote.last_viewed_at && (
+                    <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                      <Eye className="h-3 w-3" aria-hidden="true" />
+                      <span>Viewed {formatRelative(quote.last_viewed_at)}</span>
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="min-w-[18rem] text-right">
                   <div>{formatCurrency(quote.total, quote.currency)}</div>

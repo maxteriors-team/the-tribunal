@@ -15,7 +15,7 @@ recorded on the quote so the sales -> work -> billing chain stays auditable.
 
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import structlog
@@ -29,6 +29,7 @@ from app.db.scope import assert_workspace_owned
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.field_service import ServiceLocation
+from app.models.human_nudge import HumanNudge
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
@@ -91,6 +92,7 @@ from app.services.automations.events import (
 )
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import notify_workspace_event
+from app.services.nudges.strategies.base import dedup_exists
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
@@ -227,6 +229,16 @@ def build_public_roofline_comparison(
 # Statuses past which header/line edits and deletes are blocked: a quote the
 # customer has decided on (or that lapsed) is a historical record.
 _LOCKED_STATUSES = frozenset({"approved", "declined", "expired"})
+
+# How long one client "visit" lasts for view-tracking purposes. Beacons arriving
+# inside this window of ``last_viewed_at`` are a no-op: they neither bump the
+# timestamp nor increment the count. Reading a proposal is not a single page
+# load -- people refresh, switch packages, and reopen the tab -- so an
+# unthrottled counter turns one interested customer into "40 views" and the
+# number stops carrying information. It also caps the write rate on an
+# unauthenticated endpoint at one UPDATE per quote per window, regardless of how
+# much traffic the link attracts.
+VIEW_THROTTLE_MINUTES = 15
 
 
 def _fmt_qty(qty: object) -> str:
@@ -1471,6 +1483,100 @@ class QuoteService:
             message="Thank you! Your proposal has been approved.",
             deposit_required=unpaid,
             deposit_amount=due,
+        )
+
+    async def record_public_view(self, token: str) -> None:
+        """Record that a client opened their proposal, and alert the operator once.
+
+        Called from an explicit ``POST /{token}/view`` beacon rather than from
+        the GET, so reading a proposal stays a pure, cacheable read and there is
+        exactly one narrow write surface on the unauthenticated path.
+
+        **Why this signal is trustworthy.** The public proposal page is a client
+        component: the beacon only fires from a browser that executed JavaScript.
+        The link scanners that plague email read-receipts (Outlook Safe Links,
+        Gmail's image proxy, Apple Mail Privacy Protection) fetch the Next.js
+        route, get an HTML shell, and never reach this endpoint. A recorded view
+        is a human.
+
+        Repeat beacons within :data:`VIEW_THROTTLE_MINUTES` of ``last_viewed_at``
+        return without writing -- see that constant for why an unthrottled count
+        is worse than no count. ``first_viewed_at`` is stamped once and never
+        overwritten, so "they finally opened it" survives every re-read.
+
+        An unknown or draft token raises ``NotFoundError`` from ``_load_by_token``
+        before anything is written.
+        """
+        quote = await self._load_by_token(token)
+        now = datetime.now(UTC)
+
+        last = quote.last_viewed_at
+        if last is not None:
+            # Defensive: a naive timestamp would raise on subtraction, and a 500
+            # on an unauthenticated beacon is worse than a slightly early bump.
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=UTC)
+            if now - last < timedelta(minutes=VIEW_THROTTLE_MINUTES):
+                return
+
+        is_first_view = quote.first_viewed_at is None
+        if is_first_view:
+            quote.first_viewed_at = now
+        quote.last_viewed_at = now
+        quote.view_count = (quote.view_count or 0) + 1
+
+        if is_first_view:
+            await self._nudge_quote_viewed(quote, now)
+
+        await self.db.commit()
+        self.log.info(
+            "quote_viewed_by_client",
+            quote_id=str(quote.id),
+            workspace_id=str(quote.workspace_id),
+            view_count=quote.view_count,
+            first_view=is_first_view,
+        )
+
+    async def _nudge_quote_viewed(self, quote: Quote, now: datetime) -> None:
+        """Queue the "call them while they're still reading it" operator nudge.
+
+        Created inline rather than by a polling strategy so the dashboard's nudge
+        list reflects it within its own 60s poll -- the fast path that makes the
+        alert actionable. SMS/push still ride the hourly
+        :class:`~app.workers.nudge_worker.NudgeWorker` pass, deliberately: an
+        inline send would let anyone holding a public link trigger outbound spend.
+
+        ``dedup_key`` is per quote, not per view, so re-reads never produce a
+        second alert. The unique index on that column is the real guard; this
+        pre-check just avoids a doomed INSERT.
+        """
+        dedup_key = f"{quote.id}:quote_viewed"
+        if await dedup_exists(self.db, dedup_key):
+            return
+
+        client_name: str | None = None
+        if quote.contact is not None:
+            client_name = quote.contact.full_name or quote.contact.first_name
+        who = client_name or "Your client"
+
+        self.db.add(
+            HumanNudge(
+                workspace_id=quote.workspace_id,
+                contact_id=quote.contact_id,
+                nudge_type="quote_viewed",
+                title=f"\U0001f440 {who} opened quote {quote.number}",
+                message=(
+                    f"\U0001f440 {who} just opened proposal {quote.number}. "
+                    "They're thinking about it right now -- call while it is "
+                    "still on their screen."
+                ),
+                suggested_action="call",
+                priority="high",
+                due_date=now,
+                source_date_field=None,
+                status="pending",
+                dedup_key=dedup_key,
+            )
         )
 
     async def decline_public(

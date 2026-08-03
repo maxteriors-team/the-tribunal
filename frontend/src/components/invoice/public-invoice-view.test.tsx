@@ -125,6 +125,30 @@ describe("PublicInvoiceView", () => {
     expect(meta).toHaveTextContent("1 × $485.00");
   });
 
+  it("carries the workspace logo, like the proposal that preceded it", () => {
+    renderView(
+      invoice({
+        branding: {
+          ...invoice().branding,
+          logo_url: "https://cdn.example.com/logo.png",
+        },
+      })
+    );
+
+    // A customer who approved a branded proposal must not receive an unbranded
+    // invoice — the two documents are the same relationship.
+    const logo = screen.getByAltText("Maxteriors Lighting Co.");
+    expect(logo).toHaveAttribute("src", "https://cdn.example.com/logo.png");
+  });
+
+  it("renders no logo slot when the workspace has not uploaded one", () => {
+    renderView(invoice());
+
+    expect(
+      screen.queryByAltText("Maxteriors Lighting Co.")
+    ).not.toBeInTheDocument();
+  });
+
   it("exposes a table a screen reader can navigate", () => {
     renderView(invoice());
 
