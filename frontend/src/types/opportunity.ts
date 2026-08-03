@@ -49,6 +49,21 @@ export interface OpportunityActivity {
   created_at: string;
 }
 
+/**
+ * Primary contact embedded in an opportunity payload (backend
+ * `OpportunityContactSummary`). Deliberately narrow — enough to identify and
+ * reach the lead from a pipeline card without a per-card contact request.
+ */
+export interface OpportunityContact {
+  id: number;
+  first_name: string;
+  last_name?: string | null;
+  full_name: string;
+  phone_number?: string | null;
+  email?: string | null;
+  status: string;
+}
+
 export interface Opportunity {
   id: string;
   workspace_id: string;
@@ -73,4 +88,5 @@ export interface Opportunity {
   updated_at: string;
   line_items?: OpportunityLineItem[];
   activities?: OpportunityActivity[];
+  primary_contact?: OpportunityContact | null;
 }

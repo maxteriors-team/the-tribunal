@@ -19104,6 +19104,36 @@ export interface components {
             opportunity_id: string;
         };
         /**
+         * OpportunityContactSummary
+         * @description Minimal primary-contact detail embedded in opportunity responses.
+         *
+         *     The pipeline board renders the lead behind each card and dials it in place,
+         *     so it needs a name and a phone number per opportunity. Fetching those
+         *     per-card would be one request per opportunity; embedding this summary keeps
+         *     the board a single query.
+         *
+         *     Deliberately narrow: name, phone, email, lifecycle status. Address, notes,
+         *     scoring, and enrichment stay on the contact endpoints — a board card has no
+         *     use for them, and every extra PII field here widens the blast radius of the
+         *     list endpoint.
+         */
+        OpportunityContactSummary: {
+            /** Email */
+            email?: string | null;
+            /** First Name */
+            first_name: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: number;
+            /** Last Name */
+            last_name?: string | null;
+            /** Phone Number */
+            phone_number?: string | null;
+            /** Status */
+            status: string;
+        };
+        /**
          * OpportunityCreate
          * @description Create opportunity schema.
          */
@@ -19208,6 +19238,7 @@ export interface components {
              * Format: uuid
              */
             pipeline_id: string;
+            primary_contact?: components["schemas"]["OpportunityContactSummary"] | null;
             /** Primary Contact Id */
             primary_contact_id?: number | null;
             /** Probability */
@@ -19372,6 +19403,7 @@ export interface components {
              * Format: uuid
              */
             pipeline_id: string;
+            primary_contact?: components["schemas"]["OpportunityContactSummary"] | null;
             /** Primary Contact Id */
             primary_contact_id?: number | null;
             /** Probability */

@@ -136,6 +136,31 @@ class OpportunityActivityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class OpportunityContactSummary(BaseModel):
+    """Minimal primary-contact detail embedded in opportunity responses.
+
+    The pipeline board renders the lead behind each card and dials it in place,
+    so it needs a name and a phone number per opportunity. Fetching those
+    per-card would be one request per opportunity; embedding this summary keeps
+    the board a single query.
+
+    Deliberately narrow: name, phone, email, lifecycle status. Address, notes,
+    scoring, and enrichment stay on the contact endpoints — a board card has no
+    use for them, and every extra PII field here widens the blast radius of the
+    list endpoint.
+    """
+
+    id: int
+    first_name: str
+    last_name: str | None = None
+    full_name: str
+    phone_number: str | None = None
+    email: str | None = None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OpportunityBase(OpportunityLeadAttributionFields):
     """Base opportunity schema."""
 
@@ -192,6 +217,7 @@ class OpportunityResponse(OpportunityBase):
     created_at: datetime
     updated_at: datetime
     line_items: list[OpportunityLineItemResponse] = []
+    primary_contact: OpportunityContactSummary | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
