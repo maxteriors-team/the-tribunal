@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CapturedMessageResponse(BaseModel):
@@ -21,12 +22,35 @@ class CapturedMessageResponse(BaseModel):
 
 
 class CallCreate(BaseModel):
-    """Request to initiate a call."""
+    """Request to initiate a call.
+
+    ``mode`` decides who actually talks to the contact:
+
+    - ``"ai"`` (default): a voice agent handles the call. ``agent_id`` selects
+      it; when omitted the conversation's assigned agent or the workspace
+      default voice agent is used. A call with no resolvable agent is rejected
+      rather than dialing the contact into silence.
+    - ``"user"``: the operator's own phone rings first, then the contact is
+      dialed and the two legs are bridged. ``agent_id`` is ignored.
+      ``user_phone_number`` picks which allowlisted number to ring.
+    """
 
     to_number: str
     from_phone_number: str
     contact_phone: str | None = None
-    agent_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = Field(
+        default=None,
+        description="Voice agent for mode='ai'. Ignored when mode='user'.",
+    )
+    mode: Literal["ai", "user"] = "ai"
+    user_phone_number: str | None = Field(
+        default=None,
+        description=(
+            "Number to ring for mode='user'. Must be the caller's profile phone, "
+            "the workspace transfer destination, or a workspace phone number. "
+            "Defaults to the first of those that is configured."
+        ),
+    )
 
 
 class CallResponse(BaseModel):

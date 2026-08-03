@@ -9,11 +9,22 @@ export interface CallsListParams {
   search?: string;
 }
 
+/** Who talks to the contact on an outbound call. */
+export type CallMode = "ai" | "user";
+
 export interface InitiateCallRequest {
   to_number: string;
   from_phone_number: string;
   contact_phone?: string;
+  /** Voice agent for mode="ai". Ignored when mode="user". */
   agent_id?: string;
+  /** "ai" (default) hands the call to a voice agent; "user" rings your phone first. */
+  mode?: CallMode;
+  /**
+   * Number to ring for mode="user". Must be your profile phone, the workspace
+   * transfer destination, or a workspace number — anything else is rejected.
+   */
+  user_phone_number?: string;
 }
 
 export interface InitiateCallResponse {

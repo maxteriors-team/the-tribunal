@@ -4,11 +4,14 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DB, CanReadCRM, CanSendComms, CurrentUser
+from app.api.deps import DB, CanReadCRM, CanSendComms, CurrentUser, WorkspaceAccess
 from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
+from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.phone_number import PhoneNumber
@@ -22,8 +25,69 @@ from app.schemas.call import (
 )
 from app.services.calls.live_call_registry import get_live_call_registry
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
+from app.services.telephony.user_call import (
+    RepNumberNotAllowedError,
+    resolve_rep_callback_number,
+    start_user_call,
+)
 
 router = APIRouter()
+
+
+async def _resolve_voice_agent_id(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    requested_agent_id: uuid.UUID | None,
+    phone_record: PhoneNumber,
+    workspace_phone: str,
+    contact_phone: str,
+) -> uuid.UUID | None:
+    """Resolve which voice agent should handle an ``mode="ai"`` outbound call.
+
+    Precedence: the explicitly requested agent, then the agent already assigned
+    to this contact's conversation, then the agent assigned to the outbound
+    number, then any active voice-capable agent in the workspace.
+
+    Returns None when the workspace has no usable voice agent. The caller must
+    reject the request in that case: dialing a contact with no agent and no
+    human leg answers into silence.
+    """
+    voice_capable = (
+        Agent.workspace_id == workspace_id,
+        Agent.is_active.is_(True),
+        Agent.channel_mode.in_(("voice", "both")),
+    )
+
+    if requested_agent_id is not None:
+        # Scope the lookup to the workspace so an agent id from another tenant
+        # can never be attached to this workspace's call.
+        result = await db.execute(
+            select(Agent.id).where(Agent.id == requested_agent_id, *voice_capable)
+        )
+        return result.scalar_one_or_none()
+
+    conv_result = await db.execute(
+        select(Conversation.assigned_agent_id).where(
+            Conversation.workspace_id == workspace_id,
+            Conversation.workspace_phone_hash == hash_phone(workspace_phone),
+            Conversation.contact_phone_hash == hash_phone(contact_phone),
+            Conversation.assigned_agent_id.is_not(None),
+        )
+    )
+    for candidate in (conv_result.scalars().first(), phone_record.assigned_agent_id):
+        if candidate is None:
+            continue
+        agent_result = await db.execute(
+            select(Agent.id).where(Agent.id == candidate, *voice_capable)
+        )
+        resolved = agent_result.scalar_one_or_none()
+        if resolved is not None:
+            return resolved
+
+    fallback = await db.execute(
+        select(Agent.id).where(*voice_capable).order_by(Agent.created_at.asc()).limit(1)
+    )
+    return fallback.scalars().first()
 
 
 @router.post("", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
@@ -33,14 +97,21 @@ async def initiate_call(
     current_user: CurrentUser,
     db: DB,
     membership: CanSendComms,
+    workspace: WorkspaceAccess,
 ) -> CallResponse:
-    """Initiate outbound voice call.
+    """Initiate an outbound voice call, handled by an AI agent or by the user.
+
+    ``mode="ai"`` dials the contact and streams the call to a voice agent.
+    ``mode="user"`` rings the operator's own phone first and bridges the contact
+    in once they pick up, so nobody is ever dialed into silence.
 
     Args:
         workspace_id: Workspace ID
         call_data: Call request data
         current_user: Current user
         db: Database session
+        membership: Caller's workspace membership (comms-send capability)
+        workspace: Workspace the call is billed to
 
     Returns:
         Created Message record for the call
@@ -79,16 +150,64 @@ async def initiate_call(
         # Connection ID is optional - service auto-discovers if not provided
         connection_id = settings.telnyx_connection_id if settings.telnyx_connection_id else None
 
-        message = await voice_service.initiate_call(
-            to_number=call_data.to_number,
-            from_number=call_data.from_phone_number,
-            connection_id=connection_id,
-            webhook_url=webhook_url,
-            db=db,
-            workspace_id=workspace_id,
-            contact_phone=call_data.contact_phone,
-            agent_id=call_data.agent_id,
-        )
+        if call_data.mode == "user":
+            try:
+                rep_number = await resolve_rep_callback_number(
+                    db=db,
+                    user=current_user,
+                    workspace=workspace,
+                    requested=call_data.user_phone_number,
+                )
+            except RepNumberNotAllowedError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
+
+            message = await start_user_call(
+                db=db,
+                voice_service=voice_service,
+                workspace_id=workspace_id,
+                user_id=current_user.id,
+                to_number=call_data.to_number,
+                from_number=call_data.from_phone_number,
+                rep_number=rep_number,
+                contact_phone=call_data.contact_phone,
+                connection_id=connection_id,
+                webhook_url=webhook_url,
+            )
+        else:
+            # An AI call with no agent starts no audio stream, so the contact
+            # answers to dead air. Refuse the call instead of burning the lead.
+            agent_id = await _resolve_voice_agent_id(
+                db=db,
+                workspace_id=workspace_id,
+                requested_agent_id=call_data.agent_id,
+                phone_record=phone_record,
+                workspace_phone=voice_service.normalize_e164(call_data.from_phone_number),
+                contact_phone=voice_service.normalize_e164(
+                    call_data.contact_phone or call_data.to_number
+                ),
+            )
+            if agent_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "No active voice agent available for this call. Select an agent, "
+                        "or use mode='user' to take the call yourself."
+                    ),
+                )
+
+            message = await voice_service.initiate_call(
+                to_number=call_data.to_number,
+                from_number=call_data.from_phone_number,
+                connection_id=connection_id,
+                webhook_url=webhook_url,
+                db=db,
+                workspace_id=workspace_id,
+                contact_phone=call_data.contact_phone,
+                agent_id=agent_id,
+            )
 
         return CallResponse(
             id=message.id,

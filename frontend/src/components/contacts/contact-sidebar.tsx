@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactActions } from "@/components/contacts/contact-sidebar/contact-actions";
 import { ContactAppointments } from "@/components/contacts/contact-sidebar/contact-appointments";
@@ -81,6 +82,9 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
     aiEnabled,
     setAiEnabled,
     callContact,
+    callDialogOpen,
+    setCallDialogOpen,
+    submitCall,
     initiateCallMutation,
     toggleAIMutation,
     deleteContactMutation,
@@ -234,6 +238,15 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
         displayName={displayName}
         isDeleting={deleteContactMutation.isPending}
         onConfirm={handleDelete}
+      />
+      <OutboundCallDialog
+        open={callDialogOpen}
+        onOpenChange={setCallDialogOpen}
+        workspaceId={workspaceId}
+        contactName={displayName}
+        contactPhone={selectedContact.phone_number}
+        onSubmit={submitCall}
+        isSubmitting={initiateCallMutation.isPending}
       />
     </motion.div>
   );

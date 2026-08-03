@@ -99,13 +99,20 @@ export function useContactSidebarData({
   const setAiEnabled = (value: boolean) =>
     setAiState((prev) => ({ ...prev, optimistic: value }));
 
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+
   const initiateCallMutation = useMutation({
     mutationFn: (data: InitiateCallRequest) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return callsApi.initiate(workspaceId, data);
     },
-    onSuccess: () => {
-      toast.success("Call initiated successfully!");
+    onSuccess: (_data, variables) => {
+      setCallDialogOpen(false);
+      toast.success(
+        variables.mode === "user"
+          ? "Calling your phone — answer to connect the contact."
+          : "Call initiated successfully!",
+      );
     },
     onError: (error) => {
       toast.error(
@@ -120,9 +127,12 @@ export function useContactSidebarData({
   const phoneNumbers = phoneNumbersData?.items ?? [];
 
   /**
-   * Dial this contact from the first voice-enabled workspace number. Shared by
-   * the contact rail and the contact detail page so both fail the same way
-   * when the contact or the workspace has no usable number.
+   * Open the outbound-call dialog for this contact. The dialog picks who talks
+   * (AI agent or the operator's own phone) — firing the call straight from this
+   * button used to dial the contact with no agent and no human leg, which the
+   * customer experienced as dead air. Shared by the contact rail and the
+   * contact detail page so both fail the same way when the contact or the
+   * workspace has no usable number.
    */
   const callContact = () => {
     if (!contact?.phone_number) {
@@ -136,11 +146,11 @@ export function useContactSidebarData({
       return;
     }
 
-    initiateCallMutation.mutate({
-      to_number: contact.phone_number,
-      from_phone_number: voiceEnabledNumbers[0].phone_number,
-      contact_phone: contact.phone_number,
-    });
+    setCallDialogOpen(true);
+  };
+
+  const submitCall = (request: InitiateCallRequest) => {
+    initiateCallMutation.mutate(request);
   };
 
   return {
@@ -153,6 +163,9 @@ export function useContactSidebarData({
     aiEnabled,
     setAiEnabled,
     callContact,
+    callDialogOpen,
+    setCallDialogOpen,
+    submitCall,
     initiateCallMutation,
     toggleAIMutation,
     deleteContactMutation,

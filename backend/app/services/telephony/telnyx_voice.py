@@ -192,6 +192,35 @@ class TelnyxVoiceService:
         """
         return await self._get_call_control_application_id(webhook_url)
 
+    def normalize_e164(self, phone: str) -> str:
+        """Public accessor for this service's E.164 normalization.
+
+        Callers that originate their own legs (user-mode calls) must normalize
+        exactly the way :meth:`initiate_call` does, or the conversation phone
+        hashes won't match and a second conversation row appears for the same
+        contact.
+        """
+        return self._normalize_e164(phone)
+
+    async def get_or_create_voice_conversation(
+        self,
+        db: AsyncSession,
+        workspace_phone: str,
+        contact_phone: str,
+        workspace_id: uuid.UUID,
+    ) -> Conversation:
+        """Public accessor for the voice conversation resolution.
+
+        Used by user-mode outbound calls, which build their own ``Message`` row
+        but must hang it off the same conversation an AI call would use.
+        """
+        return await self._get_or_create_conversation(
+            db=db,
+            workspace_phone=workspace_phone,
+            contact_phone=contact_phone,
+            workspace_id=workspace_id,
+        )
+
     async def initiate_call(  # noqa: PLR0915
         self,
         to_number: str,

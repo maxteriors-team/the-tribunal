@@ -1,5 +1,6 @@
 """Telnyx voice call webhook handlers."""
 
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -250,6 +251,16 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
     if await _handle_transfer_leg_answered(call_control_id, log):
         return
 
+    # User-mode outbound call: one of the two legs we originated just answered.
+    # The rep leg triggers the contact dial; the contact leg triggers the
+    # bridge. Either way there is no AI to stream, so short-circuit.
+    if await _handle_user_call_leg_answered(
+        call_control_id,
+        log,
+        client_state=payload.get("client_state"),
+    ):
+        return
+
     async with AsyncSessionLocal() as db:
         # Get message with conversation loaded
         result = await db.execute(
@@ -400,6 +411,10 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
         hangup_source=hangup_source,
     )
     log.info("call_hangup")
+
+    # User-mode call: tear down the peer leg before the normal classification
+    # path runs, so a half-connected call never leaves a live leg billing.
+    await _teardown_user_call_peer_leg(call_control_id, log)
 
     async with AsyncSessionLocal() as db:
         from app.models.conversation import Message, MessageStatus
@@ -631,6 +646,213 @@ async def _handle_transfer_leg_answered(call_control_id: str, log: Any) -> bool:
     finally:
         await voice_service.close()
     return True
+
+
+async def _teardown_user_call_peer_leg(call_control_id: str, log: Any) -> None:
+    """Hang up the surviving leg of a user-mode call and clear its Redis state.
+
+    Called for every ``call.hangup``; a no-op unless the leg belongs to a live
+    user call. Both directions are handled: the rep bailing while the contact
+    rings must not leave the contact connected to nobody, and vice versa.
+    """
+    from app.models.conversation import Message, MessageStatus
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+    from app.services.telephony.user_call import STAGE_BRIDGED, pop_pending_user_call
+
+    pending = await pop_pending_user_call(call_control_id)
+    if pending is None:
+        return
+
+    peer = pending.peer_of(call_control_id)
+    log.info(
+        "user_call_leg_hangup",
+        message_id=pending.message_id,
+        stage=pending.stage,
+        peer_call_control_id=peer,
+    )
+
+    if peer and settings.telnyx_api_key:
+        voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+        try:
+            await voice_service.hangup_call(peer)
+        except Exception as e:  # pragma: no cover - teardown is best-effort
+            log.warning("user_call_peer_hangup_failed", error=str(e))
+        finally:
+            await voice_service.close()
+
+    # The rep dropping before the bridge means the call never happened. The
+    # Message may already point at the contact leg, whose own hangup webhook
+    # would otherwise be the only thing to finalise it.
+    if call_control_id == pending.rep_call_control_id and pending.stage != STAGE_BRIDGED:
+        async with AsyncSessionLocal() as db:
+            message = await db.get(Message, uuid.UUID(pending.message_id))
+            if message is not None and message.status not in _TERMINAL_HANGUP_STATUSES:
+                message.status = MessageStatus.FAILED
+                message.error_code = "USER_CALL_REP_HUNG_UP"
+                message.error_message = "Caller hung up before the contact answered."
+                await db.commit()
+
+
+async def _handle_user_call_leg_answered(
+    call_control_id: str,
+    log: Any,
+    *,
+    client_state: str | None = None,
+) -> bool:
+    """Advance a user-mode call when one of its two legs answers.
+
+    Rep leg answered -> dial the contact and repoint the ``Message`` at that new
+    leg. Contact leg answered -> bridge the two legs and mark the call answered.
+
+    Returns True when this leg belongs to a user call (handled here), so the
+    caller short-circuits normal AI streaming.
+    """
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+    from app.services.telephony.user_call import (
+        decode_user_call_client_state,
+        peek_pending_user_call,
+        pop_pending_user_call,
+    )
+
+    pending = await peek_pending_user_call(call_control_id)
+    if pending is None:
+        # Redis state is best-effort, but ``client_state`` round-trips through
+        # Telnyx on every webhook for the leg, so it still identifies a user
+        # call whose pending state expired or was lost. Without that state we
+        # cannot bridge anything, and a live leg with nobody on it bills by the
+        # minute — hang it up instead of parking it.
+        if decode_user_call_client_state(client_state) is None:
+            return False
+        log.error("user_call_state_lost_hanging_up", call_control_id=call_control_id)
+        if settings.telnyx_api_key:
+            orphan_service = TelnyxVoiceService(settings.telnyx_api_key)
+            try:
+                await orphan_service.hangup_call(call_control_id)
+            finally:
+                await orphan_service.close()
+        return True
+
+    if not settings.telnyx_api_key:
+        log.error("no_telnyx_api_key_for_user_call")
+        return True
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        if call_control_id == pending.rep_call_control_id:
+            if pending.contact_call_control_id:
+                # Telnyx retried call.answered for the rep leg; the contact leg
+                # is already dialed, so do not dial the contact twice.
+                log.info("user_call_rep_leg_answered_duplicate")
+            else:
+                await _dial_user_call_contact_leg(voice_service, pending, log)
+        elif call_control_id == pending.contact_call_control_id:
+            await _bridge_user_call_legs(voice_service, pending, log)
+    except Exception as e:
+        log.exception("user_call_leg_answered_error", error=str(e))
+        await pop_pending_user_call(call_control_id)
+    finally:
+        await voice_service.close()
+    return True
+
+
+async def _dial_user_call_contact_leg(voice_service: Any, pending: Any, log: Any) -> None:
+    """Rep picked up: dial the contact and re-anchor the Message on that leg."""
+    from app.models.conversation import Message, MessageStatus
+    from app.services.telephony.user_call import (
+        CONTACT_LEG_TIMEOUT_SECONDS,
+        make_user_call_leg_client_state,
+        pop_pending_user_call,
+        store_pending_user_call,
+    )
+
+    api_base = settings.api_base_url or "https://example.com"
+    webhook_url = f"{api_base}/webhooks/telnyx/voice"
+    connection_id = settings.telnyx_connection_id or (
+        await voice_service.get_call_control_application_id(webhook_url)
+    )
+
+    contact_ccid = await voice_service.dial_transfer_leg(
+        to_number=pending.contact_number,
+        from_number=pending.from_number,
+        connection_id=connection_id,
+        webhook_url=webhook_url,
+        client_state=make_user_call_leg_client_state(pending.message_id),
+        timeout_secs=CONTACT_LEG_TIMEOUT_SECONDS,
+    )
+
+    if not contact_ccid:
+        log.error("user_call_contact_dial_failed", message_id=pending.message_id)
+        await pop_pending_user_call(pending.rep_call_control_id)
+        await voice_service.hangup_call(pending.rep_call_control_id)
+        async with AsyncSessionLocal() as db:
+            message = await db.get(Message, uuid.UUID(pending.message_id))
+            if message is not None:
+                message.status = MessageStatus.FAILED
+                message.error_code = "USER_CALL_CONTACT_DIAL_FAILED"
+                message.error_message = "Could not dial the contact."
+                await db.commit()
+        return
+
+    await store_pending_user_call(pending.with_contact_leg(contact_ccid))
+
+    # Re-anchor the call on the contact leg so hangup, duration, recording, and
+    # call history behave exactly like an AI call.
+    async with AsyncSessionLocal() as db:
+        message = await db.get(Message, uuid.UUID(pending.message_id))
+        if message is not None:
+            message.provider_message_id = contact_ccid
+            await db.commit()
+
+    log.info(
+        "user_call_contact_leg_dialed",
+        message_id=pending.message_id,
+        contact_call_control_id=contact_ccid,
+    )
+
+
+async def _bridge_user_call_legs(voice_service: Any, pending: Any, log: Any) -> None:
+    """Contact picked up: bridge them to the waiting rep, then record if enabled."""
+    from app.models.conversation import Message, MessageStatus
+    from app.models.workspace import Workspace
+    from app.services.telephony.user_call import (
+        USER_CALL_RECORDING_SETTINGS_KEY,
+        pop_pending_user_call,
+        store_pending_user_call,
+    )
+
+    contact_ccid = pending.contact_call_control_id
+    bridged = await voice_service.bridge_calls(
+        call_control_id=contact_ccid,
+        other_call_control_id=pending.rep_call_control_id,
+    )
+    if not bridged:
+        # Two live legs that can't be joined are pure spend — drop both.
+        log.error("user_call_bridge_failed", message_id=pending.message_id)
+        await pop_pending_user_call(contact_ccid)
+        await voice_service.hangup_call(pending.rep_call_control_id)
+        await voice_service.hangup_call(contact_ccid)
+        return
+
+    await store_pending_user_call(pending.bridged())
+    log.info("user_call_bridged", message_id=pending.message_id)
+
+    record = False
+    async with AsyncSessionLocal() as db:
+        message = await db.get(Message, uuid.UUID(pending.message_id))
+        if message is not None:
+            message.status = MessageStatus.ANSWERED
+            await db.commit()
+
+        workspace = await db.get(Workspace, uuid.UUID(pending.workspace_id))
+        if workspace is not None:
+            record = bool((workspace.settings or {}).get(USER_CALL_RECORDING_SETTINGS_KEY))
+
+    if record:
+        recorded = await voice_service.start_recording(contact_ccid)
+        if recorded:
+            log.info("user_call_recording_started", message_id=pending.message_id)
+        else:
+            log.warning("user_call_recording_failed", message_id=pending.message_id)
 
 
 async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:

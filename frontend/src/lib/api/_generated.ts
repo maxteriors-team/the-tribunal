@@ -2595,13 +2595,19 @@ export interface paths {
         put?: never;
         /**
          * Initiate Call
-         * @description Initiate outbound voice call.
+         * @description Initiate an outbound voice call, handled by an AI agent or by the user.
+         *
+         *     ``mode="ai"`` dials the contact and streams the call to a voice agent.
+         *     ``mode="user"`` rings the operator's own phone first and bridges the contact
+         *     in once they pick up, so nobody is ever dialed into silence.
          *
          *     Args:
          *         workspace_id: Workspace ID
          *         call_data: Call request data
          *         current_user: Current user
          *         db: Database session
+         *         membership: Caller's workspace membership (comms-send capability)
+         *         workspace: Workspace the call is billed to
          *
          *     Returns:
          *         Created Message record for the call
@@ -11655,16 +11661,40 @@ export interface components {
         /**
          * CallCreate
          * @description Request to initiate a call.
+         *
+         *     ``mode`` decides who actually talks to the contact:
+         *
+         *     - ``"ai"`` (default): a voice agent handles the call. ``agent_id`` selects
+         *       it; when omitted the conversation's assigned agent or the workspace
+         *       default voice agent is used. A call with no resolvable agent is rejected
+         *       rather than dialing the contact into silence.
+         *     - ``"user"``: the operator's own phone rings first, then the contact is
+         *       dialed and the two legs are bridged. ``agent_id`` is ignored.
+         *       ``user_phone_number`` picks which allowlisted number to ring.
          */
         CallCreate: {
-            /** Agent Id */
+            /**
+             * Agent Id
+             * @description Voice agent for mode='ai'. Ignored when mode='user'.
+             */
             agent_id?: string | null;
             /** Contact Phone */
             contact_phone?: string | null;
             /** From Phone Number */
             from_phone_number: string;
+            /**
+             * Mode
+             * @default ai
+             * @enum {string}
+             */
+            mode: "ai" | "user";
             /** To Number */
             to_number: string;
+            /**
+             * User Phone Number
+             * @description Number to ring for mode='user'. Must be the caller's profile phone, the workspace transfer destination, or a workspace phone number. Defaults to the first of those that is configured.
+             */
+            user_phone_number?: string | null;
         };
         /**
          * CallFeedbackCreate
