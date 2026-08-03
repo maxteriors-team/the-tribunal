@@ -31,6 +31,7 @@ from app.models.workspace import Workspace
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
 from app.services.exceptions import NotFoundError
 from app.services.quotes import QuoteService
+from app.services.quotes import quote_service as quote_service_module
 from app.services.quotes.quote_service import VIEW_THROTTLE_MINUTES
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -191,6 +192,57 @@ async def test_view_after_throttle_window_bumps_recency_but_not_the_nudge() -> N
         # "They finally opened it" must survive every re-read.
         assert after.first_viewed_at == first_viewed_at
         # One alert per quote, not one per visit.
+        assert await _nudge_count(db, quote_id) == 1
+
+
+async def test_concurrent_first_views_produce_one_nudge_not_a_crash() -> None:
+    """Two tabs opened at once must not 500 on the unique ``dedup_key`` index.
+
+    Unlike the polling nudge strategies this runs on a public endpoint with
+    arbitrary concurrency, so a check-then-insert would let both callers past the
+    pre-check and make the loser raise. Postgres arbitrates instead.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        token, quote_id = await _sent_quote(svc, ws.id, contact.id)
+        await db.commit()
+
+    async with AsyncSessionLocal() as db_a:
+        db_a.add(
+            HumanNudge(
+                workspace_id=ws.id,
+                contact_id=contact.id,
+                nudge_type="quote_viewed",
+                title="already here",
+                message="a concurrent beacon won the race",
+                priority="high",
+                due_date=datetime.now(UTC),
+                status="pending",
+                dedup_key=f"{quote_id}:quote_viewed",
+            )
+        )
+        await db_a.commit()
+
+    # The loser's dedup pre-check ran *before* the winner committed, so it saw
+    # nothing and proceeded to insert. Forcing it False is the only way to land
+    # in that window deterministically -- and it is exactly the window that
+    # turns two simultaneous tabs into a 500 without ON CONFLICT DO NOTHING.
+    async def _saw_nothing(*_args: object, **_kwargs: object) -> bool:
+        return False
+
+    async with AsyncSessionLocal() as db_b:
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(quote_service_module, "dedup_exists", _saw_nothing)
+            await QuoteService(db_b).record_public_view(token)
+
+    async with AsyncSessionLocal() as db:
+        quote = await _reload(db, quote_id)
+        # The view is still recorded -- losing the nudge race must not cost the
+        # operator the recency signal.
+        assert quote.view_count == 1
+        assert quote.first_viewed_at is not None
         assert await _nudge_count(db, quote_id) == 1
 
 
