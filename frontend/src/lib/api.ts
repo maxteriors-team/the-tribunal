@@ -35,12 +35,33 @@ export function logout(): void {
     if (typeof window !== "undefined" && window.location.pathname === "/login") {
       return;
     }
-    window.location.href = "/login";
+    // Carry the destination through the sign-in wall. This interceptor fires
+    // on the 401 from a signed-out deep link and hard-navigates, so it beats
+    // the auth provider's own guard — dropping the path here is what silently
+    // turned an opened invitation into "land on the dashboard, invite still
+    // pending". Same-origin paths only, so this can't become an open redirect.
+    window.location.href = loginUrlPreservingDestination();
   } catch (navError) {
     if (process.env.NODE_ENV !== "production") {
       console.error("Failed to redirect to login:", navError);
     }
   }
+}
+
+/**
+ * `/login`, plus a `?redirect=` back to the current in-app location.
+ *
+ * Only same-origin paths are propagated (a path always starts with a single
+ * `/`), so a crafted location cannot turn the post-login hop into an offsite
+ * redirect.
+ */
+function loginUrlPreservingDestination(): string {
+  if (typeof window === "undefined") return "/login";
+  const { pathname, search } = window.location;
+  if (!pathname.startsWith("/") || pathname.startsWith("//") || pathname === "/") {
+    return "/login";
+  }
+  return `/login?redirect=${encodeURIComponent(pathname + search)}`;
 }
 
 // Track if we're currently refreshing to prevent multiple refresh attempts
