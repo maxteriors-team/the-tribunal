@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404
@@ -115,12 +115,16 @@ async def create_invitation(
             detail="Workspace not found",
         )
 
+    # Normalize once. Email casing is not significant, but ``email_hash`` is a
+    # hash of the exact string and the invitation table stores the raw value, so
+    # an un-normalized "Bob@Acme.com" would miss the existing-user lookup, miss
+    # the duplicate-invite guard, and later miss invitation claiming at signup.
+    email = invitation_data.email.strip().lower()
+
     # Check if user is already a member. ``User.email`` is encrypted at rest
     # with a random IV, so a plaintext comparison never matches — look the user
     # up by the deterministic ``email_hash`` instead.
-    result = await db.execute(
-        select(User).where(User.email_hash == hash_value(invitation_data.email))
-    )
+    result = await db.execute(select(User).where(User.email_hash == hash_value(email)))
     existing_user = result.scalar_one_or_none()
 
     if existing_user:
@@ -138,11 +142,11 @@ async def create_invitation(
     # Check for existing pending invitation
     result = await db.execute(
         apply_workspace_scope(select(WorkspaceInvitation), WorkspaceInvitation, workspace_id).where(
-            WorkspaceInvitation.email == invitation_data.email,
+            func.lower(WorkspaceInvitation.email) == email,
             WorkspaceInvitation.status == "pending",
         )
     )
-    existing_invitation = result.scalar_one_or_none()
+    existing_invitation = result.scalars().first()
 
     if existing_invitation:
         raise HTTPException(
@@ -153,7 +157,7 @@ async def create_invitation(
     # Create invitation
     invitation = WorkspaceInvitation(
         workspace_id=workspace_id,
-        email=invitation_data.email,
+        email=email,
         role=invitation_data.role,
         message=invitation_data.message,
         invited_by_id=current_user.id,
@@ -166,7 +170,7 @@ async def create_invitation(
     invitation_url = f"{settings.frontend_url}/invite/{invitation.token}"
     try:
         await send_invitation_email(
-            to_email=invitation_data.email,
+            to_email=email,
             workspace_name=workspace.name,
             inviter_name=current_user.full_name or current_user.email,
             invitation_url=invitation_url,
@@ -177,7 +181,7 @@ async def create_invitation(
     except Exception as e:
         logger.error(
             "failed_to_send_invitation_email",
-            email=invitation_data.email,
+            email=email,
             error=str(e),
         )
         # Don't fail the request if email fails - invitation is still created
@@ -185,7 +189,7 @@ async def create_invitation(
     logger.info(
         "invitation_created",
         workspace_id=str(workspace_id),
-        email=invitation_data.email,
+        email=email,
         invited_by=current_user.id,
     )
 
@@ -329,7 +333,7 @@ async def accept_invitation(
             invitation.workspace_id,
         ).where(WorkspaceMembership.user_id == current_user.id)
     )
-    if result.scalar_one_or_none():
+    if result.scalars().first():
         # Already a member, just mark invitation as accepted
         invitation.status = "accepted"
         invitation.accepted_at = datetime.now(UTC)
@@ -342,12 +346,28 @@ async def accept_invitation(
             workspace_slug=invitation.workspace.slug,
         )
 
-    # Create membership
+    # Create membership. A user whose only other memberships are non-default (or
+    # who has none at all) would otherwise resolve to default_workspace_id=null
+    # or stay pinned to an unrelated workspace, so claim the default slot when it
+    # is free. Never steal an existing default — the partial unique index
+    # uq_workspace_membership_default_per_user permits exactly one, and moving it
+    # is the user's call via POST /workspaces/{id}/set-default.
+    has_default = (
+        await db.execute(
+            select(WorkspaceMembership.id)
+            .where(
+                WorkspaceMembership.user_id == current_user.id,
+                WorkspaceMembership.is_default.is_(True),
+            )
+            .limit(1)
+        )
+    ).first() is not None
+
     membership = WorkspaceMembership(
         user_id=current_user.id,
         workspace_id=invitation.workspace_id,
         role=invitation.role,
-        is_default=False,
+        is_default=not has_default,
     )
     db.add(membership)
 

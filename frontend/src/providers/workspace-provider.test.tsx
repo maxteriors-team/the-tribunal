@@ -91,15 +91,22 @@ function renderWithProviders(client?: QueryClient) {
 
 // --- Setup ---------------------------------------------------------------
 
+/** Point `window.location.search` at `?workspace=<value>` for one test. */
+function setWorkspaceParam(value: string): void {
+  window.history.replaceState({}, "", `/?workspace=${value}`);
+}
+
 beforeEach(() => {
   listMock.mockReset();
   useAuthMock.mockReset();
   window.localStorage.clear();
+  window.history.replaceState({}, "", "/");
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
+  window.history.replaceState({}, "", "/");
 });
 
 // --- Tests ---------------------------------------------------------------
@@ -189,6 +196,53 @@ describe("WorkspaceProvider", () => {
     expect(screen.getByTestId("current").textContent).toBe("ws_c");
     expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_c");
     expect(clearSpy).toHaveBeenCalled();
+  });
+
+  it("honours ?workspace=<slug> so accepting an invitation lands in that workspace", async () => {
+    // Accepting an invitation redirects to /?workspace=<slug>. An invitee who
+    // already had a workspace of their own must land in the one they just
+    // joined, not bounce back to their stored/default selection.
+    window.localStorage.setItem("current_workspace_id", "ws_a");
+    setWorkspaceParam("ws-ws_c");
+    useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
+    listMock.mockResolvedValue(WORKSPACES);
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current").textContent).toBe("ws_c");
+    });
+    // ...and it sticks for the next visit, which carries no param.
+    expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_c");
+  });
+
+  it("lets the switcher override a ?workspace= param", async () => {
+    setWorkspaceParam("ws-ws_a");
+    useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
+    listMock.mockResolvedValue(WORKSPACES);
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current").textContent).toBe("ws_a");
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "switch" }));
+
+    expect(screen.getByTestId("current").textContent).toBe("ws_c");
+  });
+
+  it("ignores a ?workspace= param that matches no member workspace", async () => {
+    setWorkspaceParam("ws-not-mine");
+    useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
+    listMock.mockResolvedValue(WORKSPACES);
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current").textContent).toBe("ws_b");
+    });
   });
 
   it("throws when useWorkspace is called outside the provider", () => {

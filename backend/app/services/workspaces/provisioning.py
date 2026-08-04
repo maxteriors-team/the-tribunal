@@ -58,13 +58,12 @@ async def _unique_slug(db: AsyncSession, base: str) -> str:
         slug = f"{base}-{uuid.uuid4().hex[:6]}"
 
 
-async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
-    """Return the user's default workspace, creating a personal one if absent.
+async def resolve_existing_workspace(db: AsyncSession, user: User) -> Workspace | None:
+    """Return the user's default (else earliest) workspace, or ``None``.
 
-    Idempotent: if the user already has any membership, their default (or
-    earliest) workspace is returned unchanged. Otherwise a personal workspace
-    with an owner membership and a default pipeline is provisioned. Flushes but
-    does not commit; the caller owns the transaction.
+    ``None`` means the user belongs to no workspace at all and needs to be
+    landed somewhere — see
+    :func:`app.services.workspaces.invitations.onboard_user_workspace`.
     """
     existing = await db.execute(
         select(Workspace)
@@ -76,7 +75,22 @@ async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
         )
         .limit(1)
     )
-    workspace = existing.scalar_one_or_none()
+    return existing.scalar_one_or_none()
+
+
+async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
+    """Return the user's default workspace, creating a personal one if absent.
+
+    Idempotent: if the user already has any membership, their default (or
+    earliest) workspace is returned unchanged. Otherwise a personal workspace
+    with an owner membership and a default pipeline is provisioned. Flushes but
+    does not commit; the caller owns the transaction.
+
+    Callers on the register/login path should prefer
+    :func:`app.services.workspaces.invitations.onboard_user_workspace`, which
+    honours a pending invitation before falling back to a personal workspace.
+    """
+    workspace = await resolve_existing_workspace(db, user)
     if workspace is not None:
         return workspace
 

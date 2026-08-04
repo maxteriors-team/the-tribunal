@@ -44,7 +44,7 @@ from app.services.rate_limiting.auth_limiter import (
     enforce_change_password_rate_limit,
     enforce_ws_ticket_rate_limit,
 )
-from app.services.workspaces import ensure_personal_workspace
+from app.services.workspaces import onboard_user_workspace
 
 router = APIRouter()
 
@@ -137,10 +137,13 @@ async def register(
     db.add(user)
     await db.flush()
 
-    # Every new user must land in a usable default workspace (owner membership +
-    # default pipeline); without one /auth/me returns default_workspace_id=null
-    # and every workspace-scoped page freezes on its loading skeleton (RF-001).
-    await ensure_personal_workspace(db, user)
+    # Every new user must land in a usable default workspace; without one
+    # /auth/me returns default_workspace_id=null and every workspace-scoped page
+    # freezes on its loading skeleton (RF-001). An *invited* teammate lands in
+    # the workspace that invited them — provisioning a personal workspace here
+    # unconditionally is what used to strand invitees in an empty workspace of
+    # their own instead of the team's.
+    await onboard_user_workspace(db, user)
 
     await db.commit()
     await db.refresh(user)
@@ -193,8 +196,10 @@ async def login(
 
     # Belt-and-suspenders for accounts created before auto-provisioning (or any
     # path that left a user with zero memberships): heal on first login so they
-    # never hit the infinite-skeleton dead end. Idempotent for everyone else.
-    await ensure_personal_workspace(db, user)
+    # never hit the infinite-skeleton dead end. Idempotent for everyone else —
+    # in particular it never adds an existing member to a new workspace, so a
+    # pending invitation still requires an explicit accept.
+    await onboard_user_workspace(db, user)
 
     tokens = await TokenRotationService(db).issue_pair(user)
     await db.commit()

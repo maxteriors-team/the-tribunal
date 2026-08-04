@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, XCircle, Clock, Users } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle, Clock, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { use } from "react";
 import { toast } from "sonner";
@@ -71,6 +71,13 @@ export default function InviteAcceptPage({ params }: PageProps) {
     router.push(`/login?redirect=/invite/${token}`);
   };
 
+  const handleCreateAccount = () => {
+    // Signing up with the invite token pins the account to the invited email, so
+    // registration attaches it to the inviting workspace instead of creating a
+    // personal one.
+    router.push(`/register?invite=${token}`);
+  };
+
   // Loading state
   if (isAuthLoading || isInvitationLoading) {
     return <PageLoadingState className="min-h-screen" />;
@@ -100,24 +107,43 @@ export default function InviteAcceptPage({ params }: PageProps) {
     );
   }
 
-  // Expired invitation
+  // Already used, cancelled, or expired. Signing up through the invitation link
+  // claims the invitation, so "already used" is a normal path back here — it
+  // must not be reported as an expiry the invitee has to chase an admin about.
   if (invitation.is_expired || !invitation.is_valid) {
+    const expired = invitation.is_expired;
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
-              <Clock className="h-6 w-6 text-warning" />
+              {expired ? (
+                <Clock className="h-6 w-6 text-warning" />
+              ) : (
+                <CheckCircle2 className="h-6 w-6 text-warning" />
+              )}
             </div>
-            <CardTitle>Invitation Expired</CardTitle>
+            <CardTitle>
+              {expired ? "Invitation Expired" : "Invitation Already Used"}
+            </CardTitle>
             <CardDescription>
-              This invitation has expired. Please contact the workspace
-              administrator to request a new invitation.
+              {expired
+                ? "This invitation has expired. Please contact the workspace administrator to request a new invitation."
+                : `This invitation to ${invitation.workspace_name} has already been used. Sign in to open the workspace.`}
             </CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
-            <Button variant="outline" onClick={() => router.push("/")}>
-              Go to Dashboard
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(
+                  isAuthenticated
+                    ? `/?workspace=${invitation.workspace_slug}`
+                    : `/login?redirect=/invite/${token}`
+                )
+              }
+            >
+              {isAuthenticated ? "Go to Workspace" : "Sign In"}
             </Button>
           </CardFooter>
         </Card>
@@ -157,7 +183,7 @@ export default function InviteAcceptPage({ params }: PageProps) {
           {!isAuthenticated && (
             <div className="rounded-lg border border-warning/20 bg-warning/10 p-3 text-center text-sm">
               <p className="text-warning">
-                You need to sign in to accept this invitation.
+                Sign in — or create your account — to accept this invitation.
               </p>
             </div>
           )}
@@ -173,28 +199,35 @@ export default function InviteAcceptPage({ params }: PageProps) {
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
           {isAuthenticated ? (
-            <Button
-              className="w-full"
-              onClick={handleAccept}
-              disabled={acceptMutation.isPending}
-            >
-              {acceptMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {acceptMutation.isPending ? "Accepting..." : "Accept Invitation"}
-            </Button>
+            <>
+              <Button
+                className="w-full"
+                onClick={handleAccept}
+                disabled={acceptMutation.isPending}
+              >
+                {acceptMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {acceptMutation.isPending ? "Accepting..." : "Accept Invitation"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => router.push("/")}
+              >
+                Maybe Later
+              </Button>
+            </>
           ) : (
-            <Button className="w-full" onClick={handleLogin}>
-              Sign in to Accept
-            </Button>
+            <>
+              <Button className="w-full" onClick={handleCreateAccount}>
+                Create Account &amp; Join
+              </Button>
+              <Button variant="outline" className="w-full" onClick={handleLogin}>
+                I already have an account
+              </Button>
+            </>
           )}
-          <Button
-            variant="ghost"
-            className="w-full"
-            onClick={() => router.push("/")}
-          >
-            {isAuthenticated ? "Maybe Later" : "Go Back"}
-          </Button>
         </CardFooter>
       </Card>
     </div>
