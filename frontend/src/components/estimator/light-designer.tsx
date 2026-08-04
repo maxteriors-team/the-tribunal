@@ -331,7 +331,8 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   });
 
   // Which sides a line item can be billed on. Falls back to the catalog probe so
-  // the editor is available before anything is drawn — the standalone case.
+  // the editor is available before anything is drawn — the standalone case, and
+  // the reason this reads from a query rather than from what's on the photo.
   const sides = {
     permanent: Boolean((estimate ?? catalog)?.permanent.enabled),
     seasonal: Boolean((estimate ?? catalog)?.christmas.enabled),
@@ -781,6 +782,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
                   customLines={customLines}
                   onChangeCustomLines={setCustomLines}
                   sides={sides}
+                  allowCustomLines={!hosted}
                 />
               ) : null}
 

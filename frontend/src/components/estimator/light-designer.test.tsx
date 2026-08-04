@@ -839,6 +839,21 @@ describe("LightDesigner", () => {
     await waitFor(() => expect(grandRow()).toHaveTextContent("$1,600"));
   });
 
+  it("hides the line-item editor when the Quote Builder hosts the designer", async () => {
+    // That flow prices from the wizard's own document, so a line typed here
+    // would never reach the quote. Absent beats silently dropped.
+    const { container } = renderEstimator({
+      onSave: vi.fn(),
+      onPhotoChange: vi.fn(),
+      onClose: vi.fn(),
+      tierKey: "best",
+    });
+    await uploadPhoto(container);
+    await screen.findByRole("heading", { name: /^Tools$/i });
+
+    expect(screen.queryByRole("button", { name: /Add line item/i })).toBeNull();
+  });
+
   it("can share and quote a line item with nothing drawn on the photo", async () => {
     // The standalone case: no roofline, no decor — just the rep's own line.
     vi.mocked(designToEstimateInputs).mockReturnValue({
