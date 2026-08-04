@@ -64,6 +64,20 @@ function requestedRedirect(): string | null {
   return safeRedirectPath(new URLSearchParams(window.location.search).get("redirect"));
 }
 
+/**
+ * Build `/login?redirect=<here>` so signing in returns the user where they were.
+ *
+ * Dropping the destination is what stranded an invited teammate: she opened her
+ * invitation, signed out to switch to the invited account, and came back to a
+ * bare `/login` that had forgotten the invitation entirely — so she landed on
+ * the dashboard with the invite still unaccepted and no way to find it again.
+ */
+function loginPathReturningTo(destination: string): string {
+  const safe = safeRedirectPath(destination);
+  if (!safe || safe === "/") return "/login";
+  return `/login?redirect=${encodeURIComponent(safe)}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isPublicPath = isPublicPathname(pathname);
 
     if (!isAuthenticated && !isPublicPath) {
-      router.replace("/login");
+      // Preserve the deep link so signing in resumes it instead of dumping the
+      // user on the dashboard having silently lost where they were going.
+      router.replace(loginPathReturningTo(pathname));
     } else if (isAuthenticated && PUBLIC_PATHS.includes(pathname)) {
       // Only redirect away from explicit public paths (login/register), not
       // invite pages. Honour ?redirect= so this effect does not race the
@@ -137,8 +153,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Backend clears both auth cookies.
     api.post("/api/v1/auth/logout").catch(() => {});
     setUser(null);
-    router.replace("/login");
-  }, [router]);
+    // Signing out *from an invitation* means "wrong account, let me switch" — the
+    // only reason to be on that page signed in as someone else. Come back to it
+    // after the next sign-in instead of stranding the invite unaccepted.
+    const returnTo = pathname.startsWith("/invite/") ? pathname : null;
+    router.replace(returnTo ? loginPathReturningTo(returnTo) : "/login");
+  }, [pathname, router]);
 
   const value = useMemo(
     () => ({
