@@ -47,6 +47,12 @@ interface EstimatePanelProps {
   customLines: CustomLineDraft[];
   onChangeCustomLines: (lines: CustomLineDraft[]) => void;
   sides: EstimateSides;
+  /**
+   * Whether this estimate is the one being sold. False when the Quote Builder
+   * hosts the designer: that flow prices from the wizard's own document, so a
+   * line typed here would never reach the quote — better absent than dropped.
+   */
+  allowCustomLines: boolean;
 }
 
 export function EstimatePanel({
@@ -60,6 +66,7 @@ export function EstimatePanel({
   customLines,
   onChangeCustomLines,
   sides,
+  allowCustomLines,
 }: EstimatePanelProps) {
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
@@ -86,8 +93,10 @@ export function EstimatePanel({
       {!hasDesign ? (
         <p className="ep-empty">
           Pick a product on the left and trace it onto the photo. Pricing updates
-          live as you draw — or add a line item below for work that isn&rsquo;t on
-          the photo.
+          live as you draw
+          {allowCustomLines
+            ? " — or add a line item below for work that isn’t on the photo."
+            : "."}
         </p>
       ) : (
         <>
@@ -164,14 +173,16 @@ export function EstimatePanel({
         </>
       )}
 
-      <CustomLines
-        lines={customLines}
-        onChange={onChangeCustomLines}
-        sides={sides}
-        permanentTotal={permanent?.custom_total ?? 0}
-        seasonalTotal={christmas?.custom_total ?? 0}
-        hasPackages={hasPackages}
-      />
+      {allowCustomLines ? (
+        <CustomLines
+          lines={customLines}
+          onChange={onChangeCustomLines}
+          sides={sides}
+          permanentTotal={permanent?.custom_total ?? 0}
+          seasonalTotal={christmas?.custom_total ?? 0}
+          hasPackages={hasPackages}
+        />
+      ) : null}
 
       {hasDesign ? (
         <>
