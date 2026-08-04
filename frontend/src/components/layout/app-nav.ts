@@ -71,10 +71,20 @@ export interface AppNavItem {
 }
 
 export interface AppNavSection {
+  /**
+   * Stable key for the sidebar's open/closed state. Never derive it from the
+   * title — renaming a section must not silently reset which group is open.
+   */
+  id: string;
   title: string;
   items: AppNavItem[];
+  /**
+   * Collapsible sections render closed unless they own the active route (the
+   * sidebar keeps exactly one open). Sections are deliberately kept small — see
+   * `appNavSections` — so an open section plus every other section's header
+   * still fits a 700px-tall laptop window without scrolling.
+   */
   collapsible?: boolean;
-  defaultOpen?: boolean;
   devOnly?: boolean;
 }
 
@@ -135,6 +145,9 @@ export const workspaceNavItems: AppNavItem[] = [
     commandPalette: true,
     badgeKey: "pending-actions",
   },
+];
+
+export const salesNavItems: AppNavItem[] = [
   {
     title: "Opportunities",
     url: "/opportunities",
@@ -190,6 +203,9 @@ export const workspaceNavItems: AppNavItem[] = [
     commandPalette: true,
     requires: "billing:read",
   },
+];
+
+export const customerNavItems: AppNavItem[] = [
   {
     title: "Contacts",
     url: "/contacts",
@@ -218,6 +234,9 @@ export const workspaceNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
   },
+];
+
+export const insightsNavItems: AppNavItem[] = [
   {
     title: "Scorecard",
     url: "/scorecard",
@@ -274,7 +293,7 @@ export const leadDiscoveryNavItems: AppNavItem[] = [
   },
 ];
 
-export const toolsNavItems: AppNavItem[] = [
+export const automationNavItems: AppNavItem[] = [
   {
     title: "AI Agents",
     url: "/agents",
@@ -303,6 +322,23 @@ export const toolsNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
   },
+  {
+    title: "Automations",
+    url: "/automations",
+    icon: Zap,
+    sidebar: true,
+    commandPalette: true,
+  },
+  {
+    title: "Experiments",
+    url: "/experiments",
+    icon: FlaskConical,
+    sidebar: true,
+    commandPalette: true,
+  },
+];
+
+export const marketingNavItems: AppNavItem[] = [
   {
     title: "Offers",
     url: "/offers",
@@ -336,28 +372,9 @@ export const toolsNavItems: AppNavItem[] = [
     sidebar: true,
     commandPalette: true,
   },
-  {
-    title: "Phone Numbers",
-    url: "/phone-numbers",
-    icon: PhoneCall,
-    sidebar: true,
-    commandPalette: true,
-    requires: "comms:manage",
-  },
-  {
-    title: "Automations",
-    url: "/automations",
-    icon: Zap,
-    sidebar: true,
-    commandPalette: true,
-  },
-  {
-    title: "Experiments",
-    url: "/experiments",
-    icon: FlaskConical,
-    sidebar: true,
-    commandPalette: true,
-  },
+];
+
+export const operationsNavItems: AppNavItem[] = [
   {
     title: "Calendar",
     url: "/calendar",
@@ -399,6 +416,17 @@ export const toolsNavItems: AppNavItem[] = [
     commandPalette: true,
     requires: "billing:read",
   },
+];
+
+export const accountNavItems: AppNavItem[] = [
+  {
+    title: "Phone Numbers",
+    url: "/phone-numbers",
+    icon: PhoneCall,
+    sidebar: true,
+    commandPalette: true,
+    requires: "comms:manage",
+  },
   {
     title: "Billing",
     url: "/billing",
@@ -407,9 +435,6 @@ export const toolsNavItems: AppNavItem[] = [
     commandPalette: true,
     requires: "billing:read",
   },
-];
-
-export const accountNavItems: AppNavItem[] = [
   {
     title: "Settings",
     url: "/settings",
@@ -419,32 +444,111 @@ export const accountNavItems: AppNavItem[] = [
   },
 ];
 
+/**
+ * Sidebar information architecture.
+ *
+ * Every section is collapsible and the sidebar keeps exactly one open, so the
+ * resting nav height is `(sections - 1) x 40px + the open section`. Two
+ * sections used to hold 16 and 17 items: with both expanded the nav measured
+ * 1651px against ~570-770px of usable height on a laptop, which left 20-24 of
+ * the 39 destinations off-screen behind an overlay scrollbar that never
+ * appeared until you scrolled. Keep sections at **six items or fewer** so the
+ * open section plus every other section's header still fits a 700px-tall
+ * window; split a section rather than growing it past that.
+ */
 export const appNavSections: AppNavSection[] = [
   {
+    id: "workspace",
     title: "Workspace",
     items: workspaceNavItems,
+    collapsible: true,
   },
   {
+    id: "customers",
+    title: "Customers",
+    items: customerNavItems,
+    collapsible: true,
+  },
+  {
+    id: "sales",
+    title: "Sales",
+    items: salesNavItems,
+    collapsible: true,
+  },
+  {
+    id: "insights",
+    title: "Insights",
+    items: insightsNavItems,
+    collapsible: true,
+  },
+  {
+    id: "lead-discovery",
     title: "Lead Discovery",
     items: leadDiscoveryNavItems,
     collapsible: true,
-    defaultOpen: true,
   },
   {
-    title: "Tools",
-    items: toolsNavItems,
+    id: "marketing",
+    title: "Marketing",
+    items: marketingNavItems,
     collapsible: true,
-    defaultOpen: true,
   },
   {
+    id: "automation",
+    title: "AI & Automation",
+    items: automationNavItems,
+    collapsible: true,
+  },
+  {
+    id: "operations",
+    title: "Operations",
+    items: operationsNavItems,
+    collapsible: true,
+  },
+  {
+    id: "account",
     title: "Account",
     items: accountNavItems,
+    collapsible: true,
   },
 ];
 
-export const commandPaletteNavItems = appNavSections.flatMap((section) =>
-  section.items.filter((item) => item.commandPalette)
+/** Every registered nav item, in sidebar order. */
+export const allNavItems: AppNavItem[] = appNavSections.flatMap(
+  (section) => section.items
 );
+
+export const commandPaletteNavItems = allNavItems.filter(
+  (item) => item.commandPalette
+);
+
+/**
+ * Id of the section that owns `pathname`, or null when no nav item matches.
+ * The sidebar uses this to expand the section you are actually in — including
+ * on a hard load or a deep link from the command palette, where no click ever
+ * opened it. Longest URL match wins so `/reports/sales` resolves to the item
+ * that owns it rather than its `/reports` prefix.
+ */
+export function findNavSectionIdForPath(pathname: string): string | null {
+  let bestId: string | null = null;
+  let bestLength = -1;
+
+  for (const section of appNavSections) {
+    for (const item of section.items) {
+      // Nav URLs may carry a query string (e.g. `/quotes?tab=designer`);
+      // `usePathname()` never does, so compare on the path alone.
+      const url = item.url.split("?")[0];
+      const matches = pathname === url || pathname.startsWith(`${url}/`);
+
+      if (matches && url.length > bestLength) {
+        bestId = section.id;
+        bestLength = url.length;
+      }
+    }
+  }
+
+  return bestId;
+}
 
 export const breadcrumbLabels: Record<string, string> = {
   nudges: "Nudges",

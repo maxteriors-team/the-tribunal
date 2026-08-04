@@ -6,7 +6,15 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { SetupGate } from "@/components/onboarding/setup-gate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -45,8 +53,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { NoWorkspaceGate } from "@/components/workspaces/no-workspace-gate";
 import { useCapabilities } from "@/hooks/useCapabilities";
@@ -58,6 +66,7 @@ import { pendingActionsApi } from "@/lib/api/pending-actions";
 import type { Capability, Tier } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
 
@@ -65,6 +74,7 @@ import {
   appNavSections,
   breadcrumbLabels,
   canSeeNavItem,
+  findNavSectionIdForPath,
   isFieldOperationalPath,
   isNavItemVisible,
   setupNavItem,
@@ -133,6 +143,153 @@ function getVisibleSidebarSections(
       ),
     }))
     .filter((section) => section.items.length > 0);
+}
+
+interface SidebarNavProps {
+  sections: AppNavSection[];
+  renderItem: (item: AppNavItem, options?: { muted?: boolean }) => ReactNode;
+  /** Rendered above the sections (the first-run "Finish setup" entry). */
+  leading?: ReactNode;
+}
+
+/**
+ * The nav list, as an accordion: exactly one section is open at a time and the
+ * section that owns the current route opens itself.
+ *
+ * Rendering every section expanded overflowed the viewport by ~1000px on a
+ * laptop, and macOS overlay scrollbars gave no hint that anything was below the
+ * fold, so most of the CRM looked like it did not exist. One open section plus
+ * the other section headers fits without scrolling; when a workspace's
+ * capabilities do make it scroll, the fade at the bottom edge says so.
+ *
+ * Lives in its own component because it needs `useSidebar()`, which is only
+ * available under the provider that `AppSidebar` renders.
+ */
+function SidebarNav({ sections, renderItem, leading }: SidebarNavProps) {
+  const pathname = usePathname();
+  const { state, isMobile } = useSidebar();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasMoreBelow, setHasMoreBelow] = useState(false);
+
+  // The route picks the open section, and a manual toggle overrides it only for
+  // as long as you stay on that route. Derived rather than synced through an
+  // effect, so a deep link, a command-palette jump, or back/forward all render
+  // with the right section open on the first pass.
+  const activeSectionId = findNavSectionIdForPath(pathname);
+  const [toggled, setToggled] = useState<{
+    path: string;
+    sectionId: string | null;
+  } | null>(null);
+  const openSectionId =
+    toggled?.path === pathname
+      ? toggled.sectionId
+      : activeSectionId ?? sections[0]?.id ?? null;
+
+  // The icon rail hides section headers, so a closed section there would be
+  // both invisible and unopenable. Show every item and let the rail scroll.
+  const isIconRail = state === "collapsed" && !isMobile;
+
+  const syncOverflow = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // 1px slack: fractional scroll heights otherwise leave the cue stuck on.
+    setHasMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }, []);
+
+  // Layout effect + observer: the cue has to be right on first paint and after
+  // every section toggle, capability change, or window resize.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    syncOverflow();
+    const observer = new ResizeObserver(syncOverflow);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+
+    return () => observer.disconnect();
+  }, [syncOverflow, sections, openSectionId, isIconRail]);
+
+  const sectionMenu = (section: AppNavSection) => (
+    <SidebarGroupContent>
+      <SidebarMenu className="gap-0.5">
+        {section.items.map((item) =>
+          renderItem(item, { muted: section.devOnly || item.devOnly }),
+        )}
+      </SidebarMenu>
+    </SidebarGroupContent>
+  );
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <SidebarContent
+        ref={scrollRef}
+        onScroll={syncOverflow}
+        // gap-0: each group carries its own 4px padding, and the base 8px gap
+        // between nine groups cost 64px of nav height for nothing.
+        // group-data-[collapsible=icon]:overflow-y-auto: keep the rail
+        // scrollable when collapsed — the base component hides overflow there,
+        // which stranded every icon below the fold with no way to reach them.
+        className="app-scrollbar gap-0 group-data-[collapsible=icon]:overflow-y-auto"
+      >
+        {leading}
+        {sections.map((section) => {
+          if (!section.collapsible || isIconRail) {
+            return (
+              <SidebarGroup key={section.id} className="py-1">
+                <SidebarGroupLabel className="sticky top-0 z-10 bg-sidebar uppercase tracking-widest">
+                  {section.title}
+                </SidebarGroupLabel>
+                {sectionMenu(section)}
+              </SidebarGroup>
+            );
+          }
+
+          return (
+            <Collapsible
+              key={section.id}
+              open={openSectionId === section.id}
+              onOpenChange={(open) =>
+                setToggled({ path: pathname, sectionId: open ? section.id : null })
+              }
+              className="group/collapsible"
+            >
+              <SidebarGroup className="py-1">
+                <CollapsibleTrigger asChild>
+                  {/* A real button: the group label used to be a div, so the
+                      section could not be opened by keyboard at all.
+                      Only additive utilities on it — `asChild` concatenates
+                      class strings without conflict resolution, so restating
+                      the label's own colour/size/weight would leave two
+                      competing classes and let stylesheet order decide. */}
+                  <SidebarGroupLabel asChild>
+                    <button
+                      type="button"
+                      className="sticky top-0 z-10 w-full cursor-pointer rounded-md bg-sidebar uppercase tracking-widest hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    >
+                      {section.title}
+                      <ChevronDown className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 motion-reduce:transition-none" />
+                    </button>
+                  </SidebarGroupLabel>
+                </CollapsibleTrigger>
+                <CollapsibleContent>{sectionMenu(section)}</CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
+          );
+        })}
+      </SidebarContent>
+
+      {/* Overlay scrollbars stay invisible until you scroll, so this fade is the
+          only resting cue that the list continues below. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-sidebar via-sidebar/70 to-transparent transition-opacity duration-200 motion-reduce:transition-none",
+          hasMoreBelow ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </div>
+  );
 }
 
 interface AppSidebarProps {
@@ -242,16 +399,6 @@ export function AppSidebar({ children }: AppSidebarProps) {
     );
   };
 
-  const renderSectionMenu = (section: AppNavSection) => (
-    <SidebarGroupContent>
-      <SidebarMenu>
-        {section.items.map((item) =>
-          renderSidebarItem(item, { muted: section.devOnly || item.devOnly })
-        )}
-      </SidebarMenu>
-    </SidebarGroupContent>
-  );
-
   const { tier, can } = useCapabilities();
   const visibleSidebarSections = getVisibleSidebarSections(tier, can);
   // The setup entry is rendered outside the sections above, so it has to go
@@ -282,43 +429,19 @@ export function AppSidebar({ children }: AppSidebarProps) {
           <WorkspaceSwitcher />
         </SidebarHeader>
 
-        <SidebarContent className="app-scrollbar">
-          {showSetupNav && (
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>{renderSidebarItem(setupNavItem)}</SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          )}
-          {visibleSidebarSections.map((section, index) => (
-            <Fragment key={section.title}>
-              {index > 0 && <SidebarSeparator />}
-              {section.collapsible ? (
-                <Collapsible
-                  defaultOpen={section.defaultOpen}
-                  className="group/collapsible"
-                >
-                  <SidebarGroup>
-                    <CollapsibleTrigger asChild>
-                      <SidebarGroupLabel className="cursor-pointer rounded-md text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 hover:bg-sidebar-accent">
-                        {section.title}
-                        <ChevronDown className="ml-auto size-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                      </SidebarGroupLabel>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>{renderSectionMenu(section)}</CollapsibleContent>
-                  </SidebarGroup>
-                </Collapsible>
-              ) : (
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">
-                    {section.title}
-                  </SidebarGroupLabel>
-                  {renderSectionMenu(section)}
-                </SidebarGroup>
-              )}
-            </Fragment>
-          ))}
-        </SidebarContent>
+        <SidebarNav
+          sections={visibleSidebarSections}
+          renderItem={renderSidebarItem}
+          leading={
+            showSetupNav ? (
+              <SidebarGroup className="py-1">
+                <SidebarGroupContent>
+                  <SidebarMenu>{renderSidebarItem(setupNavItem)}</SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ) : null
+          }
+        />
 
         <SidebarFooter className="border-t border-sidebar-border">
           <SidebarMenu>
