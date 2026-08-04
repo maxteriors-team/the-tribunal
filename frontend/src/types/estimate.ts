@@ -8,6 +8,11 @@ type Schemas = components["schemas"];
 
 export type LinearFeetEstimateRequest = Schemas["LinearFeetEstimateRequest"];
 export type LinearFeetEstimateResult = Schemas["LinearFeetEstimateResult"];
+// A standalone rep-entered line (a bucket-truck fee, a one-off custom install)
+// that rides on top of a side's total, independent of any Good/Better/Best
+// package. `EstimateCustomLineCost` is the same line with the server's amount.
+export type EstimateCustomLine = Schemas["EstimateCustomLine"];
+export type EstimateCustomLineCost = Schemas["EstimateCustomLineCost"];
 // Convert a measured estimate into a real draft quote (the design->quote step).
 export type EstimateQuoteRequest = Schemas["EstimateQuoteRequest"];
 export type QuoteDetailResponse = Schemas["QuoteDetailResponse"];

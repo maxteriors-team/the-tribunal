@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 
 import structlog
 from sqlalchemy import select, update
@@ -41,6 +42,8 @@ from app.schemas.estimate import (
     ComparisonDeliverResult,
     ComparisonShareRequest,
     ComparisonShareResult,
+    EstimateCustomLine,
+    EstimateCustomLineCost,
     EstimateQuoteRequest,
     EstimateRenderRequest,
     EstimateRenderResult,
@@ -49,12 +52,14 @@ from app.schemas.estimate import (
     PermanentEstimate,
     PublicChristmasComparison,
     PublicComparison,
+    PublicComparisonLine,
     PublicComparisonPackage,
     PublicPermanentComparison,
     PublicRooflineComparison,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
+    CategoryLine,
     ChristmasPricing,
     FinancingEstimate,
     PackagePricing,
@@ -1789,6 +1794,75 @@ class QuoteService:
         )
 
     @staticmethod
+    def _price_custom_lines(
+        lines: Sequence[EstimateCustomLine], side: str
+    ) -> list[EstimateCustomLineCost]:
+        """Price one side's standalone lines: quantity × unit price, cent-rounded.
+
+        No gross-up. Every other figure on an estimate starts as a *net* rate the
+        engine marks up; a standalone line is the rep typing the client-facing
+        amount directly, so marking it up again would quietly overcharge the
+        number they just quoted out loud in the driveway.
+        """
+        return [
+            EstimateCustomLineCost(
+                **line.model_dump(),
+                amount=round(float(line.quantity) * float(line.unit_price), 2),
+            )
+            for line in lines
+            if line.side == side
+        ]
+
+    @staticmethod
+    def _with_custom_lines[PricingT: PermanentPricing | ChristmasPricing](
+        pricing: PricingT, lines: Sequence[EstimateCustomLineCost]
+    ) -> PricingT:
+        """Fold priced standalone lines into a side's breakdown and its total.
+
+        ``raw_total`` and ``total`` move together, so ``total - raw_total`` (the
+        job-minimum shortfall :meth:`_estimate_line_items` reconciles) is
+        untouched: an add-on tops up a job that already met the minimum instead
+        of being swallowed by it. The lines land at the end of the breakdown,
+        which is where they read on a quote.
+
+        A multiple carries into the label ("3 × Bucket truck day") the way decor
+        labels carry their feet, because :meth:`_estimate_line_items` emits every
+        line at quantity 1 priced at its authoritative total — so without this
+        the count would be lost on the way to the quote.
+        """
+        if not lines:
+            return pricing
+        subtotal = round(sum(line.amount for line in lines), 2)
+        # ``model_copy`` returns the same concrete model; mypy widens it to the
+        # TypeVar's bound, so the cast restores what the caller passed in.
+        return cast(
+            "PricingT",
+            pricing.model_copy(
+                update={
+                    "lines": [
+                        *pricing.lines,
+                        *(
+                            CategoryLine(
+                                label=(
+                                    line.label
+                                    if line.quantity == 1
+                                    else f"{line.quantity:g} × {line.label}"
+                                ),
+                                detail=line.description,
+                                quantity=line.quantity,
+                                unit_price=line.unit_price,
+                                line_total=line.amount,
+                            )
+                            for line in lines
+                        ),
+                    ],
+                    "raw_total": round(float(pricing.raw_total) + subtotal, 2),
+                    "total": round(float(pricing.total) + subtotal, 2),
+                }
+            ),
+        )
+
+    @staticmethod
     def _christmas_config_with_override(
         config: PricingSettings, roofline_override: float | None
     ) -> PricingSettings:
@@ -1818,18 +1892,31 @@ class QuoteService:
         adjust the permanent and seasonal linear-foot rates for this estimate via
         throwaway config copies, so the workspace's customer-facing pricing is
         never mutated. Each override affects only its own side.
+
+        Standalone ``custom_lines`` are added to the side they name, after the
+        engine has priced that side. They are intentionally left *out* of the
+        package ladder and out of both ``roofline_cost`` figures, so a tier card
+        still quotes its own scope and the roofline-vs-roofline block stays a
+        like-for-like comparison of the same run of lights.
         """
         perm_config = QuoteService._permanent_config_with_override(config, req.per_ft_override)
         xmas_config = QuoteService._christmas_config_with_override(
             config, req.christmas_per_ft_override
         )
-        perm = price_permanent(perm_config, feet=req.feet, channels=req.channels)
-        xmas = price_christmas(
-            xmas_config,
-            roofline_feet=req.feet,
-            items=req.christmas_items,
-            takedown=req.takedown,
-            storage=req.storage,
+        perm_custom = QuoteService._price_custom_lines(req.custom_lines, "permanent")
+        xmas_custom = QuoteService._price_custom_lines(req.custom_lines, "seasonal")
+        perm = QuoteService._with_custom_lines(
+            price_permanent(perm_config, feet=req.feet, channels=req.channels), perm_custom
+        )
+        xmas = QuoteService._with_custom_lines(
+            price_christmas(
+                xmas_config,
+                roofline_feet=req.feet,
+                items=req.christmas_items,
+                takedown=req.takedown,
+                storage=req.storage,
+            ),
+            xmas_custom,
         )
         # When the workspace sells Christmas as Good/Better/Best packages, price
         # every package from the same measurement so the rep tool can render tier
@@ -1871,12 +1958,18 @@ class QuoteService:
                 total=perm_total,
                 per_ft=float(perm.per_ft),
                 roofline_cost=float(perm.roofline_cost) if perm_enabled else 0.0,
+                custom_total=(
+                    round(sum(line.amount for line in perm_custom), 2) if perm_enabled else 0.0
+                ),
             ),
             christmas=ChristmasEstimate(
                 enabled=xmas_enabled,
                 total=xmas_total,
                 per_ft=float(xmas_config.christmas.roofline_per_ft),
                 roofline_cost=float(xmas.roofline_cost) if xmas_enabled else 0.0,
+                custom_total=(
+                    round(sum(line.amount for line in xmas_custom), 2) if xmas_enabled else 0.0
+                ),
                 items=list(xmas.items) if xmas_enabled else [],
             ),
             difference=difference,
@@ -1888,6 +1981,15 @@ class QuoteService:
             christmas_perks=list(config.christmas.perks),
             christmas_catalog=list(config.christmas.items),
             christmas_packages=christmas_packages,
+            # Grouped by side (request order within each), and lines belonging to
+            # a service this workspace doesn't sell are dropped rather than shown
+            # against a total they were never added to.
+            custom_lines=[
+                line
+                for line in (*perm_custom, *xmas_custom)
+                if (line.side == "permanent" and perm_enabled)
+                or (line.side == "seasonal" and xmas_enabled)
+            ],
         )
 
     async def estimate_linear_feet(
@@ -1911,16 +2013,20 @@ class QuoteService:
 
         Returns ``(quote_title, pricing)``. The seasonal side prices the selected
         Good/Better/Best package when one is chosen and packages are enabled,
-        else the à la carte roofline+decor. Raises :class:`ValidationError` when
-        the requested side isn't enabled for the workspace, so the rep gets an
-        actionable message instead of an empty quote.
+        else the à la carte roofline+decor. The rep's standalone lines for that
+        side are appended either way, so an add-on the customer agreed to on the
+        estimate becomes a real line on the quote instead of evaporating at
+        conversion. Raises :class:`ValidationError` when the requested side isn't
+        enabled for the workspace, so the rep gets an actionable message instead
+        of an empty quote.
         """
+        custom = self._price_custom_lines(req.custom_lines, req.side)
         if req.side == "permanent":
             if not config.permanent.enabled:
                 raise ValidationError("Permanent lighting isn't enabled for this workspace.")
             perm_config = self._permanent_config_with_override(config, req.per_ft_override)
-            pricing: PermanentPricing | ChristmasPricing = price_permanent(
-                perm_config, feet=req.feet, channels=req.channels
+            pricing: PermanentPricing | ChristmasPricing = self._with_custom_lines(
+                price_permanent(perm_config, feet=req.feet, channels=req.channels), custom
             )
             return config.permanent.label, pricing
 
@@ -1933,21 +2039,27 @@ class QuoteService:
                 None,
             )
             if package is not None:
-                pricing = price_christmas_package(
-                    xmas_config,
-                    package,
-                    roofline_feet=req.feet,
-                    items=req.christmas_items,
-                    takedown=req.takedown,
-                    storage=req.storage,
+                pricing = self._with_custom_lines(
+                    price_christmas_package(
+                        xmas_config,
+                        package,
+                        roofline_feet=req.feet,
+                        items=req.christmas_items,
+                        takedown=req.takedown,
+                        storage=req.storage,
+                    ),
+                    custom,
                 )
                 return f"{config.christmas.label} — {package.name or package.label}", pricing
-        pricing = price_christmas(
-            xmas_config,
-            roofline_feet=req.feet,
-            items=req.christmas_items,
-            takedown=req.takedown,
-            storage=req.storage,
+        pricing = self._with_custom_lines(
+            price_christmas(
+                xmas_config,
+                roofline_feet=req.feet,
+                items=req.christmas_items,
+                takedown=req.takedown,
+                storage=req.storage,
+            ),
+            custom,
         )
         return config.christmas.label, pricing
 
@@ -2108,6 +2220,10 @@ class QuoteService:
             ),
             christmas_items=req.christmas_items or None,
             selected_package=req.selected_package or None,
+            # Stored as inputs, like every other field here: the amounts are
+            # recomputed on each public view so a fixed typo shows up on the link
+            # the client already has.
+            custom_lines=[line.model_dump() for line in req.custom_lines] or None,
             client_name=req.client_name,
             label=req.label,
             contact_id=contact_id,
@@ -2257,6 +2373,10 @@ class QuoteService:
                 christmas_per_ft_override=comparison.christmas_per_ft_override,
                 christmas_items=comparison.christmas_items or {},
                 selected_package=comparison.selected_package,
+                custom_lines=[
+                    EstimateCustomLine.model_validate(line)
+                    for line in (comparison.custom_lines or [])
+                ],
             ),
         )
 
@@ -2273,8 +2393,13 @@ class QuoteService:
         recommended = _resolve_recommended_package(
             computed.christmas_packages, comparison.selected_package
         )
+        # A package total covers that package's scope only, so the rep's
+        # standalone lines are added back here — without this the client's
+        # headline would quietly drop every add-on the moment packages are on.
         christmas_total = (
-            recommended.pricing.total if recommended is not None else computed.christmas.total
+            round(recommended.pricing.total + computed.christmas.custom_total, 2)
+            if recommended is not None
+            else computed.christmas.total
         )
 
         return PublicComparison(
@@ -2300,6 +2425,17 @@ class QuoteService:
             christmas_packages=christmas_packages,
             # Opt-in roofline-vs-roofline cost block; None keeps today's payload.
             roofline=build_public_roofline_comparison(config, computed),
+            # Itemized so the client sees what the add-ons on their price are.
+            custom_lines=[
+                PublicComparisonLine(
+                    label=line.label,
+                    description=line.description,
+                    quantity=line.quantity,
+                    amount=line.amount,
+                    side=line.side,
+                )
+                for line in computed.custom_lines
+            ],
         )
 
     # ------------------------------------------------------------------

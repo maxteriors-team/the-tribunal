@@ -58,7 +58,9 @@ export type EditorAction =
   | {
       type: "UPDATE_ITEM";
       id: string;
-      patch: Partial<Pick<PlacedItem, "at" | "sizePx" | "productId">>;
+      patch: Partial<
+        Pick<PlacedItem, "at" | "sizePx" | "productId" | "beamAngleDeg">
+      >;
       transient?: boolean;
     }
   | { type: "DELETE_ITEM"; id: string }

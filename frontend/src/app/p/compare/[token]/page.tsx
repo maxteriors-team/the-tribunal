@@ -104,6 +104,9 @@ export default function PublicComparisonPage({
           // Roofline-only cost comparison; null unless the workspace turned it on
           // and sells both options, so the default page is unchanged. Costs only.
           roofline: data.roofline,
+          // Add-ons the rep put on this estimate, itemized so a price the
+          // homeowner didn't expect always has a line that explains it.
+          customLines: data.custom_lines,
         }}
       />
     </div>

@@ -57,6 +57,58 @@ export function isLandscapeStyle(style: RenderStyle): boolean {
 }
 
 /**
+ * Landscape styles that throw a **cone** and therefore have a beam angle. A path
+ * light pools light on the ground rather than aiming a beam, so its spread is
+ * its pool diameter (the throw) and it is deliberately absent here.
+ */
+export const BEAM_STYLES = [
+  "uplight",
+  "ingrade",
+  "downlight",
+] as const satisfies readonly RenderStyle[];
+
+export type BeamStyle = (typeof BEAM_STYLES)[number];
+
+/**
+ * Default beam spread in degrees per fixture type — the lamp a package ships
+ * with by default. These are the standard landscape-lamp spreads (a narrow-spot
+ * in-grade grazing a wall, a spot uplight on a column, a flood washing down from
+ * a soffit), so the number a rep edits is the one printed on the lamp box.
+ */
+export const DEFAULT_BEAM_ANGLE_DEG: Record<BeamStyle, number> = {
+  ingrade: 15,
+  uplight: 30,
+  downlight: 36,
+};
+
+/** Spread limits: narrower than a pinspot / wider than a wall wash is not a lamp. */
+export const MIN_BEAM_ANGLE_DEG = 5;
+export const MAX_BEAM_ANGLE_DEG = 120;
+
+/** Whether a style throws an editable beam (vs a ground pool or a strand). */
+export function hasBeamAngle(style: RenderStyle): style is BeamStyle {
+  return (BEAM_STYLES as readonly RenderStyle[]).includes(style);
+}
+
+export function clampBeamAngle(deg: number): number {
+  if (!Number.isFinite(deg)) return MIN_BEAM_ANGLE_DEG;
+  return Math.min(Math.max(deg, MIN_BEAM_ANGLE_DEG), MAX_BEAM_ANGLE_DEG);
+}
+
+/**
+ * The spread a fixture actually renders at: the item's own override when the rep
+ * has tuned it, else the type's default lamp. `null` for anything that doesn't
+ * throw a cone, so callers can't accidentally give a path light a beam.
+ */
+export function beamAngleFor(
+  style: RenderStyle,
+  override?: number | null,
+): number | null {
+  if (!hasBeamAngle(style)) return null;
+  return clampBeamAngle(override ?? DEFAULT_BEAM_ANGLE_DEG[style]);
+}
+
+/**
  * Where a drawn product's measured quantity lands in the server estimate
  * request. The canvas only produces feet/counts; every dollar is still computed
  * server-side, so a product just declares its destination:
@@ -135,6 +187,14 @@ export interface PlacedItem {
   at: Point;
   /** Rendered size (diameter / height) in image pixels. */
   sizePx: number;
+  /**
+   * Per-fixture beam spread in degrees, overriding the type's default lamp
+   * (see `DEFAULT_BEAM_ANGLE_DEG`). Optional so existing designs stay valid, and
+   * ignored for styles that throw no cone. Changes what the customer sees on the
+   * photo — a 15° graze up a column versus a 60° wash — and never the count, so
+   * the quantity that reaches the quote is untouched.
+   */
+  beamAngleDeg?: number;
 }
 
 export interface Calibration {

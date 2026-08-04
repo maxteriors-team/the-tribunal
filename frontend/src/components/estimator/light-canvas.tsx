@@ -35,6 +35,8 @@ import {
 import { loadImage } from "@/lib/estimator/photo";
 import {
   MAX_DUSK,
+  beamAngleAt,
+  beamHandlePos,
   drawScene,
   itemHit,
   resizeHandlePos,
@@ -61,6 +63,7 @@ type Drag =
   | { mode: "run"; runId: string; start: Point; points: Point[]; before: Design }
   | { mode: "item"; itemId: string; offset: Point; before: Design }
   | { mode: "resize"; itemId: string; before: Design }
+  | { mode: "beam"; itemId: string; before: Design }
   | { mode: "cal-a" | "cal-b"; before: Design };
 
 interface LightCanvasProps {
@@ -574,6 +577,13 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
             dragRef.current = { mode: "resize", itemId: item.id, before: design };
             return;
           }
+          // Throw first, then spread: on a tight beam the two grips crowd each
+          // other, and resizing the throw is the gesture a rep reaches for more.
+          const spreadGrip = item ? beamHandlePos(item, itemProduct) : null;
+          if (item && spreadGrip && distance(spreadGrip, p) < slack * 1.6) {
+            dragRef.current = { mode: "beam", itemId: item.id, before: design };
+            return;
+          }
         }
         // 2) items (topmost first)
         for (let i = design.items.length - 1; i >= 0; i -= 1) {
@@ -708,6 +718,17 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: { sizePx },
+          transient: true,
+        });
+        return;
+      }
+      case "beam": {
+        const item = design.items.find((i) => i.id === drag.itemId);
+        if (!item) return;
+        dispatch({
+          type: "UPDATE_ITEM",
+          id: drag.itemId,
+          patch: { beamAngleDeg: beamAngleAt(item, p) },
           transient: true,
         });
         return;

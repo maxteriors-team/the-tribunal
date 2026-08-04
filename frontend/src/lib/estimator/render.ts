@@ -13,7 +13,7 @@
  */
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
-import { isLandscapeStyle } from "./types";
+import { beamAngleFor, clampBeamAngle, isLandscapeStyle } from "./types";
 import type {
   Calibration,
   Design,
@@ -243,25 +243,22 @@ function sagPoints(a: Point, b: Point, spacing: number): Point[] {
  * Beam geometry for a landscape fixture, in image pixels.
  *
  * `sizePx` is always the **throw** the rep dragged: how far the light reaches.
- * `dir` is -1 for fixtures that aim up from the ground and +1 for a downlight
- * throwing from a soffit or a tree, so one cone routine covers both. Path lights
- * have no cone (they pool on the ground) and return `null`.
+ * `beamAngleDeg` is the lamp's spread; the width at the end of the throw is the
+ * honest trigonometry of that cone (`2 · reach · tan(angle/2)`), so swapping a
+ * 15° narrow spot for a 60° wide flood reads on the photo the way it will read
+ * on the house. `dir` is -1 for fixtures that aim up from the ground and +1 for
+ * a downlight throwing from a soffit or a tree, so one cone routine covers both.
+ * Path lights have no cone (they pool on the ground) and return `null`.
  */
 function beamGeometry(
   style: RenderStyle,
   sizePx: number,
+  beamAngleDeg?: number,
 ): { reach: number; topW: number; dir: -1 | 1 } | null {
-  switch (style) {
-    // In-grade is flush in the ground: a tight, dramatic graze up a wall.
-    case "ingrade":
-      return { reach: sizePx, topW: sizePx * 0.26, dir: -1 };
-    case "uplight":
-      return { reach: sizePx, topW: sizePx * 0.52, dir: -1 };
-    case "downlight":
-      return { reach: sizePx, topW: sizePx * 0.62, dir: 1 };
-    default:
-      return null;
-  }
+  const angle = beamAngleFor(style, beamAngleDeg);
+  if (angle === null) return null;
+  const spread = 2 * Math.tan((angle * Math.PI) / 360);
+  return { reach: sizePx, topW: sizePx * spread, dir: style === "downlight" ? 1 : -1 };
 }
 
 /** Ground-pool geometry (path light, and the splash under a downlight). */
@@ -314,7 +311,7 @@ function drawLandscapeFixture(
     return;
   }
 
-  const beam = beamGeometry(product.style, size);
+  const beam = beamGeometry(product.style, size, item.beamAngleDeg);
   if (!beam) return;
   const { reach, topW, dir } = beam;
   const baseW = Math.max(1.5, topW * 0.18);
@@ -550,6 +547,10 @@ export function drawScene(
       // rather than drawing a circle centred on a light that only goes up.
       drawFixtureSelection(ctx, item, product, vs);
       handleSquare(ctx, resizeHandlePos(item, product), 5 / vs);
+      // Second, gold grip on the cone's edge: throw is white, spread is gold, so
+      // the two grips can't be confused for each other mid-demo.
+      const spreadGrip = beamHandlePos(item, product);
+      if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
     } else if (item) {
       const r = item.sizePx / 2 + 6 / vs;
       ctx.save();
@@ -601,7 +602,7 @@ export function withRunOverrides(product: Product, run: Run): Product {
  */
 export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
   if (product && isLandscapeStyle(product.style)) {
-    const beam = beamGeometry(product.style, item.sizePx);
+    const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
     if (!beam) {
       const r = item.sizePx / 2;
       return { x: item.at.x + r, y: item.at.y + r * POOL_SQUASH };
@@ -611,6 +612,38 @@ export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
   const r = item.sizePx / 2;
   const d = r * Math.SQRT1_2 + 0.35 * r;
   return { x: item.at.x + d, y: item.at.y + d };
+}
+
+/**
+ * Where the beam-spread grip sits: the outer edge of the cone at the end of the
+ * throw. Dragging it opens or closes the beam, which is the one property of a
+ * landscape fixture a rep argues about on site ("that's washing the whole wall,
+ * I want it grazing the column"). `null` for anything without a cone — a path
+ * light's spread *is* its pool, already dragged by the resize grip.
+ */
+export function beamHandlePos(
+  item: PlacedItem,
+  product?: Product,
+): Point | null {
+  if (!product) return null;
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
+  if (!beam) return null;
+  return {
+    x: item.at.x + beam.topW / 2,
+    y: item.at.y + beam.dir * beam.reach,
+  };
+}
+
+/**
+ * The beam angle that puts the cone's edge under the pointer, in degrees.
+ *
+ * Only the sideways distance is read: the throw stays exactly where the rep set
+ * it, so opening the beam never also stretches how far the light reaches.
+ */
+export function beamAngleAt(item: PlacedItem, p: Point): number {
+  const reach = Math.max(item.sizePx, 1);
+  const half = Math.atan2(Math.abs(p.x - item.at.x), reach);
+  return clampBeamAngle((half * 360) / Math.PI);
 }
 
 /** Dashed outline of a landscape fixture's throw, drawn while it is selected. */
@@ -625,7 +658,7 @@ function drawFixtureSelection(
   ctx.strokeStyle = "rgba(245,200,66,0.9)";
   ctx.lineWidth = 1.6 / vs;
   ctx.setLineDash([7 / vs, 5 / vs]);
-  const beam = beamGeometry(product.style, item.sizePx);
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
   if (!beam) {
     const r = item.sizePx / 2;
     ctx.beginPath();

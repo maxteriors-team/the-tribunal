@@ -83,6 +83,13 @@ class RooflineComparison(Base):
     # package was chosen. Only the total ever reaches the public payload.
     selected_package: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
+    # Standalone lines the rep added outside the price book and outside any
+    # package (a bucket-truck fee, a one-off custom install). Stored as the rep's
+    # inputs — ``{label, description, quantity, unit_price, side}`` per
+    # :class:`app.schemas.estimate.EstimateCustomLine` — and re-priced on every
+    # public view like the rest of the estimate. NULL means none were added.
+    custom_lines: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+
     # Optional presentation context shown to the client / used internally.
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     label: Mapped[str | None] = mapped_column(String(200), nullable=True)

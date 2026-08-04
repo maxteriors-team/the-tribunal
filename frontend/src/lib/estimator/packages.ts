@@ -32,3 +32,20 @@ export function resolveSelectedPackage(
 export function packageName(pkg: ChristmasPackagePricing): string {
   return pkg.name ?? pkg.label;
 }
+
+/**
+ * The seasonal price the client is quoted.
+ *
+ * A package card prices that package's own scope, so the rep's standalone lines
+ * (which sit outside every package) are added back here; the à la carte total
+ * already includes them. Mirrors the server's ``get_public_comparison``, so the
+ * rep's preview and the page the homeowner opens never disagree.
+ */
+export function seasonalTotal(
+  christmas: { total: number; custom_total?: number },
+  selectedPkg: ChristmasPackagePricing | null,
+): number {
+  if (!selectedPkg) return christmas.total;
+  const total = selectedPkg.pricing.total + (christmas.custom_total ?? 0);
+  return Math.round(total * 100) / 100;
+}

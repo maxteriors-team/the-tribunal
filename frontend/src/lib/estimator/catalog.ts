@@ -73,6 +73,39 @@ export function bulbSizeNameFor(scale: number): string {
   return best;
 }
 
+/**
+ * Quick-toggle beam spreads for a placed landscape fixture, in degrees.
+ *
+ * These are the lamp spreads actually stocked for landscape work (pinspot
+ * through wide flood), so picking one here is picking the lamp the crew
+ * installs — not an arbitrary slider position. Visual only, exactly like
+ * `BULB_SIZE_OPTIONS`: the fixture count that reaches the quote is unchanged by
+ * the beam it throws.
+ */
+export interface BeamAngleOption {
+  deg: number;
+  name: string;
+  /** What that spread is for, shown as the chip's tooltip. */
+  blurb: string;
+}
+
+export const BEAM_ANGLE_OPTIONS: readonly BeamAngleOption[] = [
+  { deg: 10, name: "Very narrow", blurb: "Pinspot — a single column or statue" },
+  { deg: 15, name: "Narrow spot", blurb: "Tight graze up a wall or a chimney" },
+  { deg: 24, name: "Spot", blurb: "Standard accent on a tree or a column" },
+  { deg: 36, name: "Flood", blurb: "Washes a facade section or a wide canopy" },
+  { deg: 60, name: "Wide flood", blurb: "Broad wash over hardscape or planting" },
+];
+
+/** Nearest named beam spread for an angle (for the palette readout). */
+export function beamAngleNameFor(deg: number): string {
+  let best = BEAM_ANGLE_OPTIONS[0];
+  for (const option of BEAM_ANGLE_OPTIONS) {
+    if (Math.abs(option.deg - deg) < Math.abs(best.deg - deg)) best = option;
+  }
+  return best.name;
+}
+
 /** Quick-toggle bulb spacing choices per light style (inches). */
 export const SPACING_OPTIONS: Record<RenderStyle, number[]> = {
   c9: [9, 12, 15, 18],

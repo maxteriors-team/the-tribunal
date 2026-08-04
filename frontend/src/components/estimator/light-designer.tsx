@@ -34,6 +34,10 @@ import {
   indexProducts,
 } from "@/lib/estimator/catalog";
 import {
+  toEstimateCustomLines,
+  type CustomLineDraft,
+} from "@/lib/estimator/custom-lines";
+import {
   designScale,
   designToEstimateInputs,
   hasDesign,
@@ -46,7 +50,11 @@ import {
   resolveTierFixtures,
   type FixtureType,
 } from "@/lib/estimator/fixtures";
-import { resolveSelectedPackage, packageName } from "@/lib/estimator/packages";
+import {
+  resolveSelectedPackage,
+  packageName,
+  seasonalTotal,
+} from "@/lib/estimator/packages";
 import { fileToPhoto } from "@/lib/estimator/photo";
 import {
   SERVICES,
@@ -149,6 +157,9 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<
     number | null
   >(null);
+  // Standalone lines the rep typed for work the price book doesn't carry. Held
+  // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
+  const [customLines, setCustomLines] = useState<CustomLineDraft[]>([]);
 
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
@@ -273,6 +284,11 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const fixtureCount = fixtureLines.reduce((sum, line) => sum + line.count, 0);
   const hasLandscape = fixtureCount > 0 || inputs.bistro_feet > 0;
 
+  const customLineInputs = useMemo(
+    () => toEstimateCustomLines(customLines),
+    [customLines],
+  );
+
   const estimateParams = useMemo<LinearFeetEstimateRequest>(
     () => ({
       feet,
@@ -283,6 +299,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
       christmas_per_ft_override: christmasPerFtOverride,
       christmas_items: inputs.christmas_items,
       selected_package: selectedPackage,
+      custom_lines: customLineInputs,
     }),
     [
       feet,
@@ -292,13 +309,18 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
       christmasPerFtOverride,
       inputs.christmas_items,
       selectedPackage,
+      customLineInputs,
     ],
   );
 
   // Holiday pricing only: a landscape-only design has nothing for the roofline
-  // comparison endpoint to price, and the Quote Builder owns landscape money.
+  // comparison endpoint to price, and the Quote Builder owns landscape money. A
+  // standalone line item is priced on its own, with or without a drawing — that
+  // is the point of it — so it counts as something to price, share, and quote.
   const hasHolidayDesign =
-    feet > 0 || Object.keys(inputs.christmas_items).length > 0;
+    feet > 0 ||
+    Object.keys(inputs.christmas_items).length > 0 ||
+    customLineInputs.length > 0;
 
   const { data: estimate, isFetching } = useQuery({
     queryKey: queryKeys.estimator.compute(workspaceId, estimateParams),
@@ -308,6 +330,13 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
     staleTime: 60_000,
   });
 
+  // Which sides a line item can be billed on. Falls back to the catalog probe so
+  // the editor is available before anything is drawn — the standalone case.
+  const sides = {
+    permanent: Boolean((estimate ?? catalog)?.permanent.enabled),
+    seasonal: Boolean((estimate ?? catalog)?.christmas.enabled),
+  };
+
   // Resolve the seasonal package the rep is selling (explicit pick, else the
   // most-inclusive one). When packages are active the client sees this package's
   // total as the seasonal price, so the preview and the persisted share both
@@ -316,9 +345,15 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
     estimate?.christmas_packages ?? [],
     selectedPackage,
   );
-  const christmasTotal = selectedPkg
-    ? selectedPkg.pricing.total
-    : (estimate?.christmas.total ?? 0);
+  // The package's own total plus any standalone lines (which sit outside every
+  // package); à la carte already includes them. Same rule the server applies.
+  const christmasTotal = seasonalTotal(
+    {
+      total: estimate?.christmas.total ?? 0,
+      custom_total: estimate?.christmas.custom_total,
+    },
+    selectedPkg,
+  );
 
   // Mirror of the server's ``build_public_roofline_comparison`` so the preview
   // shows exactly what the shared page will render (same pattern as
@@ -368,6 +403,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
       setPerFtOverride(null);
       setChristmasPerFtOverride(null);
       setSelectedPackage(null);
+      setCustomLines([]);
       resetShare();
     } catch {
       window.alert("Could not read that image file.");
@@ -533,6 +569,15 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
           experience: pkg.experience,
         })),
         roofline: rooflineView,
+        // Server-priced add-ons, itemized for the client exactly as the shared
+        // page lists them — the preview is what the homeowner will see.
+        customLines: (estimate.custom_lines ?? []).map((line) => ({
+          label: line.label,
+          description: line.description,
+          quantity: line.quantity,
+          amount: line.amount,
+          side: line.side,
+        })),
       }
     : null;
 
@@ -733,6 +778,9 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
                   hasDesign={hasHolidayDesign}
                   selectedPackage={selectedPackage}
                   onSelectPackage={setSelectedPackage}
+                  customLines={customLines}
+                  onChangeCustomLines={setCustomLines}
+                  sides={sides}
                 />
               ) : null}
 

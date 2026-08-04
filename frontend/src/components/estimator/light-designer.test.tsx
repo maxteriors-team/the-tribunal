@@ -48,6 +48,8 @@ vi.mock("@/lib/estimator/render", () => ({
   drawScene: vi.fn(),
   itemHit: vi.fn(() => false),
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
+  beamHandlePos: vi.fn(() => null),
+  beamAngleAt: vi.fn(() => 30),
   DEFAULT_DUSK: 0.52,
   MAX_DUSK: 0.92,
 }));
@@ -70,12 +72,13 @@ vi.mock("@/lib/estimator/design", () => ({
 
 const ESTIMATE: LinearFeetEstimateResult = {
   feet: 100,
-  permanent: { enabled: true, total: 3300, per_ft: 32, roofline_cost: 3200 },
+  permanent: { enabled: true, total: 3300, per_ft: 32, roofline_cost: 3200, custom_total: 0 },
   christmas: {
     enabled: true,
     total: 900,
     per_ft: 6,
     roofline_cost: 600,
+    custom_total: 0,
     items: [{ key: "wreaths", label: "Wreaths", unit: "each", cost: 96 }],
   },
   difference: 2400,
@@ -708,4 +711,161 @@ describe("LightDesigner", () => {
     // Permanent isn't being sold here, so its pitch stays off the page.
     expect(screen.queryByText("Never hang lights again")).toBeNull();
   });
+  // ---- Standalone line items (independent of packages) -------------------
+
+  /** Fill the newest line-item row with a label and a price. */
+  async function fillLineItem(label: string, price: string) {
+    // The editor appears once the workspace's priced sides are known.
+    fireEvent.click(await screen.findByRole("button", { name: /Add line item/i }));
+    const labels = screen.getAllByLabelText(/Line item description/i);
+    const prices = screen.getAllByLabelText(/^Line item price$/i);
+    const row = labels.length - 1;
+    fireEvent.change(labels[row], { target: { value: label } });
+    fireEvent.change(prices[row], { target: { value: price } });
+  }
+
+  it("sends a standalone line item to the server for pricing", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    await fillLineItem("Bucket truck day", "150");
+
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          custom_lines: [
+            {
+              label: "Bucket truck day",
+              quantity: 1,
+              unit_price: 150,
+              side: "seasonal",
+            },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("keeps a half-typed line out of the priced request", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    // A row with a name but no price yet must not price as $0 mid-keystroke.
+    fireEvent.click(await screen.findByRole("button", { name: /Add line item/i }));
+    fireEvent.change(screen.getByLabelText(/Line item description/i), {
+      target: { value: "Still typing" },
+    });
+
+    await waitFor(() => expect(estimatorApi.estimate).toHaveBeenCalled());
+    expect(estimatorApi.estimate).not.toHaveBeenCalledWith(
+      "ws_1",
+      expect.objectContaining({
+        custom_lines: expect.arrayContaining([
+          expect.objectContaining({ label: "Still typing" }),
+        ]),
+      }),
+    );
+  });
+
+  it("bills a line item one-time or per season", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    await fillLineItem("Remove old clips", "90");
+    fireEvent.change(screen.getByLabelText(/Line item applies to/i), {
+      target: { value: "permanent" },
+    });
+
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          custom_lines: [
+            expect.objectContaining({ side: "permanent", unit_price: 90 }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("removes a line item from the estimate", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    await fillLineItem("Bucket truck day", "150");
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ custom_lines: [expect.anything()] }),
+      ),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Remove Bucket truck day/i }),
+    );
+    // The row is gone, so the next request (and the share) carries no add-on.
+    expect(screen.queryByDisplayValue("Bucket truck day")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Save & share link only/i }),
+    );
+    await waitFor(() =>
+      expect(estimatorApi.share).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ custom_lines: [] }),
+      ),
+    );
+  });
+
+  it("adds line items on top of the selected package, not into it", async () => {
+    // The server prices packages without the add-ons and reports the add-on
+    // subtotal separately; the headline is the pick plus that subtotal, exactly
+    // as the client's page computes it.
+    vi.mocked(estimatorApi.estimate).mockResolvedValue({
+      ...WITH_PACKAGES,
+      christmas: { ...WITH_PACKAGES.christmas, custom_total: 200 },
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await screen.findByRole("button", { name: /Premier/i });
+
+    const grandRow = () =>
+      container.querySelector(".ep-total-grand") as HTMLElement;
+    // Premier is $1,400 on its card…
+    expect(
+      screen.getByRole("button", { name: /Premier/i }),
+    ).toHaveTextContent("$1,400");
+    // …and the seasonal headline carries the $200 of add-ons on top of it.
+    await waitFor(() => expect(grandRow()).toHaveTextContent("$1,600"));
+  });
+
+  it("can share and quote a line item with nothing drawn on the photo", async () => {
+    // The standalone case: no roofline, no decor — just the rep's own line.
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: {},
+      bistro_feet: 0,
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    const share = () =>
+      screen.getByRole("button", { name: /Save & share link only/i });
+    expect(share()).toBeDisabled();
+
+    await fillLineItem("Consultation", "75");
+
+    await waitFor(() => expect(share()).toBeEnabled());
+    fireEvent.click(share());
+    await waitFor(() =>
+      expect(estimatorApi.share).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          custom_lines: [expect.objectContaining({ label: "Consultation" })],
+        }),
+      ),
+    );
+  });
+
 });

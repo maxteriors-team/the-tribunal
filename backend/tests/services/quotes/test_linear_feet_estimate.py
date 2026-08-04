@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from app.schemas.estimate import (
+    EstimateCustomLine,
     EstimateQuoteRequest,
     LinearFeetEstimateRequest,
     PublicChristmasComparison,
@@ -561,3 +562,151 @@ def test_convert_disabled_seasonal_side_raises() -> None:
     config = _config(christmas=ChristmasConfig(enabled=False))
     with pytest.raises(ValidationError):
         _convert(config, "seasonal", 100)
+
+
+# --------------------------------------------------------------------------- #
+# Standalone line items (rep-entered, independent of packages)
+# --------------------------------------------------------------------------- #
+def _line(label: str, unit_price: float, **kw) -> EstimateCustomLine:
+    return EstimateCustomLine(label=label, unit_price=unit_price, **kw)
+
+
+def test_custom_line_adds_to_the_side_it_names() -> None:
+    result = _estimate(
+        _config(),
+        100,
+        custom_lines=[
+            _line("Bucket truck day", 150, quantity=2),
+            _line("Remove old clips", 90, side="permanent"),
+        ],
+    )
+
+    # Seasonal: 100ft * $6 = $600, plus 2 x $150.
+    assert result.christmas.total == 900
+    assert result.christmas.custom_total == 300
+    # Permanent: $3,300 priced work plus the $90 line.
+    assert result.permanent.total == 3390
+    assert result.permanent.custom_total == 90
+    # Amounts are computed server-side and echoed back per line.
+    assert [(line.label, line.amount) for line in result.custom_lines] == [
+        ("Remove old clips", 90),
+        ("Bucket truck day", 300),
+    ]
+
+
+def test_custom_line_is_not_grossed_up() -> None:
+    # Every other rate on an estimate is net and gets marked up; a standalone line
+    # is the client-facing amount the rep quoted out loud, so it must land exactly.
+    config = _config(financing=FinancingConfig(enabled=True, fee_buffer=0.25))
+    result = _estimate(config, 0, custom_lines=[_line("Custom mantel garland", 425)])
+
+    assert result.christmas.total == 425
+    assert result.custom_lines[0].amount == 425
+
+
+def test_custom_line_stands_alone_without_a_drawn_design() -> None:
+    # The whole point: quote something that isn't in the price book or a package,
+    # on an estimate with nothing traced on the photo yet.
+    result = _estimate(_config(), 0, custom_lines=[_line("Consultation", 75)])
+
+    assert result.christmas.total == 75
+    assert result.permanent.total == 0
+
+
+def test_custom_lines_project_over_the_horizon_on_the_seasonal_side() -> None:
+    result = _estimate(_config(), 100, custom_lines=[_line("Extra strand", 100)])
+
+    # Seasonal work recurs: ($600 + $100) * 5 seasons.
+    assert result.christmas.total == 700
+    assert result.temporary_multi_year == 3500
+    assert result.multi_year_savings == 200  # 3500 - 3300 permanent one-time
+
+
+def test_custom_lines_stay_out_of_package_totals() -> None:
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 1}},
+        custom_lines=[_line("Balcony hand-tie", 200)],
+    )
+
+    # Each tier still quotes its own scope — switching package changes one number.
+    assert {p.key: p.pricing.total for p in result.christmas_packages} == {
+        "essential": 260,
+        "middle": 860,
+        "premier": 860,
+    }
+    # …while the à la carte seasonal headline carries the add-on.
+    assert result.christmas.total == 1060
+    assert result.christmas.custom_total == 200
+
+
+def test_custom_lines_stay_out_of_the_roofline_comparison() -> None:
+    # Roofline-vs-roofline must stay like-for-like: same run of lights, both ways.
+    config = _config(roofline_comparison_enabled=True)
+    computed = _estimate(config, 100, custom_lines=[_line("Bucket truck day", 150)])
+    block = build_public_roofline_comparison(config, computed)
+
+    assert block is not None
+    assert block.seasonal_total == 600
+    assert block.permanent_total == 3000
+    assert computed.christmas.roofline_cost == 600
+
+
+def test_custom_lines_for_a_disabled_service_are_dropped() -> None:
+    config = _config(permanent=PermanentConfig(enabled=False))
+    result = _estimate(config, 100, custom_lines=[_line("Trip fee", 60, side="permanent")])
+
+    assert result.permanent.total == 0
+    assert result.permanent.custom_total == 0
+    # Not reported against a total it was never added to.
+    assert result.custom_lines == []
+
+
+def test_convert_carries_custom_lines_onto_the_quote() -> None:
+    _title, pricing, lines = _convert(
+        _config(),
+        "seasonal",
+        100,
+        custom_lines=[
+            _line("Bucket truck day", 150, quantity=2),
+            _line("Permanent-only line", 500, side="permanent"),
+        ],
+    )
+
+    # The seasonal line becomes a real quote line; the permanent one stays behind.
+    assert pricing.total == 900
+    assert "2 × Bucket truck day" in [li.name for li in lines]
+    assert all("Permanent-only" not in li.name for li in lines)
+    assert _lines_sum(lines) == 900
+
+
+def test_convert_carries_custom_lines_onto_a_package_quote() -> None:
+    _title, pricing, lines = _convert(
+        _packages_config(),
+        "seasonal",
+        100,
+        selected_package="middle",
+        christmas_items={"trees": {"medium": 2}},
+        custom_lines=[_line("Balcony hand-tie", 200)],
+    )
+
+    # "Middle" covers roofline + trees (600 + 520), plus the standalone line.
+    assert pricing.total == 1320
+    assert "Balcony hand-tie" in [li.name for li in lines]
+    assert _lines_sum(lines) == 1320
+
+
+def test_custom_line_tops_up_a_job_that_hit_the_minimum() -> None:
+    # The minimum lifts the *priced work*; an add-on is billed on top of it rather
+    # than disappearing into the shortfall.
+    config = _config(
+        permanent=PermanentConfig(enabled=True, per_ft=30, controller_base=0, minimum=5000)
+    )
+    _title, pricing, lines = _convert(
+        config, "permanent", 100, custom_lines=[_line("Trip fee", 250, side="permanent")]
+    )
+
+    assert pricing.total == 5250
+    assert any(li.name == "Job minimum" and li.unit_price == 2000 for li in lines)
+    assert _lines_sum(lines) == 5250

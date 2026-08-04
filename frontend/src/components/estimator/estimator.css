@@ -258,6 +258,62 @@
   gap: 16px;
 }
 
+/* Client-facing add-on list: the standalone lines already inside the totals,
+   itemized so an unexpected price always has a line that explains it. */
+.cmp-addons {
+  max-width: 620px;
+  margin: 0 auto;
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  padding: 6px 18px;
+  background: var(--s2);
+}
+
+.cmp-addon {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--bdr);
+}
+
+.cmp-addon:last-child {
+  border-bottom: none;
+}
+
+.cmp-addon-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--t2);
+  font-size: 15px;
+}
+
+.cmp-addon-note {
+  color: var(--t4);
+  font-size: 13px;
+}
+
+.cmp-addon-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--t1);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cmp-addon-per {
+  color: var(--t4);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 @media (max-width: 720px) {
   .cmp-pkg-grid {
     grid-template-columns: 1fr;
@@ -740,6 +796,13 @@
   flex-wrap: wrap;
 }
 
+.tp-opt-readout {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--t4);
+}
+
 .tp-spacing-chip {
   flex: 1;
   min-width: 40px;
@@ -1182,6 +1245,96 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* ---- Standalone line items (outside the price book and every package) ---- */
+.ep-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--bdr);
+}
+
+.ep-custom-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--bdr);
+}
+
+.ep-custom-top,
+.ep-custom-fields {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ep-custom .est-input,
+.ep-custom .est-select {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.ep-custom-label {
+  flex: 1 1 auto;
+}
+
+.ep-custom-qty {
+  flex: 0 0 52px;
+  width: 52px;
+  text-align: center;
+}
+
+.ep-custom-price {
+  flex: 1 1 70px;
+}
+
+.ep-custom-side {
+  flex: 0 0 96px;
+  width: 96px;
+}
+
+.ep-custom-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  background: var(--s3);
+  color: var(--t4);
+  cursor: pointer;
+}
+
+.ep-custom-remove:hover {
+  color: #e8a17a;
+  border-color: #e8a17a;
+}
+
+.ep-custom-remove svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ep-custom-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.ep-custom-add svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* The price-book SKU behind a placed fixture — what inventory and the crew
