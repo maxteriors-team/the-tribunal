@@ -73,6 +73,30 @@ afterEach(() => {
   setUrl("/");
 });
 
+/**
+ * Sign in on `/login?redirect=<target>`.
+ *
+ * The provider deliberately skips the `/auth/me` probe on public paths such as
+ * `/login`, so `getCurrentUser` is only ever called by `login()` itself here.
+ */
+async function signInAt(url: string): Promise<void> {
+  pathnameMock.mockReturnValue("/login");
+  setUrl(url);
+  getCurrentUserMock.mockResolvedValue(USER);
+
+  render(
+    <AuthProvider>
+      <Probe />
+    </AuthProvider>,
+  );
+  // Wait out the mount probe so the signed-out state has settled.
+  await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("no"));
+  replaceMock.mockClear();
+
+  await userEvent.click(screen.getByRole("button", { name: "login" }));
+  await waitFor(() => expect(getCurrentUserMock).toHaveBeenCalled());
+}
+
 // --- Tests ---------------------------------------------------------------
 
 describe("safeRedirectPath", () => {
@@ -158,30 +182,6 @@ describe("AuthProvider redirects", () => {
     expect(replaceMock).toHaveBeenCalledWith("/login");
   });
 
-  /**
-   * Sign in on `/login?redirect=<target>`.
-   *
-   * The provider deliberately skips the `/auth/me` probe on public paths such as
-   * `/login`, so `getCurrentUser` is only ever called by `login()` itself here.
-   */
-  async function signInAt(url: string): Promise<void> {
-    pathnameMock.mockReturnValue("/login");
-    setUrl(url);
-    getCurrentUserMock.mockResolvedValue(USER);
-
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>,
-    );
-    // Wait out the mount probe so the signed-out state has settled.
-    await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("no"));
-    replaceMock.mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: "login" }));
-    await waitFor(() => expect(getCurrentUserMock).toHaveBeenCalled());
-  }
-
   it("honours ?redirect= after a successful login", async () => {
     await signInAt("/login?redirect=/invite/tok123");
 
@@ -198,4 +198,79 @@ describe("AuthProvider redirects", () => {
     });
     expect(replaceMock).not.toHaveBeenCalledWith("https://evil.com");
   });
+
+  it.each([
+    "https://evil.com",
+    "//evil.com",
+    "/\\evil.com",
+  ])("refuses %s as a post-login destination", async (hostile) => {
+    await signInAt(`/login?redirect=${hostile}`);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/");
+    });
+    expect(replaceMock).not.toHaveBeenCalledWith(hostile);
+  });
 });
+
+/**
+ * The journey that was reported broken: "I was invited but I still can't get in."
+ *
+ * She opened her invitation, signed out to switch to the invited account, signed
+ * back in — and landed on the dashboard with the invitation still pending, no
+ * way left in the product to reach it. The halves are asserted individually
+ * above; these pin the *journey*, because two separate fixes each passed their
+ * own unit tests while the end-to-end trip stayed broken.
+ */
+describe("invited teammate round trip (regression)", () => {
+  const INVITE = "/invite/gbqtqbxM66i2YFhjHTZ";
+
+  it("lets a signed-out invitee stay on the invitation instead of bouncing them", async () => {
+    // `/invite/` is deliberately public: an invitee without an account has to be
+    // able to read who invited them and reach "Create Account & Join". Bouncing
+    // them to /login here would strand exactly the people invitations exist for.
+    getCurrentUserMock.mockRejectedValue(new Error("401"));
+    pathnameMock.mockReturnValue(INVITE);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("no"));
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("returns to the invitation after signing in from it", async () => {
+    // The invite page sends "I already have an account" to
+    // /login?redirect=/invite/<token>. Signing in there must resume the
+    // invitation — landing on the dashboard is precisely the reported bug.
+    await signInAt(`/login?redirect=${INVITE}`);
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith(INVITE);
+    });
+    expect(replaceMock).not.toHaveBeenCalledWith("/");
+  });
+
+  it("survives signing out from the invitation to switch accounts", async () => {
+    // She was signed in as the wrong account — the only reason to sign out from
+    // an invitation page. The invite has to outlive the sign-out.
+    getCurrentUserMock.mockResolvedValue(USER);
+    pathnameMock.mockReturnValue(INVITE);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("yes"));
+
+    await userEvent.click(screen.getByRole("button", { name: "logout" }));
+
+    expect(replaceMock).toHaveBeenCalledWith(`/login?redirect=${encodeURIComponent(INVITE)}`);
+    expect(replaceMock).not.toHaveBeenCalledWith("/login");
+  });
+});
+

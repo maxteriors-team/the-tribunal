@@ -281,3 +281,105 @@ describe("logout()", () => {
     expect(hrefSetter).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Regression suite for the production incident where an invited teammate could
+ * not get in.
+ *
+ * She opened her invitation, signed out to switch to the invited account, signed
+ * back in — and landed on the dashboard with the invitation still pending. The
+ * `logout()` unit tests above cover the helper in isolation, but the live bug
+ * was only reachable through the *interceptor*: a signed-out deep link 401s on
+ * the `/auth/me` probe, the refresh then fails, and this hard-navigates via
+ * `window.location.href` before any router-level guard can run. Two earlier
+ * fixes looked correct against unit tests and still failed in production
+ * because nothing drove a real 401 from a real path.
+ *
+ * These tests do exactly that: 401 -> failed refresh -> navigation, asserting on
+ * the URL the browser is actually sent to.
+ */
+describe("401 interceptor preserves the destination (regression)", () => {
+  /** Every request 401s and the refresh fails — the signed-out deep link case. */
+  function installFullyUnauthorized(): void {
+    installAdapter((config) => {
+      const url = config.url ?? "";
+      // logout() fires and forgets this one; let it succeed so the only
+      // observable outcome under test is the navigation target.
+      if (url.includes("/api/v1/auth/logout")) {
+        return makeResponse(config, 200, {});
+      }
+      throw makeAxiosError(config, 401);
+    });
+  }
+
+  it("sends a deep path to /login?redirect=<path>, not a bare /login", async () => {
+    // The exact production failure: visiting /settings signed out landed on a
+    // bare /login, silently discarding where the user was going.
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/settings");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    expect(hrefSetter).toHaveBeenCalledWith("/login?redirect=%2Fsettings");
+    expect(hrefSetter).not.toHaveBeenCalledWith("/login");
+  });
+
+  it("carries an /invite/<token> path through the sign-in wall", async () => {
+    // The invitation must survive, or accepting it becomes unreachable.
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/invite/abc123XYZ");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    expect(hrefSetter).toHaveBeenCalledWith("/login?redirect=%2Finvite%2Fabc123XYZ");
+  });
+
+  it("preserves the query string of the interrupted destination", async () => {
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/contacts?view=leads&page=2");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    expect(hrefSetter).toHaveBeenCalledWith(
+      "/login?redirect=%2Fcontacts%3Fview%3Dleads%26page%3D2",
+    );
+  });
+
+  it("sends the root path to a bare /login", async () => {
+    // "/" is where a bare /login already lands, so a redirect param would be
+    // noise — and would survive into the address bar for no reason.
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    expect(hrefSetter).toHaveBeenCalledWith("/login");
+  });
+
+  it("stays on /login without navigating when already there", async () => {
+    // /login itself 401s on first paint; redirecting would reload forever.
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/login");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    expect(hrefSetter).not.toHaveBeenCalled();
+  });
+
+  it("never navigates off-origin, whatever the address bar claims", async () => {
+    // The redirect target is built from window.location, so a hostile URL must
+    // not be able to turn the post-login hop into an offsite bounce. Every
+    // emitted target has to be a same-origin path.
+    installFullyUnauthorized();
+    const hrefSetter = captureHrefAt("/evil?next=https://evil.com");
+
+    await expect(apiGet("/api/v1/protected")).rejects.toThrow();
+
+    const target = hrefSetter.mock.calls[0][0] as string;
+    expect(target.startsWith("/login")).toBe(true);
+    expect(target.startsWith("//")).toBe(false);
+    // The offsite URL may appear only as an encoded query value, never as the
+    // destination the browser would resolve.
+    expect(new URL(target, "https://app.example.com").origin).toBe("https://app.example.com");
+  });
+});
