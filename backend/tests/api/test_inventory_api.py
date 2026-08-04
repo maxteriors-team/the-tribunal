@@ -168,7 +168,8 @@ def _client_factory(
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_transactional_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: _make_user()
+    app.dependency_overrides[get_current_user] = _make_user
+    # Still a lambda: unlike _make_user, this one closes over `role`.
     app.dependency_overrides[get_membership] = lambda: _make_membership(role)
     _mount(app)
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver")
