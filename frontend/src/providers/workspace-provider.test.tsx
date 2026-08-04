@@ -91,6 +91,9 @@ function renderWithProviders(client?: QueryClient) {
 
 // --- Setup ---------------------------------------------------------------
 
+/** Where a *deliberate* workspace choice is remembered. */
+const CHOICE_KEY = "current_workspace_choice";
+
 /** Point `window.location.search` at `?workspace=<value>` for one test. */
 function setWorkspaceParam(value: string): void {
   window.history.replaceState({}, "", `/?workspace=${value}`);
@@ -124,7 +127,7 @@ describe("WorkspaceProvider", () => {
     expect(listMock).not.toHaveBeenCalled();
   });
 
-  it("falls back to the default workspace when no stored id is present", async () => {
+  it("falls back to the default workspace when nothing was chosen", async () => {
     useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
     listMock.mockResolvedValue(WORKSPACES);
 
@@ -133,11 +136,13 @@ describe("WorkspaceProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("current").textContent).toBe("ws_b");
     });
-    expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_b");
+    // Merely landing somewhere is not a choice, so nothing is recorded — the
+    // server stays in charge of where this user opens.
+    expect(window.localStorage.getItem(CHOICE_KEY)).toBeNull();
   });
 
-  it("restores the stored workspace id when it matches a member workspace", async () => {
-    window.localStorage.setItem("current_workspace_id", "ws_c");
+  it("restores a deliberately chosen workspace", async () => {
+    window.localStorage.setItem(CHOICE_KEY, "ws_c");
     useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
     listMock.mockResolvedValue(WORKSPACES);
 
@@ -148,8 +153,12 @@ describe("WorkspaceProvider", () => {
     });
   });
 
-  it("ignores a stale stored id and picks the default instead", async () => {
-    window.localStorage.setItem("current_workspace_id", "ws_gone");
+  it("ignores a legacy remembered id and follows the server default", async () => {
+    // `current_workspace_id` was rewritten on every resolution, so it recorded
+    // wherever the user last *landed*. An invited teammate whose default was
+    // corrected server-side kept reopening the workspace her browser had
+    // memorised — which looked exactly like the invitation never working.
+    window.localStorage.setItem("current_workspace_id", "ws_a");
     useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
     listMock.mockResolvedValue(WORKSPACES);
 
@@ -158,7 +167,23 @@ describe("WorkspaceProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("current").textContent).toBe("ws_b");
     });
-    expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_b");
+  });
+
+  it("drops a chosen workspace it can no longer reach", async () => {
+    // Removed from that workspace, or it was deleted. Keeping it would shadow
+    // the server default forever for something they cannot even open.
+    window.localStorage.setItem(CHOICE_KEY, "ws_gone");
+    useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
+    listMock.mockResolvedValue(WORKSPACES);
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current").textContent).toBe("ws_b");
+    });
+    await waitFor(() => {
+      expect(window.localStorage.getItem(CHOICE_KEY)).toBeNull();
+    });
   });
 
   it("falls back to the first workspace when none is marked default", async () => {
@@ -194,15 +219,15 @@ describe("WorkspaceProvider", () => {
     await user.click(screen.getByRole("button", { name: "switch" }));
 
     expect(screen.getByTestId("current").textContent).toBe("ws_c");
-    expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_c");
+    expect(window.localStorage.getItem(CHOICE_KEY)).toBe("ws_c");
     expect(clearSpy).toHaveBeenCalled();
   });
 
   it("honours ?workspace=<slug> so accepting an invitation lands in that workspace", async () => {
     // Accepting an invitation redirects to /?workspace=<slug>. An invitee who
     // already had a workspace of their own must land in the one they just
-    // joined, not bounce back to their stored/default selection.
-    window.localStorage.setItem("current_workspace_id", "ws_a");
+    // joined, not bounce back to a previous selection.
+    window.localStorage.setItem(CHOICE_KEY, "ws_a");
     setWorkspaceParam("ws-ws_c");
     useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
     listMock.mockResolvedValue(WORKSPACES);
@@ -212,8 +237,11 @@ describe("WorkspaceProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("current").textContent).toBe("ws_c");
     });
-    // ...and it sticks for the next visit, which carries no param.
-    expect(window.localStorage.getItem("current_workspace_id")).toBe("ws_c");
+    // ...and it sticks for the next visit, which carries no param: an explicit
+    // hand-off link is as deliberate as clicking the switcher.
+    await waitFor(() => {
+      expect(window.localStorage.getItem(CHOICE_KEY)).toBe("ws_c");
+    });
   });
 
   it("lets the switcher override a ?workspace= param", async () => {
@@ -242,6 +270,26 @@ describe("WorkspaceProvider", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("current").textContent).toBe("ws_b");
+    });
+  });
+
+  it("opens the workspace a stranded teammate was finally added to", async () => {
+    // The reported incident, end state. She was stranded for weeks in an empty
+    // auto-provisioned workspace, so her browser had memorised it on every one
+    // of those visits. Once her membership was corrected server-side, that
+    // memory was the last thing still sending her back to the empty one — and
+    // "the invite still doesn't work" is indistinguishable from the original bug.
+    window.localStorage.setItem("current_workspace_id", "ws_stranded");
+    useAuthMock.mockReturnValue({ isAuthenticated: true, user: null });
+    listMock.mockResolvedValue([
+      makeWorkspace("ws_stranded", { role: "owner" }),
+      makeWorkspace("ws_real_team", { role: "admin", is_default: true }),
+    ]);
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current").textContent).toBe("ws_real_team");
     });
   });
 
