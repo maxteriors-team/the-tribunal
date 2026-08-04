@@ -60,6 +60,16 @@ export interface ComparisonView {
     seasonal_multi_year: number;
     savings: number;
   } | null;
+  // Standalone add-ons the rep put on this estimate. Already inside the totals
+  // above and listed separately here, because a price that moved with no line
+  // to explain it is the fastest way to lose a signature. Empty => nothing extra.
+  customLines?: {
+    label: string;
+    description?: string | null;
+    quantity?: number;
+    amount: number;
+    side?: "permanent" | "seasonal";
+  }[];
 }
 
 function Perks({ perks }: { perks?: string[] }) {
@@ -83,6 +93,7 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
   const greeting = view.clientName ? `Prepared for ${view.clientName}` : null;
   const packages = view.christmasPackages ?? [];
   const roofline = view.roofline ?? null;
+  const customLines = view.customLines ?? [];
   // Permanent wins the roofline-only comparison when paying every season costs
   // more over the horizon than installing once.
   const rooflineSavings = roofline && roofline.savings > 0 ? roofline.savings : 0;
@@ -209,6 +220,40 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
                 {view.years} seasons
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {customLines.length > 0 ? (
+        <div className="cmp-pkg-section">
+          <div className="cmp-pkg-head">
+            <h2>Also included in your price</h2>
+            <p>
+              Work we added for your home specifically — already counted in the
+              totals above.
+            </p>
+          </div>
+          <div className="cmp-addons">
+            {customLines.map((line, i) => (
+              <div className="cmp-addon" key={`${line.label}-${i}`}>
+                <span className="cmp-addon-name">
+                  {line.quantity && line.quantity !== 1
+                    ? `${line.quantity} × ${line.label}`
+                    : line.label}
+                  {line.description ? (
+                    <span className="cmp-addon-note">{line.description}</span>
+                  ) : null}
+                </span>
+                <span className="cmp-addon-amount">
+                  {formatCurrency(line.amount, currency)}
+                  {line.side === "seasonal" ? (
+                    <span className="cmp-addon-per">per season</span>
+                  ) : (
+                    <span className="cmp-addon-per">one-time</span>
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}

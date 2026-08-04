@@ -13331,6 +13331,11 @@ export interface components {
          *     like-for-like counterpart to :attr:`PermanentEstimate.roofline_cost`.
          */
         ChristmasEstimate: {
+            /**
+             * Custom Total
+             * @default 0
+             */
+            custom_total: number;
             /** Enabled */
             enabled: boolean;
             /** Items */
@@ -13606,6 +13611,8 @@ export interface components {
             client_name?: string | null;
             /** Client Phone */
             client_phone?: string | null;
+            /** Custom Lines */
+            custom_lines?: components["schemas"]["EstimateCustomLine"][];
             /** Feet */
             feet: number;
             /** Label */
@@ -15137,6 +15144,73 @@ export interface components {
             utilization_pct?: number | null;
         };
         /**
+         * EstimateCustomLine
+         * @description A standalone line the rep adds to an estimate, outside any package.
+         *
+         *     The price book and the Good/Better/Best packages cover the work we sell every
+         *     day; this covers the rest — a bucket-truck fee, hand-tying garland on a
+         *     balcony, removing the last company's clips. It is deliberately **independent
+         *     of packages**: the amount rides on top of whichever tier the customer picks
+         *     (and on top of à la carte pricing), so a rep never has to fake it into a
+         *     decor category or edit the workspace's pricing config to land one job.
+         *
+         *     ``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog
+         *     and roofline pricing it is not grossed up, because the rep is typing what the
+         *     homeowner will pay. That makes it the one figure on the estimate the server
+         *     doesn't derive — it is quantity × price, rounded, and nothing more.
+         *
+         *     ``side`` says which half of the comparison the line belongs to, since the two
+         *     are paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs
+         *     every season and is projected over the comparison horizon like the rest of
+         *     the seasonal total. A line assigned to a side the workspace doesn't offer is
+         *     priced into a total that stays zero — same as every other input for a
+         *     disabled service — so the rep tool only ever offers the enabled sides.
+         */
+        EstimateCustomLine: {
+            /** Description */
+            description?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Side
+             * @default seasonal
+             * @enum {string}
+             */
+            side: "permanent" | "seasonal";
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * EstimateCustomLineCost
+         * @description A priced standalone line: the input plus its server-computed ``amount``.
+         */
+        EstimateCustomLineCost: {
+            /** Amount */
+            amount: number;
+            /** Description */
+            description?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Side
+             * @default seasonal
+             * @enum {string}
+             */
+            side: "permanent" | "seasonal";
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
          * EstimateQuoteRequest
          * @description Convert a measured estimate into a real draft quote.
          *
@@ -15167,6 +15241,8 @@ export interface components {
             client_name?: string | null;
             /** Client Phone */
             client_phone?: string | null;
+            /** Custom Lines */
+            custom_lines?: components["schemas"]["EstimateCustomLine"][];
             /** Feet */
             feet: number;
             /** Label */
@@ -18325,6 +18401,8 @@ export interface components {
             };
             /** Christmas Per Ft Override */
             christmas_per_ft_override?: number | null;
+            /** Custom Lines */
+            custom_lines?: components["schemas"]["EstimateCustomLine"][];
             /** Feet */
             feet: number;
             /** Per Ft Override */
@@ -18358,6 +18436,8 @@ export interface components {
             christmas_packages?: components["schemas"]["ChristmasPackagePricing"][];
             /** Christmas Perks */
             christmas_perks?: string[];
+            /** Custom Lines */
+            custom_lines?: components["schemas"]["EstimateCustomLineCost"][];
             /** Difference */
             difference: number;
             /** Feet */
@@ -21285,9 +21365,19 @@ export interface components {
          *
          *     ``roofline_cost`` is the track-only component of ``total`` (no controller or
          *     zone hardware), so it can be compared like-for-like against the seasonal
-         *     roofline cost.
+         *     roofline cost — standalone lines are deliberately excluded from it for the
+         *     same reason.
+         *
+         *     ``custom_total`` is the part of ``total`` contributed by the rep's standalone
+         *     lines, broken out so a caller pricing a *package* (whose total excludes them)
+         *     can add them back without re-deriving the arithmetic.
          */
         PermanentEstimate: {
+            /**
+             * Custom Total
+             * @default 0
+             */
+            custom_total: number;
             /** Enabled */
             enabled: boolean;
             /** Per Ft */
@@ -22736,6 +22826,8 @@ export interface components {
              * @default USD
              */
             currency: string;
+            /** Custom Lines */
+            custom_lines?: components["schemas"]["PublicComparisonLine"][];
             /** Difference */
             difference: number;
             /** Logo Url */
@@ -22752,6 +22844,34 @@ export interface components {
             temporary_multi_year: number;
             /** Years */
             years: number;
+        };
+        /**
+         * PublicComparisonLine
+         * @description One standalone add-on as the client sees it — what it is and what it costs.
+         *
+         *     Shown rather than folded silently into a headline: an unexplained bump in the
+         *     price is the fastest way to lose a signature. Feet-free like every public
+         *     model here — the label is the rep's own words, and ``amount`` is the computed
+         *     line total, never a rate or a measurement.
+         */
+        PublicComparisonLine: {
+            /** Amount */
+            amount: number;
+            /** Description */
+            description?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Side
+             * @default seasonal
+             * @enum {string}
+             */
+            side: "permanent" | "seasonal";
         };
         /**
          * PublicComparisonPackage

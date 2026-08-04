@@ -2,6 +2,11 @@ import { fireEvent, render } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+import {
+  beamAngleAt,
+  beamHandlePos,
+  resizeHandlePos,
+} from "@/lib/estimator/render";
 import type { PhotoInfo, Product } from "@/lib/estimator/types";
 
 import {
@@ -17,6 +22,8 @@ vi.mock("@/lib/estimator/render", () => ({
   drawScene: vi.fn(),
   itemHit: vi.fn(() => false),
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
+  beamHandlePos: vi.fn(() => null),
+  beamAngleAt: vi.fn(() => 30),
   DEFAULT_DUSK: 0.52,
   MAX_DUSK: 0.92,
 }));
@@ -232,5 +239,101 @@ describe("LightCanvas — touch gestures", () => {
     fireEvent.pointerDown(canvas, touch(1, 420, 380));
     fireEvent.pointerUp(canvas, touch(1, 470, 430));
     expect(placed()).toBe(0);
+  });
+});
+
+
+/**
+ * Harness with one fixture already placed and selected, so the grips around it
+ * are live. The geometry behind the grips is unit-tested in render.test.ts; what
+ * matters here is that grabbing one drives the right edit.
+ */
+function setupSelectedFixture() {
+  const item = {
+    id: "item-1",
+    productId: UPLIGHT.id,
+    at: { x: 400, y: 600 },
+    sizePx: 300,
+  };
+  const seen: EditorAction[] = [];
+  function Harness() {
+    const [state, rawDispatch] = React.useReducer(editorReducer, undefined, () => ({
+      ...initialEditorState(),
+      tool: { type: "select" as const },
+      design: { calibration: null, runs: [], items: [item] },
+      selection: { kind: "item" as const, id: item.id },
+    }));
+    const dispatch = (action: EditorAction) => {
+      seen.push(action);
+      rawDispatch(action);
+    };
+    return (
+      <LightCanvas
+        photo={PHOTO}
+        products={[UPLIGHT]}
+        state={state}
+        dispatch={dispatch}
+      />
+    );
+  }
+  const { container } = render(<Harness />);
+  const canvas = container.querySelector("canvas")!;
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, width: PHOTO.width, height: PHOTO.height,
+    right: PHOTO.width, bottom: PHOTO.height, x: 0, y: 0, toJSON: () => ({}),
+  } as DOMRect);
+  canvas.setPointerCapture = vi.fn();
+  canvas.releasePointerCapture = vi.fn();
+  return { canvas, seen, item };
+}
+
+describe("LightCanvas — beam spread grip", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("drags the spread grip into a beam-angle edit, leaving the throw alone", () => {
+    // Grip on the cone's edge (up and to the right of an uplight's fixture).
+    vi.mocked(beamHandlePos).mockReturnValue({ x: 480, y: 300 });
+    vi.mocked(beamAngleAt).mockReturnValue(48);
+    const { canvas, seen, item } = setupSelectedFixture();
+
+    fireEvent.pointerDown(canvas, {
+      clientX: 480, clientY: 300, button: 0, pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 560, clientY: 300, button: 0, pointerId: 1,
+    });
+    fireEvent.pointerUp(canvas, {
+      clientX: 560, clientY: 300, button: 0, pointerId: 1,
+    });
+
+    const edits = seen.filter((a) => a.type === "UPDATE_ITEM");
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toMatchObject({
+      id: item.id,
+      patch: { beamAngleDeg: 48 },
+    });
+    // The throw and the position are untouched by a spread drag.
+    expect(edits[0]).not.toHaveProperty("patch.sizePx");
+    expect(edits[0]).not.toHaveProperty("patch.at");
+    // One undo step for the whole drag, not one per pointer move.
+    expect(seen.filter((a) => a.type === "COMMIT_HISTORY")).toHaveLength(1);
+  });
+
+  it("keeps the throw grip's priority where the two grips crowd each other", () => {
+    // A tight beam puts both grips near the end of the throw; resizing the throw
+    // is the more common gesture, so it wins the ambiguous grab.
+    vi.mocked(resizeHandlePos).mockReturnValue({ x: 400, y: 300 });
+    vi.mocked(beamHandlePos).mockReturnValue({ x: 404, y: 300 });
+    const { canvas, seen } = setupSelectedFixture();
+
+    fireEvent.pointerDown(canvas, {
+      clientX: 402, clientY: 300, button: 0, pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, {
+      clientX: 402, clientY: 250, button: 0, pointerId: 1,
+    });
+
+    const patch = seen.find((a) => a.type === "UPDATE_ITEM");
+    expect(patch && "patch" in patch ? patch.patch : {}).toHaveProperty("sizePx");
   });
 });

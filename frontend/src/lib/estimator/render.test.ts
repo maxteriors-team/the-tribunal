@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  beamAngleAt,
+  beamHandlePos,
   drawPlacedItem,
   drawRunLights,
   drawScene,
@@ -8,6 +10,11 @@ import {
   resizeHandlePos,
   withRunOverrides,
 } from "./render";
+import {
+  DEFAULT_BEAM_ANGLE_DEG,
+  MAX_BEAM_ANGLE_DEG,
+  MIN_BEAM_ANGLE_DEG,
+} from "./types";
 import type { Design, PlacedItem, Product, Run } from "./types";
 
 // jsdom ships no canvas 2D context. A permissive stub records the calls the
@@ -18,6 +25,9 @@ function fakeCtx() {
   const gradient = { addColorStop: vi.fn() };
   return {
     createRadialGradient: vi.fn(() => gradient),
+    createLinearGradient: vi.fn(() => gradient),
+    translate: vi.fn(),
+    scale: vi.fn(),
     drawImage: vi.fn(),
     fillRect: vi.fn(),
     fillText: vi.fn(),
@@ -248,6 +258,68 @@ describe("landscape fixture geometry", () => {
     expect(itemHit(item, { x: 200, y: 200 }, 4, uplight)).toBe(false);
     // Decor keeps its full-diameter grab area.
     expect(itemHit(item, { x: 200, y: 300 }, 4)).toBe(true);
+  });
+
+  /** Half-width of the cone at the end of the throw, from the fixture's spread. */
+  const halfWidth = (reach: number, deg: number) =>
+    reach * Math.tan((deg * Math.PI) / 360);
+
+  it("puts the spread grip on the cone's edge at the default lamp angle", () => {
+    const grip = beamHandlePos(item, uplight)!;
+    expect(grip.y).toBe(100); // end of the throw, same as the resize grip
+    expect(grip.x).toBeCloseTo(
+      200 + halfWidth(300, DEFAULT_BEAM_ANGLE_DEG.uplight),
+      5,
+    );
+  });
+
+  it("opens and closes the cone with the fixture's own beam angle", () => {
+    const narrow = beamHandlePos({ ...item, beamAngleDeg: 10 }, uplight)!;
+    const wide = beamHandlePos({ ...item, beamAngleDeg: 60 }, uplight)!;
+    expect(narrow.x).toBeCloseTo(200 + halfWidth(300, 10), 5);
+    expect(wide.x).toBeCloseTo(200 + halfWidth(300, 60), 5);
+    expect(wide.x).toBeGreaterThan(narrow.x);
+  });
+
+  it("leaves the throw alone when the beam opens up", () => {
+    // Spread and throw are separate gestures: widening the beam must never also
+    // stretch how far the light reaches (which is what the customer is buying).
+    expect(resizeHandlePos({ ...item, beamAngleDeg: 60 }, uplight)).toEqual({
+      x: 200,
+      y: 100,
+    });
+  });
+
+  it("round-trips a dragged grip back to the angle that drew it", () => {
+    for (const deg of [10, 24, 36, 60]) {
+      const grip = beamHandlePos({ ...item, beamAngleDeg: deg }, uplight)!;
+      expect(beamAngleAt(item, grip)).toBeCloseTo(deg, 5);
+    }
+  });
+
+  it("clamps a drag past the ends of the range", () => {
+    expect(beamAngleAt(item, { x: 200, y: 100 })).toBe(MIN_BEAM_ANGLE_DEG);
+    expect(beamAngleAt(item, { x: 100000, y: 100 })).toBe(MAX_BEAM_ANGLE_DEG);
+  });
+
+  it("offers no spread grip on fixtures that pool instead of beam", () => {
+    const pathlight: Product = { ...uplight, id: "p1", style: "pathlight" };
+    expect(beamHandlePos(item, pathlight)).toBeNull();
+    expect(beamHandlePos(item, wreath)).toBeNull();
+    expect(beamHandlePos(item)).toBeNull();
+  });
+
+  it("paints a wider cone for a wider beam", () => {
+    stubSpriteCanvas();
+    const spread = (beamAngleDeg: number) => {
+      const ctx = fakeCtx();
+      drawPlacedItem(ctx, { ...item, beamAngleDeg }, uplight, 15, 1);
+      const xs = (ctx.lineTo as unknown as ReturnType<typeof vi.fn>).mock.calls.map(
+        (call) => call[0] as number,
+      );
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    expect(spread(60)).toBeGreaterThan(spread(15));
   });
 });
 

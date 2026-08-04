@@ -11,12 +11,13 @@ function estimate(
 ): LinearFeetEstimateResult {
   return {
     feet: 0,
-    permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0 },
+    permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0, custom_total: 0 },
     christmas: {
       enabled: true,
       total: 0,
       per_ft: 6,
       roofline_cost: 0,
+      custom_total: 0,
       items: [],
     },
     difference: 0,
@@ -76,7 +77,7 @@ describe("buildCatalog permanent roofline", () => {
   it("omits the permanent roofline when permanent lighting is disabled", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0 },
+        permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0, custom_total: 0 },
       }),
     );
     expect(catalog.find((p) => p.id === "roofline-permanent")).toBeUndefined();
@@ -85,7 +86,7 @@ describe("buildCatalog permanent roofline", () => {
   it("adds a permanent roofline priced per foot when enabled", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: true, total: 0, per_ft: 40, roofline_cost: 0 },
+        permanent: { enabled: true, total: 0, per_ft: 40, roofline_cost: 0, custom_total: 0 },
       }),
     );
     const perm = catalog.find((p) => p.id === "roofline-permanent");

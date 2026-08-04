@@ -30,6 +30,42 @@ from app.schemas.pricing import (
 # --------------------------------------------------------------------------- #
 
 
+class EstimateCustomLine(BaseModel):
+    """A standalone line the rep adds to an estimate, outside any package.
+
+    The price book and the Good/Better/Best packages cover the work we sell every
+    day; this covers the rest — a bucket-truck fee, hand-tying garland on a
+    balcony, removing the last company's clips. It is deliberately **independent
+    of packages**: the amount rides on top of whichever tier the customer picks
+    (and on top of à la carte pricing), so a rep never has to fake it into a
+    decor category or edit the workspace's pricing config to land one job.
+
+    ``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog
+    and roofline pricing it is not grossed up, because the rep is typing what the
+    homeowner will pay. That makes it the one figure on the estimate the server
+    doesn't derive — it is quantity × price, rounded, and nothing more.
+
+    ``side`` says which half of the comparison the line belongs to, since the two
+    are paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs
+    every season and is projected over the comparison horizon like the rest of
+    the seasonal total. A line assigned to a side the workspace doesn't offer is
+    priced into a total that stays zero — same as every other input for a
+    disabled service — so the rep tool only ever offers the enabled sides.
+    """
+
+    label: str = Field(min_length=1, max_length=120)
+    quantity: float = Field(default=1, gt=0, le=10_000)
+    unit_price: float = Field(ge=0, le=1_000_000)
+    side: Literal["permanent", "seasonal"] = "seasonal"
+    description: str | None = Field(default=None, max_length=300)
+
+
+class EstimateCustomLineCost(EstimateCustomLine):
+    """A priced standalone line: the input plus its server-computed ``amount``."""
+
+    amount: float
+
+
 class LinearFeetEstimateRequest(BaseModel):
     """A rep's measured roofline plus optional per-service knobs.
 
@@ -60,6 +96,11 @@ class LinearFeetEstimateRequest(BaseModel):
     # tier the client chose so the shared comparison echoes that package's total.
     # ``None`` => à la carte seasonal pricing (the standard roofline + decor flow).
     selected_package: str | None = None
+    # Standalone rep-entered lines, added on top of the priced side they belong
+    # to and *never* folded into a package's own total — a package card shows
+    # exactly what that package costs, whatever else is on the estimate. Capped
+    # so one request can't carry an unbounded breakdown onto the public page.
+    custom_lines: list[EstimateCustomLine] = Field(default_factory=list, max_length=20)
 
 
 class PermanentEstimate(BaseModel):
@@ -67,13 +108,19 @@ class PermanentEstimate(BaseModel):
 
     ``roofline_cost`` is the track-only component of ``total`` (no controller or
     zone hardware), so it can be compared like-for-like against the seasonal
-    roofline cost.
+    roofline cost — standalone lines are deliberately excluded from it for the
+    same reason.
+
+    ``custom_total`` is the part of ``total`` contributed by the rep's standalone
+    lines, broken out so a caller pricing a *package* (whose total excludes them)
+    can add them back without re-deriving the arithmetic.
     """
 
     enabled: bool
     total: float
     per_ft: float
     roofline_cost: float = 0
+    custom_total: float = 0
 
 
 class ChristmasEstimate(BaseModel):
@@ -89,6 +136,7 @@ class ChristmasEstimate(BaseModel):
     total: float
     per_ft: float
     roofline_cost: float = 0
+    custom_total: float = 0
     items: list[SeasonalItemCost] = Field(default_factory=list)
 
 
@@ -117,7 +165,13 @@ class LinearFeetEstimateResult(BaseModel):
     # enables Christmas packages (``christmas.packages_enabled``). Feet-free like
     # the à la carte breakdown; the rep tool renders one tier card per package
     # from the shared engine's totals. Empty when packages are off.
+    #
+    # A package total covers that package's own scope only: the rep's standalone
+    # lines are added to ``christmas.total`` (and reported in ``custom_total``),
+    # never into a card, so switching tier changes exactly one number.
     christmas_packages: list[ChristmasPackagePricing] = Field(default_factory=list)
+    # The rep's standalone lines with their computed amounts, in request order.
+    custom_lines: list[EstimateCustomLineCost] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
@@ -266,6 +320,22 @@ class PublicComparisonPackage(BaseModel):
     recommended: bool = False
 
 
+class PublicComparisonLine(BaseModel):
+    """One standalone add-on as the client sees it — what it is and what it costs.
+
+    Shown rather than folded silently into a headline: an unexplained bump in the
+    price is the fastest way to lose a signature. Feet-free like every public
+    model here — the label is the rep's own words, and ``amount`` is the computed
+    line total, never a rate or a measurement.
+    """
+
+    label: str
+    description: str | None = None
+    quantity: float = 1
+    amount: float
+    side: Literal["permanent", "seasonal"] = "seasonal"
+
+
 class PublicRooflineComparison(BaseModel):
     """Roofline-only, like-for-like cost comparison for the public page.
 
@@ -316,3 +386,7 @@ class PublicComparison(BaseModel):
     # ``roofline_comparison_enabled`` and both sides are offered. ``None``
     # otherwise, so the client page renders exactly as it does today by default.
     roofline: PublicRooflineComparison | None = None
+    # Standalone add-ons the rep put on this estimate, already included in the
+    # totals above and itemized here so the client can see what they're paying
+    # for. Empty for every estimate that has none — i.e. every existing link.
+    custom_lines: list[PublicComparisonLine] = Field(default_factory=list)

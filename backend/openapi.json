@@ -9776,6 +9776,11 @@
       "ChristmasEstimate": {
         "description": "Seasonal-lighting side of the estimate (rep view — includes per_ft).\n\n``items`` is the priced decor breakdown (one entry per selected category) so\nthe rep can see what makes up the seasonal total. ``roofline_cost`` is the\nroofline-only component of ``total`` (no decor, takedown, or storage) — the\nlike-for-like counterpart to :attr:`PermanentEstimate.roofline_cost`.",
         "properties": {
+          "custom_total": {
+            "default": 0,
+            "title": "Custom Total",
+            "type": "number"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -10349,6 +10354,14 @@
               }
             ],
             "title": "Client Phone"
+          },
+          "custom_lines": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateCustomLine"
+            },
+            "maxItems": 20,
+            "title": "Custom Lines",
+            "type": "array"
           },
           "feet": {
             "minimum": 0.0,
@@ -14805,6 +14818,113 @@
         "title": "EstimateCapacityReport",
         "type": "object"
       },
+      "EstimateCustomLine": {
+        "description": "A standalone line the rep adds to an estimate, outside any package.\n\nThe price book and the Good/Better/Best packages cover the work we sell every\nday; this covers the rest — a bucket-truck fee, hand-tying garland on a\nbalcony, removing the last company's clips. It is deliberately **independent\nof packages**: the amount rides on top of whichever tier the customer picks\n(and on top of à la carte pricing), so a rep never has to fake it into a\ndecor category or edit the workspace's pricing config to land one job.\n\n``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog\nand roofline pricing it is not grossed up, because the rep is typing what the\nhomeowner will pay. That makes it the one figure on the estimate the server\ndoesn't derive — it is quantity × price, rounded, and nothing more.\n\n``side`` says which half of the comparison the line belongs to, since the two\nare paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs\nevery season and is projected over the comparison horizon like the rest of\nthe seasonal total. A line assigned to a side the workspace doesn't offer is\npriced into a total that stays zero — same as every other input for a\ndisabled service — so the rep tool only ever offers the enabled sides.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "side": {
+            "default": "seasonal",
+            "enum": [
+              "permanent",
+              "seasonal"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "unit_price": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "unit_price"
+        ],
+        "title": "EstimateCustomLine",
+        "type": "object"
+      },
+      "EstimateCustomLineCost": {
+        "description": "A priced standalone line: the input plus its server-computed ``amount``.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "side": {
+            "default": "seasonal",
+            "enum": [
+              "permanent",
+              "seasonal"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "unit_price": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "unit_price",
+          "amount"
+        ],
+        "title": "EstimateCustomLineCost",
+        "type": "object"
+      },
       "EstimateQuoteRequest": {
         "description": "Convert a measured estimate into a real draft quote.\n\nReuses the estimate inputs (feet, decor, internal per-foot overrides, and the\noptional seasonal package) plus the client details from the share request,\nand adds ``side`` to choose which priced option becomes the quote: the\none-time ``permanent`` install or the ``seasonal`` (Christmas) job. Every line\nis recomputed server-side from the workspace pricing config — the rep's\nmeasurements are the only untrusted input, exactly like the estimate itself.",
         "properties": {
@@ -14871,6 +14991,14 @@
               }
             ],
             "title": "Client Phone"
+          },
+          "custom_lines": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateCustomLine"
+            },
+            "maxItems": 20,
+            "title": "Custom Lines",
+            "type": "array"
           },
           "feet": {
             "minimum": 0.0,
@@ -22456,6 +22584,14 @@
             ],
             "title": "Christmas Per Ft Override"
           },
+          "custom_lines": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateCustomLine"
+            },
+            "maxItems": 20,
+            "title": "Custom Lines",
+            "type": "array"
+          },
           "feet": {
             "minimum": 0.0,
             "title": "Feet",
@@ -22526,6 +22662,13 @@
               "type": "string"
             },
             "title": "Christmas Perks",
+            "type": "array"
+          },
+          "custom_lines": {
+            "items": {
+              "$ref": "#/components/schemas/EstimateCustomLineCost"
+            },
+            "title": "Custom Lines",
             "type": "array"
           },
           "difference": {
@@ -30750,8 +30893,13 @@
         "type": "object"
       },
       "PermanentEstimate": {
-        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).\n\n``roofline_cost`` is the track-only component of ``total`` (no controller or\nzone hardware), so it can be compared like-for-like against the seasonal\nroofline cost.",
+        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).\n\n``roofline_cost`` is the track-only component of ``total`` (no controller or\nzone hardware), so it can be compared like-for-like against the seasonal\nroofline cost — standalone lines are deliberately excluded from it for the\nsame reason.\n\n``custom_total`` is the part of ``total`` contributed by the rep's standalone\nlines, broken out so a caller pricing a *package* (whose total excludes them)\ncan add them back without re-deriving the arithmetic.",
         "properties": {
+          "custom_total": {
+            "default": 0,
+            "title": "Custom Total",
+            "type": "number"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -34738,6 +34886,13 @@
             "title": "Currency",
             "type": "string"
           },
+          "custom_lines": {
+            "items": {
+              "$ref": "#/components/schemas/PublicComparisonLine"
+            },
+            "title": "Custom Lines",
+            "type": "array"
+          },
           "difference": {
             "title": "Difference",
             "type": "number"
@@ -34803,6 +34958,50 @@
           "multi_year_savings"
         ],
         "title": "PublicComparison",
+        "type": "object"
+      },
+      "PublicComparisonLine": {
+        "description": "One standalone add-on as the client sees it — what it is and what it costs.\n\nShown rather than folded silently into a headline: an unexplained bump in the\nprice is the fastest way to lose a signature. Feet-free like every public\nmodel here — the label is the rep's own words, and ``amount`` is the computed\nline total, never a rate or a measurement.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "side": {
+            "default": "seasonal",
+            "enum": [
+              "permanent",
+              "seasonal"
+            ],
+            "title": "Side",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "amount"
+        ],
+        "title": "PublicComparisonLine",
         "type": "object"
       },
       "PublicComparisonPackage": {

@@ -19,7 +19,11 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
-from app.schemas.estimate import ComparisonShareRequest, PublicComparison
+from app.schemas.estimate import (
+    ComparisonShareRequest,
+    EstimateCustomLine,
+    PublicComparison,
+)
 from app.services.exceptions import NotFoundError, ValidationError
 from app.services.quotes import QuoteService
 
@@ -465,3 +469,56 @@ async def test_resharing_same_phone_reuses_one_customer() -> None:
             )
         ).scalar_one()
         assert count == 1
+
+
+async def test_custom_lines_survive_the_share_and_reach_the_client_itemized() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                custom_lines=[
+                    EstimateCustomLine(label="Bucket truck day", unit_price=150, quantity=2),
+                    EstimateCustomLine(label="Remove old clips", unit_price=90, side="permanent"),
+                ],
+            ),
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # Seasonal roofline 100*6=600 plus 2 x $150; permanent 3300 plus $90.
+        assert public.christmas.total == 900
+        assert public.permanent.total == 3390
+        # Itemized rather than folded silently into the headline: an unexplained
+        # bump in the price is the fastest way to lose a signature.
+        assert [(line.label, line.amount, line.side) for line in public.custom_lines] == [
+            ("Remove old clips", 90, "permanent"),
+            ("Bucket truck day", 300, "seasonal"),
+        ]
+
+
+async def test_custom_lines_ride_on_top_of_the_chosen_package() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        pricing = dict(ws.settings["pricing"])
+        pricing["christmas"] = {**pricing["christmas"], "packages_enabled": True}
+        ws.settings = {**ws.settings, "pricing": pricing}
+        await db.flush()
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                custom_lines=[EstimateCustomLine(label="Balcony hand-tie", unit_price=200)],
+            ),
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # The recommended package's own total, plus the standalone line — the
+        # add-on can't be lost just because the workspace sells packages.
+        recommended = next(p for p in public.christmas_packages if p.recommended)
+        assert public.christmas.total == round(recommended.total + 200, 2)
+        assert [line.amount for line in public.custom_lines] == [200]

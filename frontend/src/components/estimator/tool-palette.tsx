@@ -23,9 +23,11 @@ import {
 import { type Dispatch } from "react";
 
 import {
+  BEAM_ANGLE_OPTIONS,
   BULB_SIZE_OPTIONS,
   COLOR_PRESETS,
   SPACING_OPTIONS,
+  beamAngleNameFor,
   bulbSizeNameFor,
   presetNameFor,
 } from "@/lib/estimator/catalog";
@@ -33,7 +35,8 @@ import {
   seasonalIconForStyle,
   tintSurface,
 } from "@/lib/estimator/seasonal-icons";
-import type { Product, Run } from "@/lib/estimator/types";
+import { beamAngleFor } from "@/lib/estimator/types";
+import type { PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
 
 import type { EditorAction, EditorState } from "./editor-store";
@@ -77,6 +80,13 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
     selection?.kind === "run"
       ? design.runs.find((r) => r.id === selection.id)
       : undefined;
+  const selectedItem =
+    selection?.kind === "item"
+      ? design.items.find((i) => i.id === selection.id)
+      : undefined;
+  const selectedItemProduct = selectedItem
+    ? products.find((p) => p.id === selectedItem.productId)
+    : undefined;
 
   return (
     <aside className="tp-rail">
@@ -154,6 +164,14 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
               dispatch={dispatch}
             />
           </div>
+        ) : null}
+
+        {selectedItem && selectedItemProduct ? (
+          <FixtureOptions
+            item={selectedItem}
+            product={selectedItemProduct}
+            dispatch={dispatch}
+          />
         ) : null}
       </div>
 
@@ -240,6 +258,64 @@ function ProductButton({
       <span className="tp-product-name">{product.name}</span>
       <span className="tp-product-price">{price}</span>
     </button>
+  );
+}
+
+/**
+ * Beam controls for the selected landscape fixture.
+ *
+ * The spread is what a rep argues about standing in the driveway — "that's
+ * washing the whole wall, I want it grazing the column" — so it is editable per
+ * fixture here and by dragging the gold grip on the cone's edge. Renders nothing
+ * for a fixture that throws no cone (a path light pools on the ground) or for
+ * placed holiday decor, which has no beam at all.
+ */
+function FixtureOptions({
+  item,
+  product,
+  dispatch,
+}: {
+  item: PlacedItem;
+  product: Product;
+  dispatch: Dispatch<EditorAction>;
+}) {
+  const angle = beamAngleFor(product.style, item.beamAngleDeg);
+  if (angle === null) return null;
+
+  return (
+    <div className="tp-run-options">
+      <h2 className="tp-mt">Selected fixture</h2>
+      <div>
+        <p className="tp-opt-label">Beam angle</p>
+        <div className="tp-chip-row">
+          {BEAM_ANGLE_OPTIONS.map((option) => (
+            <button
+              key={option.deg}
+              type="button"
+              className={`tp-spacing-chip ${
+                Math.round(angle) === option.deg ? "on" : ""
+              }`}
+              aria-label={`${option.deg} degree beam — ${option.name}`}
+              aria-pressed={Math.round(angle) === option.deg}
+              onClick={() =>
+                dispatch({
+                  type: "UPDATE_ITEM",
+                  id: item.id,
+                  patch: { beamAngleDeg: option.deg },
+                })
+              }
+              title={`${option.name} — ${option.blurb}`}
+            >
+              {option.deg}&deg;
+            </button>
+          ))}
+        </div>
+        <p className="tp-opt-readout">
+          {beamAngleNameFor(angle)} · {Math.round(angle)}&deg; — drag the gold grip
+          on the photo to fine-tune.
+        </p>
+      </div>
+    </div>
   );
 }
 
