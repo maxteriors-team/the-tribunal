@@ -18,6 +18,9 @@ BACKUP_DIR        := backend/backups
 # Kept outside the repo so a dump key can never be committed. Override to point
 # at a shared secret store.
 BACKUP_KEY        ?= $(HOME)/.the-tribunal-backup-keys/backups.key
+# Sentinel proving the key was copied somewhere off this machine. Absent = every
+# backup prints a loud banner; `make db.key.escrowed` records it and goes quiet.
+BACKUP_KEY_ESCROW ?= $(dir $(BACKUP_KEY)).escrowed
 DB_USER           := aicrm
 DB_NAME           := aicrm
 DB_CONTAINER      := aicrm-postgres
@@ -336,8 +339,49 @@ _backup.keycheck:
 		mkdir -p "$$(dirname $(BACKUP_KEY))"; chmod 700 "$$(dirname $(BACKUP_KEY))"; \
 		openssl rand -base64 48 > "$(BACKUP_KEY)"; chmod 600 "$(BACKUP_KEY)"; \
 		echo "▶ generated a new backup encryption key at $(BACKUP_KEY)"; \
-		echo "  BACK THIS UP NOW (password manager). Without it these dumps are unrecoverable."; \
 	fi
+	@$(MAKE) --no-print-directory _backup.escrowcheck
+
+.PHONY: _backup.escrowcheck
+_backup.escrowcheck:
+	@fp="$$(openssl dgst -sha256 "$(BACKUP_KEY)" 2>/dev/null | awk '{print $$NF}' | cut -c1-16 || true)"; \
+	if [ -n "$$fp" ] && ! grep -qs "key-fingerprint $$fp" "$(BACKUP_KEY_ESCROW)"; then \
+		n=$$(ls -1 $(BACKUP_DIR)/*.dump.enc 2>/dev/null | wc -l | tr -d ' '); \
+		echo ""; \
+		echo "  ┌──────────────────────────────────────────────────────────────────────┐"; \
+		echo "  │  ⚠  BACKUP KEY EXISTS ON THIS MACHINE ONLY                           │"; \
+		echo "  ├──────────────────────────────────────────────────────────────────────┤"; \
+		printf "  │  %-68s│\n" "$$n encrypted dump(s) are unrecoverable if this Mac dies."; \
+		echo "  │                                                                      │"; \
+		echo "  │  Copy it into your password manager:                                 │"; \
+		echo "  │      make db.key.show                                                │"; \
+		echo "  │                                                                      │"; \
+		echo "  │  Then silence this banner:                                           │"; \
+		echo "  │      make db.key.escrowed                                            │"; \
+		echo "  └──────────────────────────────────────────────────────────────────────┘"; \
+		echo ""; \
+	fi
+
+.PHONY: db.key.show
+db.key.show: ## Print the backup encryption key so it can be copied into a password manager.
+	@if [ ! -f "$(BACKUP_KEY)" ]; then echo "✗ no key at $(BACKUP_KEY) — run a backup first"; exit 1; fi
+	@echo "▶ backup encryption key ($(BACKUP_KEY)) — store in a password manager, never commit:"
+	@echo ""
+	@cat "$(BACKUP_KEY)"
+	@echo ""
+	@echo "  Then run: make db.key.escrowed"
+
+.PHONY: db.key.escrowed
+db.key.escrowed: ## Record that the backup key is stored off this machine (silences the banner).
+	@if [ ! -f "$(BACKUP_KEY)" ]; then echo "✗ no key at $(BACKUP_KEY) — nothing to escrow"; exit 1; fi
+	@mkdir -p "$$(dirname $(BACKUP_KEY_ESCROW))"
+	@printf 'escrowed %s\nkey-fingerprint %s\n' \
+		"$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		"$$(openssl dgst -sha256 "$(BACKUP_KEY)" | awk '{print $$NF}' | cut -c1-16)" \
+		> "$(BACKUP_KEY_ESCROW)"
+	@chmod 600 "$(BACKUP_KEY_ESCROW)"
+	@echo "✓ recorded — backup banner silenced."
+	@echo "  If you ever rotate the key, delete $(BACKUP_KEY_ESCROW) to bring the reminder back."
 
 .PHONY: db.restore.local
 db.restore.local: ## Restore a dump into local dev DB (handles .enc). Usage: make db.restore.local f=backend/backups/<file>.dump.enc
