@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { Capability } from "@/lib/permissions";
 
 import {
+  allNavItems,
+  appNavSections,
   canSeeNavItem,
+  findNavSectionIdForPath,
   isFieldOperationalPath,
   setupNavItem,
-  workspaceNavItems,
-  toolsNavItems,
   type AppNavItem,
 } from "./app-nav";
 
@@ -20,6 +21,68 @@ const canNone = (_capability: Capability) => false;
 function navItem(url: string, requires?: Capability): AppNavItem {
   return { title: url, url, icon: (() => null) as never, requires };
 }
+
+describe("sidebar sections fit the viewport", () => {
+  // The sidebar keeps one section open, so its resting height is
+  // `(sections - 1) x ~40px header + the open section`. Six 32px rows plus
+  // eight other headers lands around 530px, which clears the ~570px of usable
+  // nav height on a 1440x700 window. A seventh row starts pushing items back
+  // off-screen, which is the regression this whole structure exists to prevent.
+  const MAX_ITEMS_PER_SECTION = 6;
+
+  it("keeps every section small enough to render without scrolling", () => {
+    for (const section of appNavSections) {
+      const sidebarItems = section.items.filter((item) => item.sidebar);
+      expect(
+        sidebarItems.length,
+        `section "${section.title}" has ${sidebarItems.length} sidebar items`,
+      ).toBeLessThanOrEqual(MAX_ITEMS_PER_SECTION);
+    }
+  });
+
+  it("gives every section a unique id for the open/closed state", () => {
+    const ids = appNavSections.map((section) => section.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.every((id) => id.length > 0)).toBe(true);
+  });
+
+  it("registers every nav item exactly once", () => {
+    const urls = allNavItems.map((item) => item.url);
+    expect(new Set(urls).size).toBe(urls.length);
+  });
+});
+
+describe("findNavSectionIdForPath", () => {
+  it("opens the section that owns the current route", () => {
+    expect(findNavSectionIdForPath("/contacts")).toBe("customers");
+    expect(findNavSectionIdForPath("/invoices")).toBe("sales");
+    expect(findNavSectionIdForPath("/settings")).toBe("account");
+  });
+
+  it("matches sub-routes, so a contact detail page keeps Customers open", () => {
+    expect(findNavSectionIdForPath("/contacts/6980/details")).toBe("customers");
+    expect(findNavSectionIdForPath("/jobs/123")).toBe("operations");
+  });
+
+  it("prefers the longest matching url over a shorter prefix", () => {
+    // Both /reports and /reports/sales are registered; the deeper route wins.
+    expect(findNavSectionIdForPath("/reports/sales")).toBe("insights");
+    // /find-leads/ad-library must not resolve via the /find-leads prefix alone.
+    expect(findNavSectionIdForPath("/find-leads/ad-library")).toBe(
+      "lead-discovery",
+    );
+  });
+
+  it("ignores the query string on deep-linked items", () => {
+    // Registered as `/quotes?tab=designer`; usePathname() never carries a query.
+    expect(findNavSectionIdForPath("/quotes")).toBe("sales");
+  });
+
+  it("returns null for routes outside the nav", () => {
+    expect(findNavSectionIdForPath("/onboarding")).toBeNull();
+    expect(findNavSectionIdForPath("/nope")).toBeNull();
+  });
+});
 
 describe("isFieldOperationalPath", () => {
   it("allows the jobs schedule and calendar (and their sub-routes)", () => {
@@ -61,9 +124,9 @@ describe("canSeeNavItem — field technician is fail-closed to operational route
 
 describe("real nav items under the field tier", () => {
   it("hides Contacts/Campaigns but shows Jobs & Calendar", () => {
-    const contacts = workspaceNavItems.find((i) => i.url === "/contacts")!;
-    const jobs = toolsNavItems.find((i) => i.url === "/jobs")!;
-    const calendar = toolsNavItems.find((i) => i.url === "/calendar")!;
+    const contacts = allNavItems.find((i) => i.url === "/contacts")!;
+    const jobs = allNavItems.find((i) => i.url === "/jobs")!;
+    const calendar = allNavItems.find((i) => i.url === "/calendar")!;
     expect(canSeeNavItem(contacts, "field", canAll)).toBe(false);
     expect(canSeeNavItem(jobs, "field", canAll)).toBe(true);
     expect(canSeeNavItem(calendar, "field", canAll)).toBe(true);
@@ -90,7 +153,7 @@ describe("setupNavItem (first-run \"Finish setup\" entry)", () => {
 });
 
 describe("Light Designer nav item (folded into the Quotes hub)", () => {
-  const designer = workspaceNavItems.find((i) => i.title === "Light Designer");
+  const designer = allNavItems.find((i) => i.title === "Light Designer");
 
   it("is a command-palette-only deep link into the Quotes designer tab", () => {
     expect(designer).toBeDefined();
@@ -110,9 +173,7 @@ describe("Light Designer nav item (folded into the Quotes hub)", () => {
 });
 
 describe("Christmas Lights seasonal hub nav item", () => {
-  const christmas = workspaceNavItems.find(
-    (i) => i.url === "/christmas-lights",
-  );
+  const christmas = allNavItems.find((i) => i.url === "/christmas-lights");
 
   it("is registered with a festive accent and billing gate", () => {
     expect(christmas).toBeDefined();
