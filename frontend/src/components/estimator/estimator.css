@@ -1298,6 +1298,13 @@
   width: 96px;
 }
 
+/* The tier a line is scoped to. Full width on its own row: package names are
+   long ("Only The Classic"), and truncating the tier is how a rep bills the
+   bucket truck to the wrong card. */
+.ep-custom-pkg {
+  width: 100%;
+}
+
 .ep-custom-remove {
   flex: 0 0 auto;
   display: inline-flex;

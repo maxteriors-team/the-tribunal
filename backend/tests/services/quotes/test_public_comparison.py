@@ -522,3 +522,110 @@ async def test_custom_lines_ride_on_top_of_the_chosen_package() -> None:
         recommended = next(p for p in public.christmas_packages if p.recommended)
         assert public.christmas.total == round(recommended.total + 200, 2)
         assert [line.amount for line in public.custom_lines] == [200]
+
+
+async def _packages_workspace(db: AsyncSession) -> Workspace:
+    """A workspace selling Christmas as Good/Better/Best tiers."""
+    ws = await _make_workspace(db)
+    pricing = dict(ws.settings["pricing"])
+    pricing["christmas"] = {**pricing["christmas"], "packages_enabled": True}
+    ws.settings = {**ws.settings, "pricing": pricing}
+    await db.flush()
+    return ws
+
+
+async def _priced_packages(svc: QuoteService, ws: Workspace):
+    """The client-facing tier ladder for this workspace, with no add-ons on it."""
+    share = await svc.share_comparison(ws.id, ComparisonShareRequest(feet=100))
+    return await svc.get_public_comparison(share.token)
+
+
+async def test_a_line_scoped_to_the_recommended_tier_is_billed_exactly_once() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _packages_workspace(db)
+        svc = QuoteService(db)
+        baseline = next(
+            p for p in (await _priced_packages(svc, ws)).christmas_packages if p.recommended
+        )
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                custom_lines=[
+                    EstimateCustomLine(
+                        label="Bucket truck day",
+                        unit_price=200,
+                        package_key=baseline.key,
+                    )
+                ],
+            ),
+        )
+        public = await svc.get_public_comparison(share.token)
+        recommended = next(p for p in public.christmas_packages if p.recommended)
+
+        # The card absorbed the line...
+        assert recommended.total == round(baseline.total + 200, 2)
+        # ...and the headline is that card's total, NOT the card plus the line a
+        # second time. That double-count is the one real hazard of scoping.
+        assert public.christmas.total == recommended.total
+        # Still itemized, so the client can see what they're paying for.
+        assert [(line.label, line.amount) for line in public.custom_lines] == [
+            ("Bucket truck day", 200)
+        ]
+
+
+async def test_a_line_scoped_to_another_tier_stays_off_the_clients_price() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _packages_workspace(db)
+        svc = QuoteService(db)
+        cheapest = (await _priced_packages(svc, ws)).christmas_packages[0]
+        assert not cheapest.recommended
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                custom_lines=[
+                    EstimateCustomLine(
+                        label="Bucket truck day",
+                        unit_price=200,
+                        package_key=cheapest.key,
+                    )
+                ],
+            ),
+        )
+        public = await svc.get_public_comparison(share.token)
+        recommended = next(p for p in public.christmas_packages if p.recommended)
+
+        # It priced into the tier it was sold with, and nowhere else.
+        assert public.christmas_packages[0].total == round(cheapest.total + 200, 2)
+        assert public.christmas.total == recommended.total
+        # Not itemized against a price it isn't part of.
+        assert public.custom_lines == []
+
+
+async def test_a_line_naming_no_priced_package_is_dropped_from_the_client_page() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _packages_workspace(db)
+        svc = QuoteService(db)
+        plain = await _priced_packages(svc, ws)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                custom_lines=[
+                    EstimateCustomLine(
+                        label="Bucket truck day",
+                        unit_price=200,
+                        package_key="platinum",
+                    )
+                ],
+            ),
+        )
+        public = await svc.get_public_comparison(share.token)
+
+        # A quiet fallback to "global" would move money the rep never asked to.
+        assert public.christmas.total == plain.christmas.total
+        assert public.custom_lines == []

@@ -57,6 +57,45 @@ describe("toEstimateCustomLines", () => {
     expect(line.side).toBe("permanent");
   });
 
+  it("omits the package key for an all-packages line", () => {
+    // No key is what asks the server for today's behavior: the line rides on
+    // top of whichever tier the client picks.
+    const [line] = toEstimateCustomLines([
+      draft({ label: "Trip charge", unitPrice: "75" }),
+    ]);
+    expect(line.package_key).toBeUndefined();
+  });
+
+  it("pins a line to the tier the rep scoped it to", () => {
+    const [line] = toEstimateCustomLines([
+      draft({
+        label: "Bucket truck day",
+        unitPrice: "200",
+        packageKey: "premier",
+      }),
+    ]);
+    expect(line.package_key).toBe("premier");
+  });
+
+  it("drops a package scope from a one-time line", () => {
+    // The ladder is seasonal; a permanent line has no card to live inside, and
+    // the server would drop it outright rather than bill it globally.
+    const [line] = toEstimateCustomLines([
+      draft({
+        label: "Remove old clips",
+        unitPrice: "90",
+        side: "permanent",
+        packageKey: "premier",
+      }),
+    ]);
+    expect(line.package_key).toBeUndefined();
+    expect(line.side).toBe("permanent");
+  });
+
+  it("starts a new row unscoped", () => {
+    expect(newCustomLineDraft("seasonal").packageKey).toBeNull();
+  });
+
   it("stops at the server's line cap", () => {
     const rows = Array.from({ length: MAX_CUSTOM_LINES + 5 }, (_, i) =>
       draft({ label: `Line ${i}`, unitPrice: "10" }),

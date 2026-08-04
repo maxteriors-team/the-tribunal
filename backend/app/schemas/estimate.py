@@ -35,7 +35,7 @@ class EstimateCustomLine(BaseModel):
 
     The price book and the Good/Better/Best packages cover the work we sell every
     day; this covers the rest — a bucket-truck fee, hand-tying garland on a
-    balcony, removing the last company's clips. It is deliberately **independent
+    balcony, removing the last company's clips. By default it is **independent
     of packages**: the amount rides on top of whichever tier the customer picks
     (and on top of à la carte pricing), so a rep never has to fake it into a
     decor category or edit the workspace's pricing config to land one job.
@@ -51,6 +51,20 @@ class EstimateCustomLine(BaseModel):
     the seasonal total. A line assigned to a side the workspace doesn't offer is
     priced into a total that stays zero — same as every other input for a
     disabled service — so the rep tool only ever offers the enabled sides.
+
+    ``package_key`` optionally pins the line **inside one tier**, for the case the
+    global default can't express: a bucket-truck day the Best install needs and
+    Good doesn't. Three rules, and the default is the one that has always been:
+
+    * ``None`` (default) — global. Rides on top of whichever tier the client
+      picks, reported in that side's ``custom_total``, in no package card.
+    * a priced package's key — priced **inside that card's own total** and
+      nowhere else, so switching tiers re-prices and the line follows the tier it
+      was sold with. Deliberately excluded from ``custom_total`` (which the
+      client page adds *on top of* a package total) so it can't be billed twice.
+    * a key no priced package matches — **dropped**, same as a line assigned to a
+      disabled service. Quietly falling back to global would move money the rep
+      never asked to move.
     """
 
     label: str = Field(min_length=1, max_length=120)
@@ -58,6 +72,7 @@ class EstimateCustomLine(BaseModel):
     unit_price: float = Field(ge=0, le=1_000_000)
     side: Literal["permanent", "seasonal"] = "seasonal"
     description: str | None = Field(default=None, max_length=300)
+    package_key: str | None = Field(default=None, max_length=60)
 
 
 class EstimateCustomLineCost(EstimateCustomLine):
@@ -97,9 +112,10 @@ class LinearFeetEstimateRequest(BaseModel):
     # ``None`` => à la carte seasonal pricing (the standard roofline + decor flow).
     selected_package: str | None = None
     # Standalone rep-entered lines, added on top of the priced side they belong
-    # to and *never* folded into a package's own total — a package card shows
-    # exactly what that package costs, whatever else is on the estimate. Capped
-    # so one request can't carry an unbounded breakdown onto the public page.
+    # to. A line without a ``package_key`` is never folded into a package's own
+    # total — that card shows exactly what the package costs, whatever else is
+    # on the estimate; a line that names a tier is priced inside that card only.
+    # Capped so one request can't carry an unbounded breakdown onto the public page.
     custom_lines: list[EstimateCustomLine] = Field(default_factory=list, max_length=20)
 
 
@@ -166,11 +182,14 @@ class LinearFeetEstimateResult(BaseModel):
     # the à la carte breakdown; the rep tool renders one tier card per package
     # from the shared engine's totals. Empty when packages are off.
     #
-    # A package total covers that package's own scope only: the rep's standalone
-    # lines are added to ``christmas.total`` (and reported in ``custom_total``),
-    # never into a card, so switching tier changes exactly one number.
+    # A package total covers that package's own scope plus any standalone line
+    # scoped to it: global lines are added to ``christmas.total`` (and reported
+    # in ``custom_total``), never into a card, so switching tier changes exactly
+    # one number — while a tier-scoped line moves with the tier that sold it.
     christmas_packages: list[ChristmasPackagePricing] = Field(default_factory=list)
     # The rep's standalone lines with their computed amounts, in request order.
+    # Includes tier-scoped lines (each carrying its ``package_key``) so the rep
+    # panel can read them under the card whose total already contains them.
     custom_lines: list[EstimateCustomLineCost] = Field(default_factory=list)
 
 

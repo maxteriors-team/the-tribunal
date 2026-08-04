@@ -697,6 +697,180 @@ def test_convert_carries_custom_lines_onto_a_package_quote() -> None:
     assert _lines_sum(lines) == 1320
 
 
+# --------------------------------------------------------------------------- #
+# Package-scoped standalone lines (the bucket truck Best needs and Good doesn't)
+# --------------------------------------------------------------------------- #
+def _package_totals(result) -> dict[str, float]:
+    """Every priced tier's card total, keyed by package."""
+    totals: dict[str, float] = {}
+    for pkg in result.christmas_packages:
+        totals[pkg.key] = pkg.pricing.total
+    return totals
+
+
+def _package(result, wanted: str):
+    """One priced tier by its package key."""
+    return next(pkg for pkg in result.christmas_packages if pkg.key in {wanted})
+
+
+def test_scoped_custom_line_is_priced_inside_only_its_own_card() -> None:
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 1}},
+        custom_lines=[_line("Bucket truck day", 200, package_key="middle")],
+    )
+
+    # Only "middle" moves: the line was sold with that tier and follows it.
+    assert _package_totals(result) == {
+        "essential": 260,
+        "middle": 1060,  # 860 + 200
+        "premier": 860,
+    }
+    # It reads on the card too, not just in the total.
+    middle = _package(result, "middle")
+    assert "Bucket truck day" in [line.label for line in middle.pricing.lines]
+
+
+def test_scoped_custom_line_stays_out_of_the_global_custom_total() -> None:
+    # ``custom_total`` is what the client page adds *on top of* a package total,
+    # so a line already inside a card must not appear in it — that is the
+    # double-count that would overbill the homeowner.
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 1}},
+        custom_lines=[_line("Bucket truck day", 200, package_key="middle")],
+    )
+
+    assert result.christmas.custom_total == 0
+    assert result.christmas.total == 860  # à la carte, untouched
+    # Still echoed to the rep, carrying the tier it belongs to.
+    assert [(line.label, line.amount, line.package_key) for line in result.custom_lines] == [
+        ("Bucket truck day", 200, "middle")
+    ]
+
+
+def test_global_and_scoped_lines_coexist_on_one_estimate() -> None:
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 1}},
+        custom_lines=[
+            _line("Trip charge", 75),
+            _line("Bucket truck day", 200, package_key="premier"),
+        ],
+    )
+
+    # The global line rides on top of every tier (via custom_total); the scoped
+    # one is inside exactly one card.
+    assert result.christmas.custom_total == 75
+    assert result.christmas.total == 935  # 860 + 75
+    assert _package_totals(result) == {
+        "essential": 260,
+        "middle": 860,
+        "premier": 1060,
+    }
+    assert [line.label for line in result.custom_lines] == [
+        "Trip charge",
+        "Bucket truck day",
+    ]
+
+
+def test_scoped_custom_line_naming_no_priced_package_is_dropped() -> None:
+    # Silently falling back to "global" would move money the rep never asked to
+    # move, so an unknown tier drops the line — same as a disabled service.
+    result = _estimate(
+        _packages_config(),
+        100,
+        christmas_items={"trees": {"medium": 1}},
+        custom_lines=[_line("Bucket truck day", 200, package_key="platinum")],
+    )
+
+    assert _package_totals(result) == {
+        "essential": 260,
+        "middle": 860,
+        "premier": 860,
+    }
+    assert result.christmas.total == 860
+    assert result.christmas.custom_total == 0
+    assert result.custom_lines == []
+
+
+def test_scoped_custom_line_is_dropped_when_the_workspace_sells_no_packages() -> None:
+    result = _estimate(
+        _config(), 100, custom_lines=[_line("Bucket truck day", 200, package_key="middle")]
+    )
+
+    assert result.christmas.total == 600
+    assert result.christmas.custom_total == 0
+    assert result.custom_lines == []
+
+
+def test_scoped_custom_line_stays_out_of_the_roofline_comparison() -> None:
+    config = _packages_config()
+    config = config.model_copy(update={"roofline_comparison_enabled": True})
+    computed = _estimate(
+        config, 100, custom_lines=[_line("Bucket truck day", 200, package_key="middle")]
+    )
+    block = build_public_roofline_comparison(config, computed)
+
+    # Like-for-like stays like-for-like: same run of lights, both ways.
+    assert block is not None
+    assert block.seasonal_total == 600
+    assert block.permanent_total == 3000
+
+
+def test_convert_carries_a_scoped_line_onto_that_package_quote_once() -> None:
+    _title, pricing, lines = _convert(
+        _packages_config(),
+        "seasonal",
+        100,
+        selected_package="middle",
+        christmas_items={"trees": {"medium": 2}},
+        custom_lines=[_line("Bucket truck day", 200, package_key="middle")],
+    )
+
+    # "Middle" covers roofline + trees (600 + 520) plus its own scoped line, and
+    # the line is folded exactly once — the sum proves it.
+    assert pricing.total == 1320
+    assert [li.name for li in lines].count("Bucket truck day") == 1
+    assert _lines_sum(lines) == 1320
+
+
+def test_convert_drops_a_line_scoped_to_a_different_package() -> None:
+    _title, pricing, lines = _convert(
+        _packages_config(),
+        "seasonal",
+        100,
+        selected_package="essential",
+        christmas_items={"trees": {"medium": 2}},
+        custom_lines=[_line("Bucket truck day", 200, package_key="middle")],
+    )
+
+    # "Essential" covers trees only (520). The Best-tier add-on isn't sold here.
+    assert pricing.total == 520
+    assert all("Bucket truck" not in li.name for li in lines)
+    assert _lines_sum(lines) == 520
+
+
+def test_convert_carries_global_and_scoped_lines_together() -> None:
+    _title, pricing, lines = _convert(
+        _packages_config(),
+        "seasonal",
+        100,
+        selected_package="middle",
+        christmas_items={"trees": {"medium": 2}},
+        custom_lines=[
+            _line("Trip charge", 75),
+            _line("Bucket truck day", 200, package_key="middle"),
+        ],
+    )
+
+    assert pricing.total == 1395  # 1120 package + 75 global + 200 scoped
+    assert _lines_sum(lines) == 1395
+
+
 def test_custom_line_tops_up_a_job_that_hit_the_minimum() -> None:
     # The minimum lifts the *priced work*; an add-on is billed on top of it rather
     # than disappearing into the shortfall.

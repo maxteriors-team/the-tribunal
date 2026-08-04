@@ -60,6 +60,7 @@ from app.schemas.estimate import (
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
     CategoryLine,
+    ChristmasPackagePricing,
     ChristmasPricing,
     FinancingEstimate,
     PackagePricing,
@@ -1795,14 +1796,20 @@ class QuoteService:
 
     @staticmethod
     def _price_custom_lines(
-        lines: Sequence[EstimateCustomLine], side: str
+        lines: Sequence[EstimateCustomLine], side: str, *, package_key: str | None = None
     ) -> list[EstimateCustomLineCost]:
-        """Price one side's standalone lines: quantity × unit price, cent-rounded.
+        """Price one bucket of standalone lines: quantity × unit price, cent-rounded.
 
         No gross-up. Every other figure on an estimate starts as a *net* rate the
         engine marks up; a standalone line is the rep typing the client-facing
         amount directly, so marking it up again would quietly overcharge the
         number they just quoted out loud in the driveway.
+
+        ``package_key`` selects the bucket, and the match is exact both ways:
+        ``None`` returns only the global lines (today's behavior), a key returns
+        only the lines pinned to that tier. Nothing is ever counted twice, and a
+        line naming a package the caller never asks about simply doesn't appear —
+        which is what drops a line whose key matches no priced package.
         """
         return [
             EstimateCustomLineCost(
@@ -1810,7 +1817,7 @@ class QuoteService:
                 amount=round(float(line.quantity) * float(line.unit_price), 2),
             )
             for line in lines
-            if line.side == side
+            if line.side == side and line.package_key == package_key
         ]
 
     @staticmethod
@@ -1894,15 +1901,21 @@ class QuoteService:
         never mutated. Each override affects only its own side.
 
         Standalone ``custom_lines`` are added to the side they name, after the
-        engine has priced that side. They are intentionally left *out* of the
-        package ladder and out of both ``roofline_cost`` figures, so a tier card
-        still quotes its own scope and the roofline-vs-roofline block stays a
-        like-for-like comparison of the same run of lights.
+        engine has priced that side. A global line (no ``package_key``) is
+        intentionally left *out* of the package ladder, so a tier card still
+        quotes its own scope; a tier-scoped line is folded into exactly that
+        card's total and kept out of ``custom_total``, which the client page adds
+        *on top of* a package total — double-counting is the one real hazard
+        here. Neither kind touches either ``roofline_cost``, so the
+        roofline-vs-roofline block stays a like-for-like comparison of the same
+        run of lights.
         """
         perm_config = QuoteService._permanent_config_with_override(config, req.per_ft_override)
         xmas_config = QuoteService._christmas_config_with_override(
             config, req.christmas_per_ft_override
         )
+        # Global lines only: a tier-scoped line belongs to one card, and folding
+        # it in here too would bill it twice on the page the homeowner opens.
         perm_custom = QuoteService._price_custom_lines(req.custom_lines, "permanent")
         xmas_custom = QuoteService._price_custom_lines(req.custom_lines, "seasonal")
         perm = QuoteService._with_custom_lines(
@@ -1933,6 +1946,26 @@ class QuoteService:
             if config.christmas.packages_enabled
             else []
         )
+        # A line pinned to a tier is priced inside that tier's own card, so it
+        # follows the package it was sold with when the rep switches tiers. Keyed
+        # by package so the scoped lines can also be echoed on ``custom_lines``
+        # for the rep panel; a key matching no priced package is never visited
+        # here, which is exactly how an unknown key gets dropped.
+        scoped_custom: dict[str, list[EstimateCustomLineCost]] = {}
+        priced_packages: list[ChristmasPackagePricing] = []
+        for pkg in christmas_packages:
+            scoped = QuoteService._price_custom_lines(
+                req.custom_lines, "seasonal", package_key=pkg.key
+            )
+            scoped_custom[pkg.key] = scoped
+            priced_packages.append(
+                pkg.model_copy(
+                    update={"pricing": QuoteService._with_custom_lines(pkg.pricing, scoped)}
+                )
+                if scoped
+                else pkg
+            )
+        christmas_packages = priced_packages
         perm_enabled = bool(config.permanent.enabled)
         xmas_enabled = bool(config.christmas.enabled)
         perm_total = float(perm.total) if perm_enabled else 0.0
@@ -1981,14 +2014,25 @@ class QuoteService:
             christmas_perks=list(config.christmas.perks),
             christmas_catalog=list(config.christmas.items),
             christmas_packages=christmas_packages,
-            # Grouped by side (request order within each), and lines belonging to
-            # a service this workspace doesn't sell are dropped rather than shown
-            # against a total they were never added to.
+            # Grouped by side (request order within each), then the tier-scoped
+            # seasonal lines in package order — each already inside its own card's
+            # total, and carrying its ``package_key`` so the rep panel can read it
+            # under that card. Lines belonging to a service this workspace doesn't
+            # sell, or naming a package it doesn't price, are dropped rather than
+            # shown against a total they were never added to.
             custom_lines=[
-                line
-                for line in (*perm_custom, *xmas_custom)
-                if (line.side == "permanent" and perm_enabled)
-                or (line.side == "seasonal" and xmas_enabled)
+                *(
+                    line
+                    for line in (*perm_custom, *xmas_custom)
+                    if (line.side == "permanent" and perm_enabled)
+                    or (line.side == "seasonal" and xmas_enabled)
+                ),
+                *(
+                    line
+                    for pkg in christmas_packages
+                    for line in scoped_custom.get(pkg.key, [])
+                    if xmas_enabled
+                ),
             ],
         )
 
@@ -2016,9 +2060,12 @@ class QuoteService:
         else the à la carte roofline+decor. The rep's standalone lines for that
         side are appended either way, so an add-on the customer agreed to on the
         estimate becomes a real line on the quote instead of evaporating at
-        conversion. Raises :class:`ValidationError` when the requested side isn't
-        enabled for the workspace, so the rep gets an actionable message instead
-        of an empty quote.
+        conversion. A line scoped to a package joins them only on that package's
+        quote — folded exactly once, alongside the global lines — and is dropped
+        on any other tier, because it was priced into that card and no other.
+        Raises :class:`ValidationError` when the requested side isn't enabled for
+        the workspace, so the rep gets an actionable message instead of an empty
+        quote.
         """
         custom = self._price_custom_lines(req.custom_lines, req.side)
         if req.side == "permanent":
@@ -2048,7 +2095,12 @@ class QuoteService:
                         takedown=req.takedown,
                         storage=req.storage,
                     ),
-                    custom,
+                    [
+                        *custom,
+                        *self._price_custom_lines(
+                            req.custom_lines, req.side, package_key=package.key
+                        ),
+                    ],
                 )
                 return f"{config.christmas.label} — {package.name or package.label}", pricing
         pricing = self._with_custom_lines(
@@ -2393,14 +2445,27 @@ class QuoteService:
         recommended = _resolve_recommended_package(
             computed.christmas_packages, comparison.selected_package
         )
-        # A package total covers that package's scope only, so the rep's
-        # standalone lines are added back here — without this the client's
-        # headline would quietly drop every add-on the moment packages are on.
+        # A package total covers that package's scope plus any line scoped to it,
+        # so only the *global* standalone lines are added back here — without this
+        # the client's headline would quietly drop every add-on the moment
+        # packages are on, and with a scoped line counted twice it would overbill.
+        # ``custom_total`` is global-only by construction, which is what keeps
+        # this addition safe.
         christmas_total = (
             round(recommended.pricing.total + computed.christmas.custom_total, 2)
             if recommended is not None
             else computed.christmas.total
         )
+        # The client sees the add-ons on the price they're actually being quoted:
+        # the global lines plus the ones scoped to the recommended tier. Lines
+        # scoped to a tier they aren't being sold are already inside a different
+        # card's total and would only confuse the itemization here.
+        recommended_key = recommended.key if recommended is not None else None
+        client_lines = [
+            line
+            for line in computed.custom_lines
+            if line.package_key is None or line.package_key == recommended_key
+        ]
 
         return PublicComparison(
             business_name=template.business_name or (workspace.name if workspace else ""),
@@ -2434,7 +2499,7 @@ class QuoteService:
                     amount=line.amount,
                     side=line.side,
                 )
-                for line in computed.custom_lines
+                for line in client_lines
             ],
         )
 

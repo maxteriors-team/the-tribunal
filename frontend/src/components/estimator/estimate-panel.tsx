@@ -14,8 +14,10 @@
  * reflects that package's total (matching what the client sees on the share).
  *
  * Standalone line items are edited here too. They are the one thing on this
- * panel the rep types a price for, and they sit *outside* the package ladder:
- * switching Good→Best re-prices the package and leaves the add-ons alone.
+ * panel the rep types a price for, and by default they sit *outside* the package
+ * ladder: switching Good→Best re-prices the package and leaves the add-ons
+ * alone. A line can instead be scoped to one tier — the bucket truck Best needs
+ * and Good doesn't — and then it is priced inside that card only.
  */
 import { Plus, X } from "lucide-react";
 
@@ -25,9 +27,16 @@ import {
   type CustomLineDraft,
   type CustomLineSide,
 } from "@/lib/estimator/custom-lines";
-import { resolveSelectedPackage, seasonalTotal } from "@/lib/estimator/packages";
+import {
+  packageName,
+  resolveSelectedPackage,
+  seasonalTotal,
+} from "@/lib/estimator/packages";
 import { formatCurrency } from "@/lib/utils/number";
-import type { LinearFeetEstimateResult } from "@/types/estimate";
+import type {
+  ChristmasPackagePricing,
+  LinearFeetEstimateResult,
+} from "@/types/estimate";
 
 /** Which halves of the comparison this workspace actually sells. */
 export interface EstimateSides {
@@ -180,7 +189,7 @@ export function EstimatePanel({
           sides={sides}
           permanentTotal={permanent?.custom_total ?? 0}
           seasonalTotal={christmas?.custom_total ?? 0}
-          hasPackages={hasPackages}
+          packages={packages}
         />
       ) : null}
 
@@ -235,14 +244,15 @@ function CustomLines({
   sides,
   permanentTotal,
   seasonalTotal: seasonalCustomTotal,
-  hasPackages,
+  packages,
 }: {
   lines: CustomLineDraft[];
   onChange: (lines: CustomLineDraft[]) => void;
   sides: EstimateSides;
   permanentTotal: number;
   seasonalTotal: number;
-  hasPackages: boolean;
+  /** Priced seasonal tiers a line can be scoped to. Empty => no scope picker. */
+  packages: ChristmasPackagePricing[];
 }) {
   // Nothing to bill against: a workspace that sells neither side has no total
   // for a line item to land on.
@@ -251,6 +261,7 @@ function CustomLines({
   const defaultSide: CustomLineSide = sides.seasonal ? "seasonal" : "permanent";
   const bothSides = sides.permanent && sides.seasonal;
   const atCap = lines.length >= MAX_CUSTOM_LINES;
+  const hasPackages = packages.length > 0;
 
   const patch = (id: string, values: Partial<CustomLineDraft>) =>
     onChange(lines.map((l) => (l.id === id ? { ...l, ...values } : l)));
@@ -260,7 +271,7 @@ function CustomLines({
       <div className="ep-lines-head">Line items</div>
       <p className="ep-pkg-hint">
         {hasPackages
-          ? "Anything that isn’t in the price book. Added on top of whichever package they pick."
+          ? "Anything that isn’t in the price book. Added on top of whichever package they pick — or put inside one tier."
           : "Anything that isn’t in the price book — a trip charge, a custom install, a credit."}
       </p>
 
@@ -325,6 +336,25 @@ function CustomLines({
               </select>
             ) : null}
           </div>
+          {/* The ladder is seasonal, so only a per-season line has a card to
+              live inside — scoping a one-time line would price it nowhere. */}
+          {hasPackages && line.side === "seasonal" ? (
+            <select
+              className="est-select ep-custom-pkg"
+              value={line.packageKey ?? ""}
+              aria-label="Line item package"
+              onChange={(e) =>
+                patch(line.id, { packageKey: e.target.value || null })
+              }
+            >
+              <option value="">All packages</option>
+              {packages.map((pkg) => (
+                <option key={pkg.key} value={pkg.key}>
+                  Only {packageName(pkg)}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       ))}
 
