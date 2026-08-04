@@ -19,8 +19,13 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   workspaceId: string | null;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials, options?: LoginOptions) => Promise<void>;
   logout: () => void;
+}
+
+interface LoginOptions {
+  /** Where to land after a successful sign-in. Defaults to `?redirect=`, else "/". */
+  redirectTo?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +43,25 @@ function isPublicPathname(pathname: string): boolean {
     CUSTOMER_PATHS.includes(pathname) ||
     PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
+}
+
+/**
+ * Accept only same-origin, in-app destinations for post-login redirects.
+ *
+ * Rejects absolute URLs, protocol-relative "//evil.com" (which the browser
+ * treats as another origin) and backslash variants, so `?redirect=` cannot be
+ * turned into an open redirect that bounces a freshly authenticated operator to
+ * an attacker-controlled login-lookalike.
+ */
+export function safeRedirectPath(value: string | null): string | null {
+  if (!value || !value.startsWith("/")) return null;
+  if (value.startsWith("//") || value.includes("\\")) return null;
+  return value;
+}
+
+function requestedRedirect(): string | null {
+  if (typeof window === "undefined") return null;
+  return safeRedirectPath(new URLSearchParams(window.location.search).get("redirect"));
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -89,19 +113,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated && !isPublicPath) {
       router.replace("/login");
     } else if (isAuthenticated && PUBLIC_PATHS.includes(pathname)) {
-      // Only redirect away from explicit public paths (login/register), not invite pages
-      router.replace("/");
+      // Only redirect away from explicit public paths (login/register), not
+      // invite pages. Honour ?redirect= so this effect does not race the
+      // post-login redirect and yank an invitee off their invitation page.
+      router.replace(requestedRedirect() ?? "/");
     }
   }, [isAuthenticated, isLoading, pathname, router]);
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
+  const login = useCallback(async (credentials: LoginCredentials, options?: LoginOptions) => {
     // Backend sets both access_token and refresh_token as httpOnly cookies on
     // the response; the body is ignored here. Subsequent requests carry the
     // cookies automatically (axios is configured with withCredentials).
     await loginApi(credentials);
     const userData = await getCurrentUser();
     setUser(userData);
-    router.replace("/");
+    // Honour where the user was headed. "Sign in to Accept" on an invitation
+    // sends them to /login?redirect=/invite/<token>; hard-coding "/" here
+    // dropped them on the dashboard with the invitation still unaccepted.
+    router.replace(options?.redirectTo ?? requestedRedirect() ?? "/");
   }, [router]);
 
   const logout = useCallback(() => {

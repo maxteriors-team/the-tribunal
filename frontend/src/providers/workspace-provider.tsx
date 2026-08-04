@@ -49,11 +49,26 @@ function setStoredWorkspaceId(workspaceId: string): void {
   }
 }
 
+/**
+ * Workspace requested via `?workspace=<slug|id>`.
+ *
+ * Accepting an invitation redirects to `/?workspace=<slug>`; without this the
+ * param was inert and a member who already had their own workspace kept landing
+ * back in it, making a successful join look like it had done nothing.
+ */
+function getRequestedWorkspaceParam(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("workspace");
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() =>
-    getStoredWorkspaceId()
+  // Holds an id *or* a slug: `?workspace=` arrives as a slug from the invitation
+  // accept redirect, and is read once at mount so a later switcher choice (which
+  // always sets a real id) cleanly overrides it.
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
+    () => getRequestedWorkspaceParam() ?? getStoredWorkspaceId()
   );
 
   const { data: workspaces = [], isPending } = useQuery({
@@ -67,7 +82,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated || workspaces.length === 0) return null;
 
     const selectedWorkspace = selectedWorkspaceId
-      ? workspaces.find((w) => w.workspace.id === selectedWorkspaceId)
+      ? workspaces.find(
+          (w) =>
+            w.workspace.id === selectedWorkspaceId ||
+            w.workspace.slug === selectedWorkspaceId
+        )
       : null;
 
     return selectedWorkspace ?? workspaces.find((w) => w.is_default) ?? workspaces[0] ?? null;
