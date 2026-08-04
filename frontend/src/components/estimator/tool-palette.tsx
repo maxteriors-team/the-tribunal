@@ -35,7 +35,12 @@ import {
   seasonalIconForStyle,
   tintSurface,
 } from "@/lib/estimator/seasonal-icons";
-import { beamAngleFor } from "@/lib/estimator/types";
+import {
+  MAX_BEAM_ANGLE_DEG,
+  MIN_BEAM_ANGLE_DEG,
+  beamAngleFor,
+  clampBeamAngle,
+} from "@/lib/estimator/types";
 import type { PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
 
@@ -266,9 +271,12 @@ function ProductButton({
  *
  * The spread is what a rep argues about standing in the driveway — "that's
  * washing the whole wall, I want it grazing the column" — so it is editable per
- * fixture here and by dragging the gold grip on the cone's edge. Renders nothing
- * for a fixture that throws no cone (a path light pools on the ground) or for
- * placed holiday decor, which has no beam at all.
+ * fixture three ways: the chips pick a real lamp off the shelf, the slider hits
+ * anything in between, and the gold grip on the cone tunes it against the photo.
+ * The slider exists because the other two can't state "42°": chips only offer
+ * five stock lamps, and dragging a grip on a photo is guesswork on a trackpad in
+ * a driveway. Renders nothing for a fixture that throws no cone (a path light
+ * pools on the ground) or for placed holiday decor, which has no beam at all.
  */
 function FixtureOptions({
   item,
@@ -310,9 +318,28 @@ function FixtureOptions({
             </button>
           ))}
         </div>
+        <input
+          className="tp-range"
+          type="range"
+          min={MIN_BEAM_ANGLE_DEG}
+          max={MAX_BEAM_ANGLE_DEG}
+          step={1}
+          value={Math.round(angle)}
+          aria-label="Beam angle in degrees"
+          aria-valuetext={`${Math.round(angle)} degrees — ${beamAngleNameFor(angle)}`}
+          onChange={(e) =>
+            dispatch({
+              type: "UPDATE_ITEM",
+              id: item.id,
+              // Clamped here as well as in the reducer: a keyboard or a browser
+              // that ignores min/max must not be able to render a 0° cone.
+              patch: { beamAngleDeg: clampBeamAngle(Number(e.target.value)) },
+            })
+          }
+        />
         <p className="tp-opt-readout">
-          {beamAngleNameFor(angle)} · {Math.round(angle)}&deg; — drag the gold grip
-          on the photo to fine-tune.
+          {beamAngleNameFor(angle)} · {Math.round(angle)}&deg; — drag the slider,
+          or the gold grip on the photo, to fine-tune.
         </p>
       </div>
     </div>
