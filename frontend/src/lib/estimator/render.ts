@@ -13,7 +13,13 @@
  */
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
-import { beamAngleFor, clampBeamAngle, isLandscapeStyle } from "./types";
+import {
+  beamAngleFor,
+  beamRotationFor,
+  clampBeamAngle,
+  isLandscapeStyle,
+  normalizeBeamRotation,
+} from "./types";
 import type {
   Calibration,
   Design,
@@ -249,16 +255,52 @@ function sagPoints(a: Point, b: Point, spacing: number): Point[] {
  * on the house. `dir` is -1 for fixtures that aim up from the ground and +1 for
  * a downlight throwing from a soffit or a tree, so one cone routine covers both.
  * Path lights have no cone (they pool on the ground) and return `null`.
+ *
+ * `rot` is where the fixture is **aimed**, in radians clockwise from that natural
+ * axis. Spread and aim are separate on purpose: one opens the cone, the other
+ * turns it. Everything else here stays in the beam's own frame (throw down the
+ * local +/-y axis), and `fromBeamSpace` maps that frame onto the photo — so the
+ * cone, its grips, and its hit-tests can never disagree about where the light
+ * points.
  */
 function beamGeometry(
   style: RenderStyle,
   sizePx: number,
   beamAngleDeg?: number,
-): { reach: number; topW: number; dir: -1 | 1 } | null {
+  beamRotationDeg?: number,
+): { reach: number; topW: number; dir: -1 | 1; rot: number } | null {
   const angle = beamAngleFor(style, beamAngleDeg);
   if (angle === null) return null;
   const spread = 2 * Math.tan((angle * Math.PI) / 360);
-  return { reach: sizePx, topW: sizePx * spread, dir: style === "downlight" ? 1 : -1 };
+  return {
+    reach: sizePx,
+    topW: sizePx * spread,
+    dir: style === "downlight" ? 1 : -1,
+    rot: (beamRotationFor(beamRotationDeg) * Math.PI) / 180,
+  };
+}
+
+/**
+ * Beam-frame point → image point. Positive `rot` turns clockwise on screen,
+ * matching `ctx.rotate` under canvas's y-down axes, so a grip drawn through this
+ * helper lands exactly on the cone the same rotation painted.
+ */
+function fromBeamSpace(at: Point, local: Point, rot: number): Point {
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  return {
+    x: at.x + local.x * cos - local.y * sin,
+    y: at.y + local.x * sin + local.y * cos,
+  };
+}
+
+/** Image point → beam-frame point (the inverse of `fromBeamSpace`). */
+function toBeamSpace(at: Point, p: Point, rot: number): Point {
+  const dx = p.x - at.x;
+  const dy = p.y - at.y;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  return { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
 }
 
 /** Ground-pool geometry (path light, and the splash under a downlight). */
@@ -311,12 +353,19 @@ function drawLandscapeFixture(
     return;
   }
 
-  const beam = beamGeometry(product.style, size, item.beamAngleDeg);
+  const beam = beamGeometry(
+    product.style,
+    size,
+    item.beamAngleDeg,
+    item.beamRotationDeg,
+  );
   if (!beam) return;
-  const { reach, topW, dir } = beam;
+  const { reach, topW, dir, rot } = beam;
   const baseW = Math.max(1.5, topW * 0.18);
   ctx.save();
   ctx.translate(x, y);
+  // Aim the whole cone, then draw it in its own frame exactly as before.
+  ctx.rotate(rot);
   const g = ctx.createLinearGradient(0, 0, 0, dir * reach);
   g.addColorStop(0, rgba(color, 0.5));
   g.addColorStop(1, rgba(color, 0));
@@ -330,8 +379,13 @@ function drawLandscapeFixture(
   ctx.fill();
   ctx.restore();
 
-  // A downlight lands on something; show the splash where the beam hits.
-  if (dir === 1) drawPool(ctx, x, y + reach, topW / 2, color, 0.34);
+  // A downlight lands on something; show the splash where the beam hits. The
+  // landing point rides with the aim, or an angled downlight would splash on a
+  // patch of wall its light no longer touches.
+  if (dir === 1) {
+    const hit = fromBeamSpace(item.at, { x: 0, y: reach }, rot);
+    drawPool(ctx, hit.x, hit.y, topW / 2, color, 0.34);
+  }
 
   const lensR = Math.max(2, topW * 0.34);
   const lens = ctx.createRadialGradient(x, y, 0, x, y, lensR);
@@ -551,6 +605,17 @@ export function drawScene(
       // the two grips can't be confused for each other mid-demo.
       const spreadGrip = beamHandlePos(item, product);
       if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
+      // Third, a cyan **round** grip floating past the end of the throw: aim.
+      // Round vs square is the tell — a rep glancing at the photo mid-pitch
+      // reads shape faster than colour, and this is the one grip that swings
+      // the light rather than resizing it. Tethered so it reads as attached to
+      // this fixture instead of a stray dot on the photo.
+      const aimGrip = rotateHandlePos(item, product, vs);
+      if (aimGrip) {
+        const throwEnd = resizeHandlePos(item, product);
+        strokePath(ctx, [throwEnd, aimGrip], "rgba(79,217,255,0.75)", 1.2 / vs);
+        handleDot(ctx, aimGrip, 5 / vs, "#4fd9ff");
+      }
     } else if (item) {
       const r = item.sizePx / 2 + 6 / vs;
       ctx.save();
@@ -602,12 +667,17 @@ export function withRunOverrides(product: Product, run: Run): Product {
  */
 export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
   if (product && isLandscapeStyle(product.style)) {
-    const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
+    const beam = beamGeometry(
+      product.style,
+      item.sizePx,
+      item.beamAngleDeg,
+      item.beamRotationDeg,
+    );
     if (!beam) {
       const r = item.sizePx / 2;
       return { x: item.at.x + r, y: item.at.y + r * POOL_SQUASH };
     }
-    return { x: item.at.x, y: item.at.y + beam.dir * beam.reach };
+    return fromBeamSpace(item.at, { x: 0, y: beam.dir * beam.reach }, beam.rot);
   }
   const r = item.sizePx / 2;
   const d = r * Math.SQRT1_2 + 0.35 * r;
@@ -626,23 +696,97 @@ export function beamHandlePos(
   product?: Product,
 ): Point | null {
   if (!product) return null;
-  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
+  const beam = beamGeometry(
+    product.style,
+    item.sizePx,
+    item.beamAngleDeg,
+    item.beamRotationDeg,
+  );
   if (!beam) return null;
-  return {
-    x: item.at.x + beam.topW / 2,
-    y: item.at.y + beam.dir * beam.reach,
-  };
+  return fromBeamSpace(
+    item.at,
+    { x: beam.topW / 2, y: beam.dir * beam.reach },
+    beam.rot,
+  );
+}
+
+/**
+ * How far past the end of the throw the aim grip floats, in **screen** pixels.
+ * Constant on screen (hence the `/ vs`) rather than proportional to the beam:
+ * a narrow 5° spot and a 120° flood otherwise crowd their grips together at
+ * exactly the moment the rep is trying to grab one of them.
+ */
+const ROTATE_GRIP_GAP_PX = 22;
+
+/**
+ * Where the aim grip sits: straight out along the beam axis, just past the
+ * resize grip at the end of the throw. Dragging it swings the whole cone — the
+ * gesture for "no, kick it toward the chimney" — without touching how far the
+ * light reaches or how wide it opens.
+ *
+ * `null` for anything with no cone to aim: a path light pools on the ground and
+ * has no direction to argue about.
+ */
+export function rotateHandlePos(
+  item: PlacedItem,
+  product: Product | undefined,
+  viewScale: number,
+): Point | null {
+  if (!product) return null;
+  const beam = beamGeometry(
+    product.style,
+    item.sizePx,
+    item.beamAngleDeg,
+    item.beamRotationDeg,
+  );
+  if (!beam) return null;
+  const gap = ROTATE_GRIP_GAP_PX / Math.max(viewScale, 0.01);
+  return fromBeamSpace(
+    item.at,
+    { x: 0, y: beam.dir * (beam.reach + gap) },
+    beam.rot,
+  );
+}
+
+/**
+ * The aim that points the fixture at `p`, in degrees clockwise from its natural
+ * axis — i.e. drag the grip, the beam follows the pointer.
+ *
+ * Only the *direction* to the pointer is read, never the distance, so swinging
+ * the beam around can't also stretch or shrink the throw the rep already set.
+ */
+export function beamRotationAt(
+  item: PlacedItem,
+  p: Point,
+  product?: Product,
+): number {
+  const beam = product
+    ? beamGeometry(product.style, item.sizePx, item.beamAngleDeg)
+    : null;
+  const dir = beam?.dir ?? -1;
+  const dx = p.x - item.at.x;
+  const dy = p.y - item.at.y;
+  // Pointer exactly on the fixture: no direction to read, so hold the aim
+  // rather than snapping the beam to an arbitrary bearing.
+  if (dx === 0 && dy === 0) return beamRotationFor(item.beamRotationDeg);
+  // The natural axis points (0, dir); the delta from it is the rotation.
+  const natural = Math.atan2(dir, 0);
+  return normalizeBeamRotation(((Math.atan2(dy, dx) - natural) * 180) / Math.PI);
 }
 
 /**
  * The beam angle that puts the cone's edge under the pointer, in degrees.
  *
  * Only the sideways distance is read: the throw stays exactly where the rep set
- * it, so opening the beam never also stretches how far the light reaches.
+ * it, so opening the beam never also stretches how far the light reaches. That
+ * measurement happens in the beam's own frame, so it means the same thing at
+ * every aim — "sideways" is across *this* cone, not across the photo.
  */
 export function beamAngleAt(item: PlacedItem, p: Point): number {
   const reach = Math.max(item.sizePx, 1);
-  const half = Math.atan2(Math.abs(p.x - item.at.x), reach);
+  const rot = (beamRotationFor(item.beamRotationDeg) * Math.PI) / 180;
+  const local = toBeamSpace(item.at, p, rot);
+  const half = Math.atan2(Math.abs(local.x), reach);
   return clampBeamAngle((half * 360) / Math.PI);
 }
 
@@ -658,18 +802,25 @@ function drawFixtureSelection(
   ctx.strokeStyle = "rgba(245,200,66,0.9)";
   ctx.lineWidth = 1.6 / vs;
   ctx.setLineDash([7 / vs, 5 / vs]);
-  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg);
+  const beam = beamGeometry(
+    product.style,
+    item.sizePx,
+    item.beamAngleDeg,
+    item.beamRotationDeg,
+  );
   if (!beam) {
     const r = item.sizePx / 2;
     ctx.beginPath();
     ctx.ellipse(x, y, r, r * POOL_SQUASH, 0, 0, Math.PI * 2);
     ctx.stroke();
   } else {
-    const far = y + beam.dir * beam.reach;
+    const far = beam.dir * beam.reach;
+    const left = fromBeamSpace(item.at, { x: -beam.topW / 2, y: far }, beam.rot);
+    const right = fromBeamSpace(item.at, { x: beam.topW / 2, y: far }, beam.rot);
     ctx.beginPath();
-    ctx.moveTo(x - beam.topW / 2, far);
+    ctx.moveTo(left.x, left.y);
     ctx.lineTo(x, y);
-    ctx.lineTo(x + beam.topW / 2, far);
+    ctx.lineTo(right.x, right.y);
     ctx.stroke();
   }
   ctx.setLineDash([]);
@@ -696,9 +847,14 @@ function handleSquare(
   ctx.restore();
 }
 
-function handleDot(ctx: CanvasRenderingContext2D, p: Point, r: number): void {
+function handleDot(
+  ctx: CanvasRenderingContext2D,
+  p: Point,
+  r: number,
+  color = "#ffffff",
+): void {
   ctx.save();
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(10,14,26,0.9)";
   ctx.lineWidth = r * 0.5;
   ctx.beginPath();

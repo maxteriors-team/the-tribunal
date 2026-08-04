@@ -39,7 +39,9 @@ import {
   MAX_BEAM_ANGLE_DEG,
   MIN_BEAM_ANGLE_DEG,
   beamAngleFor,
+  beamRotationFor,
   clampBeamAngle,
+  normalizeBeamRotation,
 } from "@/lib/estimator/types";
 import type { PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
@@ -277,6 +279,11 @@ function ProductButton({
  * five stock lamps, and dragging a grip on a photo is guesswork on a trackpad in
  * a driveway. Renders nothing for a fixture that throws no cone (a path light
  * pools on the ground) or for placed holiday decor, which has no beam at all.
+ *
+ * Aim sits under spread and is a separate axis: spread opens the cone, aim turns
+ * it. Real installs are almost never straight up — the uplight is kicked toward
+ * the column, the soffit downlight is angled onto the path — so without this the
+ * photo argues for a design nobody would actually install.
  */
 function FixtureOptions({
   item,
@@ -289,6 +296,8 @@ function FixtureOptions({
 }) {
   const angle = beamAngleFor(product.style, item.beamAngleDeg);
   if (angle === null) return null;
+  const rotation = beamRotationFor(item.beamRotationDeg);
+  const natural = product.style === "downlight" ? "down" : "up";
 
   return (
     <div className="tp-run-options">
@@ -342,8 +351,64 @@ function FixtureOptions({
           or the gold grip on the photo, to fine-tune.
         </p>
       </div>
+      <div className="tp-mt">
+        <p className="tp-opt-label">Aim</p>
+        <input
+          className="tp-range"
+          type="range"
+          min={-180}
+          max={180}
+          step={1}
+          value={Math.round(rotation)}
+          aria-label="Beam aim in degrees"
+          aria-valuetext={aimLabel(rotation, natural)}
+          onChange={(e) =>
+            dispatch({
+              type: "UPDATE_ITEM",
+              id: item.id,
+              patch: {
+                beamRotationDeg: normalizeBeamRotation(Number(e.target.value)),
+              },
+            })
+          }
+        />
+        <div className="tp-aim-foot">
+          <p className="tp-opt-readout">{aimLabel(rotation, natural)}</p>
+          {/* Getting back to straight is otherwise a pixel hunt for 0 on a
+              360-wide slider, and "put it back how it was" is the single most
+              common thing a rep says after trying an aim. */}
+          <button
+            type="button"
+            className="tp-mini-btn"
+            disabled={Math.round(rotation) === 0}
+            onClick={() =>
+              dispatch({
+                type: "UPDATE_ITEM",
+                id: item.id,
+                patch: { beamRotationDeg: 0 },
+              })
+            }
+          >
+            Reset
+          </button>
+        </div>
+      </div>
     </div>
   );
+}
+
+/**
+ * Plain-English aim, e.g. "Straight up" or "20° clockwise".
+ *
+ * Deliberately "clockwise", not "left"/"right": the same rotation swings an
+ * uplight's cone right and a downlight's cone left (it points the other way), so
+ * a screen-side word would be wrong for half the fixtures on the photo.
+ */
+function aimLabel(rotationDeg: number, natural: "up" | "down"): string {
+  const deg = Math.round(rotationDeg);
+  if (deg === 0) return natural === "down" ? "Straight down" : "Straight up";
+  if (Math.abs(deg) === 180) return `Flipped — pointing ${natural === "down" ? "up" : "down"}`;
+  return `${Math.abs(deg)}\u00b0 ${deg > 0 ? "clockwise" : "counter-clockwise"}`;
 }
 
 function RunOptions({
