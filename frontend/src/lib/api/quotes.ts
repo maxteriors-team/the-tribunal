@@ -3,6 +3,8 @@ import type {
   CreateQuoteRequest,
   Quote,
   QuoteConvertResult,
+  QuoteDeliverChannel,
+  QuoteDeliverResult,
   QuoteLineItemInput,
   UpdateQuoteRequest,
 } from "@/types";
@@ -38,6 +40,30 @@ export const quotesApi = {
   // Lifecycle transitions
   send: async (workspaceId: string, quoteId: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/send`);
+  },
+
+  /**
+   * Email or text the client their proposal link.
+   *
+   * Distinct from `send`, which marks the quote sent and emails **best-effort**
+   * — it swallows "there was no address" and reports success either way. This
+   * one names the channel and surfaces the server's reason when a rail isn't
+   * ready (no client phone, number opted out, Telnyx unconfigured), which is the
+   * difference between a rep knowing the customer got it and only hoping so.
+   *
+   * `to` overrides the destination; omitted, the server falls back to the wizard
+   * snapshot's client email/phone, then the linked contact's.
+   */
+  deliver: async (
+    workspaceId: string,
+    quoteId: string,
+    channel: QuoteDeliverChannel,
+    to?: string | null,
+  ): Promise<QuoteDeliverResult> => {
+    return apiPost<QuoteDeliverResult>(
+      `${quotePath(workspaceId, quoteId)}/deliver`,
+      { channel, to: to ?? null },
+    );
   },
 
   approve: async (workspaceId: string, quoteId: string): Promise<Quote> => {

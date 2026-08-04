@@ -1,7 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Eye, ExternalLink, FileText, MoreHorizontal, Plus, X } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Eye,
+  ExternalLink,
+  FileText,
+  Mail,
+  MessageSquare,
+  MoreHorizontal,
+  Plus,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -36,7 +47,7 @@ import { POLL_60S } from "@/lib/query-options";
 import { formatDate, formatRelative } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
-import type { Quote, QuoteStatus } from "@/types";
+import type { Quote, QuoteDeliverChannel, QuoteStatus } from "@/types";
 
 import { ConvertQuoteDialog } from "./convert-quote-dialog";
 
@@ -82,6 +93,31 @@ export function QuotesList() {
       toast.error(getApiErrorMessage(err, "Failed to send quote")),
   });
 
+  // Deliberately separate from `sendMutation`: that one marks the quote sent and
+  // emails best-effort, so it reports success even when nobody was emailed. This
+  // one names the channel, confirms the destination, and shows the server's own
+  // reason on failure — "add a mobile number", "this number opted out" — which
+  // is a thing the rep can act on while still standing in the driveway.
+  const deliverMutation = useMutation({
+    mutationFn: ({
+      id,
+      channel,
+    }: {
+      id: string;
+      channel: QuoteDeliverChannel;
+    }) => quotesApi.deliver(workspaceId ?? "", id, channel),
+    onSuccess: (result) => {
+      toast.success(
+        result.channel === "sms"
+          ? `Proposal texted to ${result.to}`
+          : `Proposal emailed to ${result.to}`,
+      );
+      invalidate();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Couldn't send the proposal")),
+  });
+
   const approveMutation = useMutation({
     mutationFn: (id: string) => quotesApi.approve(workspaceId ?? "", id),
     onSuccess: (q) => {
@@ -104,6 +140,7 @@ export function QuotesList() {
 
   const busy =
     sendMutation.isPending ||
+    deliverMutation.isPending ||
     approveMutation.isPending ||
     declineMutation.isPending;
 
@@ -216,6 +253,9 @@ export function QuotesList() {
                     quote={quote}
                     busy={busy}
                     onSend={() => sendMutation.mutate(quote.id)}
+                    onDeliver={(channel) =>
+                      deliverMutation.mutate({ id: quote.id, channel })
+                    }
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
                     onConvert={() => setConvertQuote(quote)}
@@ -251,6 +291,7 @@ interface RowActionsProps {
   quote: Quote;
   busy: boolean;
   onSend: () => void;
+  onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
   onDecline: () => void;
   onConvert: () => void;
@@ -262,6 +303,7 @@ function RowActions({
   quote,
   busy,
   onSend,
+  onDeliver,
   onApprove,
   onDecline,
   onConvert,
@@ -289,8 +331,21 @@ function RowActions({
       <DropdownMenuContent align="end">
         {isOpen && (
           <>
+            {/* Emailing and texting come first: they are what "send it to them"
+                actually means to a rep. Both work straight from a draft — the
+                server marks the quote sent and mints its client link on the way
+                out, so there is no "send first, then deliver" two-step. */}
+            <DropdownMenuItem onClick={() => onDeliver("email")}>
+              <Mail className="mr-2 h-4 w-4" />
+              Email proposal to client
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDeliver("sms")}>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Text proposal to client
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSend}>
-              {quote.status === "draft" ? "Send quote" : "Resend quote"}
+              {quote.status === "draft" ? "Mark as sent" : "Re-send email"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onApprove}>
               <Check className="mr-2 h-4 w-4" />
