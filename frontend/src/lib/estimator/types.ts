@@ -109,6 +109,35 @@ export function beamAngleFor(
 }
 
 /**
+ * Where a fixture is **aimed**, in degrees clockwise from the direction its type
+ * throws naturally — straight up for an uplight or in-grade, straight down for a
+ * downlight.
+ *
+ * Deliberately a *delta* from that natural axis rather than an absolute compass
+ * bearing, for one reason: `0` then means "exactly what this fixture rendered
+ * before aiming existed". Every design already saved has no rotation, so it
+ * keeps drawing identically, and the same zero reads correctly for a downlight
+ * (which points down) and an uplight (which points up) without a per-style
+ * baseline to remember.
+ *
+ * Aim is independent of spread: this turns the cone, `beamAngleDeg` opens it.
+ * Neither changes the fixture count, so nothing here can move the quote.
+ */
+export function normalizeBeamRotation(deg: number): number {
+  // A wrap, not a clamp: a beam can point anywhere on the circle, and a rep
+  // dragging past straight-down should keep turning rather than stick. The
+  // canonical circle is [-180, 180), so a half turn reads -180 either way round
+  // and two aims that point the same direction always compare equal.
+  if (!Number.isFinite(deg)) return 0;
+  return ((((deg + 180) % 360) + 360) % 360) - 180;
+}
+
+/** The aim a fixture actually renders at — its override, else its natural axis. */
+export function beamRotationFor(override?: number | null): number {
+  return normalizeBeamRotation(override ?? 0);
+}
+
+/**
  * Where a drawn product's measured quantity lands in the server estimate
  * request. The canvas only produces feet/counts; every dollar is still computed
  * server-side, so a product just declares its destination:
@@ -195,6 +224,16 @@ export interface PlacedItem {
    * the quantity that reaches the quote is untouched.
    */
   beamAngleDeg?: number;
+  /**
+   * Which way this fixture is aimed, in degrees clockwise from the direction its
+   * style throws naturally (see `normalizeBeamRotation`). Optional and absent by
+   * default, so a design drawn before aiming existed renders unchanged.
+   *
+   * Real installs are rarely straight up: an uplight is kicked toward a column,
+   * a downlight is angled off a soffit onto the path. Like the spread, this is
+   * pure rendering — the fixture is still one fixture on the quote.
+   */
+  beamRotationDeg?: number;
 }
 
 export interface Calibration {
