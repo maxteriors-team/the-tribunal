@@ -3,9 +3,11 @@
  *
  * Packages and the decor catalog cover the work we sell every day. This covers
  * the rest: a bucket-truck day, hand-tying garland on a balcony, pulling the
- * last company's clips. A line here rides on top of whichever package the
+ * last company's clips. By default a line rides on top of whichever package the
  * customer picks (and on top of à la carte pricing), so nothing has to be faked
- * into a decor category to land one job.
+ * into a decor category to land one job. A line can instead be pinned to one
+ * tier — the bucket truck the Best install needs and Good doesn't — and then it
+ * is priced inside that card only, moving with the tier that sold it.
  *
  * Drafts hold raw input strings, because a half-typed "12" must not price as
  * $12: only complete rows convert into request lines, and every dollar on the
@@ -25,6 +27,13 @@ export interface CustomLineDraft {
   /** Raw input text; blank means the row isn't priced yet. */
   unitPrice: string;
   side: CustomLineSide;
+  /**
+   * The seasonal package this line belongs to, or `null` for "all packages" —
+   * the default, where the line rides on top of whichever tier the client picks.
+   * A key the server doesn't price is dropped there rather than silently
+   * re-scoped, so the picker only ever offers priced tiers.
+   */
+  packageKey: string | null;
 }
 
 /** The server caps a request at 20 lines (`EstimateCustomLine` max_length). */
@@ -40,6 +49,7 @@ export function newCustomLineDraft(side: CustomLineSide): CustomLineDraft {
     quantity: "1",
     unitPrice: "",
     side,
+    packageKey: null,
   };
 }
 
@@ -57,6 +67,10 @@ function parsePositive(raw: string, fallback: number): number | null {
  * row is still being typed, and sending it would make the total jump around
  * under the rep's hands mid-keystroke. A free line ($0, "included") is
  * deliberately allowed; a negative one is not (use a discount on the quote).
+ *
+ * `package_key` is only sent when the rep pinned the line to a tier: omitting it
+ * is what asks the server for today's global behavior, and only a seasonal line
+ * can live inside a seasonal package.
  */
 export function toEstimateCustomLines(
   drafts: readonly CustomLineDraft[],
@@ -76,7 +90,14 @@ export function toEstimateCustomLines(
     ) {
       continue;
     }
-    lines.push({ label, quantity, unit_price: unitPrice, side: draft.side });
+    const scoped = draft.side === "seasonal" ? draft.packageKey : null;
+    lines.push({
+      label,
+      quantity,
+      unit_price: unitPrice,
+      side: draft.side,
+      ...(scoped ? { package_key: scoped } : {}),
+    });
     if (lines.length >= MAX_CUSTOM_LINES) break;
   }
   return lines;

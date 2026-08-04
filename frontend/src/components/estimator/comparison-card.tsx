@@ -63,13 +63,32 @@ export interface ComparisonView {
   // Standalone add-ons the rep put on this estimate. Already inside the totals
   // above and listed separately here, because a price that moved with no line
   // to explain it is the fastest way to lose a signature. Empty => nothing extra.
+  //
+  // `packageKey` names the tier a line was priced *inside* (rather than on top
+  // of every tier), so the reason it appears and disappears with the package is
+  // on the page instead of left to the client to guess. Undefined/null => the
+  // line rides on whichever tier they pick, which is the default.
   customLines?: {
     label: string;
     description?: string | null;
     quantity?: number;
     amount: number;
     side?: "permanent" | "seasonal";
+    packageKey?: string | null;
   }[];
+}
+
+/**
+ * The tier a scoped add-on was priced inside, by name — or null when the line
+ * rides on every tier (the default) or names a package this ladder doesn't show.
+ * Never the raw package key — an internal identifier, not client copy.
+ */
+function packageNameFor(
+  packageKey: string | null | undefined,
+  packages: ComparisonPackageView[],
+): string | null {
+  if (!packageKey) return null;
+  return packages.find((pkg) => pkg.key === packageKey)?.name ?? null;
 }
 
 function Perks({ perks }: { perks?: string[] }) {
@@ -242,6 +261,11 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
                     : line.label}
                   {line.description ? (
                     <span className="cmp-addon-note">{line.description}</span>
+                  ) : null}
+                  {packageNameFor(line.packageKey, packages) ? (
+                    <span className="cmp-addon-note">
+                      Included with {packageNameFor(line.packageKey, packages)}
+                    </span>
                   ) : null}
                 </span>
                 <span className="cmp-addon-amount">

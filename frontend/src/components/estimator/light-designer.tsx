@@ -571,14 +571,24 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
         })),
         roofline: rooflineView,
         // Server-priced add-ons, itemized for the client exactly as the shared
-        // page lists them — the preview is what the homeowner will see.
-        customLines: (estimate.custom_lines ?? []).map((line) => ({
-          label: line.label,
-          description: line.description,
-          quantity: line.quantity,
-          amount: line.amount,
-          side: line.side,
-        })),
+        // page lists them — the preview is what the homeowner will see. A line
+        // scoped to a tier they aren't being sold is already inside a different
+        // card's total, so it is filtered out here the same way
+        // ``get_public_comparison`` filters it, and the preview can't promise
+        // work that isn't on this price.
+        customLines: (estimate.custom_lines ?? [])
+          .filter(
+            (line) =>
+              !line.package_key || line.package_key === selectedPkg?.key,
+          )
+          .map((line) => ({
+            label: line.label,
+            description: line.description,
+            quantity: line.quantity,
+            amount: line.amount,
+            side: line.side,
+            packageKey: line.package_key,
+          })),
       }
     : null;
 

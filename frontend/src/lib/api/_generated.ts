@@ -15337,7 +15337,7 @@ export interface components {
          *
          *     The price book and the Good/Better/Best packages cover the work we sell every
          *     day; this covers the rest — a bucket-truck fee, hand-tying garland on a
-         *     balcony, removing the last company's clips. It is deliberately **independent
+         *     balcony, removing the last company's clips. By default it is **independent
          *     of packages**: the amount rides on top of whichever tier the customer picks
          *     (and on top of à la carte pricing), so a rep never has to fake it into a
          *     decor category or edit the workspace's pricing config to land one job.
@@ -15353,12 +15353,28 @@ export interface components {
          *     the seasonal total. A line assigned to a side the workspace doesn't offer is
          *     priced into a total that stays zero — same as every other input for a
          *     disabled service — so the rep tool only ever offers the enabled sides.
+         *
+         *     ``package_key`` optionally pins the line **inside one tier**, for the case the
+         *     global default can't express: a bucket-truck day the Best install needs and
+         *     Good doesn't. Three rules, and the default is the one that has always been:
+         *
+         *     * ``None`` (default) — global. Rides on top of whichever tier the client
+         *       picks, reported in that side's ``custom_total``, in no package card.
+         *     * a priced package's key — priced **inside that card's own total** and
+         *       nowhere else, so switching tiers re-prices and the line follows the tier it
+         *       was sold with. Deliberately excluded from ``custom_total`` (which the
+         *       client page adds *on top of* a package total) so it can't be billed twice.
+         *     * a key no priced package matches — **dropped**, same as a line assigned to a
+         *       disabled service. Quietly falling back to global would move money the rep
+         *       never asked to move.
          */
         EstimateCustomLine: {
             /** Description */
             description?: string | null;
             /** Label */
             label: string;
+            /** Package Key */
+            package_key?: string | null;
             /**
              * Quantity
              * @default 1
@@ -15384,6 +15400,8 @@ export interface components {
             description?: string | null;
             /** Label */
             label: string;
+            /** Package Key */
+            package_key?: string | null;
             /**
              * Quantity
              * @default 1

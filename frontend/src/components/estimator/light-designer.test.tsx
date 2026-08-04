@@ -839,6 +839,67 @@ describe("LightDesigner", () => {
     await waitFor(() => expect(grandRow()).toHaveTextContent("$1,600"));
   });
 
+  it("scopes a line item to one package when the rep pins it there", async () => {
+    // The bucket-truck day Premier needs and Essential doesn't: pinning it sends
+    // the tier, and the server prices it inside that card only.
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await screen.findByRole("button", { name: /Premier/i });
+
+    await fillLineItem("Bucket truck day", "200");
+    fireEvent.change(screen.getByLabelText(/Line item package/i), {
+      target: { value: "premier" },
+    });
+
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          custom_lines: [
+            expect.objectContaining({
+              label: "Bucket truck day",
+              package_key: "premier",
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("defaults a line item to every package", async () => {
+    // Today's behavior is the default: no tier is sent, so the line rides on
+    // top of whichever package the client picks.
+    vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await screen.findByRole("button", { name: /Premier/i });
+
+    await fillLineItem("Trip charge", "75");
+
+    expect(screen.getByLabelText(/Line item package/i)).toHaveValue("");
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          custom_lines: [
+            { label: "Trip charge", quantity: 1, unit_price: 75, side: "seasonal" },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("offers no package picker when the workspace sells no packages", async () => {
+    // À la carte seasonal has no tier for a line to live inside.
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    await fillLineItem("Bucket truck day", "200");
+
+    expect(screen.queryByLabelText(/Line item package/i)).toBeNull();
+  });
+
   it("hides the line-item editor when the Quote Builder hosts the designer", async () => {
     // That flow prices from the wizard's own document, so a line typed here
     // would never reach the quote. Absent beats silently dropped.

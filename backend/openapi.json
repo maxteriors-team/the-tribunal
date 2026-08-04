@@ -15249,7 +15249,7 @@
         "type": "object"
       },
       "EstimateCustomLine": {
-        "description": "A standalone line the rep adds to an estimate, outside any package.\n\nThe price book and the Good/Better/Best packages cover the work we sell every\nday; this covers the rest — a bucket-truck fee, hand-tying garland on a\nbalcony, removing the last company's clips. It is deliberately **independent\nof packages**: the amount rides on top of whichever tier the customer picks\n(and on top of à la carte pricing), so a rep never has to fake it into a\ndecor category or edit the workspace's pricing config to land one job.\n\n``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog\nand roofline pricing it is not grossed up, because the rep is typing what the\nhomeowner will pay. That makes it the one figure on the estimate the server\ndoesn't derive — it is quantity × price, rounded, and nothing more.\n\n``side`` says which half of the comparison the line belongs to, since the two\nare paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs\nevery season and is projected over the comparison horizon like the rest of\nthe seasonal total. A line assigned to a side the workspace doesn't offer is\npriced into a total that stays zero — same as every other input for a\ndisabled service — so the rep tool only ever offers the enabled sides.",
+        "description": "A standalone line the rep adds to an estimate, outside any package.\n\nThe price book and the Good/Better/Best packages cover the work we sell every\nday; this covers the rest — a bucket-truck fee, hand-tying garland on a\nbalcony, removing the last company's clips. By default it is **independent\nof packages**: the amount rides on top of whichever tier the customer picks\n(and on top of à la carte pricing), so a rep never has to fake it into a\ndecor category or edit the workspace's pricing config to land one job.\n\n``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog\nand roofline pricing it is not grossed up, because the rep is typing what the\nhomeowner will pay. That makes it the one figure on the estimate the server\ndoesn't derive — it is quantity × price, rounded, and nothing more.\n\n``side`` says which half of the comparison the line belongs to, since the two\nare paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs\nevery season and is projected over the comparison horizon like the rest of\nthe seasonal total. A line assigned to a side the workspace doesn't offer is\npriced into a total that stays zero — same as every other input for a\ndisabled service — so the rep tool only ever offers the enabled sides.\n\n``package_key`` optionally pins the line **inside one tier**, for the case the\nglobal default can't express: a bucket-truck day the Best install needs and\nGood doesn't. Three rules, and the default is the one that has always been:\n\n* ``None`` (default) — global. Rides on top of whichever tier the client\n  picks, reported in that side's ``custom_total``, in no package card.\n* a priced package's key — priced **inside that card's own total** and\n  nowhere else, so switching tiers re-prices and the line follows the tier it\n  was sold with. Deliberately excluded from ``custom_total`` (which the\n  client page adds *on top of* a package total) so it can't be billed twice.\n* a key no priced package matches — **dropped**, same as a line assigned to a\n  disabled service. Quietly falling back to global would move money the rep\n  never asked to move.",
         "properties": {
           "description": {
             "anyOf": [
@@ -15268,6 +15268,18 @@
             "minLength": 1,
             "title": "Label",
             "type": "string"
+          },
+          "package_key": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Key"
           },
           "quantity": {
             "default": 1,
@@ -15323,6 +15335,18 @@
             "minLength": 1,
             "title": "Label",
             "type": "string"
+          },
+          "package_key": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Key"
           },
           "quantity": {
             "default": 1,
