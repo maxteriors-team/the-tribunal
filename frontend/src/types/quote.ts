@@ -1,5 +1,7 @@
 // Quote (estimate) types. Mirrors the backend `app/schemas/quote.py` contract.
 
+import type { components } from "@/lib/api/_generated";
+
 import type { FinancingEstimate } from "./financing";
 
 export type QuoteStatus =
@@ -114,3 +116,14 @@ export interface QuoteConvertResult {
   job_id: string | null;
   invoice_id: string | null;
 }
+
+/**
+ * Outcome of emailing or texting a client their proposal link.
+ *
+ * Taken from the generated OpenAPI schema rather than hand-mirrored: `to` is the
+ * destination the server actually resolved (the wizard snapshot's client, the
+ * linked contact, or an explicit override), and telling the rep exactly where it
+ * went is the whole point of surfacing the result.
+ */
+export type QuoteDeliverResult = components["schemas"]["QuoteDeliverResult"];
+export type QuoteDeliverChannel = QuoteDeliverResult["channel"];
