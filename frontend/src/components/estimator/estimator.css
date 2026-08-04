@@ -826,6 +826,16 @@
   color: var(--gold);
 }
 
+/* Continuous companion to the preset chips: the chips are stock lamps, this is
+   every angle in between. Gold thumb so it reads as the same control as the
+   grip on the cone. */
+.tp-range {
+  width: 100%;
+  margin: 8px 0 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
 .tp-actions {
   flex-direction: row;
   flex-wrap: wrap;
