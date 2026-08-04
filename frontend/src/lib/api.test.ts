@@ -219,28 +219,65 @@ describe("api response interceptor", () => {
   });
 });
 
+/** Spy on `window.location.href` assignments while pretending to be at `at`. */
+function captureHrefAt(at: string): ReturnType<typeof vi.fn> {
+  window.history.replaceState({}, "", at);
+  const hrefSetter = vi.fn();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: new Proxy(window.location, {
+      set(target, prop, value) {
+        if (prop === "href") {
+          hrefSetter(value);
+          return true;
+        }
+        (target as unknown as Record<string | symbol, unknown>)[prop] = value;
+        return true;
+      },
+    }),
+  });
+  return hrefSetter;
+}
+
 describe("logout()", () => {
   it("calls the logout endpoint and redirects to /login", async () => {
     const postSpy = vi.spyOn(api, "post").mockResolvedValue({ data: {} } as AxiosResponse);
-
-    const hrefSetter = vi.fn();
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: new Proxy(window.location, {
-        set(target, prop, value) {
-          if (prop === "href") {
-            hrefSetter(value);
-            return true;
-          }
-          (target as unknown as Record<string | symbol, unknown>)[prop] = value;
-          return true;
-        },
-      }),
-    });
+    const hrefSetter = captureHrefAt("/");
 
     logout();
 
     expect(postSpy).toHaveBeenCalledWith("/api/v1/auth/logout");
     expect(hrefSetter).toHaveBeenCalledWith("/login");
+  });
+
+  it("preserves the current location so sign-in can resume it", () => {
+    // This path fires on the 401 from a signed-out deep link and hard-navigates,
+    // beating the auth provider's own guard. Dropping the destination here is
+    // what turned an opened invitation into "dashboard, invite still pending".
+    vi.spyOn(api, "post").mockResolvedValue({ data: {} } as AxiosResponse);
+    const hrefSetter = captureHrefAt("/invite/tok123");
+
+    logout();
+
+    expect(hrefSetter).toHaveBeenCalledWith("/login?redirect=%2Finvite%2Ftok123");
+  });
+
+  it("keeps the query string of the interrupted destination", () => {
+    vi.spyOn(api, "post").mockResolvedValue({ data: {} } as AxiosResponse);
+    const hrefSetter = captureHrefAt("/contacts?view=leads");
+
+    logout();
+
+    expect(hrefSetter).toHaveBeenCalledWith("/login?redirect=%2Fcontacts%3Fview%3Dleads");
+  });
+
+  it("does not redirect at all when already on /login", () => {
+    // Guards the infinite reload loop: /login 401s on first paint.
+    vi.spyOn(api, "post").mockResolvedValue({ data: {} } as AxiosResponse);
+    const hrefSetter = captureHrefAt("/login");
+
+    logout();
+
+    expect(hrefSetter).not.toHaveBeenCalled();
   });
 });
