@@ -20,9 +20,25 @@ from pydantic import BaseModel, Field
 # defined in :mod:`app.schemas.inventory` and re-exported here: ``/reports/cogs``
 # sits next to ar-aging and job-pnl, but there must be exactly one COGSReport
 # model in the OpenAPI contract.
-from app.schemas.inventory import COGSBreakdownRow as COGSBreakdownRow
-from app.schemas.inventory import COGSGroupBy as COGSGroupBy
-from app.schemas.inventory import COGSReport as COGSReport
+from app.schemas.inventory import COGSBreakdownRow, COGSGroupBy, COGSReport
+
+# Declared explicitly because the COGS names above are re-exports rather than
+# local definitions: without ``__all__`` they read as dead imports to both a
+# reader and to static analysis (CodeQL flags them), and the redundant-alias
+# idiom that normally signals a re-export is only honoured in ``__init__.py``.
+__all__ = [
+    "ARAgingBucket",
+    "ARAgingReport",
+    "AttributionGapReport",
+    "BacklogReport",
+    "COGSBreakdownRow",
+    "COGSGroupBy",
+    "COGSReport",
+    "EstimateCapacityReport",
+    "JobPnLSummary",
+    "SalesPerformanceBreakdownRow",
+    "SalesPerformanceReport",
+]
 
 
 class ARAgingBucket(BaseModel):
