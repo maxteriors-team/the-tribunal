@@ -22314,6 +22314,11 @@ export interface components {
             landscape?: components["schemas"]["LandscapeConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
             /**
+             * Quote Validity Days
+             * @default 30
+             */
+            quote_validity_days: number;
+            /**
              * Roofline Comparison Enabled
              * @default false
              */
@@ -22347,6 +22352,8 @@ export interface components {
             financing?: components["schemas"]["FinancingConfig"] | null;
             landscape?: components["schemas"]["LandscapeConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
+            /** Quote Validity Days */
+            quote_validity_days?: number | null;
             /** Roofline Comparison Enabled */
             roofline_comparison_enabled?: boolean | null;
             savings?: components["schemas"]["SavingsConfig"] | null;

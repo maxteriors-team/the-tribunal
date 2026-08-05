@@ -838,3 +838,78 @@ async def test_create_quote_from_estimate_empty_design_is_rejected() -> None:
             await svc.create_quote_from_estimate(
                 ws.id, EstimateQuoteRequest(side="seasonal", feet=0)
             )
+
+
+# --------------------------------------------------------------------------- #
+# Price-validity window (pricing.quote_validity_days)
+# --------------------------------------------------------------------------- #
+async def _orm_quote(db: AsyncSession, quote_id: uuid.UUID) -> Quote:
+    """Reload the ORM row: ``create_quote`` returns a response schema."""
+    result = await db.execute(select(Quote).where(Quote.id == quote_id))
+    return result.scalar_one()
+
+
+async def test_send_stamps_the_default_thirty_day_validity_window() -> None:
+    """A sent quote stops being open-ended, so a stale price cannot be accepted."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+        assert created.expiry_date is None  # drafts carry no deadline
+
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+
+        # Asserted against the quote's own ``sent_at`` rather than a local
+        # ``date.today()``: the window is anchored to the stored UTC send stamp,
+        # so a hardcoded local date makes this test fail after 5pm Pacific.
+        assert quote.sent_at is not None
+        assert quote.expiry_date == quote.sent_at.date() + timedelta(days=30)
+
+
+async def test_validity_window_is_per_workspace_configurable() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {"pricing": {"quote_validity_days": 14}}
+        await db.flush()
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+
+        assert quote.sent_at is not None
+        assert quote.expiry_date == quote.sent_at.date() + timedelta(days=14)
+
+
+async def test_operator_set_expiry_is_never_overwritten() -> None:
+    """An explicit deadline is a commitment; the default only fills a blank."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        explicit = date.today() + timedelta(days=90)
+        created = await svc.create_quote(
+            ws.id, QuoteCreate(line_items=[], expiry_date=explicit), created_by_id=None
+        )
+
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+
+        assert quote.expiry_date == explicit
+
+
+async def test_resending_never_extends_a_deadline_already_shown() -> None:
+    """Re-sending the same link must not quietly move the date the customer saw."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+        first_expiry = quote.expiry_date
+        # Simulate the quote having been sent a week ago and re-sent today.
+        quote.sent_at = datetime.now(UTC) - timedelta(days=7)
+        await svc._ensure_sent_state(quote)
+
+        assert quote.expiry_date == first_expiry
