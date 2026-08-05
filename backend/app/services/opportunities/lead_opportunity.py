@@ -1,13 +1,17 @@
 """Auto-open pipeline opportunities for new inbound leads.
 
 Drops a new lead onto the Opportunities board so operators can work it without
-any manual data entry — the "new leads automatically go into the pipeline" flow.
-Idempotent per contact: a contact never gets a second *open* card, so wiring
-this into multiple inbound funnels (lead form, embed widget, offer opt-ins,
-inbound SMS, inbound call) is safe.
+any manual data entry. Idempotent per contact: a contact never gets a second
+*open* card, so wiring this into multiple inbound funnels (lead form, embed
+widget, offer opt-ins, inbound SMS, inbound call) is safe.
 
 Gated per workspace via ``workspace.settings["auto_pipeline"]["enabled"]``
-(default ON), stored in the JSONB ``settings`` column — no migration required.
+(**default OFF**), stored in the JSONB ``settings`` column — no migration
+required. Off by default because the Opportunities board is the *sales*
+pipeline: a raw inbound lead belongs in Contacts until someone has contacted
+them and booked a call or demo. A workspace that wants the old behaviour opts
+back in via ``PUT /api/v1/workspaces/{workspace_id}/auto-pipeline``.
+
 A won/lost/abandoned deal never blocks a new card, so a returning lead whose
 previous deal already closed still gets a fresh opportunity.
 """
@@ -40,11 +44,11 @@ _OPEN_STATUS = "open"
 
 
 def auto_pipeline_enabled(workspace: Workspace) -> bool:
-    """Whether new inbound leads should auto-open a pipeline card (default True)."""
+    """Whether new inbound leads should auto-open a pipeline card (default False)."""
     raw = (workspace.settings or {}).get(SETTINGS_KEY, {})
     if not isinstance(raw, dict):
-        return True
-    return bool(raw.get("enabled", True))
+        return False
+    return bool(raw.get("enabled", False))
 
 
 def _opportunity_name(contact: Contact) -> str:

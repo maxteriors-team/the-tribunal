@@ -1,10 +1,11 @@
 """Tests for auto-pipeline lead-opportunity creation.
 
-Proves the "new leads automatically go into the pipeline" contract:
+Proves the opt-in auto-pipeline contract:
 
-* A new lead lands on the board in the default pipeline's first stage.
+* Auto-pipeline is **off** unless a workspace explicitly enables it, so an
+  inbound lead stays in Contacts instead of cluttering the sales board.
+* With it enabled, a new lead lands in the default pipeline's first stage.
 * A contact never gets two open cards (idempotent per contact).
-* The workspace ``auto_pipeline.enabled`` setting gates the behavior.
 * A closed (won/lost) deal does not block a returning lead's fresh card.
 """
 
@@ -38,10 +39,10 @@ def _contact(**kw: object) -> Contact:
     return Contact(**base)  # type: ignore[arg-type]
 
 
-def test_auto_pipeline_enabled_defaults_on() -> None:
-    assert auto_pipeline_enabled(Workspace(settings={})) is True
-    assert auto_pipeline_enabled(Workspace(settings=None)) is True  # type: ignore[arg-type]
-    assert auto_pipeline_enabled(Workspace(settings={"auto_pipeline": {}})) is True
+def test_auto_pipeline_enabled_defaults_off() -> None:
+    assert auto_pipeline_enabled(Workspace(settings={})) is False
+    assert auto_pipeline_enabled(Workspace(settings=None)) is False  # type: ignore[arg-type]
+    assert auto_pipeline_enabled(Workspace(settings={"auto_pipeline": {}})) is False
 
 
 def test_auto_pipeline_enabled_respects_explicit_flag() -> None:
@@ -52,7 +53,7 @@ def test_auto_pipeline_enabled_respects_explicit_flag() -> None:
 
 
 def test_auto_pipeline_enabled_tolerates_malformed_settings() -> None:
-    assert auto_pipeline_enabled(Workspace(settings={"auto_pipeline": "yes"})) is True
+    assert auto_pipeline_enabled(Workspace(settings={"auto_pipeline": "yes"})) is False
 
 
 def test_opportunity_name_variants() -> None:
@@ -98,9 +99,35 @@ async def _new_workspace(db: object, **settings: object) -> Workspace:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_default_workspace_creates_no_card() -> None:
+    """An inbound lead does not open an opportunity unless the workspace opts in."""
+    async with AsyncSessionLocal() as db:
+        ws = await _new_workspace(db)  # no auto_pipeline setting at all
+        contact = _persisted_contact(ws.id)
+        db.add(contact)
+        await db.flush()
+
+        opp = await open_lead_opportunity(db, ws.id, contact, source="lead_form")
+        await db.flush()
+
+        assert opp is None
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Opportunity)
+                .where(Opportunity.workspace_id == ws.id)
+            )
+        ).scalar_one()
+        assert count == 0
+
+        await db.rollback()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_new_lead_lands_in_first_stage() -> None:
     async with AsyncSessionLocal() as db:
-        ws = await _new_workspace(db)
+        ws = await _new_workspace(db, auto_pipeline={"enabled": True})
         contact = _persisted_contact(ws.id)
         db.add(contact)
         await db.flush()
@@ -113,7 +140,7 @@ async def test_new_lead_lands_in_first_stage() -> None:
         assert opp.status == "open"
         assert opp.source == "lead_form"
 
-        # The card is in the default pipeline's entry stage (order 0 = "New").
+        # The card is in the default pipeline's entry stage (order 0 = "Qualified").
         first_stage = (
             await db.execute(
                 select(PipelineStage)
@@ -133,7 +160,7 @@ async def test_new_lead_lands_in_first_stage() -> None:
 @pytest.mark.asyncio
 async def test_never_creates_two_open_cards_for_one_contact() -> None:
     async with AsyncSessionLocal() as db:
-        ws = await _new_workspace(db)
+        ws = await _new_workspace(db, auto_pipeline={"enabled": True})
         contact = _persisted_contact(ws.id)
         db.add(contact)
         await db.flush()
@@ -190,7 +217,7 @@ async def test_disabled_setting_skips_card() -> None:
 @pytest.mark.asyncio
 async def test_closed_deal_does_not_block_new_card() -> None:
     async with AsyncSessionLocal() as db:
-        ws = await _new_workspace(db)
+        ws = await _new_workspace(db, auto_pipeline={"enabled": True})
         contact = _persisted_contact(ws.id)
         db.add(contact)
         await db.flush()

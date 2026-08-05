@@ -311,7 +311,10 @@ async def _get_or_create_stage(
         db.add(pipeline)
         await db.flush()
 
-    stage_name = "Booked" if category == ResponseCategory.BOOKED else "Qualified"
+    # Names/orders/probabilities must match DEFAULT_PIPELINE_STAGES, otherwise a
+    # reply grafts a stray stage that collides with a real one on ``order``.
+    booked = category == ResponseCategory.BOOKED
+    stage_name = "Visit/Demo Scheduled" if booked else "Qualified"
     stage_result = await db.execute(
         select(PipelineStage)
         .where(PipelineStage.pipeline_id == pipeline.id)
@@ -325,8 +328,8 @@ async def _get_or_create_stage(
     stage = PipelineStage(
         pipeline_id=pipeline.id,
         name=stage_name,
-        order=2 if category == ResponseCategory.BOOKED else 1,
-        probability=80 if category == ResponseCategory.BOOKED else 25,
+        order=1 if booked else 0,
+        probability=45 if booked else 25,
         stage_type="active",
     )
     db.add(stage)
