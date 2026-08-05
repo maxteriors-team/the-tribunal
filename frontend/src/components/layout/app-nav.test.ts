@@ -172,6 +172,22 @@ describe("Light Designer nav item (folded into the Quotes hub)", () => {
   });
 });
 
+describe("Segments nav item (folded into the campaign builder)", () => {
+  const segments = allNavItems.find((i) => i.url === "/segments");
+
+  it("is a command-palette-only entry, not a duplicate sidebar row", () => {
+    expect(segments).toBeDefined();
+    expect(segments!.title).toBe("Segments");
+    // Recipient selection already lives inline in the campaign builder and on
+    // Contacts via "Save as Segment", so a sidebar row is a second front door.
+    expect(segments!.sidebar).toBe(false);
+    // Still searchable and URL-reachable: saved segments are what the AI growth
+    // workflow, prebooking audiences, and the outbound auto-draft worker read,
+    // so the management screen has to stay reachable.
+    expect(segments!.commandPalette).toBe(true);
+  });
+});
+
 describe("Christmas Lights seasonal hub nav item", () => {
   const christmas = allNavItems.find((i) => i.url === "/christmas-lights");
 
