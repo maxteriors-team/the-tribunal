@@ -214,10 +214,16 @@ export const customerNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    // Recipient selection already lives inline in the campaign builder
+    // (filters + search) and on Contacts via "Save as Segment", so a
+    // standalone sidebar entry is a duplicate entry point. Kept in the command
+    // palette (and reachable by URL) for managing the saved segments that the
+    // AI growth workflow, prebooking audiences, and the outbound auto-draft
+    // worker depend on.
     title: "Segments",
     url: "/segments",
     icon: Boxes,
-    sidebar: true,
+    sidebar: false,
     commandPalette: true,
   },
   {
