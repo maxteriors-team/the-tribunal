@@ -47,6 +47,7 @@ function pricing(perm: PermanentConfig): PricingSettings {
   return {
     comparison_years: 5,
     roofline_comparison_enabled: false,
+    quote_validity_days: 30,
     permanent: perm,
   };
 }
