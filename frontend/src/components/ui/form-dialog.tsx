@@ -66,7 +66,7 @@ export interface FormDialogProps<TFieldValues extends FieldValues> {
   footerExtra?: React.ReactNode;
   /** className applied to `DialogContent`. */
   className?: string;
-  /** className applied to the inner `<form>`. Defaults to "space-y-4". */
+  /** className applied to the scrolling field area. Defaults to "space-y-4". */
   formClassName?: string;
 }
 
@@ -91,17 +91,36 @@ export function FormDialog<TFieldValues extends FieldValues>({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={className}>
-        <DialogHeader>
+      {/*
+        Capped at the viewport with the fields as the only scrolling part, so a
+        long form (the contact form runs past 20 fields) can never push its own
+        title or its Save button off-screen. Short forms are unaffected: this is
+        a ceiling, not a fixed height. `dvh` rather than `vh` so a mobile
+        browser's retracting URL bar doesn't crop the footer.
+      */}
+      <DialogContent className={cn("flex max-h-[min(90dvh,52rem)] flex-col", className)}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={handleSubmit} className={cn("space-y-4", formClassName)}>
-            {children}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
+            {/*
+              `-mx-1 px-1` keeps input focus rings from being clipped by the
+              scroll container's edge; `overscroll-contain` stops a scroll that
+              reaches the end of the fields from scrolling the page behind.
+            */}
+            <div
+              className={cn(
+                "-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 space-y-4",
+                formClassName,
+              )}
+            >
+              {children}
+            </div>
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
               {footerExtra}
               {!hideCancel && (
                 <Button
