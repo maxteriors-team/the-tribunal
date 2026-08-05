@@ -3,8 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { LeadSourcePicker } from "@/components/lead-sources/source-pickers";
+import { LeadSourceField } from "@/components/lead-sources/lead-source-field";
 import { ReferralPartnerPicker } from "@/components/referral-partners/referral-partner-picker";
+import { AddressAutocompleteInput } from "@/components/shared/address-autocomplete-input";
+import { ContactTagsField } from "@/components/tags/contact-tags-field";
 import {
   FormControl,
   FormField,
@@ -24,6 +26,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { contactQueryKeys } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import type { AddressParts } from "@/lib/api/addresses";
 import {
   contactsApi,
   type ManualContactCreatePayload,
@@ -231,6 +234,27 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
     leadSources?.find((source) => source.id === selectedLeadSourceId)
       ?.source_type === "referral_partner";
 
+  // Filling the rest of the address from one pick is the point of the lookup:
+  // city/state/ZIP typed by hand are where duplicate addresses come from. Blank
+  // fields from the provider are skipped so a pick can never wipe something the
+  // operator already typed (an apartment number, say).
+  const applyPickedAddress = (parts: AddressParts) => {
+    const patch: Partial<Record<keyof ContactFormValues, string>> = {
+      address_line1: parts.address_line1,
+      address_line2: parts.address_line2,
+      address_city: parts.address_city,
+      address_state: parts.address_state,
+      address_zip: parts.address_zip,
+    };
+    for (const [name, value] of Object.entries(patch)) {
+      if (!value) continue;
+      form.setValue(name as keyof ContactFormValues, value, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  };
+
   const title = mode === "create" ? "Add New Contact" : "Edit Contact";
   const description =
     mode === "create"
@@ -357,7 +381,7 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
                 {captureSettings?.require_lead_source_on_manual_create ? " *" : ""}
               </FormLabel>
               <FormControl>
-                <LeadSourcePicker
+                <LeadSourceField
                   workspaceId={workspaceId ?? ""}
                   value={field.value || undefined}
                   onChange={(leadSourceId) => field.onChange(leadSourceId)}
@@ -401,7 +425,11 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           <FormItem>
             <FormLabel>Tags</FormLabel>
             <FormControl>
-              <Input placeholder="vip, priority, follow-up" {...field} />
+              <ContactTagsField
+                workspaceId={workspaceId ?? ""}
+                value={field.value ?? ""}
+                onChange={field.onChange}
+              />
             </FormControl>
             <FormMessage />
           </FormItem>
@@ -449,7 +477,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
             <FormItem>
               <FormLabel>Address Line 1</FormLabel>
               <FormControl>
-                <Input placeholder="123 Main St" {...field} />
+                <AddressAutocompleteInput
+                  workspaceId={workspaceId ?? ""}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  onAddressPicked={applyPickedAddress}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
