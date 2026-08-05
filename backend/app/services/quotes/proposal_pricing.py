@@ -179,6 +179,20 @@ def monthly_payment(
     return _round_cent(t / _d(n))
 
 
+def financing_is_offered(config: PricingSettings) -> bool:
+    """Whether this workspace offers financing on anything at all.
+
+    Quote-independent counterpart to :func:`financing_is_eligible`, for copy that
+    has to decide *before* there are line items to price — e.g. telling an
+    operator to walk a customer through payment options. Clearing every category
+    is how a workspace stops offering financing without touching
+    :func:`price_buffer`, so an empty ``category_minimums`` reads as "not
+    offered" even while ``enabled`` stays true to preserve the fee gross-up.
+    """
+    financing = config.financing
+    return bool(financing.enabled and financing.category_minimums)
+
+
 def financing_is_eligible(
     total: float | Decimal,
     category_totals: Mapping[str, float | Decimal],

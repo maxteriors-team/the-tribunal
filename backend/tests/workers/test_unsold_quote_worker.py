@@ -544,3 +544,61 @@ async def test_missing_template_defers_instead_of_sending_empty_copy() -> None:
 
     assert result is None
     worker._send_sms.assert_not_awaited()
+
+
+# --------------------------------------------------------------------------- #
+# Revival nudge copy tracks whether the workspace still offers financing
+# --------------------------------------------------------------------------- #
+def _quote_with_financing(category_minimums: dict[str, float] | None) -> SimpleNamespace:
+    """A revivable quote whose workspace offers financing only when categories exist."""
+    quote = _quote()
+    financing: dict[str, object] = {"enabled": True, "fee_buffer": 0.11}
+    if category_minimums is not None:
+        financing["category_minimums"] = category_minimums
+    quote.workspace.settings = {"timezone": "UTC", "pricing": {"financing": financing}}
+    return quote
+
+
+async def _revival_nudge_message(quote: SimpleNamespace) -> str:
+    """Run the call-task branch and return the operator-facing nudge copy."""
+    worker = UnsoldQuoteWorker()
+    db = AsyncMock()
+    # No existing nudge for this dedup key, so a fresh one is built.
+    no_existing_nudge = MagicMock()
+    no_existing_nudge.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=no_existing_nudge)
+
+    created: list[object] = []
+    db.add = MagicMock(side_effect=created.append)
+
+    await worker._create_call_task(
+        quote=quote,  # type: ignore[arg-type]
+        recipient=_recipient(),
+        touch=QuoteRevivalTouchSettings(offset_days=30, channel="call"),
+        config=QuoteRevivalSettings(enabled=True, timezone="UTC"),
+        now=ANCHOR + timedelta(days=30),
+        db=db,
+    )
+
+    assert created, "expected a HumanNudge to be created"
+    return created[0].message  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_revival_nudge_pitches_financing_when_the_workspace_offers_it() -> None:
+    message = await _revival_nudge_message(_quote_with_financing({"permanent": 0}))
+
+    assert "walk through financing" in message
+
+
+@pytest.mark.asyncio
+async def test_revival_nudge_drops_financing_once_every_category_is_cleared() -> None:
+    """Clearing categories is how financing is switched off without losing the fee buffer.
+
+    The rep gets one revival call per quote; pitching a discontinued product
+    wastes it.
+    """
+    message = await _revival_nudge_message(_quote_with_financing({}))
+
+    assert "financing" not in message.lower()
+    assert "re-price or re-schedule" in message
