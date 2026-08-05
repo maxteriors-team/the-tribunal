@@ -97,6 +97,7 @@ function pricing(xmas: ChristmasConfig): PricingSettings {
   return {
     comparison_years: 5,
     roofline_comparison_enabled: false,
+    quote_validity_days: 30,
     christmas: xmas,
   };
 }
