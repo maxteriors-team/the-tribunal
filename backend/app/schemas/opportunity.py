@@ -236,3 +236,14 @@ class PaginatedOpportunities(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class AutoPipelineSettings(BaseModel):
+    """Whether inbound leads auto-open a card on the sales pipeline.
+
+    Off by default: a raw inbound lead belongs in Contacts until someone has
+    contacted them and booked a call or demo. Turning this on restores the
+    older behaviour where every inbound funnel opens an opportunity.
+    """
+
+    enabled: bool = False

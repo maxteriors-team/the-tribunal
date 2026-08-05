@@ -19,6 +19,7 @@ from app.schemas.neighbor_outreach import (
     NeighborOutreachSettings,
     NeighborOutreachSettingsUpdate,
 )
+from app.schemas.opportunity import AutoPipelineSettings
 from app.schemas.pricing import (
     PricingSettings,
     PricingSettingsUpdate,
@@ -65,6 +66,10 @@ from app.services.lead_sources.capture_settings import (
     SETTINGS_KEY as LEAD_SOURCE_CAPTURE_KEY,
 )
 from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
+from app.services.opportunities.lead_opportunity import (
+    SETTINGS_KEY as AUTO_PIPELINE_KEY,
+)
+from app.services.opportunities.lead_opportunity import auto_pipeline_enabled
 from app.services.quotes.attach_rules_config import (
     SETTINGS_KEY as ATTACH_RULES_KEY,
 )
@@ -639,6 +644,36 @@ async def update_lead_source_capture_policy(
     await db.commit()
     await db.refresh(workspace)
     return get_lead_source_capture_settings(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/auto-pipeline",
+    response_model=AutoPipelineSettings,
+)
+async def get_auto_pipeline_policy(
+    workspace: WorkspaceAccess,
+) -> AutoPipelineSettings:
+    """Get whether inbound leads auto-open a card on the sales pipeline."""
+    return AutoPipelineSettings(enabled=auto_pipeline_enabled(workspace))
+
+
+@router.put(
+    "/workspaces/{workspace_id}/auto-pipeline",
+    response_model=AutoPipelineSettings,
+)
+async def update_auto_pipeline_policy(
+    update: AutoPipelineSettings,
+    workspace: WorkspaceAccess,
+    db: DB,
+) -> AutoPipelineSettings:
+    """Replace the namespaced auto-pipeline policy without touching other settings."""
+    current_settings = dict(workspace.settings or {})
+    current_settings[AUTO_PIPELINE_KEY] = update.model_dump()
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+    return AutoPipelineSettings(enabled=auto_pipeline_enabled(workspace))
 
 
 @router.get(

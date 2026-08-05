@@ -3,8 +3,8 @@
 Every workspace needs at least one active pipeline with ordered stages so that
 the opportunities board has columns to render and the ad-library promotion flow
 (:mod:`app.services.outbound.promotion`) can open an opportunity in the
-workspace's earliest active pipeline / first stage instead of hitting the
-``pipeline is None`` branch.
+workspace's earliest active pipeline / entry stage (``Qualified``) instead of
+hitting the ``pipeline is None`` branch.
 
 This module is the single source of truth for the default pipeline shape and
 exposes :func:`ensure_default_pipeline`, an idempotent helper used at workspace
@@ -37,12 +37,17 @@ DEFAULT_PIPELINE_DESCRIPTION = "Default pipeline created automatically for this 
 
 # Ordered stages for the default pipeline. ``order`` is ascending, so the first
 # entry is the entry stage the promotion flow drops new opportunities into.
+#
+# The board is the *sales* pipeline: a deal only belongs here once the lead has
+# been contacted and qualified, so ``Qualified`` — not a pre-contact "New"
+# column — is the entry stage. Raw inbound leads live in Contacts.
 DEFAULT_PIPELINE_STAGES: list[dict[str, object]] = [
-    {"name": "New", "order": 0, "probability": 0, "stage_type": "active"},
-    {"name": "Qualified", "order": 1, "probability": 25, "stage_type": "active"},
-    {"name": "Proposal", "order": 2, "probability": 50, "stage_type": "active"},
-    {"name": "Won", "order": 3, "probability": 100, "stage_type": "won"},
-    {"name": "Lost", "order": 4, "probability": 0, "stage_type": "lost"},
+    {"name": "Qualified", "order": 0, "probability": 25, "stage_type": "active"},
+    {"name": "Visit/Demo Scheduled", "order": 1, "probability": 45, "stage_type": "active"},
+    {"name": "Quote", "order": 2, "probability": 60, "stage_type": "active"},
+    {"name": "Quote Sent / Follow Up", "order": 3, "probability": 75, "stage_type": "active"},
+    {"name": "Won", "order": 4, "probability": 100, "stage_type": "won"},
+    {"name": "Lost", "order": 5, "probability": 0, "stage_type": "lost"},
 ]
 
 

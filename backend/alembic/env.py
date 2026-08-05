@@ -48,17 +48,27 @@ def _descending_op_index_names() -> frozenset[str]:
 
 _DESCENDING_OP_INDEX_NAMES = _descending_op_index_names()
 
+# Tables a migration owns end-to-end: created by its ``upgrade()`` and dropped by
+# its ``downgrade()``, deliberately outliving the upgrade so the reverse can
+# restore the data it rewrote. They have no ORM model by design, so autogenerate
+# would otherwise propose dropping them and ``alembic check`` would fail on any
+# database the migration has actually run against.
+_MIGRATION_OWNED_TABLES = frozenset({"pipeline_restructure_backup"})
+
 
 def include_object(obj, name, type_, reflected, compare_to):  # noqa: ANN001, ANN201
-    """Exclude known expression-index false positives from autogenerate.
+    """Exclude known autogenerate false positives.
 
     Applies to both the reflected (database) and metadata (ORM) sides so the
-    index is never proposed for drop or recreate. See
-    :func:`_descending_op_index_names` for the rationale.
+    object is never proposed for drop or recreate. See
+    :func:`_descending_op_index_names` and :data:`_MIGRATION_OWNED_TABLES` for
+    the rationale.
     """
-    if type_ == "index" and name in _DESCENDING_OP_INDEX_NAMES:
-        return False
-    return True
+    excluded_by_type = {
+        "index": _DESCENDING_OP_INDEX_NAMES,
+        "table": _MIGRATION_OWNED_TABLES,
+    }
+    return name not in excluded_by_type.get(type_, frozenset())
 
 
 def get_url() -> str:
