@@ -33984,7 +33984,7 @@
         "type": "object"
       },
       "ProposalCharge": {
-        "description": "A grossed-up add-on charge included in every tier's price.",
+        "description": "A grossed-up add-on charge.\n\nOn every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`\nfor the rules. Snapshotted onto the document so re-selecting a tier reprices\ncorrectly without the original wizard payload.",
         "properties": {
           "amount": {
             "title": "Amount",
@@ -34005,6 +34005,17 @@
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "tier_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier Key"
           }
         },
         "required": [
@@ -48083,7 +48094,7 @@
         "type": "object"
       },
       "WizardCharge": {
-        "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.",
+        "description": "A custom add-on charge. The rep enters the *net* they want to keep; the\nserver grosses it up by the finance buffer like every other price.\n\n``tier_key`` optionally pins the charge to **one package**, mirroring\n``EstimateCustomLine.package_key`` on the estimator side:\n\n* ``None`` (default) — rides on every tier, which is how this has always\n  behaved and what an unset field asks for.\n* set — charged only when the client is buying that tier, so the core\n  drilling the Premier install needs stops inflating the Starter.\n\nA key naming no tier in the document stays global rather than being dropped.\nThe estimator can drop a scoped line because it is only ever a preview; this\ncharge is money the rep typed on a quote they are about to send, and\nsilently zeroing it is worse than charging it somewhere they can see it.",
         "properties": {
           "catalog_item_id": {
             "anyOf": [
@@ -48114,6 +48125,18 @@
             "minimum": 0.0,
             "title": "Net Amount",
             "type": "number"
+          },
+          "tier_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier Key"
           }
         },
         "title": "WizardCharge",

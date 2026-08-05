@@ -125,6 +125,20 @@ export function ClientProposalView({
       null,
     );
   }, [doc.tiers]);
+  // A charge pinned to a tier is only charged when that tier is the one being
+  // bought, so the client must not read it under a package it doesn't apply to.
+  // Mirrors `charges_for_tier` on the server, including the stale-key fallback:
+  // a key naming no tier stays visible rather than silently vanishing.
+  const shownCharges = useMemo(() => {
+    const known = new Set(doc.tiers.map((tier) => tier.key));
+    return doc.additional_charges.filter(
+      (charge) =>
+        !charge.tier_key ||
+        !known.has(charge.tier_key) ||
+        charge.tier_key === selectedTier,
+    );
+  }, [doc.additional_charges, doc.tiers, selectedTier]);
+
   const financingEstimate = financingFromSnapshot(
     doc.financing,
     lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
@@ -368,13 +382,13 @@ export function ClientProposalView({
 
         <FinancingEstimate financing={financingEstimate} />
 
-        {doc.additional_charges.length ? (
+        {shownCharges.length ? (
           <div className="addon-bar">
             <div className="addon-bar-label">
-              {doc.additional_charges.map((charge, i) => (
-                <span key={i}>
+              {shownCharges.map((charge, i) => (
+                <span key={charge.description + i}>
                   + {charge.description}{" "}&#8212; {fmt(charge.amount)}
-                  {i < doc.additional_charges.length - 1 ? <br /> : null}
+                  {i < shownCharges.length - 1 ? <br /> : null}
                 </span>
               ))}
             </div>

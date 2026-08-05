@@ -144,6 +144,12 @@ export interface ChargeDraft {
    * actually count as an attach instead of an uncategorized custom charge.
    */
   catalogItemId?: string | null;
+  /**
+   * Package this charge belongs to, or null/undefined for "every package" —
+   * the default. Pinning it means the charge follows the tier it was sold with:
+   * core drilling the Premier install needs stops inflating the Starter.
+   */
+  tierKey?: string | null;
 }
 
 export interface BistroDraft {
@@ -637,6 +643,9 @@ export function useSalesWizard(
         description: c.description.trim() || null,
         net_amount: Number.parseFloat(c.amount) || 0,
         catalog_item_id: c.catalogItemId ?? null,
+        // Omitted rather than null when the charge is global: an absent field
+        // is what asks the server for the ride-on-every-tier default.
+        ...(c.tierKey ? { tier_key: c.tierKey } : {}),
       }))
       .filter((c) => c.net_amount > 0);
     const feet = Number.parseFloat(bistro.feet) || 0;

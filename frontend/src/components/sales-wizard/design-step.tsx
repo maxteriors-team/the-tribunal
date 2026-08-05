@@ -180,6 +180,29 @@ export function DesignStep({ wizard }: DesignStepProps) {
                 onChange={(e) => setCharge(i, { amount: e.target.value })}
               />
             </div>
+            {/* Pin the charge to one package so it follows the tier it was
+                sold with. Default stays "every package", which is how add-ons
+                have always priced. */}
+            {tiers.length > 1 ? (
+              <select
+                className="additional-tier"
+                value={charge.tierKey ?? ""}
+                aria-label="Charge applies to"
+                onChange={(e) =>
+                  setCharge(i, { tierKey: e.target.value || null })
+                }
+              >
+                <option value="">Every package</option>
+                {order.map((key) => {
+                  const tier = tiers.find((t) => t.key === key);
+                  return tier ? (
+                    <option key={key} value={key}>
+                      Only {tier.name || tier.label || key}
+                    </option>
+                  ) : null;
+                })}
+              </select>
+            ) : null}
             <button
               type="button"
               className="charge-del"
