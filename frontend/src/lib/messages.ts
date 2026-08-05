@@ -62,6 +62,11 @@ export const messages = {
     noneVoiceEnabled: "No voice-enabled phone numbers available",
   },
 
+  calls: {
+    ended: "Call ended",
+    endFailed: "Failed to end the call. Please try again.",
+  },
+
   findLeads: {
     found: (count: number) => `Found ${count} businesses`,
     searchFailed: "Failed to search. Please check your API key configuration.",
