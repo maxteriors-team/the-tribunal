@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     ad_library,
+    addresses,
     agents,
     api_keys,
     appointments,
@@ -293,6 +294,13 @@ api_router.include_router(
     scraping.router,
     prefix="/workspaces/{workspace_id}/scraping",
     tags=["Lead Scraping"],
+)
+# Address autocomplete behind the operator-facing address fields. Server-side so
+# the provider API key never reaches the browser.
+api_router.include_router(
+    addresses.router,
+    prefix="/workspaces/{workspace_id}/addresses",
+    tags=["Addresses"],
 )
 api_router.include_router(
     find_leads_ai.router,
