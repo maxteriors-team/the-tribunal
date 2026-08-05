@@ -20,7 +20,13 @@ import type { Tag } from "@/types";
 interface TagPickerProps {
   workspaceId: string;
   selectedTagIds: string[];
-  onSelectionChange: (tagIds: string[]) => void;
+  /**
+   * The `tags` argument carries the full records for the selected ids,
+   * including one created a moment ago. Callers that need anything but the id
+   * (a name, a colour) have to read it from here: the tag list query has not
+   * refetched yet, so a brand-new id resolves to nothing in the list.
+   */
+  onSelectionChange: (tagIds: string[], tags: Tag[]) => void;
   allowCreate?: boolean;
   children?: React.ReactNode;
 }
@@ -46,11 +52,22 @@ export function TagPicker({
     (t) => t.name.toLowerCase() === search.trim().toLowerCase()
   );
 
+  /** Report ids plus the records behind them, `justCreated` included. */
+  const emitSelection = (tagIds: string[], justCreated?: Tag) => {
+    const byId = new Map(
+      (justCreated ? [...tags, justCreated] : tags).map((tag) => [tag.id, tag])
+    );
+    onSelectionChange(
+      tagIds,
+      tagIds.map((id) => byId.get(id)).filter((tag): tag is Tag => Boolean(tag))
+    );
+  };
+
   const handleToggle = (tagId: string) => {
     if (selectedTagIds.includes(tagId)) {
-      onSelectionChange(selectedTagIds.filter((id) => id !== tagId));
+      emitSelection(selectedTagIds.filter((id) => id !== tagId));
     } else {
-      onSelectionChange([...selectedTagIds, tagId]);
+      emitSelection([...selectedTagIds, tagId]);
     }
   };
 
@@ -62,7 +79,7 @@ export function TagPicker({
       name: search.trim(),
       color: randomColor,
     });
-    onSelectionChange([...selectedTagIds, newTag.id]);
+    emitSelection([...selectedTagIds, newTag.id], newTag);
     setSearch("");
   };
 
@@ -84,7 +101,11 @@ export function TagPicker({
             onChange={(e) => setSearch(e.target.value)}
             className="h-8"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && search.trim() && !exactMatch && allowCreate) {
+              if (e.key !== "Enter") return;
+              // This picker is used inside form dialogs; without this, Enter
+              // would submit the surrounding form instead of creating a tag.
+              e.preventDefault();
+              if (search.trim() && !exactMatch && allowCreate) {
                 handleCreateTag();
               }
             }}
@@ -100,6 +121,7 @@ export function TagPicker({
               {filteredTags.map((tag: Tag) => (
                 <button
                   key={tag.id}
+                  type="button"
                   onClick={() => handleToggle(tag.id)}
                   className={cn(
                     "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors",
@@ -123,6 +145,7 @@ export function TagPicker({
               )}
               {search.trim() && !exactMatch && allowCreate && (
                 <button
+                  type="button"
                   onClick={handleCreateTag}
                   disabled={createTag.isPending}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent transition-colors text-primary"

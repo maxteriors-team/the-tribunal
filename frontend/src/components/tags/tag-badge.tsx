@@ -43,6 +43,9 @@ export function TagBadge({ name, color, onRemove, className }: TagBadgeProps) {
       {onRemove && (
         <button
           type="button"
+          // Named, because an unlabelled icon button reads as plain "button":
+          // with several chips in a row nothing tells the remove controls apart.
+          aria-label={`Remove ${name} tag`}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -50,7 +53,7 @@ export function TagBadge({ name, color, onRemove, className }: TagBadgeProps) {
           }}
           className="ml-0.5 rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
         >
-          <X className="h-3 w-3" />
+          <X aria-hidden="true" className="h-3 w-3" />
         </button>
       )}
     </span>
