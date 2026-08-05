@@ -22601,7 +22601,11 @@ export interface components {
         };
         /**
          * ProposalCharge
-         * @description A grossed-up add-on charge included in every tier's price.
+         * @description A grossed-up add-on charge.
+         *
+         *     On every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`
+         *     for the rules. Snapshotted onto the document so re-selecting a tier reprices
+         *     correctly without the original wizard payload.
          */
         ProposalCharge: {
             /** Amount */
@@ -22610,6 +22614,8 @@ export interface components {
             catalog_item_id?: string | null;
             /** Description */
             description: string;
+            /** Tier Key */
+            tier_key?: string | null;
         };
         /**
          * ProposalDocument
@@ -28109,6 +28115,19 @@ export interface components {
          * WizardCharge
          * @description A custom add-on charge. The rep enters the *net* they want to keep; the
          *     server grosses it up by the finance buffer like every other price.
+         *
+         *     ``tier_key`` optionally pins the charge to **one package**, mirroring
+         *     ``EstimateCustomLine.package_key`` on the estimator side:
+         *
+         *     * ``None`` (default) — rides on every tier, which is how this has always
+         *       behaved and what an unset field asks for.
+         *     * set — charged only when the client is buying that tier, so the core
+         *       drilling the Premier install needs stops inflating the Starter.
+         *
+         *     A key naming no tier in the document stays global rather than being dropped.
+         *     The estimator can drop a scoped line because it is only ever a preview; this
+         *     charge is money the rep typed on a quote they are about to send, and
+         *     silently zeroing it is worse than charging it somewhere they can see it.
          */
         WizardCharge: {
             /** Catalog Item Id */
@@ -28120,6 +28139,8 @@ export interface components {
              * @default 0
              */
             net_amount: number;
+            /** Tier Key */
+            tier_key?: string | null;
         };
         /**
          * WizardChristmasSelection

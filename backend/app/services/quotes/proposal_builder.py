@@ -9,6 +9,7 @@ client's submitted quantities are the only untrusted input.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -168,15 +169,19 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                     description=(c.description or "").strip() or "Additional Services",
                     amount=float(amount),
                     catalog_item_id=c.catalog_item_id,
+                    tier_key=c.tier_key,
                 )
             )
-    additional_total = sum((_d(c.amount) for c in charges), Decimal("0"))
-
     categories = _active_categories(payload)
     has_landscape = "landscape" in categories
 
     tier_order = (config.tier_order or [t.key for t in config.tiers]) if has_landscape else []
     tiers_by_key = {t.key: t for t in config.tiers}
+    # The keys a charge may legitimately name. Resolved before the tier loop so
+    # the card price and the quote's line items apply the same stale-key rule;
+    # if they disagreed, a document's displayed total would drift from the
+    # server-recomputed one.
+    known_tier_keys = set(tier_order)
 
     tier_views: list[ProposalTierView] = []
     tier_base: dict[str, Decimal] = {}
@@ -209,7 +214,14 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             )
         tier_base[key] = base
         tier_lines[key] = lines
-        pricing = pp.price_tier(base, additional_total, config)
+        # Only the charges this tier actually carries: a charge pinned to the
+        # Premier must not inflate the Starter's card price, which is the whole
+        # point of pinning it.
+        tier_additional = sum(
+            (_d(c.amount) for c in _charges_for(charges, key, known_tier_keys)),
+            Decimal("0"),
+        )
+        pricing = pp.price_tier(base, tier_additional, config)
         tier_views.append(
             ProposalTierView(
                 key=key,
@@ -420,6 +432,36 @@ class TierSelection:
     grand_monthly: float
 
 
+def _charges_for(
+    charges: Sequence[ProposalCharge],
+    selected: str | None,
+    known_keys: set[str],
+) -> list[ProposalCharge]:
+    """Charges owed when ``selected`` is the tier being bought.
+
+    Global charges (no ``tier_key``) always apply. A pinned charge applies only
+    to its own tier — that is what makes it follow the package it was sold with.
+    A key matching no known tier falls back to global rather than vanishing, so a
+    stale key can never silently delete money from a quote.
+    """
+    return [
+        charge
+        for charge in charges
+        if charge.tier_key is None
+        or charge.tier_key not in known_keys
+        or charge.tier_key == selected
+    ]
+
+
+def charges_for_tier(
+    charges: Sequence[ProposalCharge],
+    selected: str | None,
+    tier_views: Sequence[ProposalTierView],
+) -> list[ProposalCharge]:
+    """:func:`_charges_for` against a document's own tiers."""
+    return _charges_for(charges, selected, {view.key for view in tier_views})
+
+
 def select_tier(
     *,
     tier_views: list[ProposalTierView],
@@ -432,10 +474,12 @@ def select_tier(
 ) -> TierSelection:
     """Derive the canonical line items + totals for one selected package.
 
-    The tier contributes its own fixture lines; charges, bistro, and the
-    per-category sections are tier-independent and ride along with every
-    package. Grand totals are summed from the emitted line items so a document's
-    display figures can never drift from the server-recomputed quote total.
+    The tier contributes its own fixture lines. Bistro and the per-category
+    sections are tier-independent and ride along with every package; a charge
+    does too *unless* it names a ``tier_key``, in which case it is only charged
+    when that tier is the one being bought — see :func:`charges_for_tier`.
+    Grand totals are summed from the emitted line items so a document's display
+    figures can never drift from the server-recomputed quote total.
 
     ``catalog`` supplies the staff fulfillment sheet and the price-book id each
     fixture line snapshots its service category from; pass ``None`` when pricing
@@ -471,7 +515,7 @@ def select_tier(
                     fulfillment[sku] = FulfillmentPart(
                         sku=sku, description=comp.get("description"), qty=float(qty)
                     )
-    for charge in charges:
+    for charge in charges_for_tier(charges, selected, tier_views):
         line_items.append(
             QuoteLineItemCreate(
                 name=charge.description,
