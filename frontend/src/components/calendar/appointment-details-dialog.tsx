@@ -10,6 +10,8 @@
 import { Clock, Trash2 } from "lucide-react";
 
 import {
+  AttendanceControl,
+  hasStarted,
   ReminderBadges,
   SendReminderButton,
 } from "@/components/calendar/appointment-actions";
@@ -115,6 +117,20 @@ export function AppointmentDetailsDialog({
                   )}
                 </div>
               </div>
+              {workspaceId && hasStarted(apt.scheduled_at) && apt.status !== "cancelled" ? (
+                <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                  <p className="text-sm font-medium">Did they show up?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Recording this is what makes your show-up rate a number instead
+                    of a dash — and a no-show starts the re-engagement follow-up.
+                  </p>
+                  <AttendanceControl
+                    appointment={apt}
+                    workspaceId={workspaceId}
+                    onMarked={onChanged}
+                  />
+                </div>
+              ) : null}
               <div className="grid gap-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Clock className="size-4 text-muted-foreground" />

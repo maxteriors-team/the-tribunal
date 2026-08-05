@@ -29,6 +29,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
 from app.models.workspace import Workspace
+from app.services.appointments.attendance import record_attendance_outcome
 from app.services.campaigns.guarantee_tracker import increment_completed_and_check_guarantee
 from app.services.email import send_appointment_booked_notification
 from app.services.push_notifications import push_notification_service
@@ -680,6 +681,8 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
             log.info("appointment_already_terminal", status=appointment.status)
             return
 
+        previous_status = appointment.status
+
         # Determine if completed or no-show
         no_show_host = data.get("noShowHost", False)
         attendees = data.get("attendees", [])
@@ -700,28 +703,10 @@ async def handle_meeting_ended(data: dict[str, Any], log: Any) -> None:  # noqa:
 
         is_no_show = appointment.status == AppointmentStatus.NO_SHOW
 
-        # Update contact lifecycle tags and status fields before committing
-        meeting_contact_result = await db.execute(
-            select(Contact).where(Contact.id == appointment.contact_id)
-        )
-        meeting_contact = meeting_contact_result.scalar_one_or_none()
-        if meeting_contact:
-            if is_no_show:
-                await TagService(db).add_tag_to_contact(
-                    workspace_id=meeting_contact.workspace_id,
-                    contact_id=meeting_contact.id,
-                    name="no-show",
-                )
-                meeting_contact.last_appointment_status = "no_show"
-                meeting_contact.noshow_count = (meeting_contact.noshow_count or 0) + 1
-            else:
-                await TagService(db).add_tag_to_contact(
-                    workspace_id=meeting_contact.workspace_id,
-                    contact_id=meeting_contact.id,
-                    name="showed-up",
-                )
-                meeting_contact.last_appointment_status = "completed"
-            db.add(meeting_contact)
+        # Contact lifecycle tags + status fields, shared verbatim with the
+        # in-app "Attended / No-show" control so both writers leave a contact in
+        # the same state the re-engagement worker and automations look for.
+        await record_attendance_outcome(db, appointment, previous_status=previous_status)
 
         await db.commit()
 
