@@ -13,13 +13,14 @@ off each quote without dropping quotes that have neither.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
 
 from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
+from app.models.appointment import Appointment
 from app.models.contact import Contact
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
@@ -273,3 +274,220 @@ async def test_refuses_to_report_across_currencies() -> None:
             await _report(db, ws.id)
 
         assert exc.value.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Conversion rate — a contact cohort, not a quote cohort
+# ---------------------------------------------------------------------------
+
+
+async def _won_deal_for(db, workspace_id: uuid.UUID, contact_id: int) -> Opportunity:
+    pipeline = Pipeline(workspace_id=workspace_id, name="Sales")
+    db.add(pipeline)
+    await db.flush()
+    opportunity = Opportunity(
+        workspace_id=workspace_id,
+        pipeline_id=pipeline.id,
+        primary_contact_id=contact_id,
+        name="Deal",
+        status="won",
+    )
+    db.add(opportunity)
+    await db.flush()
+    return opportunity
+
+
+async def _contact_created_at(db, workspace_id: uuid.UUID, created_at: datetime) -> Contact:
+    contact = await _contact(db, workspace_id)
+    contact.created_at = created_at
+    await db.flush()
+    return contact
+
+
+async def test_conversion_counts_won_contacts_over_the_created_cohort() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        won = await _contact_created_at(db, ws.id, IN_WINDOW)
+        await _won_deal_for(db, ws.id, won.id)
+        await _contact_created_at(db, ws.id, IN_WINDOW)  # still open
+        await _contact_created_at(db, ws.id, IN_WINDOW)  # still open
+        # Created before the window: neither numerator nor denominator.
+        outside = await _contact_created_at(db, ws.id, datetime(2026, 6, 1, tzinfo=UTC))
+        await _won_deal_for(db, ws.id, outside.id)
+
+        report = await _report(db, ws.id)
+
+        assert report.contacts_created == 3
+        assert report.contacts_converted == 1
+        assert report.conversion_rate == 0.3333
+
+
+async def test_conversion_is_null_for_a_window_with_no_new_contacts() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        await _contact_created_at(db, ws.id, datetime(2026, 5, 1, tzinfo=UTC))
+
+        report = await _report(db, ws.id)
+
+        assert report.contacts_created == 0
+        assert report.conversion_rate is None
+
+
+async def test_conversion_ignores_another_workspaces_won_deals() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        other = await _workspace(db)
+        contact = await _contact_created_at(db, ws.id, IN_WINDOW)
+        # A won deal filed under a different tenant must not convert this contact.
+        await _won_deal_for(db, other.id, contact.id)
+
+        report = await _report(db, ws.id)
+
+        assert report.contacts_created == 1
+        assert report.contacts_converted == 0
+        assert report.conversion_rate == 0.0
+
+
+async def test_open_and_lost_deals_do_not_count_as_conversions() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact_created_at(db, ws.id, IN_WINDOW)
+        deal = await _won_deal_for(db, ws.id, contact.id)
+        deal.status = "lost"
+        await db.flush()
+
+        report = await _report(db, ws.id)
+
+        assert report.contacts_converted == 0
+
+
+# ---------------------------------------------------------------------------
+# Stale statuses — a lapsed quote is decided, not still out
+# ---------------------------------------------------------------------------
+
+
+async def test_lapsed_sent_quote_counts_as_expired_without_a_sweep() -> None:
+    """No worker flips ``sent`` -> ``expired``; the report must not be fooled.
+
+    ``_expire_overdue`` only runs on quote *read* paths, so a quote whose
+    expiry date passed can sit in ``sent`` for days. Counting it as undecided
+    would keep it out of the close-rate denominator and inflate the rate.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        await _quote(db, ws.id, status="approved", total=1_000)
+        lapsed = await _quote(db, ws.id, status="sent", total=2_000)
+        lapsed.expiry_date = date(2026, 7, 20)  # inside the window, already past
+        await db.flush()
+
+        report = await _report(db, ws.id)
+
+        # 1 approved / (1 approved + 1 expired) — not 100% off a lone approval.
+        assert report.close_rate == 0.5
+        # The stored row is untouched: reporting is a GET and must not write.
+        await db.refresh(lapsed)
+        assert lapsed.status == "sent"
+
+
+async def test_sent_quote_inside_its_validity_window_stays_undecided() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        await _quote(db, ws.id, status="approved", total=1_000)
+        still_out = await _quote(db, ws.id, status="sent", total=2_000)
+        still_out.expiry_date = date.today() + timedelta(days=30)
+        await db.flush()
+
+        report = await _report(db, ws.id)
+
+        assert report.close_rate == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Show-up rate — appointments booked in the window
+# ---------------------------------------------------------------------------
+
+
+async def _appointment(
+    db,
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    *,
+    status: str,
+    scheduled_at: datetime = IN_WINDOW,
+) -> Appointment:
+    appointment = Appointment(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+        scheduled_at=scheduled_at,
+        status=status,
+    )
+    db.add(appointment)
+    await db.flush()
+    return appointment
+
+
+async def test_show_up_rate_counts_only_decided_appointments() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _appointment(db, ws.id, contact.id, status="completed")
+        await _appointment(db, ws.id, contact.id, status="completed")
+        await _appointment(db, ws.id, contact.id, status="completed")
+        await _appointment(db, ws.id, contact.id, status="no_show")
+        # Neither of these is a decision about attendance.
+        await _appointment(db, ws.id, contact.id, status="scheduled")
+        await _appointment(db, ws.id, contact.id, status="cancelled")
+
+        report = await _report(db, ws.id)
+
+        assert report.appointments_completed == 3
+        assert report.appointments_no_show == 1
+        assert report.show_up_rate == 0.75
+
+
+async def test_show_up_rate_is_null_when_nothing_was_marked() -> None:
+    """The state every workspace starts in: booked, but never marked."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _appointment(db, ws.id, contact.id, status="scheduled")
+        await _appointment(db, ws.id, contact.id, status="scheduled")
+
+        report = await _report(db, ws.id)
+
+        assert report.show_up_rate is None
+
+
+async def test_show_up_rate_excludes_appointments_outside_the_window() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _appointment(db, ws.id, contact.id, status="completed")
+        await _appointment(
+            db,
+            ws.id,
+            contact.id,
+            status="no_show",
+            scheduled_at=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        report = await _report(db, ws.id)
+
+        assert report.appointments_completed == 1
+        assert report.appointments_no_show == 0
+        assert report.show_up_rate == 1.0
+
+
+async def test_another_workspaces_appointments_never_leak_in() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        other = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        other_contact = await _contact(db, other.id)
+        await _appointment(db, ws.id, contact.id, status="completed")
+        await _appointment(db, other.id, other_contact.id, status="no_show")
+
+        report = await _report(db, ws.id)
+
+        assert report.appointments_no_show == 0
+        assert report.show_up_rate == 1.0

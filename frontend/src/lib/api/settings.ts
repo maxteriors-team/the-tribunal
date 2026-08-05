@@ -73,6 +73,18 @@ export interface TeamMember {
   created_at: string;
 }
 
+/**
+ * What puts a card on the sales pipeline without an operator typing it.
+ *
+ * Two switches on purpose: a raw inbound lead is a weak signal (`enabled`,
+ * default off) while a sent quote is the strongest one the CRM sees
+ * (`on_quote_sent`, default on).
+ */
+export interface AutoPipelineSettings {
+  enabled: boolean;
+  on_quote_sent: boolean;
+}
+
 // Speed-to-lead SLA types
 export interface SpeedToLeadSettings {
   enabled: boolean;
@@ -229,6 +241,23 @@ export const settingsApi = {
   getTeamMembers: async (workspaceId: string): Promise<TeamMember[]> => {
     return apiGet<TeamMember[]>(
       `/api/v1/settings/workspaces/${workspaceId}/team`
+    );
+  },
+
+  // Auto-pipeline (inbound leads + sent quotes)
+  getAutoPipeline: async (workspaceId: string): Promise<AutoPipelineSettings> => {
+    return apiGet<AutoPipelineSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/auto-pipeline`
+    );
+  },
+
+  updateAutoPipeline: async (
+    workspaceId: string,
+    data: AutoPipelineSettings
+  ): Promise<AutoPipelineSettings> => {
+    return apiPut<AutoPipelineSettings>(
+      `/api/v1/settings/workspaces/${workspaceId}/auto-pipeline`,
+      data
     );
   },
 

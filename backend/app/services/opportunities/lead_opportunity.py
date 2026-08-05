@@ -51,7 +51,7 @@ def auto_pipeline_enabled(workspace: Workspace) -> bool:
     return bool(raw.get("enabled", False))
 
 
-def _opportunity_name(contact: Contact) -> str:
+def opportunity_name(contact: Contact) -> str:
     """Human-readable deal name derived from the contact (never blank)."""
     full_name = " ".join(p for p in (contact.first_name, contact.last_name) if p).strip()
     company = (contact.company_name or "").strip()
@@ -103,7 +103,7 @@ async def open_lead_opportunity(
         pipeline_id=pipeline.id,
         stage_id=stage.id if stage else None,
         primary_contact_id=contact.id,
-        name=_opportunity_name(contact),
+        name=opportunity_name(contact),
         probability=stage.probability if stage else 0,
         source=source,
         status=_OPEN_STATUS,

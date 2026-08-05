@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.message_template import MessageTemplate
-from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
 from app.schemas.attach_rules import (
     AttachRulesSettings,
     AttachRulesSettingsUpdate,
@@ -70,6 +70,7 @@ from app.services.opportunities.lead_opportunity import (
     SETTINGS_KEY as AUTO_PIPELINE_KEY,
 )
 from app.services.opportunities.lead_opportunity import auto_pipeline_enabled
+from app.services.opportunities.quote_opportunity import on_quote_sent_enabled
 from app.services.quotes.attach_rules_config import (
     SETTINGS_KEY as ATTACH_RULES_KEY,
 )
@@ -653,8 +654,8 @@ async def update_lead_source_capture_policy(
 async def get_auto_pipeline_policy(
     workspace: WorkspaceAccess,
 ) -> AutoPipelineSettings:
-    """Get whether inbound leads auto-open a card on the sales pipeline."""
-    return AutoPipelineSettings(enabled=auto_pipeline_enabled(workspace))
+    """Get what auto-opens or advances a card on the sales pipeline."""
+    return _auto_pipeline_settings(workspace)
 
 
 @router.put(
@@ -673,7 +674,15 @@ async def update_auto_pipeline_policy(
 
     await db.commit()
     await db.refresh(workspace)
-    return AutoPipelineSettings(enabled=auto_pipeline_enabled(workspace))
+    return _auto_pipeline_settings(workspace)
+
+
+def _auto_pipeline_settings(workspace: Workspace) -> AutoPipelineSettings:
+    """Read both auto-pipeline switches through their own default-bearing readers."""
+    return AutoPipelineSettings(
+        enabled=auto_pipeline_enabled(workspace),
+        on_quote_sent=on_quote_sent_enabled(workspace),
+    )
 
 
 @router.get(

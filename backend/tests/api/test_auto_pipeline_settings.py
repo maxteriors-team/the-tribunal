@@ -79,27 +79,47 @@ def _url() -> str:
     return f"/api/v1/workspaces/{WS_ID}/auto-pipeline"
 
 
-async def test_get_defaults_to_off(auth_client: AsyncClient) -> None:
-    """No stored setting means inbound leads stay off the sales board."""
+async def test_get_defaults_leads_off_and_sent_quotes_on(auth_client: AsyncClient) -> None:
+    """Two different defaults, because the two signals are not equal.
+
+    A raw inbound lead stays off the sales board; a *sent quote* means somebody
+    was quoted a price, which earns a card on its own merit.
+    """
     resp = await auth_client.get(_url())
 
     assert resp.status_code == 200
-    assert resp.json() == {"enabled": False}
+    assert resp.json() == {"enabled": False, "on_quote_sent": True}
 
 
-async def test_put_then_get_round_trips_the_flag(
+async def test_put_then_get_round_trips_the_flags(
     auth_client: AsyncClient, workspace: SimpleNamespace
 ) -> None:
-    resp = await auth_client.put(_url(), json={"enabled": True})
+    resp = await auth_client.put(_url(), json={"enabled": True, "on_quote_sent": True})
 
     assert resp.status_code == 200
-    assert resp.json() == {"enabled": True}
-    assert workspace.settings["auto_pipeline"] == {"enabled": True}
-    assert (await auth_client.get(_url())).json() == {"enabled": True}
+    assert resp.json() == {"enabled": True, "on_quote_sent": True}
+    assert workspace.settings["auto_pipeline"] == {"enabled": True, "on_quote_sent": True}
+    assert (await auth_client.get(_url())).json() == {"enabled": True, "on_quote_sent": True}
 
     # And back off again.
-    assert (await auth_client.put(_url(), json={"enabled": False})).json() == {"enabled": False}
-    assert (await auth_client.get(_url())).json() == {"enabled": False}
+    assert (
+        await auth_client.put(_url(), json={"enabled": False, "on_quote_sent": False})
+    ).json() == {"enabled": False, "on_quote_sent": False}
+    assert (await auth_client.get(_url())).json() == {
+        "enabled": False,
+        "on_quote_sent": False,
+    }
+
+
+async def test_quote_sent_can_be_switched_off_without_touching_leads(
+    auth_client: AsyncClient, workspace: SimpleNamespace
+) -> None:
+    """The two switches are independent; one is not an alias of the other."""
+    resp = await auth_client.put(_url(), json={"on_quote_sent": False})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"enabled": False, "on_quote_sent": False}
+    assert workspace.settings["auto_pipeline"]["on_quote_sent"] is False
 
 
 async def test_write_is_namespaced_and_keeps_neighbouring_settings() -> None:
@@ -115,10 +135,10 @@ async def test_write_is_namespaced_and_keeps_neighbouring_settings() -> None:
     assert workspace.settings["lead_source_capture"] == {
         "require_lead_source_on_manual_create": True
     }
-    assert workspace.settings["auto_pipeline"] == {"enabled": True}
+    assert workspace.settings["auto_pipeline"] == {"enabled": True, "on_quote_sent": True}
 
 
-async def test_corrupt_blob_reads_as_off_not_a_500() -> None:
+async def test_corrupt_blob_reads_as_the_defaults_not_a_500() -> None:
     """A hand-edited settings row must not 500 the settings page."""
     workspace = _make_workspace({"auto_pipeline": "yes please"})
 
@@ -126,7 +146,8 @@ async def test_corrupt_blob_reads_as_off_not_a_500() -> None:
         resp = await ac.get(_url())
 
     assert resp.status_code == 200
-    assert resp.json() == {"enabled": False}
+    # Each switch falls back to its own default, not to a blanket False.
+    assert resp.json() == {"enabled": False, "on_quote_sent": True}
 
 
 async def test_non_boolean_payload_rejected(auth_client: AsyncClient) -> None:

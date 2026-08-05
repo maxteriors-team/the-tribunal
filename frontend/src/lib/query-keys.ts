@@ -549,6 +549,8 @@ export const queryKeys = {
     team: (workspaceId: string) => ["settings", "team", workspaceId] as const,
     integrations: (workspaceId: string) =>
       ["settings", "integrations", workspaceId] as const,
+    autoPipeline: (workspaceId: string) =>
+      ["settings", "auto-pipeline", workspaceId] as const,
     speedToLead: (workspaceId: string) =>
       ["settings", "speed-to-lead", workspaceId] as const,
     speedToLeadMetrics: (workspaceId: string) =>

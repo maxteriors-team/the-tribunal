@@ -259,6 +259,28 @@ async def update_opportunity(
     )
 
 
+@router.post("/{opportunity_id}/remove-from-pipeline", response_model=OpportunityResponse)
+async def remove_opportunity_from_pipeline(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWritePipelineOwn,
+) -> OpportunityResponse:
+    """Take a deal off the board, keeping its history.
+
+    Sticky: a contact whose card was removed here is not given a new one the
+    next time a quote is sent to them.
+    """
+    service = OpportunityService(db)
+    return await service.remove_from_pipeline(
+        workspace_id,
+        opportunity_id,
+        current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_opportunity(
     workspace_id: uuid.UUID,

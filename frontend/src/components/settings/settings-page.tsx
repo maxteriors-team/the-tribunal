@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, Layers, MapPin, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
+import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, KanbanSquare, Layers, MapPin, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
@@ -13,6 +13,7 @@ import { NeighborOutreachSettingsTab } from "@/components/settings/neighbor-outr
 import { NotificationsSettingsTab } from "@/components/settings/notifications-settings-tab";
 import { NudgeSettingsTab } from "@/components/settings/nudge-settings-tab";
 import { PermanentPricingSettingsCard } from "@/components/settings/permanent-pricing-settings-card";
+import { PipelineSettingsTab } from "@/components/settings/pipeline-settings-tab";
 import { ProfileSettingsTab } from "@/components/settings/profile-settings-tab";
 import { ProposalSettingsTab } from "@/components/settings/proposal-settings-tab";
 import { QuoteFollowupSettingsTab } from "@/components/settings/quote-followup-settings-tab";
@@ -36,6 +37,7 @@ const settingsTabs = [
   { value: "pricing", label: "Pricing", icon: DollarSign },
   { value: "attach-rules", label: "Attach Rules", icon: Layers },
   { value: "sales-targets", label: "Sales Targets", icon: Target },
+  { value: "pipeline", label: "Pipeline", icon: KanbanSquare },
   { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
   { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
   { value: "quote-revival", label: "Quote Revival", icon: History },
@@ -137,6 +139,12 @@ export function SettingsPage() {
         <TabsContent value="sales-targets">
           <QueryErrorBoundary message="Failed to load sales targets. Please try again.">
             <SalesTargetsSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="pipeline">
+          <QueryErrorBoundary message="Failed to load pipeline settings. Please try again.">
+            <PipelineSettingsTab />
           </QueryErrorBoundary>
         </TabsContent>
 

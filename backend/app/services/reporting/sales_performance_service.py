@@ -40,16 +40,19 @@ from statistics import median
 
 from fastapi import HTTPException
 from fastapi import status as http_status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import apply_workspace_scope
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.contact import Contact
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.reporting import SalesPerformanceBreakdownRow, SalesPerformanceReport
 from app.services.dashboard.lead_source_roi_service import source_type_label
+from app.services.quotes.quote_expiry import effective_status
 from app.services.reporting.reporting_service import _require_single_currency
 
 # Report name used in the multi-currency refusal message.
@@ -60,6 +63,9 @@ _DRAFT_STATUS = "draft"
 _APPROVED_STATUS = "approved"
 # A customer decision was actually made. ``sent`` is deliberately absent.
 _DECIDED_STATUSES = frozenset({"approved", "declined", "expired"})
+
+# Deal status that counts a contact in the cohort as converted.
+_WON_STATUS = "won"
 
 # Bucket labels for rows with no group value, so a breakdown never hides volume.
 UNASSIGNED_CLOSER_LABEL = "Unassigned"
@@ -84,6 +90,54 @@ class QuoteFact:
     closer_id: int | None = None
     closer_name: str | None = None
     lead_source_type: LeadSourceType | None = None
+
+
+@dataclass(frozen=True)
+class ConversionFacts:
+    """The contact cohort behind ``conversion_rate``.
+
+    Cohorted on **contact creation** inside the window, counting a won deal
+    whenever it lands — the same shape as the quote cohort, where a quote and
+    the decision it later earned stay in one bucket. The consequence is that a
+    recent window understates conversion (deals still in flight cannot have
+    closed yet), which is why the rate always ships with its denominator.
+    """
+
+    contacts_created: int = 0
+    contacts_converted: int = 0
+
+
+@dataclass(frozen=True)
+class AttendanceFacts:
+    """Decided appointment outcomes in the window.
+
+    Only ``completed`` and ``no_show`` are decisions. A ``scheduled``
+    appointment is unknown attendance and a ``cancelled`` one is a call-off, so
+    neither belongs in the fraction — folding them in would report a workspace
+    that simply has not marked anything as one that gets stood up.
+    """
+
+    completed: int = 0
+    no_show: int = 0
+
+
+def show_up_rate(facts: AttendanceFacts) -> float | None:
+    """Attended share of decided appointments, or ``None`` when none decided."""
+    decided = facts.completed + facts.no_show
+    if decided <= 0:
+        return None
+    return round(facts.completed / decided, 4)
+
+
+def conversion_rate(facts: ConversionFacts) -> float | None:
+    """Won-deal share of the contact cohort, or ``None`` with no contacts.
+
+    ``None`` rather than ``0``: a window in which nobody was created has an
+    unreadable conversion rate, not a failed one.
+    """
+    if facts.contacts_created <= 0:
+        return None
+    return round(facts.contacts_converted / facts.contacts_created, 4)
 
 
 @dataclass(frozen=True)
@@ -216,7 +270,12 @@ def _service_identity(fact: QuoteFact) -> tuple[str | None, str]:
 
 
 def assemble_sales_performance(
-    facts: Iterable[QuoteFact], *, date_from: date, date_to: date
+    facts: Iterable[QuoteFact],
+    *,
+    date_from: date,
+    date_to: date,
+    conversion: ConversionFacts | None = None,
+    attendance: AttendanceFacts | None = None,
 ) -> SalesPerformanceReport:
     """Build the report from cohort quotes.
 
@@ -228,6 +287,8 @@ def assemble_sales_performance(
         {fact.currency for fact in issued if fact.currency}, REPORT_NAME
     )
     metrics = _compute(issued)
+    contact_cohort = conversion or ConversionFacts()
+    appointments = attendance or AttendanceFacts()
 
     return SalesPerformanceReport(
         date_from=date_from,
@@ -241,6 +302,12 @@ def assemble_sales_performance(
         attach_rate=metrics.attach_rate,
         avg_attach_value=metrics.avg_attach_value,
         close_rate=metrics.close_rate,
+        contacts_created=contact_cohort.contacts_created,
+        contacts_converted=contact_cohort.contacts_converted,
+        conversion_rate=conversion_rate(contact_cohort),
+        appointments_completed=appointments.completed,
+        appointments_no_show=appointments.no_show,
+        show_up_rate=show_up_rate(appointments),
         by_closer=_breakdown(issued, _closer_identity),
         by_lead_source=_breakdown(issued, _lead_source_identity),
         by_primary_service=_breakdown(issued, _service_identity),
@@ -266,7 +333,87 @@ class SalesPerformanceService:
         """
         start, end = resolve_window(date_from, date_to)
         facts = await self._load_facts(workspace_id, start, end)
-        return assemble_sales_performance(facts, date_from=start, date_to=end)
+        conversion = await self._load_conversion(workspace_id, start, end)
+        attendance = await self._load_attendance(workspace_id, start, end)
+        return assemble_sales_performance(
+            facts,
+            date_from=start,
+            date_to=end,
+            conversion=conversion,
+            attendance=attendance,
+        )
+
+    async def _load_attendance(
+        self, workspace_id: uuid.UUID, date_from: date, date_to: date
+    ) -> AttendanceFacts:
+        """Count attended vs missed appointments *scheduled* inside the window.
+
+        Cohorted on ``scheduled_at`` rather than on when someone got around to
+        marking it, so the rate answers "of the visits booked for July, how many
+        happened?".
+        """
+        start = datetime.combine(date_from, time.min, tzinfo=UTC)
+        end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+
+        row = (
+            await self.db.execute(
+                select(
+                    func.count(Appointment.id).filter(
+                        Appointment.status == AppointmentStatus.COMPLETED
+                    ),
+                    func.count(Appointment.id).filter(
+                        Appointment.status == AppointmentStatus.NO_SHOW
+                    ),
+                ).where(
+                    Appointment.workspace_id == workspace_id,
+                    Appointment.scheduled_at >= start,
+                    Appointment.scheduled_at < end,
+                )
+            )
+        ).one()
+
+        return AttendanceFacts(completed=int(row[0] or 0), no_show=int(row[1] or 0))
+
+    async def _load_conversion(
+        self, workspace_id: uuid.UUID, date_from: date, date_to: date
+    ) -> ConversionFacts:
+        """Count the window's new contacts and how many reached a won deal.
+
+        One pass over ``contacts`` (workspace + created_at) with a correlated
+        ``EXISTS`` against ``opportunities.primary_contact_id`` — indexed — so
+        the subquery stops at the first won deal instead of materializing every
+        deal a contact ever had.
+        """
+        start = datetime.combine(date_from, time.min, tzinfo=UTC)
+        end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+
+        won_deal = (
+            select(Opportunity.id)
+            .where(
+                Opportunity.workspace_id == workspace_id,
+                Opportunity.primary_contact_id == Contact.id,
+                Opportunity.status == _WON_STATUS,
+            )
+            .exists()
+        )
+
+        row = (
+            await self.db.execute(
+                select(
+                    func.count(Contact.id),
+                    func.count(Contact.id).filter(won_deal),
+                ).where(
+                    Contact.workspace_id == workspace_id,
+                    Contact.created_at >= start,
+                    Contact.created_at < end,
+                )
+            )
+        ).one()
+
+        return ConversionFacts(
+            contacts_created=int(row[0] or 0),
+            contacts_converted=int(row[1] or 0),
+        )
 
     async def _load_facts(
         self, workspace_id: uuid.UUID, date_from: date, date_to: date
@@ -280,7 +427,12 @@ class SalesPerformanceService:
         query = (
             apply_workspace_scope(
                 select(
-                    Quote.status,
+                    # A quote past its expiry date is a *decision*, not an
+                    # undecided quote — but nothing sweeps it to ``expired``
+                    # until a quote screen is opened, so the report derives the
+                    # status rather than trusting the stored one. Counting a
+                    # lapsed quote as still-out would deflate the close rate.
+                    effective_status().label("status"),
                     Quote.total,
                     Quote.attach_count,
                     Quote.attach_value,
