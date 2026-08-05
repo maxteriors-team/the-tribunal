@@ -30,6 +30,7 @@ import pytest
 from app.api.webhooks import calcom as _calcom_router_module
 from app.api.webhooks import calcom_handlers as handlers
 from app.models.appointment import AppointmentStatus
+from app.services.appointments import attendance
 from app.services.webhook_replay import SignatureClaim, SignatureClaimOutcome
 from tests.fixtures.webhooks import load_calcom_data
 
@@ -165,6 +166,10 @@ def _stub_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
     tag_service.add_tag_to_contact = AsyncMock(return_value=None)
     tag_service_factory = MagicMock(return_value=tag_service)
     monkeypatch.setattr(handlers, "TagService", tag_service_factory)
+    # ``handle_meeting_ended`` delegates its contact-side effects to
+    # ``record_attendance_outcome`` (shared with the in-app attendance control),
+    # which resolves ``TagService`` in its own module namespace.
+    monkeypatch.setattr(attendance, "TagService", tag_service_factory)
     stubs["tag_service"] = tag_service
 
     increment_guarantee = AsyncMock(return_value=None)

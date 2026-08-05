@@ -1,11 +1,12 @@
 "use client";
 
-import { Bell, Loader2 } from "lucide-react";
+import { Bell, Loader2, UserCheck, UserX } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useMarkAttendance, type AttendanceOutcome } from "@/hooks/useMarkAttendance";
 import { appointmentsApi } from "@/lib/api/appointments";
 import { offsetToLabel } from "@/lib/calendar/calendar-derivations";
 import type { Appointment } from "@/types";
@@ -126,5 +127,92 @@ export function SendReminderButton({
       )}
       Remind
     </Button>
+  );
+}
+
+/** True once the appointment's slot has started, so attendance is knowable. */
+export function hasStarted(scheduledAt: string, now: Date = new Date()): boolean {
+  const start = new Date(scheduledAt).getTime();
+  return Number.isFinite(start) && start <= now.getTime();
+}
+
+interface AttendanceControlProps {
+  appointment: Appointment;
+  workspaceId: string;
+  onMarked?: () => void;
+}
+
+/**
+ * "Attended / No-show" for an appointment whose slot has passed.
+ *
+ * Show-up rate is the one funnel number a CRM cannot infer, and until this
+ * shipped nothing outside the Cal.com webhook could write it — a workspace
+ * booking by phone saw a permanent dash. Deliberately not auto-resolved after N
+ * hours: assuming attendance would manufacture a 100% show-up rate, which is
+ * worse than no number at all.
+ */
+export function AttendanceControl({
+  appointment,
+  workspaceId,
+  onMarked,
+}: AttendanceControlProps) {
+  const markAttendance = useMarkAttendance({ workspaceId, onSuccess: onMarked });
+
+  if (!hasStarted(appointment.scheduled_at)) return null;
+  if (appointment.status === "cancelled") return null;
+
+  const pendingOutcome = markAttendance.isPending
+    ? markAttendance.variables?.outcome
+    : undefined;
+
+  const mark = (outcome: AttendanceOutcome) => (event: React.MouseEvent) => {
+    event.stopPropagation();
+    markAttendance.mutate({ appointmentId: appointment.id, outcome });
+  };
+
+  const buttons: {
+    outcome: AttendanceOutcome;
+    label: string;
+    icon: typeof UserCheck;
+    activeClass: string;
+  }[] = [
+    {
+      outcome: "completed",
+      label: "Attended",
+      icon: UserCheck,
+      activeClass: "border-success/40 bg-success/10 text-success",
+    },
+    {
+      outcome: "no_show",
+      label: "No-show",
+      icon: UserX,
+      activeClass: "border-destructive/40 bg-destructive/10 text-destructive",
+    },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {buttons.map(({ outcome, label, icon: Icon, activeClass }) => {
+        const isCurrent = appointment.status === outcome;
+        return (
+          <Button
+            key={outcome}
+            variant="outline"
+            size="sm"
+            className={`h-7 gap-1 text-xs ${isCurrent ? activeClass : ""}`}
+            onClick={mark(outcome)}
+            disabled={markAttendance.isPending || isCurrent}
+            aria-pressed={isCurrent}
+          >
+            {pendingOutcome === outcome ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Icon className="size-3" />
+            )}
+            {label}
+          </Button>
+        );
+      })}
+    </div>
   );
 }

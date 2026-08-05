@@ -28,6 +28,7 @@ from app.schemas.appointment import (
     AppointmentUpdate,
     PaginatedAppointments,
 )
+from app.services.appointments.attendance import record_attendance_outcome
 
 logger = structlog.get_logger()
 
@@ -194,6 +195,14 @@ class AppointmentService:
 
         for field, value in update_data.items():
             setattr(appointment, field, value)
+
+        # An operator marking attendance must leave the contact in exactly the
+        # state the Cal.com webhook would: the lifecycle tag,
+        # ``last_appointment_status``, and ``noshow_count``. Without this an
+        # in-app no-show is invisible to the ``no_show`` automation trigger and
+        # to ``noshow_reengagement_worker``.
+        if appointment.status != previous_status:
+            await record_attendance_outcome(self.db, appointment, previous_status=previous_status)
 
         await self.db.commit()
         await self.db.refresh(appointment)

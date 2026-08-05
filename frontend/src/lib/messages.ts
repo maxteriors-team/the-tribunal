@@ -67,6 +67,12 @@ export const messages = {
     endFailed: "Failed to end the call. Please try again.",
   },
 
+  appointments: {
+    markedAttended: "Marked as attended",
+    markedNoShow: "Marked as a no-show",
+    attendanceFailed: "Failed to update attendance. Please try again.",
+  },
+
   findLeads: {
     found: (count: number) => `Found ${count} businesses`,
     searchFailed: "Failed to search. Please check your API key configuration.",
