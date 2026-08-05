@@ -190,6 +190,12 @@ export const queryKeys = {
       ["people-discovery-job", workspaceId, jobId] as const,
     missions: (workspaceId: string) => ["people-missions", workspaceId] as const,
   },
+  addresses: {
+    // Keyed on the typed text, so backtracking a character replays a cached
+    // answer instead of re-billing the provider for a query already asked.
+    suggest: (workspaceId: string, query: string) =>
+      ["addresses", workspaceId, "suggest", query] as const,
+  },
   agents: {
     ...agents,
     activeOnly: (workspaceId: string) =>
