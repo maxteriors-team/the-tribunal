@@ -28,10 +28,14 @@ from app.services.reporting.sales_performance_service import (
     UNASSIGNED_CLOSER_LABEL,
     UNATTRIBUTED_SOURCE_LABEL,
     UNCATEGORIZED_SERVICE_LABEL,
+    AttendanceFacts,
+    ConversionFacts,
     QuoteFact,
     assemble_sales_performance,
+    conversion_rate,
     current_month_window,
     resolve_window,
+    show_up_rate,
 )
 
 WINDOW_FROM = date(2026, 7, 1)
@@ -372,3 +376,71 @@ def test_inverted_window_is_refused_rather_than_reported_as_empty() -> None:
         resolve_window(date(2026, 7, 31), date(2026, 7, 1))
 
     assert exc.value.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# Conversion rate (contact cohort)
+# --------------------------------------------------------------------------- #
+def test_conversion_rate_is_null_when_nobody_was_created() -> None:
+    """No contacts in the window means the rate is unreadable, not 0%."""
+    report = _report()
+
+    assert report.contacts_created == 0
+    assert report.contacts_converted == 0
+    assert report.conversion_rate is None
+
+
+def test_conversion_rate_divides_won_contacts_by_the_cohort() -> None:
+    report = assemble_sales_performance(
+        [],
+        date_from=WINDOW_FROM,
+        date_to=WINDOW_TO,
+        conversion=ConversionFacts(contacts_created=40, contacts_converted=7),
+    )
+
+    assert report.conversion_rate == 0.175
+    assert report.contacts_created == 40
+    assert report.contacts_converted == 7
+
+
+def test_conversion_rate_reports_a_real_zero_when_nobody_converted() -> None:
+    """0 of 25 is a fact about the funnel; only an empty cohort is null."""
+    facts = ConversionFacts(contacts_created=25, contacts_converted=0)
+
+    assert conversion_rate(facts) == 0.0
+
+
+def test_conversion_rate_rounds_to_four_places_like_every_other_rate() -> None:
+    assert conversion_rate(ConversionFacts(contacts_created=3, contacts_converted=1)) == 0.3333
+    assert conversion_rate(ConversionFacts(contacts_created=7, contacts_converted=7)) == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Show-up rate (appointment outcomes)
+# --------------------------------------------------------------------------- #
+def test_show_up_rate_is_null_until_an_appointment_is_marked() -> None:
+    """A workspace that has marked nothing has an unreadable rate, not 0%."""
+    report = _report()
+
+    assert report.appointments_completed == 0
+    assert report.appointments_no_show == 0
+    assert report.show_up_rate is None
+
+
+def test_show_up_rate_divides_attended_by_decided() -> None:
+    report = assemble_sales_performance(
+        [],
+        date_from=WINDOW_FROM,
+        date_to=WINDOW_TO,
+        attendance=AttendanceFacts(completed=9, no_show=3),
+    )
+
+    assert report.show_up_rate == 0.75
+    assert report.appointments_completed == 9
+    assert report.appointments_no_show == 3
+
+
+def test_show_up_rate_reports_a_real_zero_when_everyone_missed() -> None:
+    assert show_up_rate(AttendanceFacts(completed=0, no_show=4)) == 0.0
+    assert show_up_rate(AttendanceFacts(completed=4, no_show=0)) == 1.0
+    assert show_up_rate(AttendanceFacts(completed=2, no_show=1)) == 0.6667

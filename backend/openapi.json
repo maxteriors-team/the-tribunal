@@ -4504,11 +4504,16 @@
         "type": "object"
       },
       "AutoPipelineSettings": {
-        "description": "Whether inbound leads auto-open a card on the sales pipeline.\n\nOff by default: a raw inbound lead belongs in Contacts until someone has\ncontacted them and booked a call or demo. Turning this on restores the\nolder behaviour where every inbound funnel opens an opportunity.",
+        "description": "What puts a card on the sales pipeline without an operator typing it.\n\nTwo independent switches, because the two signals are not equally strong:\n\n- ``enabled`` — raw *inbound leads*. **Off** by default: a lead belongs in\n  Contacts until someone has contacted them and booked a call or demo.\n- ``on_quote_sent`` — a *sent quote*. **On** by default: somebody has been\n  quoted a price, which is the strongest buying signal the CRM sees.",
         "properties": {
           "enabled": {
             "default": false,
             "title": "Enabled",
+            "type": "boolean"
+          },
+          "on_quote_sent": {
+            "default": true,
+            "title": "On Quote Sent",
             "type": "boolean"
           }
         },
@@ -42828,6 +42833,20 @@
       "SalesPerformanceReport": {
         "description": "Sales performance over a quote cohort.\n\nQuotes are cohorted by creation date inside the inclusive window, so a quote\nand the decision it later earned are reported together. Drafts never count\n(they never reached a customer) and still-``sent`` quotes are undecided, so\nthey are excluded from the close-rate denominator rather than counted as\nlosses. Every rate is null instead of zero when its denominator is empty.",
         "properties": {
+          "appointments_completed": {
+            "default": 0,
+            "description": "Window appointments the customer attended",
+            "minimum": 0.0,
+            "title": "Appointments Completed",
+            "type": "integer"
+          },
+          "appointments_no_show": {
+            "default": 0,
+            "description": "Window appointments the customer missed",
+            "minimum": 0.0,
+            "title": "Appointments No Show",
+            "type": "integer"
+          },
           "attach_rate": {
             "anyOf": [
               {
@@ -42900,6 +42919,32 @@
             "description": "approved / (approved + declined + expired) as a 0..1 ratio; null when no cohort quote has been decided yet",
             "title": "Close Rate"
           },
+          "contacts_converted": {
+            "default": 0,
+            "description": "Those contacts that have since reached a won deal",
+            "minimum": 0.0,
+            "title": "Contacts Converted",
+            "type": "integer"
+          },
+          "contacts_created": {
+            "default": 0,
+            "description": "Contacts created in the window — the denominator of conversion_rate",
+            "minimum": 0.0,
+            "title": "Contacts Created",
+            "type": "integer"
+          },
+          "conversion_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "contacts_converted / contacts_created as a 0..1 ratio, or null when no contact was created in the window. Cohorted on contact creation and counting a win whenever it lands, so a recent window understates conversion: deals still in flight cannot have closed yet.",
+            "title": "Conversion Rate"
+          },
           "currency": {
             "description": "Currency of every money field in this report",
             "title": "Currency",
@@ -42943,6 +42988,18 @@
             "description": "Summed total of the approved quotes",
             "title": "Revenue Approved",
             "type": "number"
+          },
+          "show_up_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "completed / (completed + no_show) as a 0..1 ratio, or null when no appointment in the window has been marked either way. Scheduled and cancelled appointments are in neither side of the fraction: an unmarked appointment is unknown attendance, not an absence.",
+            "title": "Show Up Rate"
           }
         },
         "required": [
@@ -51686,7 +51743,7 @@
     },
     "/api/v1/settings/workspaces/{workspace_id}/auto-pipeline": {
       "get": {
-        "description": "Get whether inbound leads auto-open a card on the sales pipeline.",
+        "description": "Get what auto-opens or advances a card on the sales pipeline.",
         "operationId": "get_auto_pipeline_policy_api_v1_settings_workspaces__workspace_id__auto_pipeline_get",
         "parameters": [
           {
@@ -74842,6 +74899,65 @@
           }
         ],
         "summary": "Update Line Item",
+        "tags": [
+          "Opportunities"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/remove-from-pipeline": {
+      "post": {
+        "description": "Take a deal off the board, keeping its history.\n\nSticky: a contact whose card was removed here is not given a new one the\nnext time a quote is sent to them.",
+        "operationId": "remove_opportunity_from_pipeline_api_v1_workspaces__workspace_id__opportunities__opportunity_id__remove_from_pipeline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Opportunity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Remove Opportunity From Pipeline",
         "tags": [
           "Opportunities"
         ]

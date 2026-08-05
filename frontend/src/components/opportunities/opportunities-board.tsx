@@ -17,6 +17,16 @@ import { toast } from "sonner";
 
 import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
 import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appointment-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,6 +127,7 @@ function PipelineBoard({
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
   const [scheduleContactId, setScheduleContactId] = useState<number | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<Opportunity | null>(null);
 
   const {
     callTarget,
@@ -197,6 +208,22 @@ function PipelineBoard({
       const stageName = stages.find((s) => s.id === stageId)?.name ?? "stage";
       toast.success(`Moved to ${stageName}`);
     },
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.opportunities.all(workspaceId),
+      });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (opportunityId: string) =>
+      opportunitiesApi.removeFromPipeline(workspaceId, opportunityId),
+    onSuccess: () => {
+      toast.success("Removed from the pipeline");
+      setPendingRemoval(null);
+    },
+    onError: (err) =>
+      toast.error(getApiErrorMessage(err, "Failed to remove from the pipeline")),
     onSettled: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.opportunities.all(workspaceId),
@@ -313,6 +340,7 @@ function PipelineBoard({
                 }
                 onCall={callContact}
                 onSchedule={scheduleContactFor}
+                onRemove={setPendingRemoval}
               />
             ))}
           </div>
@@ -349,6 +377,42 @@ function PipelineBoard({
         onOpenChange={setManageStagesOpen}
       />
 
+      <AlertDialog
+        open={!!pendingRemoval}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemoval(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {pendingRemoval?.name} from the pipeline?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The deal and its history are kept, but the card leaves the board and
+              automation will not put it back — including the next time you send
+              this customer a quote. You can always add a deal for them manually.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>
+              Keep it
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={removeMutation.isPending}
+              onClick={(event) => {
+                // Removal is a request, not a navigation: keep the dialog up
+                // until the server confirms so a failure can be shown.
+                event.preventDefault();
+                if (pendingRemoval) removeMutation.mutate(pendingRemoval.id);
+              }}
+            >
+              {removeMutation.isPending ? "Removing…" : "Remove from pipeline"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <OutboundCallDialog
         open={callDialogOpen}
         onOpenChange={setCallDialogOpen}
@@ -381,6 +445,7 @@ function StageColumn({
   onMove,
   onCall,
   onSchedule,
+  onRemove,
 }: {
   stage: PipelineStage;
   stages: PipelineStage[];
@@ -390,6 +455,7 @@ function StageColumn({
   onMove: (opportunityId: string, stageId: string) => void;
   onCall: (opportunity: Opportunity) => void;
   onSchedule: (opportunity: Opportunity) => void;
+  onRemove: (opportunity: Opportunity) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
@@ -442,6 +508,7 @@ function StageColumn({
               onMove={onMove}
               onCall={onCall}
               onSchedule={onSchedule}
+              onRemove={onRemove}
             />
           ))
         )}

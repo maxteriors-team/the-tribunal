@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Banknote,
+  CalendarCheck,
   DollarSign,
   FileText,
   Minus,
-  PackagePlus,
   Target,
   TrendingDown,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
 
@@ -46,12 +47,14 @@ import {
 } from "./sales-performance-breakdown-table";
 import {
   APPROVED_SAMPLE,
+  CONTACT_SAMPLE,
   currentMonthRange,
   describeDelta,
   describeSample,
   formatMoney,
   formatRate,
   isLowSample,
+  MARKED_APPOINTMENT_SAMPLE,
   previousRange,
   QUOTED_SAMPLE,
   type DateRange,
@@ -103,6 +106,8 @@ interface HeadlineCardProps {
   delta: MetricDelta | null;
   sampleSize: number;
   sampleNoun: SampleNoun;
+  /** Caveat the number cannot state on its own, e.g. a lagging cohort. */
+  note?: string;
 }
 
 function HeadlineCard({
@@ -112,6 +117,7 @@ function HeadlineCard({
   delta,
   sampleSize,
   sampleNoun,
+  note,
 }: HeadlineCardProps) {
   const low = isLowSample(sampleSize);
 
@@ -135,6 +141,7 @@ function HeadlineCard({
           {describeSample(sampleSize, sampleNoun)}
           {low ? " · low sample" : ""}
         </p>
+        {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
       </CardContent>
     </Card>
   );
@@ -229,45 +236,61 @@ function SalesPerformanceBody({
   previous: SalesPerformanceReportData | undefined;
 }) {
   const { currency } = data;
+  const markedAppointments =
+    data.appointments_completed + data.appointments_no_show;
 
-  if (data.quotes_issued === 0) {
+  // Nothing happened at all in this window — no leads, no visits, no quotes.
+  // Five dashes would be honest but useless; say what would fill them.
+  if (
+    data.quotes_issued === 0 &&
+    data.contacts_created === 0 &&
+    markedAppointments === 0
+  ) {
     return (
       <PageEmptyState
         icon={<FileText className="size-8" />}
-        title="No quotes in this date range"
-        description="Average job value, attach rate, and close rate are all computed from quotes you have sent. Send your first quote, or widen the date range, and this report will fill in."
+        title="Nothing to report in this date range"
+        description="These numbers come from the contacts you took on, the appointments you marked attended or missed, and the quotes you sent. Widen the date range, or work a lead through the funnel, and this report will fill in."
       />
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <HeadlineCard
-          label="Average Job Value"
-          icon={DollarSign}
-          value={formatMoney(data.avg_job_value, currency)}
+          label="Conversion Rate"
+          icon={Users}
+          value={formatRate(data.conversion_rate)}
           delta={describeDelta(
-            data.avg_job_value,
-            previous?.avg_job_value,
-            "currency",
-            currency,
-          )}
-          sampleSize={data.quotes_approved}
-          sampleNoun={APPROVED_SAMPLE}
-        />
-        <HeadlineCard
-          label="Attach Rate"
-          icon={PackagePlus}
-          value={formatRate(data.attach_rate)}
-          delta={describeDelta(
-            data.attach_rate,
-            previous?.attach_rate,
+            data.conversion_rate,
+            previous?.conversion_rate,
             "ratio",
             currency,
           )}
-          sampleSize={data.quotes_approved}
-          sampleNoun={APPROVED_SAMPLE}
+          sampleSize={data.contacts_created}
+          sampleNoun={CONTACT_SAMPLE}
+          note="New contacts that have since reached a won deal. A recent window understates it — deals still in flight cannot have closed yet."
+        />
+        <HeadlineCard
+          label="Show-up Rate"
+          icon={CalendarCheck}
+          value={formatRate(data.show_up_rate)}
+          delta={describeDelta(
+            data.show_up_rate,
+            previous?.show_up_rate,
+            "ratio",
+            currency,
+          )}
+          sampleSize={markedAppointments}
+          sampleNoun={MARKED_APPOINTMENT_SAMPLE}
+          note={
+            markedAppointments === 0
+              ? "Mark past appointments attended or no-show and this fills in."
+              : `${data.appointments_no_show} no-show${
+                  data.appointments_no_show === 1 ? "" : "s"
+                } of ${markedAppointments} marked`
+          }
         />
         <HeadlineCard
           label="Close Rate"
@@ -283,7 +306,20 @@ function SalesPerformanceBody({
           sampleNoun={QUOTED_SAMPLE}
         />
         <HeadlineCard
-          label="Revenue Approved"
+          label="Average Job Value"
+          icon={DollarSign}
+          value={formatMoney(data.avg_job_value, currency)}
+          delta={describeDelta(
+            data.avg_job_value,
+            previous?.avg_job_value,
+            "currency",
+            currency,
+          )}
+          sampleSize={data.quotes_approved}
+          sampleNoun={APPROVED_SAMPLE}
+        />
+        <HeadlineCard
+          label="Revenue Won"
           icon={Banknote}
           value={formatMoney(data.revenue_approved, currency)}
           delta={describeDelta(
@@ -297,14 +333,24 @@ function SalesPerformanceBody({
         />
       </div>
 
-      {data.quotes_approved === 0 ? (
+      {data.quotes_issued === 0 ? (
+        <Card>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              No quotes were created in this range, so close rate, average job
+              value and revenue won have nothing to compute from and show a dash
+              rather than a zero.
+            </p>
+          </CardContent>
+        </Card>
+      ) : data.quotes_approved === 0 ? (
         <Card>
           {/* `Card` already supplies py-6; no extra top padding needed. */}
           <CardContent>
             <p className="text-sm text-muted-foreground">
               None of the {data.quotes_issued} quotes in this range have been
-              approved yet, so average job value and attach rate have nothing to
-              average and show a dash rather than a zero. Close rate still counts
+              approved yet, so average job value and revenue won have nothing to
+              total and show a dash rather than a zero. Close rate still counts
               every quote the customer has decided on.
             </p>
           </CardContent>

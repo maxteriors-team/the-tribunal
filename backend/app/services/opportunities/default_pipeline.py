@@ -26,6 +26,7 @@ __all__ = [
     "DEFAULT_PIPELINE_DESCRIPTION",
     "DEFAULT_PIPELINE_NAME",
     "DEFAULT_PIPELINE_STAGES",
+    "QUOTE_SENT_STAGE_NAME",
     "ensure_default_pipeline",
     "get_default_pipeline_first_stage",
 ]
@@ -34,6 +35,10 @@ logger = structlog.get_logger()
 
 DEFAULT_PIPELINE_NAME = "Sales Pipeline"
 DEFAULT_PIPELINE_DESCRIPTION = "Default pipeline created automatically for this workspace."
+
+# The stage a sent quote lands a deal in. Named here rather than inline so the
+# stage definition below and the quote-send automation cannot drift apart.
+QUOTE_SENT_STAGE_NAME = "Quote Sent / Follow Up"
 
 # Ordered stages for the default pipeline. ``order`` is ascending, so the first
 # entry is the entry stage the promotion flow drops new opportunities into.
@@ -45,7 +50,7 @@ DEFAULT_PIPELINE_STAGES: list[dict[str, object]] = [
     {"name": "Qualified", "order": 0, "probability": 25, "stage_type": "active"},
     {"name": "Visit/Demo Scheduled", "order": 1, "probability": 45, "stage_type": "active"},
     {"name": "Quote", "order": 2, "probability": 60, "stage_type": "active"},
-    {"name": "Quote Sent / Follow Up", "order": 3, "probability": 75, "stage_type": "active"},
+    {"name": QUOTE_SENT_STAGE_NAME, "order": 3, "probability": 75, "stage_type": "active"},
     {"name": "Won", "order": 4, "probability": 100, "stage_type": "won"},
     {"name": "Lost", "order": 5, "probability": 0, "stage_type": "lost"},
 ]

@@ -10,6 +10,11 @@ Emission is intentionally cheap and side-effect free: it does **not** commit
 workspace actually has an active automation listening for that trigger. That
 keeps the events table from accumulating rows nobody consumes on the hot paths
 that emit them.
+
+One customer-level override applies to every trigger: a contact tagged
+``no-automation`` (see :mod:`app.services.automations.opt_out`) never queues an
+event, so a single tag mutes automated follow-up for that person without
+touching anyone else's.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import Automation
 from app.models.automation_event import AutomationEvent
+from app.services.automations.opt_out import automation_suppressed
 
 logger = structlog.get_logger()
 
@@ -160,9 +166,21 @@ async def emit_automation_event(
 
     Returns:
         The queued :class:`AutomationEvent`, or ``None`` when skipped because
-        no automation is listening.
+        no automation is listening or the contact opted out of automation.
     """
     if require_active_automation and not await _has_active_listener(db, workspace_id, event_type):
+        return None
+
+    # Contact-level kill switch. Deliberately *after* the listener check so a
+    # workspace with no automations never pays for this query, and gated on the
+    # one choke point every event trigger passes through.
+    if await automation_suppressed(db, workspace_id, contact_id):
+        logger.info(
+            "automation_event_suppressed_by_tag",
+            workspace_id=str(workspace_id),
+            event_type=event_type,
+            contact_id=contact_id,
+        )
         return None
 
     event = AutomationEvent(

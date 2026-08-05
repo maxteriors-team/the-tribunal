@@ -36,6 +36,7 @@ from app.services.automations.events import (
 from app.services.exceptions import NotFoundError
 from app.services.opportunities.default_pipeline import DEFAULT_PIPELINE_STAGES
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
+from app.services.opportunities.pipeline_removal import remove_from_pipeline
 
 logger = structlog.get_logger()
 
@@ -495,6 +496,31 @@ class OpportunityService:
             opportunity.closed_date = datetime.now(UTC).date() if is_closed else None
             opportunity.closed_by_id = user_id if is_closed else None
 
+        await self.db.commit()
+        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
+
+        return OpportunityResponse.model_validate(opportunity)
+
+    async def remove_from_pipeline(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        user_id: int,
+        restrict_to_user_id: int | None = None,
+    ) -> OpportunityResponse:
+        """Take a deal off the board without destroying it.
+
+        The softer counterpart to :meth:`delete_opportunity`: the card and its
+        activity history survive, and the contact is marked so an automatic
+        quote-send card is not put straight back (which would make the button
+        look broken).
+        """
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        await remove_from_pipeline(self.db, opportunity, user_id=user_id)
         await self.db.commit()
         await self.db.refresh(opportunity, ["line_items", "primary_contact"])
 

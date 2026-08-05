@@ -1119,7 +1119,7 @@ export interface paths {
         };
         /**
          * Get Auto Pipeline Policy
-         * @description Get whether inbound leads auto-open a card on the sales pipeline.
+         * @description Get what auto-opens or advances a card on the sales pipeline.
          */
         get: operations["get_auto_pipeline_policy_api_v1_settings_workspaces__workspace_id__auto_pipeline_get"];
         /**
@@ -6637,6 +6637,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/remove-from-pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Opportunity From Pipeline
+         * @description Take a deal off the board, keeping its history.
+         *
+         *     Sticky: a contact whose card was removed here is not given a new one the
+         *     next time a quote is sent to them.
+         */
+        post: operations["remove_opportunity_from_pipeline_api_v1_workspaces__workspace_id__opportunities__opportunity_id__remove_from_pipeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/outbound-missions": {
         parameters: {
             query?: never;
@@ -11177,11 +11200,14 @@ export interface components {
         };
         /**
          * AutoPipelineSettings
-         * @description Whether inbound leads auto-open a card on the sales pipeline.
+         * @description What puts a card on the sales pipeline without an operator typing it.
          *
-         *     Off by default: a raw inbound lead belongs in Contacts until someone has
-         *     contacted them and booked a call or demo. Turning this on restores the
-         *     older behaviour where every inbound funnel opens an opportunity.
+         *     Two independent switches, because the two signals are not equally strong:
+         *
+         *     - ``enabled`` — raw *inbound leads*. **Off** by default: a lead belongs in
+         *       Contacts until someone has contacted them and booked a call or demo.
+         *     - ``on_quote_sent`` — a *sent quote*. **On** by default: somebody has been
+         *       quoted a price, which is the strongest buying signal the CRM sees.
          */
         AutoPipelineSettings: {
             /**
@@ -11189,6 +11215,11 @@ export interface components {
              * @default false
              */
             enabled: boolean;
+            /**
+             * On Quote Sent
+             * @default true
+             */
+            on_quote_sent: boolean;
         };
         /**
          * AutomationActionSchema
@@ -25970,6 +26001,18 @@ export interface components {
          */
         SalesPerformanceReport: {
             /**
+             * Appointments Completed
+             * @description Window appointments the customer attended
+             * @default 0
+             */
+            appointments_completed: number;
+            /**
+             * Appointments No Show
+             * @description Window appointments the customer missed
+             * @default 0
+             */
+            appointments_no_show: number;
+            /**
              * Attach Rate
              * @description Share (0..1) of approved quotes with at least one attached service beyond the primary one, or null with no approvals
              */
@@ -26004,6 +26047,23 @@ export interface components {
              * @description approved / (approved + declined + expired) as a 0..1 ratio; null when no cohort quote has been decided yet
              */
             close_rate?: number | null;
+            /**
+             * Contacts Converted
+             * @description Those contacts that have since reached a won deal
+             * @default 0
+             */
+            contacts_converted: number;
+            /**
+             * Contacts Created
+             * @description Contacts created in the window — the denominator of conversion_rate
+             * @default 0
+             */
+            contacts_created: number;
+            /**
+             * Conversion Rate
+             * @description contacts_converted / contacts_created as a 0..1 ratio, or null when no contact was created in the window. Cohorted on contact creation and counting a win whenever it lands, so a recent window understates conversion: deals still in flight cannot have closed yet.
+             */
+            conversion_rate?: number | null;
             /**
              * Currency
              * @description Currency of every money field in this report
@@ -26041,6 +26101,11 @@ export interface components {
              * @description Summed total of the approved quotes
              */
             revenue_approved: number;
+            /**
+             * Show Up Rate
+             * @description completed / (completed + no_show) as a 0..1 ratio, or null when no appointment in the window has been marked either way. Scheduled and cancelled appointments are in neither side of the fraction: an unmarked appointment is unknown attendance, not an absence.
+             */
+            show_up_rate?: number | null;
         };
         /**
          * SavingsConfig
@@ -42219,6 +42284,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_opportunity_from_pipeline_api_v1_workspaces__workspace_id__opportunities__opportunity_id__remove_from_pipeline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

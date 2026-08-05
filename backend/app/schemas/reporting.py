@@ -169,6 +169,44 @@ class SalesPerformanceReport(BaseModel):
             "when no cohort quote has been decided yet"
         ),
     )
+    contacts_created: int = Field(
+        0,
+        ge=0,
+        description="Contacts created in the window — the denominator of conversion_rate",
+    )
+    contacts_converted: int = Field(
+        0,
+        ge=0,
+        description="Those contacts that have since reached a won deal",
+    )
+    conversion_rate: float | None = Field(
+        None,
+        description=(
+            "contacts_converted / contacts_created as a 0..1 ratio, or null when "
+            "no contact was created in the window. Cohorted on contact creation "
+            "and counting a win whenever it lands, so a recent window "
+            "understates conversion: deals still in flight cannot have closed yet."
+        ),
+    )
+    appointments_completed: int = Field(
+        0,
+        ge=0,
+        description="Window appointments the customer attended",
+    )
+    appointments_no_show: int = Field(
+        0,
+        ge=0,
+        description="Window appointments the customer missed",
+    )
+    show_up_rate: float | None = Field(
+        None,
+        description=(
+            "completed / (completed + no_show) as a 0..1 ratio, or null when no "
+            "appointment in the window has been marked either way. Scheduled and "
+            "cancelled appointments are in neither side of the fraction: an "
+            "unmarked appointment is unknown attendance, not an absence."
+        ),
+    )
     by_closer: list[SalesPerformanceBreakdownRow] = Field(
         ..., description="Performance grouped by the user who created the quote"
     )
