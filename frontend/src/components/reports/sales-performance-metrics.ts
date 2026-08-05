@@ -175,6 +175,24 @@ export const APPROVED_SAMPLE: SampleNoun = {
 /** Volume behind a close rate: quotes issued in the window. */
 export const QUOTED_SAMPLE: SampleNoun = { singular: "quote", plural: "quotes" };
 
+/** Denominator of conversion rate: contacts created in the window. */
+export const CONTACT_SAMPLE: SampleNoun = {
+  singular: "new contact",
+  plural: "new contacts",
+};
+
+/**
+ * Denominator of show-up rate: appointments actually marked attended or missed.
+ *
+ * Deliberately not "appointments booked". A booked-but-unmarked appointment is
+ * unknown attendance, and counting it would report a workspace that has not
+ * marked anything as one whose customers never turned up.
+ */
+export const MARKED_APPOINTMENT_SAMPLE: SampleNoun = {
+  singular: "marked",
+  plural: "marked",
+};
+
 /** The denominator caption shown beside a rate, e.g. "8 approved". */
 export function describeSample(sampleSize: number, noun: SampleNoun): string {
   return `${formatNumber(sampleSize)} ${

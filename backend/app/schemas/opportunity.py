@@ -239,11 +239,15 @@ class PaginatedOpportunities(BaseModel):
 
 
 class AutoPipelineSettings(BaseModel):
-    """Whether inbound leads auto-open a card on the sales pipeline.
+    """What puts a card on the sales pipeline without an operator typing it.
 
-    Off by default: a raw inbound lead belongs in Contacts until someone has
-    contacted them and booked a call or demo. Turning this on restores the
-    older behaviour where every inbound funnel opens an opportunity.
+    Two independent switches, because the two signals are not equally strong:
+
+    - ``enabled`` — raw *inbound leads*. **Off** by default: a lead belongs in
+      Contacts until someone has contacted them and booked a call or demo.
+    - ``on_quote_sent`` — a *sent quote*. **On** by default: somebody has been
+      quoted a price, which is the strongest buying signal the CRM sees.
     """
 
     enabled: bool = False
+    on_quote_sent: bool = True

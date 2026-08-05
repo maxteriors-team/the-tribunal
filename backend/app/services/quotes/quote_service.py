@@ -100,6 +100,7 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import notify_workspace_event
 from app.services.nudges.strategies.base import dedup_exists
+from app.services.opportunities.quote_opportunity import place_quote_on_pipeline
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
@@ -121,6 +122,7 @@ from app.services.quotes.proposal_pricing import (
     price_permanent,
 )
 from app.services.quotes.proposal_template import get_proposal_template
+from app.services.quotes.quote_expiry import EXPIRED_STATUS, overdue_sent_predicate
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 
 logger = structlog.get_logger()
@@ -771,11 +773,9 @@ class QuoteService:
             update(Quote)
             .where(
                 Quote.workspace_id == workspace_id,
-                Quote.status == "sent",
-                Quote.expiry_date.is_not(None),
-                Quote.expiry_date < date.today(),
+                overdue_sent_predicate(),
             )
-            .values(status="expired")
+            .values(status=EXPIRED_STATUS)
         )
 
     # ------------------------------------------------------------------
@@ -1008,8 +1008,35 @@ class QuoteService:
         quote.status = "sent"
         if not already_sent:
             await self._emit_lifecycle_event(quote, EVENT_QUOTE_SENT)
+            await self._place_on_pipeline(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
+
+    async def _place_on_pipeline(self, quote: Quote) -> None:
+        """Put the quoted contact on the sales board (first send only).
+
+        Runs inside the send transaction so a card can never outlive a send that
+        rolled back. Best-effort: a pipeline hiccup must not stop the quote from
+        reaching the customer, which is the operator's actual intent.
+        """
+        if quote.contact_id is None:
+            return
+        try:
+            contact = await self.db.get(Contact, quote.contact_id)
+            if contact is None:
+                return
+            await place_quote_on_pipeline(
+                self.db,
+                quote.workspace_id,
+                contact,
+                quote_id=quote.id,
+            )
+        except Exception as exc:  # noqa: BLE001 — never block a send on the board
+            self.log.warning(
+                "quote_pipeline_placement_failed",
+                quote_id=str(quote.id),
+                error=str(exc),
+            )
 
     async def deliver_quote(
         self,

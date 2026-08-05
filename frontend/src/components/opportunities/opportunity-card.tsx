@@ -44,6 +44,7 @@ interface OpportunityCardProps {
   onMove: (opportunityId: string, stageId: string) => void;
   onCall: (opportunity: Opportunity) => void;
   onSchedule: (opportunity: Opportunity) => void;
+  onRemove: (opportunity: Opportunity) => void;
 }
 
 export function OpportunityCard({
@@ -53,6 +54,7 @@ export function OpportunityCard({
   onMove,
   onCall,
   onSchedule,
+  onRemove,
 }: OpportunityCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: opportunity.id,
@@ -124,6 +126,13 @@ export function OpportunityCard({
                   {stage.name}
                 </DropdownMenuItem>
               ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => onRemove(opportunity)}
+            >
+              Remove from pipeline
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

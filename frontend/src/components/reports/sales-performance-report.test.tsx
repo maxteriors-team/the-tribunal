@@ -56,6 +56,12 @@ function report(overrides: Partial<Report> = {}): Report {
     attach_rate: 0.5,
     avg_attach_value: 600,
     close_rate: 0.4,
+    contacts_created: 25,
+    contacts_converted: 5,
+    conversion_rate: 0.2,
+    appointments_completed: 9,
+    appointments_no_show: 3,
+    show_up_rate: 0.75,
     by_closer: [row()],
     by_lead_source: [row({ key: "google_ads", label: "Google Ads" })],
     by_primary_service: [row({ key: "gutters", label: "Gutter Cleaning" })],
@@ -63,7 +69,7 @@ function report(overrides: Partial<Report> = {}): Report {
   };
 }
 
-/** An untouched workspace: no quotes at all, so every rate is null. */
+/** An untouched workspace: nothing happened, so every rate is null. */
 function emptyReport(): Report {
   return report({
     quotes_issued: 0,
@@ -74,6 +80,12 @@ function emptyReport(): Report {
     attach_rate: null,
     avg_attach_value: null,
     close_rate: null,
+    contacts_created: 0,
+    contacts_converted: 0,
+    conversion_rate: null,
+    appointments_completed: 0,
+    appointments_no_show: 0,
+    show_up_rate: null,
     by_closer: [],
     by_lead_source: [],
     by_primary_service: [],
@@ -132,16 +144,95 @@ describe("SalesPerformanceReport", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the three levers plus approved revenue", async () => {
+  it("renders the five headline KPIs, funnel first then the money", async () => {
     respondWith(report());
 
     renderReport();
 
-    expect(await screen.findByText("Average Job Value")).toBeInTheDocument();
-    expect(screen.getByText("Attach Rate")).toBeInTheDocument();
+    expect(await screen.findByText("Conversion Rate")).toBeInTheDocument();
+    expect(screen.getByText("Show-up Rate")).toBeInTheDocument();
     expect(screen.getByText("Close Rate")).toBeInTheDocument();
-    expect(screen.getByText("Revenue Approved")).toBeInTheDocument();
+    expect(screen.getByText("Average Job Value")).toBeInTheDocument();
+    expect(screen.getByText("Revenue Won")).toBeInTheDocument();
     expect(screen.getByText("$51,000.00")).toBeInTheDocument();
+    // Attach rate is demoted to the breakdown body, not a headline.
+    expect(screen.queryByText("Attach Rate")).not.toBeInTheDocument();
+  });
+
+  it("shows conversion and show-up rate with the denominators they rest on", async () => {
+    respondWith(report());
+
+    renderReport();
+
+    await screen.findByText("Conversion Rate");
+    expect(screen.getByText("20%")).toBeInTheDocument();
+    expect(screen.getByText("25 new contacts")).toBeInTheDocument();
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("12 marked")).toBeInTheDocument();
+    expect(screen.getByText("3 no-shows of 12 marked")).toBeInTheDocument();
+    // Conversion lags by construction and must say so.
+    expect(
+      screen.getByText(/A recent window understates it/),
+    ).toBeInTheDocument();
+  });
+
+  it("dashes out show-up rate until an appointment is actually marked", async () => {
+    respondWith(
+      report({ appointments_completed: 0, appointments_no_show: 0, show_up_rate: null }),
+    );
+
+    renderReport();
+
+    await screen.findByText("Show-up Rate");
+    // A workspace that has marked nothing is unknown, not 0% attendance.
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Mark past appointments attended or no-show and this fills in."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 marked")).toBeInTheDocument();
+  });
+
+  it("dashes out conversion when no contact was created in the window", async () => {
+    respondWith(
+      report({ contacts_created: 0, contacts_converted: 0, conversion_rate: null }),
+    );
+
+    renderReport();
+
+    await screen.findByText("Conversion Rate");
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+    expect(screen.getByText("0 new contacts")).toBeInTheDocument();
+  });
+
+  it("still shows a real zero rate, which is a fact and not a missing value", async () => {
+    respondWith(
+      report({ contacts_created: 25, contacts_converted: 0, conversion_rate: 0 }),
+    );
+
+    renderReport();
+
+    await screen.findByText("Conversion Rate");
+    expect(screen.getByText("0%")).toBeInTheDocument();
+  });
+
+  it("flags conversion and show-up rates that rest on almost no data", async () => {
+    respondWith(
+      report({
+        contacts_created: 3,
+        contacts_converted: 3,
+        conversion_rate: 1,
+        appointments_completed: 2,
+        appointments_no_show: 0,
+        show_up_rate: 1,
+      }),
+    );
+
+    renderReport();
+
+    await screen.findByText("Conversion Rate");
+    // 100% off three contacts and two appointments must not read as a win.
+    expect(screen.getByText("3 new contacts · low sample")).toBeInTheDocument();
+    expect(screen.getByText("2 marked · low sample")).toBeInTheDocument();
   });
 
   it("defaults the date range to the current calendar month", async () => {
@@ -182,7 +273,8 @@ describe("SalesPerformanceReport", () => {
         date_from: "2026-05-31",
         date_to: "2026-06-30",
         close_rate: 0.3,
-        attach_rate: 0.42,
+        conversion_rate: 0.15,
+        show_up_rate: 0.6,
         avg_job_value: 3_900,
         revenue_approved: 44_000,
       }),
@@ -192,7 +284,8 @@ describe("SalesPerformanceReport", () => {
 
     // Close rate 30% -> 40% is ten points, not "+33%".
     expect(await screen.findByText("+10.0 pts")).toBeInTheDocument();
-    expect(screen.getByText("+8.0 pts")).toBeInTheDocument();
+    expect(screen.getByText("+5.0 pts")).toBeInTheDocument(); // conversion
+    expect(screen.getByText("+15.0 pts")).toBeInTheDocument(); // show-up
     expect(screen.getByText("+$350.00")).toBeInTheDocument();
     expect(screen.getByText("+$7,000.00")).toBeInTheDocument();
     expect(screen.getByText("vs 30% prior")).toBeInTheDocument();
@@ -207,16 +300,18 @@ describe("SalesPerformanceReport", () => {
         quotes_issued: 0,
         quotes_approved: 0,
         avg_job_value: null,
-        attach_rate: null,
         close_rate: null,
+        conversion_rate: null,
+        show_up_rate: null,
       }),
     );
 
     renderReport();
 
     const notices = await screen.findAllByText("No prior-period data to compare");
-    // Average job value, attach rate, and close rate all lack a baseline.
-    expect(notices.length).toBe(3);
+    // Conversion, show-up, close rate and average job value all lack a
+    // baseline; only revenue won has a prior number to compare against.
+    expect(notices.length).toBe(4);
   });
 
   it("explains an empty workspace instead of rendering NaN or 0%", async () => {
@@ -225,11 +320,39 @@ describe("SalesPerformanceReport", () => {
     renderReport();
 
     expect(
-      await screen.findByText("No quotes in this date range"),
+      await screen.findByText("Nothing to report in this date range"),
     ).toBeInTheDocument();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("still reports the funnel when the window has contacts but no quotes", async () => {
+    respondWith(
+      report({
+        quotes_issued: 0,
+        quotes_approved: 0,
+        revenue_approved: 0,
+        avg_job_value: null,
+        median_job_value: null,
+        attach_rate: null,
+        avg_attach_value: null,
+        close_rate: null,
+        by_closer: [],
+        by_lead_source: [],
+        by_primary_service: [],
+      }),
+    );
+
+    renderReport();
+
+    // Quote metrics dash out, but conversion and show-up still have data.
+    expect(await screen.findByText("Conversion Rate")).toBeInTheDocument();
+    expect(screen.getByText("20%")).toBeInTheDocument();
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No quotes were created in this range/),
+    ).toBeInTheDocument();
   });
 
   it("dashes out averages that have no approvals to average", async () => {
@@ -257,7 +380,7 @@ describe("SalesPerformanceReport", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/have nothing to average and show a dash rather than a zero/),
+      screen.getByText(/have nothing to total and show a dash rather than a zero/),
     ).toBeInTheDocument();
   });
 
@@ -295,7 +418,7 @@ describe("SalesPerformanceReport", () => {
 
     await screen.findByText("Dana Reyes");
     // Headline close rate is drawn from the 30 issued quotes; average job value
-    // and attach rate from the 12 approved ones.
+    // and revenue won from the 12 approved ones.
     expect(screen.getByText("30 quotes")).toBeInTheDocument();
     expect(screen.getAllByText("12 approved").length).toBeGreaterThanOrEqual(2);
 

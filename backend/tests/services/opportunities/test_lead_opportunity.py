@@ -24,8 +24,8 @@ from app.models.pipeline import PipelineStage
 from app.models.workspace import Workspace
 from app.services.opportunities import open_lead_opportunity
 from app.services.opportunities.lead_opportunity import (
-    _opportunity_name,
     auto_pipeline_enabled,
+    opportunity_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -57,13 +57,13 @@ def test_auto_pipeline_enabled_tolerates_malformed_settings() -> None:
 
 
 def test_opportunity_name_variants() -> None:
-    assert _opportunity_name(_contact(first_name="Jane", last_name="Doe")) == "Jane Doe"
+    assert opportunity_name(_contact(first_name="Jane", last_name="Doe")) == "Jane Doe"
     assert (
-        _opportunity_name(_contact(first_name="Jane", last_name="Doe", company_name="Acme"))
+        opportunity_name(_contact(first_name="Jane", last_name="Doe", company_name="Acme"))
         == "Jane Doe — Acme"
     )
-    assert _opportunity_name(_contact(first_name="", company_name="Acme")) == "Acme"
-    assert _opportunity_name(_contact(first_name="")) == "New lead"
+    assert opportunity_name(_contact(first_name="", company_name="Acme")) == "Acme"
+    assert opportunity_name(_contact(first_name="")) == "New lead"
 
 
 # ---------------------------------------------------------------------------

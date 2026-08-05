@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPROVED_SAMPLE,
+  CONTACT_SAMPLE,
   currentMonthRange,
   describeDelta,
   describeRange,
@@ -10,6 +11,7 @@ import {
   formatRate,
   fromIsoDate,
   isLowSample,
+  MARKED_APPOINTMENT_SAMPLE,
   NO_VALUE,
   previousRange,
   QUOTED_SAMPLE,
@@ -164,5 +166,13 @@ describe("sample size", () => {
     // "8 approved", never "8 approveds".
     expect(describeSample(1, APPROVED_SAMPLE)).toBe("1 approved");
     expect(describeSample(8, APPROVED_SAMPLE)).toBe("8 approved");
+  });
+
+  it("names the funnel KPIs' denominators", () => {
+    expect(describeSample(1, CONTACT_SAMPLE)).toBe("1 new contact");
+    expect(describeSample(25, CONTACT_SAMPLE)).toBe("25 new contacts");
+    // Show-up rate rests on appointments *marked*, not appointments booked.
+    expect(describeSample(1, MARKED_APPOINTMENT_SAMPLE)).toBe("1 marked");
+    expect(describeSample(12, MARKED_APPOINTMENT_SAMPLE)).toBe("12 marked");
   });
 });

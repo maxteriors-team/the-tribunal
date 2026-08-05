@@ -155,6 +155,21 @@ export const opportunitiesApi = {
   update: baseOpportunitiesApi.update!,
   delete: baseOpportunitiesApi.delete!,
 
+  /**
+   * Take a deal off the board, keeping the card and its history.
+   *
+   * Sticky on purpose: the contact is not given a fresh card the next time a
+   * quote is sent to them, so the action does not silently undo itself.
+   */
+  removeFromPipeline: async (
+    workspaceId: string,
+    opportunityId: string
+  ): Promise<Opportunity> => {
+    return apiPost<Opportunity>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/remove-from-pipeline`
+    );
+  },
+
   // Line item endpoints (custom)
   addLineItem: async (
     workspaceId: string,

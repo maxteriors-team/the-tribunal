@@ -2,10 +2,12 @@
 
 import { Phone, Mail, Building2, MapPin } from "lucide-react";
 
+import { AutomationOptOut } from "@/components/contacts/contact-sidebar/automation-opt-out";
 import { InfoRow } from "@/components/contacts/contact-sidebar/info-row";
 import { TagBadge } from "@/components/tags/tag-badge";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import type { Contact } from "@/types";
 
 interface ContactInfoSectionProps {
@@ -18,6 +20,7 @@ export function ContactInfoSection({
   contact,
   wrapValues = false,
 }: ContactInfoSectionProps) {
+  const workspaceId = useWorkspaceId();
   const tags = Array.isArray(contact.tags)
     ? contact.tags
     : typeof contact.tags === "string"
@@ -118,6 +121,13 @@ export function ContactInfoSection({
           </div>
         </>
       )}
+
+      {workspaceId ? (
+        <>
+          <Separator />
+          <AutomationOptOut contact={contact} workspaceId={workspaceId} />
+        </>
+      ) : null}
     </>
   );
 }

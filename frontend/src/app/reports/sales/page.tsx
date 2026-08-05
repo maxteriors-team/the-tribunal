@@ -10,8 +10,9 @@ export default function SalesPerformanceRoute() {
             Sales Performance
           </h1>
           <p className="text-sm text-muted-foreground">
-            Average job value, attach rate, and close rate: the three levers that
-            grow revenue without buying more leads.
+            The funnel and the money: who converts, who turns up, what closes,
+            and what it was worth — so you can see where the leak is, not just
+            what you sold.
           </p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
