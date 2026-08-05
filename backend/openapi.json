@@ -1658,6 +1658,126 @@
         "title": "AddToMissionResponse",
         "type": "object"
       },
+      "AddressParts": {
+        "description": "A resolved postal address split into the fields a contact stores.",
+        "properties": {
+          "address_city": {
+            "default": "",
+            "title": "Address City",
+            "type": "string"
+          },
+          "address_line1": {
+            "default": "",
+            "title": "Address Line1",
+            "type": "string"
+          },
+          "address_line2": {
+            "default": "",
+            "title": "Address Line2",
+            "type": "string"
+          },
+          "address_state": {
+            "default": "",
+            "title": "Address State",
+            "type": "string"
+          },
+          "address_zip": {
+            "default": "",
+            "title": "Address Zip",
+            "type": "string"
+          }
+        },
+        "title": "AddressParts",
+        "type": "object"
+      },
+      "AddressResolveRequest": {
+        "description": "Ask for the structured address behind a previously returned suggestion.",
+        "properties": {
+          "session_token": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Token"
+          },
+          "suggestion_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Suggestion Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "suggestion_id"
+        ],
+        "title": "AddressResolveRequest",
+        "type": "object"
+      },
+      "AddressSuggestion": {
+        "description": "One pickable address candidate.\n\n``parts`` is populated only by providers that return a structured address\nwith the candidate list (the Census geocoder does). When it is ``None`` the\ncaller must resolve the suggestion before it can fill a form — that second\nround trip is what Google's session-token billing model expects.",
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "parts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddressParts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "AddressSuggestion",
+        "type": "object"
+      },
+      "AddressSuggestionsResponse": {
+        "description": "Candidate list plus the provider that produced it.\n\n``provider=\"none\"`` means no lookup provider is available, which the UI\ntreats as \"leave the plain text field alone\" rather than as an error.",
+        "properties": {
+          "provider": {
+            "enum": [
+              "google_places",
+              "census",
+              "none"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/AddressSuggestion"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "AddressSuggestionsResponse",
+        "type": "object"
+      },
       "AdjustStockRequest": {
         "description": "Reconcile to a counted quantity, or write off shrinkage.\n\n``quantity_on_hand`` is the **absolute** counted number; the service posts\nthe signed delta. ``write_off_quantity`` instead removes a known amount as\n``shrinkage`` so waste is reported apart from cost of goods sold. Exactly\none of the two must be supplied.",
         "properties": {
@@ -54045,6 +54165,146 @@
         "summary": "Create Search",
         "tags": [
           "Ad Library"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/addresses/resolve": {
+      "post": {
+        "description": "Expand a picked suggestion into the fields a contact stores.\n\nReturns empty parts when the suggestion cannot be expanded, so the caller\nkeeps whatever the operator already typed instead of wiping the field.",
+        "operationId": "resolve_address_api_v1_workspaces__workspace_id__addresses_resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressParts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Resolve Address",
+        "tags": [
+          "Addresses"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/addresses/suggest": {
+      "get": {
+        "description": "Suggest addresses for a partially typed address.",
+        "operationId": "suggest_addresses_api_v1_workspaces__workspace_id__addresses_suggest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Partially typed address",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Partially typed address",
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Groups the keystrokes of one address entry into a single billed session",
+            "in": "query",
+            "name": "session_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Groups the keystrokes of one address entry into a single billed session",
+              "title": "Session Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressSuggestionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Suggest Addresses",
+        "tags": [
+          "Addresses"
         ]
       }
     },

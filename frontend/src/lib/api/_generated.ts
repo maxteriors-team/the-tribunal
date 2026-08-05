@@ -1699,6 +1699,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/addresses/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Address
+         * @description Expand a picked suggestion into the fields a contact stores.
+         *
+         *     Returns empty parts when the suggestion cannot be expanded, so the caller
+         *     keeps whatever the operator already typed instead of wiping the field.
+         */
+        post: operations["resolve_address_api_v1_workspaces__workspace_id__addresses_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/addresses/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Addresses
+         * @description Suggest addresses for a partially typed address.
+         */
+        get: operations["suggest_addresses_api_v1_workspaces__workspace_id__addresses_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/agents": {
         parameters: {
             query?: never;
@@ -10046,6 +10089,84 @@ export interface components {
             mission_id: string;
             /** Skipped */
             skipped: number;
+        };
+        /**
+         * AddressParts
+         * @description A resolved postal address split into the fields a contact stores.
+         */
+        AddressParts: {
+            /**
+             * Address City
+             * @default
+             */
+            address_city: string;
+            /**
+             * Address Line1
+             * @default
+             */
+            address_line1: string;
+            /**
+             * Address Line2
+             * @default
+             */
+            address_line2: string;
+            /**
+             * Address State
+             * @default
+             */
+            address_state: string;
+            /**
+             * Address Zip
+             * @default
+             */
+            address_zip: string;
+        };
+        /**
+         * AddressResolveRequest
+         * @description Ask for the structured address behind a previously returned suggestion.
+         */
+        AddressResolveRequest: {
+            /** Session Token */
+            session_token?: string | null;
+            /** Suggestion Id */
+            suggestion_id: string;
+        };
+        /**
+         * AddressSuggestion
+         * @description One pickable address candidate.
+         *
+         *     ``parts`` is populated only by providers that return a structured address
+         *     with the candidate list (the Census geocoder does). When it is ``None`` the
+         *     caller must resolve the suggestion before it can fill a form — that second
+         *     round trip is what Google's session-token billing model expects.
+         */
+        AddressSuggestion: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            parts?: components["schemas"]["AddressParts"] | null;
+        };
+        /**
+         * AddressSuggestionsResponse
+         * @description Candidate list plus the provider that produced it.
+         *
+         *     ``provider="none"`` means no lookup provider is available, which the UI
+         *     treats as "leave the plain text field alone" rather than as an error.
+         */
+        AddressSuggestionsResponse: {
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "google_places" | "census" | "none";
+            /** Suggestions */
+            suggestions?: components["schemas"]["AddressSuggestion"][];
         };
         /**
          * AdjustStockRequest
@@ -31729,6 +31850,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadDiscoveryJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_address_api_v1_workspaces__workspace_id__addresses_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddressResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressParts"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_addresses_api_v1_workspaces__workspace_id__addresses_suggest_get: {
+        parameters: {
+            query: {
+                /** @description Partially typed address */
+                q: string;
+                /** @description Groups the keystrokes of one address entry into a single billed session */
+                session_token?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddressSuggestionsResponse"];
                 };
             };
             /** @description Validation Error */
