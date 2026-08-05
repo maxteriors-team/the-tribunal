@@ -767,6 +767,11 @@ class PricingSettings(BaseModel):
     # vs seasonal roofline per season) on the public comparison page. Off by
     # default so existing workspaces and already-shared links are unchanged.
     roofline_comparison_enabled: bool = False
+    # How long a quoted price holds. Stamped onto ``expiry_date`` when a quote is
+    # first *sent* (not created), so a draft that sits a fortnight still reaches
+    # the customer with the full window. An operator-set ``expiry_date`` always
+    # wins; this only fills the blank.
+    quote_validity_days: int = Field(default=30, ge=1, le=365)
 
 
 # --------------------------------------------------------------------------- #
@@ -1079,3 +1084,4 @@ class PricingSettingsUpdate(BaseModel):
     service_packages: list[ServicePackageConfig] | None = None
     comparison_years: int | None = Field(default=None, ge=1, le=30)
     roofline_comparison_enabled: bool | None = None
+    quote_validity_days: int | None = Field(default=None, ge=1, le=365)

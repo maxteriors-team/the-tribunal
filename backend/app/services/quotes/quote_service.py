@@ -986,11 +986,22 @@ class QuoteService:
         Sets ``sent_at`` once and allocates the public proposal token once, on
         first send — re-sending keeps the same token so a link already in a
         customer's inbox never breaks.
+
+        First send is also when the price-validity clock starts: a quote with no
+        explicit ``expiry_date`` gets the workspace's
+        ``pricing.quote_validity_days`` window from today. Anchoring on send
+        rather than creation means a draft that sits for a fortnight still
+        reaches the customer with the full window, and re-sending never quietly
+        extends a deadline the customer has already been shown.
         """
         if quote.status in {"approved", "declined"}:
             raise ConflictError(f"Cannot send a {quote.status} quote")
         if quote.sent_at is None:
             quote.sent_at = datetime.now(UTC)
+        if quote.expiry_date is None:
+            workspace = await get_or_404(self.db, Workspace, quote.workspace_id)
+            validity = get_pricing_config(workspace).quote_validity_days
+            quote.expiry_date = quote.sent_at.date() + timedelta(days=validity)
         if quote.public_token is None:
             quote.public_token = generate_quote_token()
         already_sent = quote.status == "sent"

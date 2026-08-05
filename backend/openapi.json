@@ -33118,6 +33118,13 @@
           "permanent": {
             "$ref": "#/components/schemas/PermanentConfig"
           },
+          "quote_validity_days": {
+            "default": 30,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Quote Validity Days",
+            "type": "integer"
+          },
           "roofline_comparison_enabled": {
             "default": false,
             "title": "Roofline Comparison Enabled",
@@ -33259,6 +33266,19 @@
                 "type": "null"
               }
             ]
+          },
+          "quote_validity_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Validity Days"
           },
           "roofline_comparison_enabled": {
             "anyOf": [
