@@ -1,13 +1,24 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Headphones, PhoneCall, Radio } from "lucide-react";
+import { Headphones, Loader2, PhoneCall, PhoneOff, Radio } from "lucide-react";
 import { useState } from "react";
 
 import { LiveCallSupervisor } from "@/components/calls/live-call-supervisor";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useHangupCall } from "@/hooks/useHangupCall";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { callsApi, type LiveCall } from "@/lib/api/calls";
 import { queryKeys } from "@/lib/query-keys";
@@ -18,15 +29,27 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+/** How a call is named to the operator, in the row and in the confirm prompt. */
+function callLabel(call: LiveCall): string {
+  return call.contact_name || call.contact_phone || "Unknown contact";
+}
+
 /**
  * Live-call roster + supervision entry point.
  *
  * Polls the workspace's in-progress calls and, for each, exposes a "Supervise"
- * action that opens the listen / whisper / barge panel.
+ * action that opens the listen / whisper / barge panel, plus an "End call"
+ * action that drops the call from here without waiting for the far end.
+ *
+ * Ending a call is instant and unrecoverable, and its button sits next to
+ * "Supervise" in a polling roster whose rows can reorder underneath the cursor,
+ * so it is confirmed first — the same guard the destructive actions on Quotes
+ * and Lead Sources use.
  */
 export function LiveCallsPanel() {
   const workspaceId = useWorkspaceId();
   const [activeCall, setActiveCall] = useState<LiveCall | null>(null);
+  const [callPendingConfirm, setCallPendingConfirm] = useState<LiveCall | null>(null);
 
   const { data } = useQuery({
     queryKey: queryKeys.calls.live(workspaceId ?? ""),
@@ -37,6 +60,15 @@ export function LiveCallsPanel() {
     enabled: Boolean(workspaceId),
     // Live roster: poll frequently so calls appear/disappear promptly.
     refetchInterval: 5000,
+  });
+
+  const hangupCall = useHangupCall({
+    workspaceId,
+    onSuccess: (callId) => {
+      // Dropping the call the supervisor panel is watching leaves it pointed at
+      // a dead call, so close it.
+      setActiveCall((current) => (current?.call_id === callId ? null : current));
+    },
   });
 
   const liveCalls = data?.items ?? [];
@@ -65,9 +97,7 @@ export function LiveCallsPanel() {
                 <PhoneCall className="size-4 text-primary" />
               </div>
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
-                  {call.contact_name || call.contact_phone || "Unknown contact"}
-                </div>
+                <div className="truncate text-sm font-medium">{callLabel(call)}</div>
                 <div className="truncate text-xs text-muted-foreground">
                   {call.direction}
                   {call.agent_name ? ` · ${call.agent_name}` : ""} ·{" "}
@@ -77,15 +107,34 @@ export function LiveCallsPanel() {
                 </div>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 flex-shrink-0"
-              onClick={() => setActiveCall(call)}
-            >
-              <Headphones className="h-4 w-4" />
-              Supervise
-            </Button>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setActiveCall(call)}
+              >
+                <Headphones className="h-4 w-4" />
+                Supervise
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                // One hook instance drives the whole roster, so gate on the id
+                // being dropped: a bare `isPending` freezes every other row's
+                // button too.
+                disabled={hangupCall.isPending && hangupCall.variables === call.call_id}
+                onClick={() => setCallPendingConfirm(call)}
+              >
+                {hangupCall.isPending && hangupCall.variables === call.call_id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PhoneOff className="h-4 w-4" />
+                )}
+                End call
+              </Button>
+            </div>
           </div>
         ))}
       </CardContent>
@@ -98,6 +147,35 @@ export function LiveCallsPanel() {
         workspaceId={workspaceId ?? ""}
         call={activeCall}
       />
+
+      <AlertDialog
+        open={callPendingConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setCallPendingConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>End this call?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {callPendingConfirm
+                ? `The call with ${callLabel(callPendingConfirm)} will be hung up immediately. This cannot be undone.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep call</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() =>
+                callPendingConfirm && hangupCall.mutate(callPendingConfirm.call_id)
+              }
+            >
+              End call
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

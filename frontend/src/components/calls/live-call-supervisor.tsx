@@ -1,8 +1,18 @@
 "use client";
 
-import { Ear, Mic, MicOff, Send, X, Loader2 } from "lucide-react";
+import { Ear, Mic, MicOff, PhoneOff, Send, X, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useCallSupervisor } from "@/hooks/useCallSupervisor";
+import { useHangupCall } from "@/hooks/useHangupCall";
 import { type LiveCall } from "@/lib/api/calls";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +40,9 @@ interface LiveCallSupervisorProps {
  *
  * Mounted from the live-call roster. Opening it connects the supervisor
  * WebSocket and begins streaming the call audio; whisper sends private AI
- * guidance; barge takes over the call with the operator's microphone.
+ * guidance; barge takes over the call with the operator's microphone; end call
+ * drops it outright — the operator who barged in is the one who needs to hang
+ * up, so the control lives here and not only on the roster.
  */
 export function LiveCallSupervisor({
   open,
@@ -49,6 +62,16 @@ export function LiveCallSupervisor({
     }
     onOpenChange(next);
   };
+
+  // Ending the call makes the supervision session meaningless, so tear the
+  // socket down and close rather than leaving a panel bound to a dead call.
+  const hangupCall = useHangupCall({
+    workspaceId,
+    onSuccess: () => handleOpenChange(false),
+  });
+
+  // Instant and unrecoverable, so it is confirmed first — matching the roster.
+  const [confirmEndCall, setConfirmEndCall] = useState(false);
 
   const handleSendWhisper = () => {
     if (!whisperText.trim()) return;
@@ -175,12 +198,47 @@ export function LiveCallSupervisor({
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
           <Button variant="ghost" className="gap-2" onClick={() => handleOpenChange(false)}>
             <X className="h-4 w-4" />
             Close
           </Button>
+          <Button
+            variant="destructive"
+            className="gap-2"
+            disabled={!callId || hangupCall.isPending}
+            onClick={() => setConfirmEndCall(true)}
+          >
+            {hangupCall.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PhoneOff className="h-4 w-4" />
+            )}
+            End call
+          </Button>
         </div>
+
+        <AlertDialog open={confirmEndCall} onOpenChange={setConfirmEndCall}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>End this call?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {`The call with ${call?.contact_name || call?.contact_phone || "this contact"} will be hung up immediately. This cannot be undone.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep call</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  if (callId) hangupCall.mutate(callId);
+                }}
+              >
+                End call
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
