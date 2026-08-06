@@ -18,14 +18,33 @@ import { useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils/date";
 import type { PublicProposal } from "@/types/proposal";
 
+import {
+  ChristmasGuarantee,
+  ChristmasIncluded,
+  ChristmasSteps,
+  ChristmasTrust,
+  ChristmasValueProps,
+} from "./christmas-sections";
 import { DepositPanel } from "./deposit-panel";
-import { fmt, type ProposalDoc } from "./document";
+import {
+  fmt,
+  isChristmasProposal,
+  proposalValueProps,
+  type ProposalDoc,
+} from "./document";
 import {
   FinancingEstimate,
   financingFromSnapshot,
 } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
+import {
+  StandardExperience,
+  StandardGuarantee,
+  StandardIncluded,
+  StandardSteps,
+  StandardTrust,
+} from "./standard-sections";
 
 import "./proposal-theme.css";
 
@@ -139,11 +158,22 @@ export function ClientProposalView({
     );
   }, [doc.additional_charges, doc.tiers, selectedTier]);
 
-  const financingEstimate = financingFromSnapshot(
-    doc.financing,
-    lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
-    lowestTier?.pricing.monthly_by_term ?? {},
-  );
+  // A seasonal Christmas quote presents as Christmas: evergreen palette, lights
+  // and garland, and copy about the season instead of about a permanent
+  // installation. A mixed quote stays neutral (see `isChristmasProposal`).
+  const festive = isChristmasProposal(doc);
+  const valueProps = proposalValueProps(doc);
+
+  // Seasonal Christmas is sold as one up-front price, so it never shows a
+  // monthly estimate. Suppressing it here (rather than server-side) also cleans
+  // up quotes already saved with a financing block on the snapshot.
+  const financingEstimate = festive
+    ? null
+    : financingFromSnapshot(
+        doc.financing,
+        lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
+        lowestTier?.pricing.monthly_by_term ?? {},
+      );
 
   // The client proposal shows one all-inclusive package price. Cash/check
   // figures remain internal; estimated financing uses the shared compliance
@@ -185,7 +215,9 @@ export function ClientProposalView({
       : null;
 
   return (
-    <div className={`proposal-view ${proposalFontVars}`}>
+    <div
+      className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}
+    >
       <div className="present-nav no-print">
         <div className="present-nav-brand">
           {`${brandName} · Proposal ${data.number}`}
@@ -224,8 +256,8 @@ export function ClientProposalView({
           ) : null}
           <div className="present-eyebrow">{brandName}</div>
           <div className="present-hi">
-            Hi, <strong>{first || "there"}</strong>{" "}&#8212; your custom
-            proposal
+            Hi, <strong>{first || "there"}</strong>{" "}&#8212;{" "}
+            {festive ? "your Christmas lighting plan" : "your custom proposal"}
           </div>
           <div className="present-name">{residence}</div>
           <div className="present-ornament">
@@ -234,25 +266,49 @@ export function ClientProposalView({
             <div className="present-ornament-line r" />
           </div>
           <div className="present-tagline">
-            {first ? `${first}, we` : "We"}{" "}designed this around your home and
-            the way you want it to feel &#8212; every detail chosen with
-            intention, nothing left to chance.
+            {festive ? (
+              <>
+                {first ? `${first}, this` : "This"}{" "}display was designed
+                around your rooflines, your trees, and the way your home should
+                look from the street on Christmas Eve.
+              </>
+            ) : (
+              <>
+                {first ? `${first}, we` : "We"}{" "}designed this around your
+                home and the way you want it to feel &#8212; every detail chosen
+                with intention, nothing left to chance.
+              </>
+            )}
           </div>
         </div>
 
         <div className="value-bar">
-          <div className="value-bar-eyebrow">Our Approach</div>
+          <div className="value-bar-eyebrow">
+            {festive ? "Our Promise" : "Our Approach"}
+          </div>
           <div className="value-bar-text">
-            Your home is already beautiful.{" "}
-            <em>We&rsquo;re here to make it unforgettable.</em>{" "}Every detail is
-            deliberate &#8212; chosen for your home, your style, and the way you
-            live.
+            {festive ? (
+              <>
+                You should get to enjoy Christmas.{" "}
+                <em>We handle everything else.</em>{" "}The design, the ladders,
+                the lights, the maintenance, and the takedown are all ours.
+              </>
+            ) : (
+              <>
+                Your home is already beautiful.{" "}
+                <em>We&rsquo;re here to make it unforgettable.</em>{" "}Every
+                detail is deliberate &#8212; chosen for your home, your style,
+                and the way you live.
+              </>
+            )}
           </div>
         </div>
 
         {doc.mockups.length ? (
           <div className="pmock-section">
-            <div className="section-heading">The Vision for Your Home</div>
+            <div className="section-heading">
+              {festive ? "Your Home, Lit Up" : "The Vision for Your Home"}
+            </div>
             <div
               className={`pmock-grid${doc.mockups.length === 1 ? " single" : ""}`}
             >
@@ -496,7 +552,11 @@ export function ClientProposalView({
               <div className="pcare-section" key={sec.key}>
                 <div className="pcare-inner">
                   <div className="pcare-left">
-                    <div className="pcare-eyebrow">Your Quote</div>
+                    <div className="pcare-eyebrow">
+                      {sec.key === "christmas"
+                        ? "Your Holiday Display"
+                        : "Your Quote"}
+                    </div>
                     <div className="pcare-name">{sec.label}</div>
                     <div className="pcare-price">
                       {fmt(sec.financed_total)}{" "}
@@ -525,7 +585,9 @@ export function ClientProposalView({
                       {fmt(sec.financed_total)}
                     </div>
                     <div className="pcare-savings-unit">
-                      All-inclusive · professionally installed
+                      {sec.key === "christmas"
+                        ? "Install, maintenance, takedown, and storage included"
+                        : "All-inclusive \u00b7 professionally installed"}
                     </div>
                   </div>
                 </div>
@@ -548,126 +610,30 @@ export function ClientProposalView({
           </>
         ) : null}
 
-        <div className="wg-section">
-          <div className="section-heading">The {brandName} Experience</div>
-          <div className="wg-grid">
-            {[
-              [
-                "A designer, not a salesperson",
-                "Your project is designed around your home and how you live in it — never a template. We walk the property, listen, and compose the plan by hand.",
-              ],
-              [
-                "We treat your home like ours",
-                "Shoe covers indoors, drop cloths where they matter, and your property left exactly as we found it — every footprint gone before we pull away.",
-              ],
-              [
-                "Craftsmanship you can see",
-                "Premium materials, clean lines, and meticulous install work. The details you notice up close are the ones we obsess over.",
-              ],
-              [
-                "The reveal walkthrough",
-                "We don\u2019t call it finished until you\u2019ve seen it and love it. Your first look is a guided walkthrough with the person who designed it.",
-              ],
-              [
-                "One call, handled",
-                "A question, a tweak, something that needs attention — you reach us directly. No ticket queues, no call centers.",
-              ],
-              [
-                "Here for the long run",
-                "A growing local company that stands behind every project it delivers — this year and years from now.",
-              ],
-            ].map(([title, desc]) => (
-              <div className="wg-item" key={title}>
-                <div className="wg-item-title">{title}</div>
-                <div className="wg-item-desc">{desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="guarantee-section">
-          <div className="guarantee-badge">
-            <div className="guarantee-badge-star">&#9733;</div>
-            <div className="guarantee-badge-text">
-              Satisfaction
-              <br />
-              Guaranteed
-            </div>
-          </div>
-          <div className="guarantee-content">
-            <div className="guarantee-title">
-              <em>Satisfaction</em>{" "}Guaranteed
-            </div>
-            <div className="guarantee-body">
-              We don&rsquo;t consider the job done until you&rsquo;re completely
-              happy with your project. If anything isn&rsquo;t right after
-              installation,{" "}
-              <strong>
-                we come back and make it right &#8212; no questions asked.
-              </strong>{" "}
-              Your home deserves to look exactly the way you imagined it.
-            </div>
-          </div>
-        </div>
-
-        <div className="included-section">
-          <div className="section-heading">Every Project Includes</div>
-          <div className="included-grid">
-            {[
-              "Custom design tailored to your property",
-              "Professional installation by our own crew",
-              "Premium, commercial-grade materials",
-              "Meticulous cleanup — left better than we found it",
-              "1-year workmanship warranty on all work",
-              "A completion walkthrough before we call it done",
-            ].map((item) => (
-              <div className="included-item" key={item}>
-                <span className="included-check">&#9670;</span> {item}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="steps-section">
-          <div className="section-heading">How It Works</div>
-          <div className="steps-grid">
-            <div className="step-card">
-              <div className="step-num">I</div>
-              <div className="step-title">You Choose</div>
-              <div className="step-desc">
-                Pick the option that fits your vision and your home.
-              </div>
-            </div>
-            <div className="step-card">
-              <div className="step-num">II</div>
-              <div className="step-title">We Install</div>
-              <div className="step-desc">
-                Our team handles everything — expertly, cleanly, and on
-                schedule.
-              </div>
-            </div>
-            <div className="step-card">
-              <div className="step-num">III</div>
-              <div className="step-title">You Enjoy</div>
-              <div className="step-desc">
-                Step outside to a home that looks like nothing else on the
-                street.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="trust-section">
-          <div className="trust-heading">Why {brandName}</div>
-          <div className="trust-body">
-            We&rsquo;ve designed and installed projects across hundreds of homes
-            in this area. Our team aren&rsquo;t salespeople &#8212;
-            they&rsquo;re <strong>designers and craftspeople</strong>. When we
-            walk your property, we&rsquo;re thinking about proportion, detail,
-            and the story your home tells.{" "}
-            <strong>The result is the artwork.</strong>
-          </div>
-        </div>
+        {/* The pitch. A seasonal quote sells maintenance, takedown, and
+            storage; a permanent one sells design and craftsmanship. Neither
+            set of promises is true of the other product, so the whole block
+            swaps rather than accumulating conditionals. */}
+        {festive ? (
+          <>
+            <ChristmasValueProps
+              brandName={brandName}
+              valueProps={valueProps}
+            />
+            <ChristmasGuarantee />
+            <ChristmasIncluded />
+            <ChristmasSteps />
+            <ChristmasTrust brandName={brandName} />
+          </>
+        ) : (
+          <>
+            <StandardExperience brandName={brandName} />
+            <StandardGuarantee />
+            <StandardIncluded />
+            <StandardSteps />
+            <StandardTrust brandName={brandName} />
+          </>
+        )}
 
         {data.notes ? (
           <div className="pp-terms">

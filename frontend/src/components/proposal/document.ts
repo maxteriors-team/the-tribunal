@@ -25,6 +25,20 @@ type CarePlanPricing = Schemas["CarePlanPricing"];
 type BistroPricing = Schemas["BistroPricing"];
 type WizardClient = Schemas["WizardClient"];
 type ProposalMockup = Schemas["ProposalMockup"];
+export type ProposalValueProp = Schemas["ValueProp"];
+
+/**
+ * The service path a quote came from. `christmas` is the only one that changes
+ * the page's whole presentation, so it is named rather than inferred at each
+ * call site. A quote spanning several service paths is `mixed`, which stays
+ * neutral: a landscape package must not arrive wrapped in garland.
+ */
+export type ProposalService =
+  | "landscape"
+  | "permanent"
+  | "bistro"
+  | "christmas"
+  | "mixed";
 
 export interface ProposalTier {
   key: string;
@@ -64,12 +78,14 @@ export interface ProposalBistroView extends Omit<BistroPricing, "lines"> {
 }
 
 export interface ProposalCategoryView
-  extends Omit<ProposalCategorySection, "lines"> {
+  extends Omit<ProposalCategorySection, "lines" | "value_props"> {
   lines: CategoryLine[];
+  value_props: ProposalValueProp[];
 }
 
 /** The fully-normalized proposal snapshot the client view renders. */
 export interface ProposalDoc {
+  service: ProposalService | null;
   client: WizardClient | null;
   tier_order: string[];
   tiers: ProposalTier[];
@@ -91,8 +107,28 @@ export interface ProposalDoc {
   grand_monthly_payment: number;
 }
 
+const SERVICES: readonly ProposalService[] = [
+  "landscape",
+  "permanent",
+  "bistro",
+  "christmas",
+  "mixed",
+];
+
+/**
+ * Narrow the snapshot's free-string service to the known set.
+ *
+ * Snapshots predating the field, and any value a future backend adds, resolve
+ * to `null` — which every consumer treats as "present it neutrally". An unknown
+ * service must never be guessed into a themed presentation.
+ */
+function parseService(value: unknown): ProposalService | null {
+  return SERVICES.find((s) => s === value) ?? null;
+}
+
 export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
   return {
+    service: parseService(doc.service),
     client: doc.client ?? null,
     tier_order: doc.tier_order ?? [],
     tiers: (doc.tiers ?? []).map((tier: ProposalTierView) => ({
@@ -145,6 +181,9 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
       (section: ProposalCategorySection) => ({
         ...section,
         lines: section.lines ?? [],
+        // Absent on every snapshot saved before value props existed. Empty is
+        // the honest read: render nothing, never an empty promise block.
+        value_props: section.value_props ?? [],
       }),
     ),
     selected_financed_total: doc.selected_financed_total ?? 0,
@@ -172,6 +211,32 @@ export function parseProposalDocument(
   const hasBistro = Boolean(doc.bistro && (doc.bistro.total ?? 0) > 0);
   if (!hasTiers && !hasSections && !hasBistro) return null;
   return normalizeProposalDocument(doc);
+}
+
+/**
+ * Whether this proposal should present as Christmas.
+ *
+ * Drives the festive theme and copy, so it deliberately answers "is Christmas
+ * the *whole* job" rather than "does this quote touch Christmas". A mixed quote
+ * stays on the neutral premium sheet: wrapping a year-round install in garland
+ * misrepresents what the customer is buying.
+ */
+export function isChristmasProposal(doc: ProposalDoc): boolean {
+  if (doc.service) return doc.service === "christmas";
+  // Snapshots saved before `service` existed still carry section keys, which is
+  // the same signal the server derives it from. Requiring christmas to be the
+  // only priced line reproduces the `mixed` exclusion above.
+  return (
+    doc.tiers.length === 0 &&
+    !doc.bistro &&
+    doc.category_sections.length > 0 &&
+    doc.category_sections.every((section) => section.key === "christmas")
+  );
+}
+
+/** The selling points to render, in section order. Empty on old snapshots. */
+export function proposalValueProps(doc: ProposalDoc): ProposalValueProp[] {
+  return doc.category_sections.flatMap((section) => section.value_props);
 }
 
 /** `$1,234` — whole-dollar proposal figures. */

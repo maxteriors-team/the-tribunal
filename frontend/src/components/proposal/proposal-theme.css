@@ -748,3 +748,260 @@
   .proposal-view .dep-panel { flex-direction: column; align-items: stretch; text-align: center; }
   .proposal-view .dep-pay-btn { width: 100%; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * CHRISTMAS — "dusk on Christmas Eve"
+ *
+ * Applied as `.proposal-view.is-christmas` when the quote's service is the
+ * seasonal Christmas line (see `isChristmasProposal` in `./document.ts`). A
+ * mixed quote stays on the neutral sheet: a year-round install must not arrive
+ * wrapped in garland.
+ *
+ * Works by remapping the same tokens `.proposal-view` already defines, so every
+ * existing rule inherits the holiday palette with no duplicated component CSS.
+ * Same technique, same palette, as `.cmp-festive` in `components/estimator/
+ * estimator.css` — the two public pages are one company.
+ *
+ * The decoration is the catalog: string lights, pine garland, and a wreath are
+ * the products being sold, drawn as UI. No emoji, no snowflakes, no candy
+ * canes. Red and green are structural (surface, ornament, marker), never
+ * confetti, and holly red is kept off the action buttons so it can never be
+ * confused with the decline/danger control.
+ *
+ * Contrast (measured against the evergreen base #0b1712): --t1 18.3:1,
+ * --t2 15.2:1, --t3 8.3:1, --t4 5.4:1, --gold 11.4:1, --gold-d 7.0:1 for the
+ * small uppercase eyebrows. --holly is 4.0:1 and is therefore used only for
+ * non-text ornament and borders, never for text.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.proposal-view.is-christmas {
+  /* Midnight evergreen: the night sky through pine, not flat black. */
+  --black: #0b1712;
+  --s1: #11201a;
+  --s2: #16271f;
+  --s3: #1c2f26;
+  /* Candlelit warm gold — the color of an installed C9 bulb at dusk. */
+  --gold: #ecc873;
+  --gold-l: #f7de9c;
+  --gold-d: #c39a4a;
+  --gold-g: rgba(236, 200, 115, 0.1);
+  /* Frost-white on evergreen. */
+  --t1: #ffffff;
+  --t2: #d7e2dc;
+  --t3: #a1b3a9;
+  --t4: #7d8f85;
+  --bdr: rgba(220, 240, 232, 0.12);
+  --bdr-g: rgba(236, 200, 115, 0.32);
+  /* Holly berry + pine bough: ornament only. */
+  --holly: #cf4636;
+  --holly-l: #ff9d86;
+  --holly-glow: rgba(207, 70, 54, 0.42);
+  --pine: #2f5c44;
+  --pine-l: #4b8a64;
+  --wire: rgba(220, 240, 232, 0.22);
+
+  position: relative;
+  /* Clear the garland strung across the top edge. */
+  padding-top: 24px;
+}
+
+/* ── String-light garland across the top of the page ───────────────────────
+ * A thin wire with evenly spaced warm-gold / holly / pine bulbs, tiled to any
+ * width. Purely decorative, so it is hidden from assistive tech by virtue of
+ * being a pseudo-element and is never the only carrier of information. */
+.proposal-view.is-christmas::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 14px 15px, var(--gold-l) 0 2px, rgba(247, 222, 156, 0.35) 3px, transparent 7px),
+    radial-gradient(circle at 42px 15px, var(--holly-l) 0 2px, var(--holly-glow) 3px, transparent 7px),
+    radial-gradient(circle at 70px 15px, #a7ecb8 0 2px, rgba(95, 224, 140, 0.35) 3px, transparent 7px),
+    linear-gradient(var(--wire), var(--wire));
+  background-repeat: repeat-x;
+  background-size: 84px 24px, 84px 24px, 84px 24px, 100% 2px;
+  background-position: 0 0, 0 0, 0 0, 0 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .proposal-view.is-christmas::before {
+    animation: xv-twinkle 5.5s ease-in-out infinite;
+  }
+}
+
+@keyframes xv-twinkle {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+
+/* ── Pine-garland dividers ─────────────────────────────────────────────────
+ * The plain 1px rules that trail every section heading become a needled bough.
+ * Same geometry (7px tall, vertically centered on the old line) so nothing in
+ * the layout shifts. */
+.proposal-view.is-christmas .section-heading::after,
+.proposal-view.is-christmas .pcare-eyebrow::after {
+  height: 7px;
+  background:
+    repeating-linear-gradient(62deg, var(--pine-l) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-62deg, var(--pine-l) 0 1px, transparent 1px 5px),
+    linear-gradient(var(--pine), var(--pine));
+  background-repeat: repeat-x;
+  background-size: 100% 7px, 100% 7px, 100% 1px;
+  background-position: 0 0, 0 0, 0 3px;
+  opacity: 0.75;
+}
+
+/* Hero ornament: the diamond becomes a holly berry between two boughs. */
+.proposal-view.is-christmas .present-ornament-diamond {
+  width: 8px;
+  height: 8px;
+  border: none;
+  border-radius: 50%;
+  transform: none;
+  background: var(--holly);
+  box-shadow: 0 0 10px var(--holly-glow);
+}
+
+/* The seasonal price section carries a pine rail instead of the gold one. */
+.proposal-view.is-christmas .pcare-section::before {
+  background: linear-gradient(180deg, transparent, var(--pine-l) 30%, var(--holly) 70%, transparent);
+}
+
+/* ── Value propositions ────────────────────────────────────────────────────
+ * The "why us" block. Six titled promises in a two-up grid that collapses to
+ * one column, marked with a wreath so the section reads as the holiday pitch
+ * and not another price table. */
+.proposal-view .xv-section {
+  border: 1px solid var(--bdr-g);
+  background: linear-gradient(135deg, rgba(236, 200, 115, 0.06) 0%, rgba(47, 92, 68, 0.08) 100%);
+  padding: 40px 36px;
+  margin-bottom: 56px;
+  animation: sw-up 0.8s var(--ease) 0.16s both;
+}
+
+.proposal-view .xv-head {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 30px;
+}
+
+/* A wreath: an evergreen ring of needles with a holly bow at its base. */
+.proposal-view .xv-wreath {
+  position: relative;
+  flex-shrink: 0;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: 7px dotted var(--pine-l);
+  background: radial-gradient(circle, transparent 52%, rgba(47, 92, 68, 0.35) 53%, transparent 72%);
+}
+
+.proposal-view .xv-wreath::before {
+  /* The bow: two holly loops tied at the bottom of the ring. */
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 22px;
+  height: 11px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at 5px 5px, var(--holly) 0 4px, transparent 5px),
+    radial-gradient(circle at 17px 5px, var(--holly) 0 4px, transparent 5px),
+    radial-gradient(circle at 11px 6px, var(--holly-l) 0 2px, transparent 3px);
+}
+
+.proposal-view .xv-title {
+  font-family: var(--font-cormorant), serif;
+  font-size: clamp(24px, 3.4vw, 32px);
+  font-weight: 400;
+  font-style: italic;
+  color: var(--t1);
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+
+.proposal-view .xv-title em {
+  color: var(--gold-l);
+  font-style: italic;
+}
+
+.proposal-view .xv-sub {
+  font-size: 12px;
+  color: var(--t3);
+  line-height: 1.6;
+}
+
+.proposal-view .xv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: var(--bdr);
+}
+
+.proposal-view .xv-item {
+  background: var(--s1);
+  padding: 24px 26px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+/* A single lit bulb marks each promise. */
+.proposal-view .xv-bulb {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(236, 200, 115, 0.55);
+}
+
+.proposal-view .xv-item:nth-child(3n + 2) .xv-bulb {
+  background: var(--holly);
+  box-shadow: 0 0 8px var(--holly-glow);
+}
+
+.proposal-view .xv-item:nth-child(3n + 3) .xv-bulb {
+  background: #a7ecb8;
+  box-shadow: 0 0 8px rgba(95, 224, 140, 0.45);
+}
+
+.proposal-view .xv-item-title {
+  font-family: var(--font-cormorant), serif;
+  font-size: 19px;
+  font-style: italic;
+  color: var(--gold-l);
+  margin-bottom: 7px;
+  line-height: 1.2;
+}
+
+.proposal-view .xv-item-body {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--t3);
+}
+
+@media (max-width: 660px) {
+  .proposal-view .xv-section { padding: 30px 22px; }
+  .proposal-view .xv-grid { grid-template-columns: 1fr; }
+  .proposal-view .xv-head { gap: 16px; }
+  .proposal-view .xv-wreath { width: 52px; height: 52px; border-width: 5px; }
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────
+ * The client's "Save as PDF" path. Lights and animation cost ink and read as
+ * artifacts on paper; the palette and the wreath stay. */
+@media print {
+  .proposal-view.is-christmas { padding-top: 0; }
+  .proposal-view.is-christmas::before { display: none; }
+  .proposal-view .xv-section { break-inside: avoid; }
+  .proposal-view .xv-item { break-inside: avoid; }
+}
