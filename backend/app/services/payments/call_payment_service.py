@@ -14,10 +14,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import stripe
 import structlog
 
 from app.core.config import settings
+from app.services.payments.stripe_client import (
+    from_minor_units,
+    is_payment_configured,
+    stripe_client,
+    to_minor_units,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,26 +41,25 @@ MAX_PAYMENT_AMOUNT = 10_000.0
 # shared billing webhook can route it away from the SaaS-subscription path.
 PAYMENT_KIND = "in_call_payment"
 
-_ZERO_DECIMAL_CURRENCIES = frozenset(
-    {
-        "bif",
-        "clp",
-        "djf",
-        "gnf",
-        "jpy",
-        "kmf",
-        "krw",
-        "mga",
-        "pyg",
-        "rwf",
-        "ugx",
-        "vnd",
-        "vuv",
-        "xaf",
-        "xof",
-        "xpf",
-    }
-)
+# Re-exported from :mod:`app.services.payments.stripe_client`, which owns the
+# Stripe boundary. Callers that already import these from here (``invoice_service``,
+# ``quote_deposit_service``, their tests) keep working unchanged; new code should
+# import from ``stripe_client`` directly.
+__all__ = [
+    "MAX_PAYMENT_AMOUNT",
+    "MIN_PAYMENT_AMOUNT",
+    "PAYMENT_KIND",
+    "CheckoutSessionResult",
+    "SessionStatus",
+    "create_payment_checkout_session",
+    "from_minor_units",
+    "handle_checkout_session_completed",
+    "is_payment_configured",
+    "mark_call_payment_paid",
+    "notify_payment_operators",
+    "retrieve_session_status",
+    "to_minor_units",
+]
 
 
 @dataclass(slots=True)
@@ -74,29 +78,6 @@ class SessionStatus:
     payment_status: str  # "paid" | "unpaid" | "no_payment_required"
     status: str  # "open" | "complete" | "expired"
     payment_intent_id: str | None
-
-
-def is_payment_configured() -> bool:
-    """Return whether Stripe is configured for collecting payments."""
-    return bool(settings.stripe_secret_key)
-
-
-def to_minor_units(amount: float, currency: str) -> int:
-    """Convert a major-unit amount (e.g. dollars) to Stripe's minor units."""
-    if currency.lower() in _ZERO_DECIMAL_CURRENCIES:
-        return int(round(amount))
-    return int(round(amount * 100))
-
-
-def from_minor_units(amount: int, currency: str) -> float:
-    """Convert a Stripe minor-unit amount back to major units (e.g. dollars)."""
-    if currency.lower() in _ZERO_DECIMAL_CURRENCIES:
-        return float(amount)
-    return round(amount / 100, 2)
-
-
-def _stripe_client() -> stripe.StripeClient:
-    return stripe.StripeClient(settings.stripe_secret_key)
 
 
 async def create_payment_checkout_session(
@@ -119,7 +100,7 @@ async def create_payment_checkout_session(
     Raises ``stripe.StripeError`` on Stripe failures so the caller can surface a
     friendly message without persisting a dangling row.
     """
-    client = _stripe_client()
+    client = stripe_client()
     params: dict[str, Any] = {
         "mode": "payment",
         "line_items": [
@@ -152,7 +133,7 @@ async def create_payment_checkout_session(
 
 async def retrieve_session_status(session_id: str) -> SessionStatus:
     """Fetch the current status of a Checkout Session from Stripe."""
-    client = _stripe_client()
+    client = stripe_client()
     session = client.checkout.sessions.retrieve(session_id)
     payment_intent = getattr(session, "payment_intent", None)
     payment_intent_id = payment_intent if isinstance(payment_intent, str) else None
