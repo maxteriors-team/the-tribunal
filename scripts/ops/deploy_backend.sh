@@ -17,7 +17,9 @@
 #      those are uploaded too and the image would not match the commit).
 #   2. Writes ``backend/app/build_info.json`` — the build stamp that
 #      ``app.core.build_info`` reads at runtime.
-#   3. Runs ``railway up`` from ``backend/`` so the stamp ships in the upload.
+#   3. Runs ``railway up`` from the **repo root** so the stamp ships in the
+#      upload. See "Where the upload runs from" below — this is not the
+#      obvious choice, and getting it wrong fails the build outright.
 #   4. Deletes the stamp again (EXIT trap, so it also cleans up on failure or
 #      Ctrl-C). It must never be committed: a stale stamp makes ``/version``
 #      lie, which is worse than ``"unknown"``. A pre-commit hook backstops this.
@@ -25,6 +27,26 @@
 # The stamp is deliberately NOT gitignored — ``railway up`` skips gitignored
 # paths when building the upload tarball, so an ignored stamp would never reach
 # the builder.
+#
+# Where the upload runs from
+# --------------------------
+# From the **repo root**, not from ``backend/``. The Railway service sets its
+# own Root Directory to ``backend``, and that is applied to whatever tree gets
+# uploaded. Uploading from inside ``backend/`` therefore makes the builder look
+# for ``backend/backend/`` and the build dies before it starts:
+#
+#     Error: Failed to read app source directory
+#         No such file or directory (os error 2)
+#     nixpacks exited with an error
+#
+# That failure is safe but expensive to diagnose: the deploy fails at build
+# time, so production keeps serving the previous release and ``/version`` still
+# reports the *old* SHA — which reads exactly like a deploy that silently did
+# nothing. It cost a release cycle before the cause was found, hence this note.
+#
+# Changing this back to ``cd "$BACKEND_DIR"`` will break every deploy. If the
+# service's Root Directory is ever cleared in the Railway dashboard, this has to
+# change with it.
 #
 # Usage:
 #   make deploy.backend                       # deploys the service below
@@ -134,7 +156,9 @@ else
 fi
 
 bold "▶ deploying ${SERVICE} @ ${SHA}"
-cd "$BACKEND_DIR"
+# Repo root, deliberately — the service's Root Directory is already `backend`.
+# See "Where the upload runs from" at the top of this file before changing it.
+cd "$REPO_ROOT"
 railway up "${UP_ARGS[@]}"
 
 green "✓ upload complete — build running on Railway"
