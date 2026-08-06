@@ -10127,6 +10127,20 @@
             "title": "Label",
             "type": "string"
           },
+          "maintenance_through_day": {
+            "default": 23,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Maintenance Through Day",
+            "type": "integer"
+          },
+          "maintenance_through_month": {
+            "default": 12,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Maintenance Through Month",
+            "type": "integer"
+          },
           "minimum": {
             "default": 0,
             "minimum": 0.0,
@@ -10210,6 +10224,13 @@
             "minimum": 0.0,
             "title": "Takedown Rate",
             "type": "number"
+          },
+          "value_props": {
+            "items": {
+              "$ref": "#/components/schemas/ValueProp"
+            },
+            "title": "Value Props",
+            "type": "array"
           }
         },
         "title": "ChristmasConfig",
@@ -33931,7 +33952,7 @@
         "type": "object"
       },
       "ProposalCategorySection": {
-        "description": "One priced product-line section (permanent / christmas) in a quote.\n\nLandscape keeps its rich tier cards and bistro its bespoke block; these\nsections carry the *new* per-linear-ft / decor lines so the client page can\nrender any mix of product lines uniformly.\n\n``takedown``/``storage`` record the seasonal services the client actually\nbought, so downstream dispatch reads a field instead of pattern-matching a\ndisplay label. Both are ``None`` on sections written before this existed and\non non-seasonal lines — a consumer must read ``None`` as \"unknown\", never as\n\"declined\", or a season already sold silently loses its takedown crew.",
+        "description": "One priced product-line section (permanent / christmas) in a quote.\n\nLandscape keeps its rich tier cards and bistro its bespoke block; these\nsections carry the *new* per-linear-ft / decor lines so the client page can\nrender any mix of product lines uniformly.\n\n``takedown``/``storage`` record the seasonal services the client actually\nbought, so downstream dispatch reads a field instead of pattern-matching a\ndisplay label. Both are ``None`` on sections written before this existed and\non non-seasonal lines — a consumer must read ``None`` as \"unknown\", never as\n\"declined\", or a season already sold silently loses its takedown crew.\n\n``value_props`` is the \"why buy from us\" copy for this product line,\nsnapshot at save time so a later Settings edit never rewrites the promises\non a proposal a customer has already read. Empty on sections written before\nthis existed, which the client page renders as nothing rather than as an\nempty section.",
         "properties": {
           "cash_savings": {
             "default": 0,
@@ -33994,6 +34015,13 @@
               }
             ],
             "title": "Takedown"
+          },
+          "value_props": {
+            "items": {
+              "$ref": "#/components/schemas/ValueProp"
+            },
+            "title": "Value Props",
+            "type": "array"
           }
         },
         "required": [
@@ -46760,6 +46788,25 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValueProp": {
+        "description": "One titled selling point rendered on the client-facing proposal.\n\nRicher than the flat ``perks`` strings on the comparison page: the proposal\nneeds a scannable title plus a sentence of substance, because it is the\ndocument a homeowner reads alone, at night, before deciding.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "ValueProp",
         "type": "object"
       },
       "ValueStackItem": {

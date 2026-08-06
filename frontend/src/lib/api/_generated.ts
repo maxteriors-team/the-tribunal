@@ -13492,6 +13492,16 @@ export interface components {
              */
             label: string;
             /**
+             * Maintenance Through Day
+             * @default 23
+             */
+            maintenance_through_day: number;
+            /**
+             * Maintenance Through Month
+             * @default 12
+             */
+            maintenance_through_month: number;
+            /**
              * Minimum
              * @default 0
              */
@@ -13547,6 +13557,8 @@ export interface components {
              * @default 0.25
              */
             takedown_rate: number;
+            /** Value Props */
+            value_props?: components["schemas"]["ValueProp"][];
         };
         /**
          * ChristmasEstimate
@@ -22568,6 +22580,12 @@ export interface components {
          *     display label. Both are ``None`` on sections written before this existed and
          *     on non-seasonal lines — a consumer must read ``None`` as "unknown", never as
          *     "declined", or a season already sold silently loses its takedown crew.
+         *
+         *     ``value_props`` is the "why buy from us" copy for this product line,
+         *     snapshot at save time so a later Settings edit never rewrites the promises
+         *     on a proposal a customer has already read. Empty on sections written before
+         *     this existed, which the client page renders as nothing rather than as an
+         *     empty section.
          */
         ProposalCategorySection: {
             /**
@@ -22605,6 +22623,8 @@ export interface components {
             storage?: boolean | null;
             /** Takedown */
             takedown?: boolean | null;
+            /** Value Props */
+            value_props?: components["schemas"]["ValueProp"][];
         };
         /**
          * ProposalCharge
@@ -27651,6 +27671,20 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * ValueProp
+         * @description One titled selling point rendered on the client-facing proposal.
+         *
+         *     Richer than the flat ``perks`` strings on the comparison page: the proposal
+         *     needs a scannable title plus a sentence of substance, because it is the
+         *     document a homeowner reads alone, at night, before deciding.
+         */
+        ValueProp: {
+            /** Body */
+            body: string;
+            /** Title */
+            title: string;
         };
         /**
          * ValueStackItem

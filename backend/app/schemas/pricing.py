@@ -16,7 +16,7 @@ the quote/invoice schemas; the server recomputes canonical totals with
 ``Numeric`` in :mod:`app.services.quotes.proposal_pricing`.
 """
 
-from calendar import monthrange
+from calendar import month_name, monthrange
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
@@ -387,6 +387,81 @@ def _default_christmas_perks() -> list[str]:
     ]
 
 
+# Substituted into a :class:`ValueProp` body with the workspace's configured
+# in-season maintenance cutoff ("December 23"). One token means the operator can
+# reword the promise freely while the *date* stays owned by
+# ``ChristmasConfig.maintenance_through_*`` -- so moving the cutoff can never
+# leave a stale date sitting in the customer-facing copy of one proposal.
+MAINTENANCE_THROUGH_TOKEN = "{maintenance_through}"
+
+
+class ValueProp(BaseModel):
+    """One titled selling point rendered on the client-facing proposal.
+
+    Richer than the flat ``perks`` strings on the comparison page: the proposal
+    needs a scannable title plus a sentence of substance, because it is the
+    document a homeowner reads alone, at night, before deciding.
+    """
+
+    title: str
+    body: str
+
+
+def _default_christmas_value_props() -> list[ValueProp]:
+    """Why a homeowner should buy seasonal lighting from this company.
+
+    Operator-editable. Answers the four questions a homeowner actually asks:
+    what happens when something breaks, what do I own, what does it cost, and
+    what does my house look like when it is over.
+    """
+    return [
+        ValueProp(
+            title="A Worry-Free Christmas",
+            body=(
+                f"Maintenance is included through {MAINTENANCE_THROUGH_TOKEN}. "
+                "If a bulb goes out or a strand comes loose, we come out and "
+                "fix it at no charge."
+            ),
+        ),
+        ValueProp(
+            title="Every Light Is Ours",
+            body=(
+                "We own the bulbs, strands, and clips. You never buy the "
+                "equipment, hunt for replacements, or find somewhere to store "
+                "it in January."
+            ),
+        ),
+        ValueProp(
+            title="Everything Is Included",
+            body=(
+                "Design, installation, in-season maintenance, takedown, and "
+                "off-season storage are all part of the price you see here."
+            ),
+        ),
+        ValueProp(
+            title="Your Neighbors Will Be Jealous",
+            body=(
+                "Strands are cut to fit your roofline, so the lines run "
+                "straight and every peak and gable lands even."
+            ),
+        ),
+        ValueProp(
+            title="Affordable, Up-Front Pricing",
+            body=(
+                "One seasonal price, agreed before we start. No equipment to "
+                "purchase and no surprise charges after the install."
+            ),
+        ),
+        ValueProp(
+            title="Nothing Permanent on Your Home",
+            body=(
+                "No drilling and no adhesive. Everything comes down clean in "
+                "the new year and your home looks untouched."
+            ),
+        ),
+    ]
+
+
 class ChristmasPackage(BaseModel):
     """A seasonal-Christmas service tier (Good/Better/Best for holiday decor).
 
@@ -507,10 +582,17 @@ class ChristmasConfig(BaseModel):
     season_install_day: int = Field(default=15, ge=1, le=31)
     season_takedown_month: int = Field(default=1, ge=1, le=12)
     season_takedown_day: int = Field(default=8, ge=1, le=31)
+    # Last day of included in-season maintenance. The whole seasonal promise is
+    # "we keep it lit until Christmas", so this date is quoted verbatim to the
+    # customer on the proposal and must be operator-editable without a deploy.
+    maintenance_through_month: int = Field(default=12, ge=1, le=12)
+    maintenance_through_day: int = Field(default=23, ge=1, le=31)
     minimum: float = Field(default=0, ge=0)
     label: str = "Christmas Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
     perks: list[str] = Field(default_factory=_default_christmas_perks)
+    # Titled selling points rendered on the client-facing proposal page.
+    value_props: list[ValueProp] = Field(default_factory=_default_christmas_value_props)
     # Seasonal service tiers (Good/Better/Best). When ``packages_enabled`` the
     # wizard/estimator sell Christmas as packages (a subset of ``items`` +
     # roofline priced by the shared engine); when False the current à la carte
@@ -559,7 +641,20 @@ class ChristmasConfig(BaseModel):
         self.season_takedown_day = min(
             self.season_takedown_day, monthrange(2001, self.season_takedown_month)[1]
         )
+        self.maintenance_through_day = min(
+            self.maintenance_through_day, monthrange(2001, self.maintenance_through_month)[1]
+        )
         return self
+
+    @property
+    def maintenance_through_label(self) -> str:
+        """The maintenance cutoff as customer-facing text (``"December 23"``).
+
+        No year: the proposal promises a date within *this* season, and a year
+        printed on a quote sent in late December reads as either stale or as a
+        promise about next Christmas.
+        """
+        return f"{month_name[self.maintenance_through_month]} {self.maintenance_through_day}"
 
 
 # --------------------------------------------------------------------------- #

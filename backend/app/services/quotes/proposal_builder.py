@@ -16,11 +16,13 @@ from typing import Any
 
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
+    MAINTENANCE_THROUGH_TOKEN,
     BistroPricing,
     ChristmasPackage,
     ChristmasPricing,
     PermanentPricing,
     PricingSettings,
+    ValueProp,
 )
 from app.schemas.proposal_wizard import (
     CATEGORY_ORDER,
@@ -82,6 +84,23 @@ def _counts(items: list[WizardCategoryCount]) -> dict[str, float]:
     return {i.key: float(i.quantity) for i in items}
 
 
+def _christmas_value_props(config: PricingSettings) -> list[ValueProp]:
+    """Seasonal selling points with the maintenance cutoff date resolved.
+
+    Substituting here rather than in the client snapshots the promise onto the
+    saved proposal: the customer keeps reading the date they were sold, even
+    after the workspace moves its cutoff for a later season.
+    """
+    through = config.christmas.maintenance_through_label
+    return [
+        ValueProp(
+            title=prop.title,
+            body=prop.body.replace(MAINTENANCE_THROUGH_TOKEN, through),
+        )
+        for prop in config.christmas.value_props
+    ]
+
+
 def _category_section(
     key: str,
     label: str,
@@ -90,19 +109,21 @@ def _category_section(
     *,
     takedown: bool | None = None,
     storage: bool | None = None,
+    value_props: list[ValueProp] | None = None,
 ) -> ProposalCategorySection:
     """Wrap a category pricing result with financed/cash/monthly figures.
 
     ``takedown``/``storage`` are the seasonal services the client bought. Only
     the christmas section passes them (permanent leaves them ``None``) so
     dispatch can later read what was sold instead of inferring it from the
-    wording of a display line.
+    wording of a display line. ``value_props`` is likewise seasonal-only today.
     """
     total = _d(pricing.total)
     return ProposalCategorySection(
         key=key,
         label=label,
         lines=list(pricing.lines),
+        value_props=list(value_props or []),
         financed_total=float(total),
         cash_total=float(pp.cash_price(total, config)) if total > 0 else 0.0,
         cash_savings=float(pp.cash_savings(total, config)) if total > 0 else 0.0,
@@ -337,6 +358,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                     # this matches the money the engine actually charged.
                     takedown=payload.christmas.takedown and config.christmas.takedown_enabled,
                     storage=payload.christmas.storage,
+                    value_props=_christmas_value_props(config),
                 )
             )
 

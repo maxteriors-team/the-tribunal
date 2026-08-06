@@ -20,6 +20,7 @@ from app.schemas.pricing import (
     CarePlanPricing,
     CategoryLine,
     TierPricing,
+    ValueProp,
 )
 
 # Product lines the unified builder can quote, in canonical display order.
@@ -294,11 +295,18 @@ class ProposalCategorySection(BaseModel):
     display label. Both are ``None`` on sections written before this existed and
     on non-seasonal lines — a consumer must read ``None`` as "unknown", never as
     "declined", or a season already sold silently loses its takedown crew.
+
+    ``value_props`` is the "why buy from us" copy for this product line,
+    snapshot at save time so a later Settings edit never rewrites the promises
+    on a proposal a customer has already read. Empty on sections written before
+    this existed, which the client page renders as nothing rather than as an
+    empty section.
     """
 
     key: str
     label: str
     lines: list[CategoryLine] = Field(default_factory=list)
+    value_props: list[ValueProp] = Field(default_factory=list)
     financed_total: float = 0
     cash_total: float = 0
     cash_savings: float = 0
