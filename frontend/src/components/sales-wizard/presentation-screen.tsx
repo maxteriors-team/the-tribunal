@@ -26,7 +26,12 @@ import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
 interface PresentationScreenProps {
   wizard: UseSalesWizardReturn;
   brandName: string;
-  onBack: () => void;
+  /**
+   * Omitted when the preview is embedded as a builder step: that step's own
+   * Back control already returns the rep to Line Items, and a second "Edit"
+   * button beside it is two controls for one job.
+   */
+  onBack?: () => void;
 }
 
 export function PresentationScreen({
@@ -43,11 +48,17 @@ export function PresentationScreen({
         : lowest,
     null,
   );
-  const financingEstimate = financingFromSnapshot(
-    doc?.financing,
-    lowestTier?.pricing.monthly_payment ?? doc?.grand_monthly_payment ?? 0,
-    lowestTier?.pricing.monthly_by_term ?? {},
-  );
+  // Seasonal Christmas is sold as one up-front price, never a monthly. The rep
+  // preview has to match the client page exactly, or the rep talks a homeowner
+  // through a payment option the proposal will not offer them.
+  const isChristmas = wizard.activeService === "christmas";
+  const financingEstimate = isChristmas
+    ? null
+    : financingFromSnapshot(
+        doc?.financing,
+        lowestTier?.pricing.monthly_payment ?? doc?.grand_monthly_payment ?? 0,
+        lowestTier?.pricing.monthly_by_term ?? {},
+      );
 
   const client = doc?.client ?? null;
   const first = client?.first_name?.trim() || "";
@@ -95,7 +106,7 @@ export function PresentationScreen({
         await navigator.clipboard.writeText(shareLink);
         toast.success("Client link copied");
       } catch {
-        toast.error("Could not copy — use the review step’s link box");
+        toast.error("Could not copy — use the Send step’s link box");
       }
       return;
     }
@@ -109,7 +120,7 @@ export function PresentationScreen({
           await navigator.clipboard.writeText(link);
           toast.success("Saved — client link copied to clipboard");
         } catch {
-          toast.success("Saved — copy the client link from the review step");
+          toast.success("Saved — copy the client link from the Send step");
         }
       } else {
         toast.success("Proposal saved");
@@ -151,9 +162,11 @@ export function PresentationScreen({
           >
             &#9113; Print / PDF
           </button>
-          <button type="button" className="back-btn" onClick={onBack}>
-            &#8592; Edit
-          </button>
+          {onBack ? (
+            <button type="button" className="back-btn" onClick={onBack}>
+              &#8592; Edit
+            </button>
+          ) : null}
         </div>
       </div>
 

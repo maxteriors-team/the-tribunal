@@ -19,16 +19,24 @@ import {
 import { CategoryStep, SERVICE_ACCENTS } from "./category-step";
 import { ClientTypeahead } from "./client-typeahead";
 import { DesignStep, MiniTotals } from "./design-step";
-import { EnhancementsStep } from "./enhancements-step";
+import { EnhancementsStep, MockupsBlock } from "./enhancements-step";
+import { PresentationScreen } from "./presentation-screen";
 import { fmt, type ClientDraft, type UseSalesWizardReturn } from "./use-sales-wizard";
 
+/**
+ * The quote-builder flow: capture the customer, show them the vision, price the
+ * work, preview what they will receive, then send it.
+ *
+ * Kept in sync with the `steps` array in `CalculatorScreen` — the sections read
+ * their visibility from that array rather than comparing hardcoded strings, so
+ * a rename here is a type error instead of an invisible step.
+ */
 export type WizardStepId =
-  | "client"
+  | "customer"
+  | "mockup"
   | "lines"
-  | "design"
-  | "seasonal"
-  | "enhancements"
-  | "review";
+  | "preview"
+  | "send";
 
 interface StepDef {
   id: WizardStepId;
@@ -38,7 +46,6 @@ interface StepDef {
 interface CalculatorScreenProps {
   wizard: UseSalesWizardReturn;
   brandName: string;
-  onPresent: () => void;
   onOpenNight: () => void;
 }
 
@@ -192,7 +199,6 @@ function DepositField({ wizard }: { wizard: UseSalesWizardReturn }) {
 export function CalculatorScreen({
   wizard,
   brandName,
-  onPresent,
   onOpenNight,
 }: CalculatorScreenProps) {
   const { document: doc, pricing } = wizard;
@@ -204,6 +210,10 @@ export function CalculatorScreen({
   // and service tag follow the active service, so a permanent quote is never
   // presented as Christmas.
   const isPermanentService = wizard.activeService === "permanent";
+  // Roofline work (permanent track or seasonal Christmas) is measured on the
+  // photo; landscape work is placed fixture by fixture. The Mockup step says
+  // which, so the rep knows what the designer is for on this quote.
+  const isSeasonalService = isPermanentService || hasSeasonal;
   const seasonalStep = isPermanentService
     ? {
         // The progress chip clips past ~8 tracked characters, so the step reads
@@ -224,24 +234,27 @@ export function CalculatorScreen({
           "decor counts \u2014 every line prices live off your workspace rates.",
       };
 
-  // Steps are driven by which product lines the quote covers, so the rep only
-  // walks the sections that apply to this quote.
-  const steps = useMemo<StepDef[]>(() => {
-    const list: StepDef[] = [
-      { id: "client", label: "Client" },
-      { id: "lines", label: "Lines" },
-    ];
-    if (hasLandscape) list.push({ id: "design", label: "Design" });
-    if (hasSeasonal) list.push({ id: "seasonal", label: seasonalStep.label });
-    // Add-ons: mockups apply to every quote (care/bistro gate internally), so
-    // this step is always available.
-    list.push({ id: "enhancements", label: "Add-ons" });
-    list.push({ id: "review", label: "Review" });
-    return list;
-  }, [hasLandscape, hasSeasonal, seasonalStep.label]);
+  // The rep's five moves, in the order a quote is actually sold: capture who
+  // it is for, show them what it will look like, price it, look at what they
+  // will see, then send it.
+  //
+  // Every step here is unconditional. The product lines a quote covers vary, so
+  // they vary *inside* Line Items rather than adding and removing steps beneath
+  // the rep: a progress bar whose length changes when you tick a checkbox
+  // renumbers the step you are standing on.
+  const steps = useMemo<StepDef[]>(
+    () => [
+      { id: "customer", label: "Customer" },
+      { id: "mockup", label: "Mockup" },
+      { id: "lines", label: "Line Items" },
+      { id: "preview", label: "Preview" },
+      { id: "send", label: "Send" },
+    ],
+    [],
+  );
 
-  const [stepState, setStep] = useState<WizardStepId>("client");
-  const step = steps.some((s) => s.id === stepState) ? stepState : "client";
+  const [stepState, setStep] = useState<WizardStepId>("customer");
+  const step = steps.some((s) => s.id === stepState) ? stepState : "customer";
   const stepIndex = Math.max(
     0,
     steps.findIndex((s) => s.id === step),
@@ -250,6 +263,9 @@ export function CalculatorScreen({
     const i = steps.findIndex((s) => s.id === id);
     return `Step ${i + 1} of ${steps.length}`;
   };
+  /** Section visibility, derived from the step list so a rename cannot silently
+   * hide a whole step's UI the way six hardcoded string comparisons could. */
+  const on = (id: WizardStepId) => `wizard-step${step === id ? " active" : ""}`;
 
   const goTo = (id: WizardStepId) => {
     setStep(id);
@@ -365,12 +381,12 @@ export function CalculatorScreen({
         </div>
 
         <div className="wizard-shell">
-          {/* ── Client ── */}
-          <section className={`wizard-step${step === "client" ? " active" : ""}`}>
+          {/* ── 1 · Customer ── */}
+          <section className={on("customer")}>
             <div className="wizard-step-heading">
-              <div className="wizard-kicker">{stepOf("client")}</div>
+              <div className="wizard-kicker">{stepOf("customer")}</div>
               <div className="wizard-title">
-                <em>Client</em>{" "}Details
+                <em>Customer</em>{" "}Details
               </div>
               <div className="wizard-copy">
                 Capture the client, property, and rep info once. These fields
@@ -405,39 +421,79 @@ export function CalculatorScreen({
             <div className="wizard-nav single">
               <span className="wizard-nav-spacer" />
               <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                Next: Product Lines
+                Next: Mockup
               </button>
             </div>
           </section>
 
-          {/* ── Product lines ── */}
-          <section className={`wizard-step${step === "lines" ? " active" : ""}`}>
+          {/* ── 2 · Mockup ──
+              Every visual the client will see, in one place: the lit-photo
+              designer and the uploaded mockup gallery. Deliberately ungated ──
+              it used to sit inside the landscape-only Design step, which left
+              a Christmas rep with no way to reach the Light Designer at all,
+              even though saving one already feeds roofline feet back into a
+              Christmas quote. */}
+          <section className={on("mockup")}>
             <div className="wizard-step-heading">
-              <div className="wizard-kicker">{stepOf("lines")}</div>
+              <div className="wizard-kicker">{stepOf("mockup")}</div>
               <div className="wizard-title">
-                <em>Product</em>{" "}Lines
+                <em>Visual</em>{" "}Mockup
               </div>
               <div className="wizard-copy">
-                Pick the service this quote covers. One quote, one service —
-                switching services starts that service&apos;s quote.
+                Show them the house before you price it. Light a photo of the
+                property, or upload mockups. Both ride along to the client
+                proposal.
               </div>
             </div>
-            <CategoryStep wizard={wizard} />
+            <button
+              type="button"
+              className={`night-launch-btn${wizard.night.image ? " saved" : ""}`}
+              onClick={onOpenNight}
+            >
+              {wizard.night.image
+                ? "Design saved \u2014 edit the lit photo"
+                : "Open the Light Designer"}
+            </button>
+            <div className="night-launch-sub">
+              {wizard.night.image
+                ? "Saved to this proposal \u2014 it shows on the client’s shared page and the quote is filed on their customer record."
+                : isSeasonalService
+                  ? "Trace the rooflines and place decor on a photo of the home, then drag dusk down to show it lit. Saving pushes the measured roofline feet into this quote and files the image with the proposal."
+                  : "Place uplights, spots, path lights and wall washes on a photo of the home, then drag dusk down to show it lit. Saving pushes the fixture counts into this quote and files the image with the proposal."}
+            </div>
+            <MockupsBlock wizard={wizard} />
             <div className="wizard-nav">
               <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
                 Back
               </button>
               <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                Continue
+                Next: Line Items
               </button>
             </div>
           </section>
 
-          {/* ── Design (landscape) ── */}
-          {hasLandscape ? (
-            <section className={`wizard-step${step === "design" ? " active" : ""}`}>
-              <div className="wizard-step-heading">
-                <div className="wizard-kicker">{stepOf("design")}</div>
+          {/* ── 3 · Line Items ──
+              One step, priced top to bottom: what the quote covers, then the
+              per-service lines for whichever product lines it covers, then the
+              optional add-ons. The sub-sections vary by service; the step does
+              not. */}
+          <section className={on("lines")}>
+            <div className="wizard-step-heading">
+              <div className="wizard-kicker">{stepOf("lines")}</div>
+              <div className="wizard-title">
+                <em>Line</em>{" "}Items
+              </div>
+              <div className="wizard-copy">
+                Pick the service this quote covers, then price every line. One
+                quote, one service — switching services starts that
+                service&apos;s quote.
+              </div>
+            </div>
+            <CategoryStep wizard={wizard} />
+
+            {/* ── Landscape packages ── */}
+            {hasLandscape ? (
+              <div className="wizard-substep">
                 <ServiceTag
                   label="Landscape Lighting"
                   accent={SERVICE_ACCENTS.landscape}
@@ -449,38 +505,14 @@ export function CalculatorScreen({
                   Build Good / Better / Best options with fixture counts. Add any
                   custom job charges here so every package total stays accurate.
                 </div>
+                <DesignStep wizard={wizard} />
               </div>
-              <DesignStep wizard={wizard} />
-              <button
-                type="button"
-                className={`night-launch-btn${wizard.night.image ? " saved" : ""}`}
-                onClick={onOpenNight}
-              >
-                {wizard.night.image
-                  ? "Design saved \u2014 edit the lit photo"
-                  : "Open the Light Designer"}
-              </button>
-              <div className="night-launch-sub">
-                {wizard.night.image
-                  ? "Saved to this proposal \u2014 it shows on the client’s shared page and the quote is filed on their customer record."
-                  : "Place uplights, spots, path lights and wall washes on a photo of the home, then drag dusk down to show it lit. Saving pushes the fixture counts into this quote and files the image with the proposal."}
-              </div>
-              <div className="wizard-nav">
-                <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
-                  Back
-                </button>
-                <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                  Continue
-                </button>
-              </div>
-            </section>
-          ) : null}
+            ) : null}
 
-          {/* ── Seasonal & permanent ── */}
-          {hasSeasonal ? (
-            <section className={`wizard-step${step === "seasonal" ? " active" : ""}`}>
-              <div className="wizard-step-heading">
-                <div className="wizard-kicker">{stepOf("seasonal")}</div>
+
+            {/* ── Seasonal / permanent roofline ── */}
+            {hasSeasonal ? (
+              <div className="wizard-substep">
                 <ServiceTag
                   label={seasonalStep.tag}
                   accent={seasonalStep.accent}
@@ -497,61 +529,32 @@ export function CalculatorScreen({
                   )}
                 </div>
                 <div className="wizard-copy">{seasonalStep.copy}</div>
+                <div className="wizard-copy">{seasonalStep.copy}</div>
+                {wizard.hasCategory("permanent") ? (
+                  <PermanentSection wizard={wizard} />
+                ) : null}
+                {wizard.hasCategory("christmas") ? (
+                  <ChristmasSection wizard={wizard} />
+                ) : null}
               </div>
-              {wizard.hasCategory("permanent") ? (
-                <PermanentSection wizard={wizard} />
-              ) : null}
-              {wizard.hasCategory("christmas") ? (
-                <ChristmasSection wizard={wizard} />
-              ) : null}
-              <div className="wizard-nav">
-                <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
-                  Back
-                </button>
-                <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                  Continue
-                </button>
-              </div>
-            </section>
-          ) : null}
+            ) : null}
 
-          {/* ── Enhancements (mockups always · care / bistro) ── */}
-          <section className={`wizard-step${step === "enhancements" ? " active" : ""}`}>
-            <div className="wizard-step-heading">
-              <div className="wizard-kicker">{stepOf("enhancements")}</div>
+            {/* ── Optional add-ons (each gates itself on its product line) ── */}
+            <div className="wizard-substep">
               <div className="wizard-title">
-                <em>Enhance</em>{" "}the Proposal
+                <em>Add</em>{" "}Ons
               </div>
               <div className="wizard-copy">
-                Upload design mockups, then add annual care or bistro string
-                lighting. Leave any optional section blank and it stays out of
-                the client proposal.
+                Annual care and bistro string lighting. Leave a section blank
+                and it stays out of the client proposal.
               </div>
             </div>
             <EnhancementsStep wizard={wizard} />
             {hasLandscape ? <MiniTotals wizard={wizard} /> : null}
-            <div className="wizard-nav">
-              <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
-                Back
-              </button>
-              <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
-                Next: Review
-              </button>
-            </div>
-          </section>
 
-          {/* ── Review ── */}
-          <section className={`wizard-step${step === "review" ? " active" : ""}`}>
-            <div className="wizard-step-heading">
-              <div className="wizard-kicker">{stepOf("review")}</div>
-              <div className="wizard-title">
-                <em>Review</em>{" "}&amp; Send
-              </div>
-              <div className="wizard-copy">
-                Confirm every line, preview the client-facing proposal, then save
-                it to get a shareable client link.
-              </div>
-            </div>
+            {/* The priced result of everything above. Totals live with the
+                inputs that move them, so a rep never has to leave the step to
+                find out what a change did. */}
 
             <div className="wizard-review-intro">
               Totals update live from your inputs across every selected product
@@ -669,6 +672,56 @@ export function CalculatorScreen({
               </ul>
             </div>
 
+            <div className="wizard-nav">
+              <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
+                Back
+              </button>
+              <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
+                Next: Preview
+              </button>
+            </div>
+          </section>
+
+          {/* ── 4 · Preview ──
+              The client's page, rendered from the same server document they
+              will be sent. Shown in place rather than as a separate screen so
+              the rep can step back to Line Items and forward to Send without
+              losing the flow. */}
+          <section className={on("preview")}>
+            <div className="wizard-step-heading">
+              <div className="wizard-kicker">{stepOf("preview")}</div>
+              <div className="wizard-title">
+                <em>Preview</em>{" "}the Proposal
+              </div>
+              <div className="wizard-copy">
+                Exactly what the customer opens. Check the name, the totals,
+                and the mockups before you send it.
+              </div>
+            </div>
+            <PresentationScreen wizard={wizard} brandName={brandName} />
+            <div className="wizard-nav">
+              <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>
+                Back
+              </button>
+              <button type="button" className="wizard-nav-btn primary" onClick={goNext}>
+                Next: Send
+              </button>
+            </div>
+          </section>
+
+          {/* ── 5 · Send ── */}
+          <section className={on("send")}>
+            <div className="wizard-step-heading">
+              <div className="wizard-kicker">{stepOf("send")}</div>
+              <div className="wizard-title">
+                <em>Send</em>{" "}to the Customer
+              </div>
+              <div className="wizard-copy">
+                Save the quote to mint the client link, then text or email it.
+                Both go to the details captured in step 1.
+              </div>
+            </div>
+
             {wizard.attachWarning && (
               <AttachPrompt
                 warning={wizard.attachWarning}
@@ -679,9 +732,6 @@ export function CalculatorScreen({
             )}
 
             <div className="action-row">
-              <button type="button" className="present-btn" onClick={onPresent}>
-                Preview Proposal
-              </button>
               <button
                 type="button"
                 className="email-btn"
@@ -718,7 +768,7 @@ export function CalculatorScreen({
                     title={
                       wizard.client.email
                         ? undefined
-                        : "Add a client email in step 1"
+                        : "Add a customer email in step 1"
                     }
                     onClick={() => void handleDeliver("email")}
                   >
@@ -733,7 +783,7 @@ export function CalculatorScreen({
                     title={
                       wizard.client.phone
                         ? undefined
-                        : "Add a client phone in step 1"
+                        : "Add a customer phone in step 1"
                     }
                     onClick={() => void handleDeliver("sms")}
                   >

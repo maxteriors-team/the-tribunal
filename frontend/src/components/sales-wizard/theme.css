@@ -117,6 +117,12 @@
   .wizard-step.active { display: block; }
   .wizard-step-heading { background: linear-gradient(135deg, rgba(212, 175, 90, 0.08), rgba(212, 175, 90, 0.01)); border: 1px solid var(--bdr-g); padding: 20px 22px; margin-bottom: 16px; position: relative; overflow: hidden; }
   .wizard-step-heading::before { content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 2px; background: linear-gradient(180deg, transparent, var(--gold), transparent); }
+  /* A section within a step (a product line inside Line Items). Same anatomy as
+     a step heading at a quieter weight, so the rep reads it as a subdivision of
+     the step they are on rather than as a step they have skipped to. */
+  .wizard-substep { border-left: 2px solid var(--bdr-g); padding: 4px 0 4px 16px; margin: 30px 0 14px; }
+  .wizard-substep .wizard-title { font-size: clamp(22px, 3vw, 27px); }
+  .wizard-substep .wizard-copy { margin-top: 8px; }
   .wizard-kicker { font-size: 9px; font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold-d); margin-bottom: 9px; }
   .wizard-title { font-family: var(--font-cormorant), serif; font-size: clamp(28px, 4vw, 38px); font-weight: 300; color: var(--t1); line-height: 1; }
   .wizard-title em { font-style: italic; color: var(--gold-l); }
