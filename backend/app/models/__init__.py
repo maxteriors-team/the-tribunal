@@ -19,9 +19,22 @@ from app.models.caller_memory import CallerMemory
 from app.models.campaign import Campaign, CampaignContact
 from app.models.campaign_number_pool import CampaignNumberPool
 from app.models.campaign_report import CampaignReport
+from app.models.card_charge_attempt import (
+    CHARGE_ATTEMPT_STATUSES,
+    CHARGE_TRIGGERS,
+    CardChargeAttempt,
+)
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.contact_attachment import ContactAttachment
+from app.models.contact_card_setup_token import (
+    CARD_SETUP_TOKEN_TTL_HOURS,
+    ContactCardSetupToken,
+)
+from app.models.contact_payment_method import (
+    PAYMENT_METHOD_STATUSES,
+    ContactPaymentMethod,
+)
 from app.models.conversation import Conversation, Message
 from app.models.demo_request import DemoRequest
 from app.models.device_token import DeviceToken
@@ -177,6 +190,13 @@ __all__ = [
     "WorkspaceInvitation",
     "Contact",
     "ContactAttachment",
+    "ContactCardSetupToken",
+    "CARD_SETUP_TOKEN_TTL_HOURS",
+    "ContactPaymentMethod",
+    "PAYMENT_METHOD_STATUSES",
+    "CardChargeAttempt",
+    "CHARGE_ATTEMPT_STATUSES",
+    "CHARGE_TRIGGERS",
     "Conversation",
     "Message",
     "DemoRequest",
