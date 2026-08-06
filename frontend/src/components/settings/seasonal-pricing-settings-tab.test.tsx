@@ -84,8 +84,13 @@ function christmas(overrides: Partial<ChristmasConfig> = {}): ChristmasConfig {
     season_install_day: 15,
     season_takedown_month: 1,
     season_takedown_day: 8,
+    maintenance_through_month: 12,
+    maintenance_through_day: 23,
     minimum: 0,
     perks: ["We hang it, we take it down"],
+    value_props: [
+      { title: "A Worry-Free Christmas", body: "Maintenance through Dec 23." },
+    ],
     packages_enabled: false,
     package_order: ["premier"],
     packages: [seasonalPackage()],
@@ -226,6 +231,16 @@ describe("SeasonalPricingSettingsTab", () => {
           items: [seasonalItem()],
           // Untouched by this editor — must survive the block-replace save.
           perks: ["We hang it, we take it down"],
+          // Likewise: losing these silently rewrites the promises (and the
+          // maintenance date) printed on every future client proposal.
+          maintenance_through_month: 12,
+          maintenance_through_day: 23,
+          value_props: [
+            {
+              title: "A Worry-Free Christmas",
+              body: "Maintenance through Dec 23.",
+            },
+          ],
           packages_enabled: false,
           package_order: ["premier"],
           packages: [seasonalPackage()],

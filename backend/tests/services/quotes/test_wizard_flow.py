@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.workspace import Workspace
+from app.schemas.pricing import MAINTENANCE_THROUGH_TOKEN
 from app.schemas.proposal_wizard import (
     ProposalMockup,
     ProposalWizardPayload,
@@ -449,6 +450,82 @@ async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
         assert [line.name for line in quote.line_items] == ["Christmas Lighting"]
         assert quote.total == doc.grand_financed_total
         assert quote.proposal_document["service"] == "christmas"
+
+
+async def test_christmas_section_carries_dated_value_props() -> None:
+    """The seasonal section ships its selling points with the maintenance cutoff
+    already rendered, so the customer reads a real date and not a placeholder."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        payload = ProposalWizardPayload(
+            client=WizardClient(first_name="Dana", last_name="Cole"),
+            categories=["christmas"],
+            christmas=WizardChristmasSelection(roofline_feet=200),
+        )
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        props = doc.category_sections[0].value_props
+
+        assert props, "a christmas section must sell, not just itemize"
+        bodies = [p.body for p in props]
+        # The token is an internal detail; a customer must never see one.
+        assert not any(MAINTENANCE_THROUGH_TOKEN in body for body in bodies)
+        assert any("December 23" in body for body in bodies)
+        # The three promises the operator sells this season on.
+        joined = " ".join(bodies).lower()
+        assert "maintenance is included" in joined
+        assert "we own the bulbs" in joined
+        assert "off-season storage" in joined
+
+
+async def test_value_props_follow_the_configured_maintenance_date() -> None:
+    """Moving the cutoff in Settings moves the promise, with no code change."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        settings = dict(ws.settings or {})
+        pricing = dict(settings["pricing"])
+        pricing["christmas"] = {
+            **pricing["christmas"],
+            "maintenance_through_month": 12,
+            "maintenance_through_day": 20,
+        }
+        settings["pricing"] = pricing
+        ws.settings = settings
+        await db.commit()
+
+        svc = QuoteService(db)
+        doc = await svc.preview_from_wizard(
+            ws.id,
+            ProposalWizardPayload(
+                client=WizardClient(first_name="Dana", last_name="Cole"),
+                categories=["christmas"],
+                christmas=WizardChristmasSelection(roofline_feet=200),
+            ),
+        )
+        bodies = " ".join(p.body for p in doc.category_sections[0].value_props)
+        assert "December 20" in bodies
+        assert "December 23" not in bodies
+
+
+async def test_permanent_section_has_no_seasonal_value_props() -> None:
+    """Seasonal promises (takedown, storage, nothing permanent on the home) are
+    false for the permanent LED product, so they must not leak onto it."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+
+        doc = await svc.preview_from_wizard(
+            ws.id,
+            ProposalWizardPayload(
+                client=WizardClient(first_name="Dana", last_name="Cole"),
+                categories=["permanent"],
+                permanent=WizardPermanentSelection(feet=100, channels=3),
+            ),
+        )
+        assert doc.category_sections[0].key == "permanent"
+        assert doc.category_sections[0].value_props == []
+
 
 
 async def test_permanent_only_quote_is_its_own_service_path() -> None:
