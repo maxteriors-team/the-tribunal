@@ -86,7 +86,10 @@ class TestDatabaseHostGuard:
         with pytest.raises(seeder.UnsafeTargetError) as excinfo:
             seeder.assert_local_target()
 
-        assert "monorail.proxy.rlwy.net" in str(excinfo.value)
+        # Pin the *reason* rather than searching the message for a hostname. The
+        # message has to tell an operator why their seed was refused, and an
+        # incidental substring match would still pass if it named the wrong host.
+        assert "not a recognised local host" in str(excinfo.value)
 
     def test_a_hostname_hidden_in_the_password_does_not_pass_the_guard(
         self, seeder: Any, monkeypatch: pytest.MonkeyPatch
