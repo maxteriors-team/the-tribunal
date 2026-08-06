@@ -11,18 +11,30 @@ Run against a local database only::
 
 Prints the workspace id, the login email, and the password so the seeded state
 can be opened in the browser.
+
+This refuses to run anywhere but a local database. It creates a *login* -- a
+workspace owner whose password is printed to the terminal -- so pointing it at
+production would mint a real account with a known credential in a tenant full of
+customer data, alongside ~90 rows of fake contacts, quotes and appointments that
+would then be indistinguishable from real ones in every KPI it exists to
+populate. Both guards below are deliberately fail-closed: an unrecognised host or
+an unset ``ENVIRONMENT`` aborts rather than assuming local.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import secrets
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 
+from app.core.config import settings  # noqa: E402
 from app.core.encryption import hash_phone, hash_value  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.db.session import AsyncSessionLocal  # noqa: E402
@@ -36,11 +48,87 @@ from app.services.opportunities.default_pipeline import (  # noqa: E402
     ensure_default_pipeline,
 )
 
-PASSWORD = "kpi-demo-password-123"
+# The environments this codebase already treats as "not deployed" -- same set as
+# ``_validate_public_urls`` in app/main.py and ``Settings.secure_auth_cookies``.
+# Kept identical on purpose: two competing definitions of "is this production?"
+# is how one of them ends up wrong.
+LOCAL_ENVIRONMENTS = {"development", "local", "test", "testing"}
+
+# Allowlist rather than a blocklist of known production hosts. A blocklist is
+# only as good as its last update -- it silently fails open the day a database
+# moves to a host nobody added to it, which is exactly the day this matters.
+LOCAL_DB_HOSTS = {
+    "",  # a socket path or hostless URL is inherently local
+    "localhost",
+    "127.0.0.1",
+    "::1",
+    "host.docker.internal",
+    "postgres",  # docker-compose service name
+    "db",
+    "aicrm-postgres",  # this repo's compose container
+}
+
+
+class UnsafeTargetError(RuntimeError):
+    """The configured target is not a local development database."""
+
+
+def _resolve_password() -> str:
+    """Return the demo password: ``SEED_DEMO_PASSWORD`` or a fresh random one.
+
+    Generated rather than hardcoded so the repository never carries a working
+    credential, and so two people seeding demos do not end up sharing one. It is
+    printed at the end because the whole point is to log in as this user.
+    """
+    supplied = os.environ.get("SEED_DEMO_PASSWORD", "").strip()
+    if supplied:
+        if len(supplied) < 8:
+            raise UnsafeTargetError(
+                "SEED_DEMO_PASSWORD is shorter than the 8 characters the app "
+                "requires; the seeded account would be unusable."
+            )
+        return supplied
+    # token_urlsafe(12) is 16 chars, comfortably past the 8-char minimum.
+    return secrets.token_urlsafe(12)
+
+
+def assert_local_target() -> None:
+    """Abort unless both the environment and the database look local.
+
+    Raises:
+        UnsafeTargetError: if ``ENVIRONMENT`` is not a local one, or
+            ``DATABASE_URL`` points somewhere outside :data:`LOCAL_DB_HOSTS`.
+    """
+    environment = settings.environment.strip().lower()
+    if environment not in LOCAL_ENVIRONMENTS:
+        raise UnsafeTargetError(
+            f"ENVIRONMENT is {environment!r}, not one of "
+            f"{sorted(LOCAL_ENVIRONMENTS)}. This script seeds ~90 fake records "
+            "and a known-password owner account; it must never run outside a "
+            "local database."
+        )
+
+    # Parse rather than substring-match: a password or query parameter can
+    # contain any hostname you care to look for, so `"localhost" in url` is not
+    # a check, it is a coincidence waiting to happen.
+    host = (urlsplit(settings.database_url).hostname or "").lower()
+    if host not in LOCAL_DB_HOSTS:
+        raise UnsafeTargetError(
+            f"DATABASE_URL points at host {host!r}, which is not a recognised "
+            f"local host ({sorted(h for h in LOCAL_DB_HOSTS if h)}). Refusing to "
+            "seed demo data into a database that may hold real customers. Point "
+            "DATABASE_URL at your local Postgres (make dev.db) and re-run."
+        )
+
+
 SUFFIX = uuid.uuid4().hex[:6]
 
 
 async def main() -> None:
+    # Before anything opens a connection.
+    assert_local_target()
+    password = _resolve_password()
+
     async with AsyncSessionLocal() as db:
         workspace = Workspace(
             id=uuid.uuid4(),
@@ -53,18 +141,14 @@ async def main() -> None:
         user = User(
             email=email,
             email_hash=hash_value(email),
-            hashed_password=get_password_hash(PASSWORD),
+            hashed_password=get_password_hash(password),
             full_name="Dana Reyes",
             is_active=True,
         )
         db.add(user)
         await db.flush()
 
-        db.add(
-            WorkspaceMembership(
-                workspace_id=workspace.id, user_id=user.id, role="owner"
-            )
-        )
+        db.add(WorkspaceMembership(workspace_id=workspace.id, user_id=user.id, role="owner"))
         pipeline = await ensure_default_pipeline(db, workspace.id)
 
         now = datetime.now(UTC)
@@ -142,8 +226,14 @@ async def main() -> None:
 
     print(f"workspace_id={workspace.id}")
     print(f"email={email}")
-    print(f"password={PASSWORD}")
+    print(f"password={password}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except UnsafeTargetError as exc:
+        # Exit non-zero and say why, so a scripted caller fails loudly instead
+        # of reporting success over a seed that never happened.
+        print(f"refusing to seed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
