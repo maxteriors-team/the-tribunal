@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { invoicesApi } from "@/lib/api/invoices";
+import { paymentMethodsApi } from "@/lib/api/payment-methods";
 import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
@@ -48,6 +49,9 @@ import type { Invoice, InvoiceStatus } from "@/types";
 
 import { InvoiceCreateDialog } from "./invoice-create-dialog";
 import { InvoiceEditDialog } from "./invoice-edit-dialog";
+
+/** Money rounding, so binary-float dust never reaches a charge amount. */
+const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 const STATUS_VARIANT: Record<
   InvoiceStatus,
@@ -67,6 +71,7 @@ export function InvoicesList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Invoice | null>(null);
+  const [pendingCharge, setPendingCharge] = useState<Invoice | null>(null);
 
   const query = useQuery({
     queryKey: queryKeys.invoices.list(workspaceId ?? ""),
@@ -120,6 +125,49 @@ export function InvoicesList() {
     // no SMS number in the workspace) — show it rather than a generic failure.
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to text invoice")),
+  });
+
+  // Charging a card on file is the only action here that moves money without
+  // the customer present, so it confirms first and reports the three outcomes
+  // distinctly: paid, needs authentication (recoverable), declined (final).
+  const chargeMutation = useMutation({
+    mutationFn: (invoice: Invoice) =>
+      paymentMethodsApi.charge(workspaceId ?? "", invoice.contact_id as number, {
+        amount: round2(invoice.total - invoice.amount_paid),
+        currency: invoice.currency,
+        description: `Invoice ${invoice.number}`,
+        trigger: "invoice",
+        invoice_id: invoice.id,
+      }),
+    onSuccess: (result, invoice) => {
+      setPendingCharge(null);
+      if (result.status === "succeeded") {
+        toast.success(
+          `Charged ${formatCurrency(result.amount, result.currency)} to the card on file`,
+          { description: `Invoice ${invoice.number} updated.` }
+        );
+      } else if (result.status === "requires_action") {
+        // Not a lost sale: the customer just has to authenticate.
+        toast.warning("The bank needs the customer to approve this payment", {
+          description: result.recovery_url
+            ? `Send them their invoice link to finish: ${result.recovery_url}`
+            : "Ask the customer to pay from their invoice link.",
+        });
+      } else if (result.status === "no_card_on_file") {
+        toast.warning("No card on file for this customer", {
+          description:
+            "Send them a card-on-file link from their contact record first.",
+        });
+      } else {
+        // A hard decline. Say so, name the reason, and do not retry.
+        toast.error("The card was declined", {
+          description: `${result.decline_code ?? "declined"} \u2014 nothing was charged and no retry is scheduled.`,
+        });
+      }
+      invalidate();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to charge the card on file")),
   });
 
   const deleteMutation = useMutation({
@@ -201,10 +249,12 @@ export function InvoicesList() {
                     onText={() => textMutation.mutate(invoice)}
                     onVoid={() => voidMutation.mutate(invoice.id)}
                     onDelete={() => setPendingDelete(invoice)}
+                    onCharge={() => setPendingCharge(invoice)}
                     busy={
                       sendMutation.isPending ||
                       voidMutation.isPending ||
-                      textMutation.isPending
+                      textMutation.isPending ||
+                      chargeMutation.isPending
                     }
                   />
                 </TableCell>
@@ -228,6 +278,45 @@ export function InvoicesList() {
           if (!next) setEditing(null);
         }}
       />
+
+      {/* Charging a saved card takes real money from a real person who is not
+          in the room. Name the amount and the customer before it happens. */}
+      <AlertDialog
+        open={pendingCharge !== null}
+        onOpenChange={(next) => {
+          if (!next && !chargeMutation.isPending) setPendingCharge(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingCharge
+                ? `Charge ${formatCurrency(round2(pendingCharge.total - pendingCharge.amount_paid), pendingCharge.currency)} to the card on file?`
+                : "Charge the card on file?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This charges the customer&rsquo;s saved card for the outstanding
+              balance on invoice {pendingCharge?.number} right now, without them
+              being present. They agreed to this when they saved the card. If it
+              is declined, nothing is taken and no retry is scheduled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={chargeMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingCharge) chargeMutation.mutate(pendingCharge);
+              }}
+              disabled={chargeMutation.isPending}
+            >
+              {chargeMutation.isPending ? "Charging\u2026" : "Charge card"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Deleting is only offered for drafts, but it still destroys a record —
           confirm with the number so the operator sees which one. */}
@@ -275,6 +364,7 @@ interface RowActionsProps {
   onText: () => void;
   onVoid: () => void;
   onDelete: () => void;
+  onCharge: () => void;
   busy: boolean;
 }
 
@@ -291,6 +381,7 @@ function RowActions({
   onText,
   onVoid,
   onDelete,
+  onCharge,
   busy,
 }: RowActionsProps) {
   const isVoid = invoice.status === "void";
@@ -305,7 +396,14 @@ function RowActions({
   const canVoid = !isVoid && invoice.status !== "paid";
   // Issued invoices are accounting records: void, never delete.
   const canDelete = isDraft;
-  if (!canEdit && !canSend && !canVoid && !canDelete) return null;
+  // Charging needs a customer to charge and a balance to charge for. Whether
+  // they actually have a card saved isn't on the list row, so the API answers
+  // that and the result is reported rather than guessed at here.
+  const canCharge =
+    !isVoid &&
+    invoice.contact_id != null &&
+    round2(invoice.total - invoice.amount_paid) > 0;
+  if (!canEdit && !canSend && !canVoid && !canDelete && !canCharge) return null;
 
   return (
     <DropdownMenu>
@@ -327,6 +425,11 @@ function RowActions({
         )}
         {canText && (
           <DropdownMenuItem onClick={onText}>Text invoice</DropdownMenuItem>
+        )}
+        {canCharge && (
+          <DropdownMenuItem onClick={onCharge}>
+            Charge card on file
+          </DropdownMenuItem>
         )}
         {canVoid && (
           <DropdownMenuItem variant="destructive" onClick={onVoid}>

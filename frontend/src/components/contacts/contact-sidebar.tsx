@@ -15,6 +15,7 @@ import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact
 import { ContactHeader } from "@/components/contacts/contact-sidebar/contact-header";
 import { ContactInfoSection } from "@/components/contacts/contact-sidebar/contact-info-section";
 import { ContactNotesMeta } from "@/components/contacts/contact-sidebar/contact-notes-meta";
+import { ContactPaymentMethods } from "@/components/contacts/contact-sidebar/contact-payment-method";
 import { ContactQuotes } from "@/components/contacts/contact-sidebar/contact-quotes";
 import { ContactTimeline } from "@/components/contacts/contact-sidebar/contact-timeline";
 import { DeleteContactDialog } from "@/components/contacts/contact-sidebar/delete-contact-dialog";
@@ -216,6 +217,12 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
 
           <Separator />
           <ContactQuotes quotes={quotes} isLoading={quotesLoading} />
+
+          <Separator />
+          <ContactPaymentMethods
+            workspaceId={workspaceId}
+            contactId={selectedContact.id}
+          />
 
           <ContactNotesMeta contact={selectedContact} />
         </div>

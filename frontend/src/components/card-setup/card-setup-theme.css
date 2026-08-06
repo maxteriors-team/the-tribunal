@@ -1,0 +1,272 @@
+/**
+ * Public card-setup page — additions on top of `proposal-theme.css`.
+ *
+ * Reuses the proposal/invoice dark-and-gold brand wholesale. That is not
+ * decoration: a page asking for a card number has to be recognisable as the
+ * same business whose proposal and invoice the customer already opened, or it
+ * reads like a phishing attempt. Everything here is scoped under `.card-setup`
+ * (applied alongside `.proposal-view`) so none of it can alter those pages.
+ *
+ * Layout logic: the terms sit *above* the card fields because that is the order
+ * of the actual decision — you read what you are authorising, then you decide,
+ * then you hand over the card. Burying the terms under a disclosure link is
+ * exactly what makes this kind of page feel untrustworthy.
+ */
+
+/* --- Accessibility floor (the shared theme styles :hover, never :focus) --- */
+
+.card-setup :is(button, a, input):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.card-setup .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* `--t4` (#666) is ~3.4:1 on the near-black page, below the 4.5:1 AA floor.
+   Every muted string here is legal or financial text, so it is lifted to
+   `--t3` (~6.9:1). Measured, not eyeballed. */
+.card-setup .cs-muted,
+.card-setup .pp-meta {
+  color: var(--t3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-setup *,
+  .card-setup *::before,
+  .card-setup *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- Shared content rail ------------------------------------------------ */
+
+.card-setup .cs-body {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+}
+
+@media (max-width: 640px) {
+  .card-setup .cs-body {
+    padding: 32px 18px 56px;
+  }
+}
+
+/* --- Header ------------------------------------------------------------- */
+
+.card-setup .cs-head {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.card-setup .cs-logo {
+  max-height: 64px;
+  width: auto;
+  margin: 0 auto 20px;
+  display: block;
+}
+
+.card-setup .cs-eyebrow {
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold-d);
+  margin-bottom: 12px;
+}
+
+.card-setup .cs-title {
+  font-family: var(--font-cormorant), serif;
+  font-size: clamp(30px, 7vw, 42px);
+  font-weight: 300;
+  line-height: 1.15;
+  color: var(--t1);
+  margin: 0 0 12px;
+}
+
+.card-setup .cs-lede {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--t2);
+  margin: 0;
+}
+
+/* --- Section blocks ----------------------------------------------------- */
+
+.card-setup .cs-section {
+  border: 1px solid var(--bdr);
+  border-radius: 4px;
+  background: var(--s1);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.card-setup .cs-section-title {
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold-d);
+  margin: 0 0 16px;
+}
+
+/* The consent copy. Deliberately full size and full width rather than
+   fine print — it is the thing being agreed to. */
+.card-setup .cs-terms p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--t2);
+  margin: 0 0 14px;
+}
+
+.card-setup .cs-terms p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- Consent checkbox --------------------------------------------------- */
+
+.card-setup .cs-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--bdr);
+  cursor: pointer;
+}
+
+.card-setup .cs-consent input[type="checkbox"] {
+  /* Sized for a thumb, not a mouse: most of these links arrive by text. */
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.card-setup .cs-consent-label {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--t1);
+}
+
+/* --- Stripe Payment Element slot --------------------------------------- */
+
+.card-setup .cs-element {
+  min-height: 120px;
+}
+
+.card-setup .cs-element-loading {
+  font-size: 14px;
+  color: var(--t3);
+}
+
+/* --- Submit ------------------------------------------------------------- */
+
+.card-setup .cs-submit {
+  width: 100%;
+  margin-top: 24px;
+  padding: 16px 24px;
+  font-family: var(--font-montserrat), sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--black);
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    background-color 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
+.card-setup .cs-submit:hover:not(:disabled) {
+  background: var(--gold-l);
+  border-color: var(--gold-l);
+}
+
+.card-setup .cs-submit:disabled {
+  background: transparent;
+  color: var(--t3);
+  border-color: var(--bdr);
+  cursor: not-allowed;
+}
+
+/* Says *why* the button is unavailable. A disabled control with no
+   explanation is a dead end, and this one has two possible causes. */
+.card-setup .cs-submit-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t3);
+  text-align: center;
+}
+
+.card-setup .cs-error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 120, 100, 0.4);
+  border-radius: 3px;
+  background: rgba(255, 120, 100, 0.08);
+  color: #ffb0a4;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* --- Trust line + success ---------------------------------------------- */
+
+.card-setup .cs-secure {
+  margin: 20px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--t3);
+  text-align: center;
+}
+
+.card-setup .cs-done {
+  text-align: center;
+  border: 1px solid var(--bdr-g);
+  border-radius: 4px;
+  background: var(--gold-g);
+  padding: 40px 24px;
+}
+
+.card-setup .cs-done-title {
+  font-family: var(--font-cormorant), serif;
+  font-size: clamp(26px, 6vw, 34px);
+  font-weight: 300;
+  color: var(--t1);
+  margin: 0 0 12px;
+}
+
+.card-setup .cs-done-body {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--t2);
+  margin: 0;
+}
+
+.card-setup .cs-expiry {
+  margin: 32px 0 0;
+  font-size: 13px;
+  color: var(--t3);
+  text-align: center;
+}

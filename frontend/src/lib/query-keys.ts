@@ -314,6 +314,8 @@ export const queryKeys = {
       [...contacts.detail(workspaceId, contactId), "tags"] as const,
     engagementSummary: (workspaceId: string, contactId: string) =>
       [...contacts.detail(workspaceId, contactId), "engagement-summary"] as const,
+    paymentMethods: (workspaceId: string, contactId: number | string) =>
+      [...contacts.detail(workspaceId, contactId), "payment-methods"] as const,
   },
   conversations: {
     ...conversations,
@@ -501,6 +503,10 @@ export const queryKeys = {
   publicComparisons: {
     all: () => ["public-comparisons"] as const,
     byToken: (token: string) => ["public-comparisons", token] as const,
+  },
+  publicCardSetup: {
+    all: () => ["public-card-setup"] as const,
+    byToken: (token: string) => ["public-card-setup", token] as const,
   },
   reviews: {
     ...reviews,
