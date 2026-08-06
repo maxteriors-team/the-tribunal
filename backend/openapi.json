@@ -9482,6 +9482,31 @@
         "title": "CapturedMessageResponse",
         "type": "object"
       },
+      "CardSetupLinkResponse": {
+        "description": "A freshly minted, single-use card-setup link for a customer.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "token",
+          "expires_at"
+        ],
+        "title": "CardSetupLinkResponse",
+        "type": "object"
+      },
       "CarePlanConfig": {
         "description": "Auto-priced maintenance plan, keyed off the proposal's fixture count.",
         "properties": {
@@ -10140,6 +10165,160 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "ChargeCardRequest": {
+        "description": "Charge a contact's saved card for a specific amount.",
+        "properties": {
+          "amount": {
+            "description": "Amount in major units (e.g. dollars).",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "invoice_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice Id"
+          },
+          "payment_method_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method Id"
+          },
+          "trigger": {
+            "default": "manual",
+            "enum": [
+              "invoice",
+              "deposit",
+              "recurring_job",
+              "no_show_fee",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "description"
+        ],
+        "title": "ChargeCardRequest",
+        "type": "object"
+      },
+      "ChargeCardResponse": {
+        "description": "Outcome of an off-session charge.\n\n``status`` is the whole point: ``succeeded``, ``requires_action`` (the\ncustomer must authenticate — recoverable), and ``declined`` (hard no, not\nretried) are three different things and the UI must not blur them.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "decline_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decline Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "payment_intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Intent Id"
+          },
+          "recovery_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Url"
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "declined",
+              "requires_action",
+              "error",
+              "no_card_on_file",
+              "skipped_no_automation"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "amount",
+          "currency"
+        ],
+        "title": "ChargeCardResponse",
         "type": "object"
       },
       "ChatRequest": {
@@ -30915,6 +31094,102 @@
         "title": "ParseCalcomUrlResponse",
         "type": "object"
       },
+      "PaymentMethodResponse": {
+        "description": "A saved card as the operator dashboard sees it.",
+        "properties": {
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "exp_month": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exp Month"
+          },
+          "exp_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exp Year"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last4"
+          },
+          "mandate_accepted_at": {
+            "format": "date-time",
+            "title": "Mandate Accepted At",
+            "type": "string"
+          },
+          "mandate_text_version": {
+            "title": "Mandate Text Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "removed",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "contact_id",
+          "is_default",
+          "status",
+          "mandate_text_version",
+          "mandate_accepted_at",
+          "created_at"
+        ],
+        "title": "PaymentMethodResponse",
+        "type": "object"
+      },
       "PendingActionListResponse": {
         "description": "Schema for paginated pending action list.",
         "properties": {
@@ -35505,6 +35780,87 @@
         ],
         "title": "ProspectStatus",
         "type": "string"
+      },
+      "PublicCardSetup": {
+        "description": "What the customer's card-setup page needs before it can render a form.",
+        "properties": {
+          "business_name": {
+            "title": "Business Name",
+            "type": "string"
+          },
+          "contact_name": {
+            "title": "Contact Name",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mandate_text": {
+            "title": "Mandate Text",
+            "type": "string"
+          },
+          "mandate_text_version": {
+            "title": "Mandate Text Version",
+            "type": "string"
+          },
+          "publishable_key": {
+            "title": "Publishable Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contact_name",
+          "business_name",
+          "publishable_key",
+          "mandate_text_version",
+          "mandate_text",
+          "expires_at"
+        ],
+        "title": "PublicCardSetup",
+        "type": "object"
+      },
+      "PublicCardSetupIntent": {
+        "description": "The SetupIntent client secret for one customer's card entry.\n\nScoped to a single customer and a single card entry. It is returned once, to\nthe browser that holds the setup token, and is never logged or persisted.",
+        "properties": {
+          "client_secret": {
+            "title": "Client Secret",
+            "type": "string"
+          },
+          "publishable_key": {
+            "title": "Publishable Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_secret",
+          "publishable_key"
+        ],
+        "title": "PublicCardSetupIntent",
+        "type": "object"
+      },
+      "PublicCardSetupIntentRequest": {
+        "description": "The customer's explicit opt-in, sent with the request that starts setup.\n\n``accept_terms`` is ``Literal[True]``, so a request that omits it or sends\n``false`` is rejected by FastAPI's own validation with a 422 **before the\nhandler runs** — no Stripe object is created for an unconsented save. The\nservice re-checks it anyway; this is the boundary, not the only guard.",
+        "properties": {
+          "accept_terms": {
+            "const": true,
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
+          "mandate_text_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Mandate Text Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accept_terms",
+          "mandate_text_version"
+        ],
+        "title": "PublicCardSetupIntentRequest",
+        "type": "object"
       },
       "PublicChristmasComparison": {
         "description": "Seasonal side as the client sees it.",
@@ -50081,6 +50437,102 @@
         ]
       }
     },
+    "/api/v1/p/card-setup/{token}": {
+      "get": {
+        "description": "Render the customer's card-setup page. Expired or spent links are refused.",
+        "operationId": "get_card_setup_page_api_v1_p_card_setup__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCardSetup"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Card Setup Page",
+        "tags": [
+          "Public Card Setup"
+        ]
+      }
+    },
+    "/api/v1/p/card-setup/{token}/intent": {
+      "post": {
+        "description": "Create the SetupIntent the browser confirms the card against.\n\nThe token is spent here rather than on success, because a SetupIntent is a\nbillable Stripe object and one link must not be able to mint several. The\ncustomer's IP and user agent are read from *this* request — that is the\nwritten-agreement record, so it has to be observed rather than reported.",
+        "operationId": "create_card_setup_intent_api_v1_p_card_setup__token__intent_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCardSetupIntentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCardSetupIntent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Card Setup Intent",
+        "tags": [
+          "Public Card Setup"
+        ]
+      }
+    },
     "/api/v1/p/compare/{token}": {
       "get": {
         "description": "Render a client's permanent-vs-temporary savings comparison by token.\n\nPrices are recomputed from the workspace's live pricing config; the payload\nnever includes the internal linear-feet measurement. Unknown tokens 404.",
@@ -63395,6 +63847,330 @@
         "summary": "Send Message To Contact",
         "tags": [
           "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods": {
+      "get": {
+        "description": "List the cards this contact has authorised us to keep, default first.",
+        "operationId": "list_payment_methods_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentMethodResponse"
+                  },
+                  "title": "Response List Payment Methods Api V1 Workspaces  Workspace Id  Contacts  Contact Id  Payment Methods Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Payment Methods",
+        "tags": [
+          "Card on File"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/charge": {
+      "post": {
+        "description": "Charge this contact's saved card for a stated amount.\n\nAn explicit operator action, so it is **not** suppressed by the\n``no-automation`` tag — that tag mutes automation, not the human.\n\nThe idempotency key is derived from the operator, the contact, the amount and\nthe invoice, so a double-clicked button charges once. A different amount, or\na later deliberate re-charge of the same amount, produces a different key and\nis allowed through — this dedupes accidents, not intent.\n\nNever raises for a declined card: the outcome is in ``status``.",
+        "operationId": "charge_card_on_file_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_charge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChargeCardRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChargeCardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Charge Card On File",
+        "tags": [
+          "Card on File"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/setup-link": {
+      "post": {
+        "description": "Mint a single-use, 72-hour link the customer opens to save their card.\n\nMinting a new link invalidates any earlier unused one for the same contact,\nso \"send it again\" never leaves two live card-entry URLs for one customer.",
+        "operationId": "create_setup_link_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_setup_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSetupLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Setup Link",
+        "tags": [
+          "Card on File"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/{payment_method_id}": {
+      "delete": {
+        "description": "Forget a saved card: detached at Stripe, marked removed here.\n\nA soft delete. The row stays because charge attempts point at it and those\nare the record of money already taken, but the card can no longer be charged.",
+        "operationId": "remove_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "payment_method_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Method Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Remove Payment Method",
+        "tags": [
+          "Card on File"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/{payment_method_id}/default": {
+      "post": {
+        "description": "Choose which saved card automatic charges use.",
+        "operationId": "set_default_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "payment_method_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payment Method Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentMethodResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Default Payment Method",
+        "tags": [
+          "Card on File"
         ]
       }
     },

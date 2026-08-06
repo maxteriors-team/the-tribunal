@@ -372,6 +372,10 @@ async def stripe_webhook(request: Request, db: DB) -> dict[str, str]:
         await _handle_checkout_completed(event_data, db)
     elif event_type == "customer.subscription.deleted":
         await _handle_subscription_deleted(event_data, db)
+    elif event_type == "setup_intent.succeeded":
+        await _handle_setup_intent_succeeded(event_data, db)
+    elif event_type == "payment_intent.payment_failed":
+        await _handle_payment_intent_failed(event_data, db)
 
     return {"status": "ok"}
 
@@ -445,6 +449,35 @@ async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
         workspace_id=workspace_id_str,
         customer_id=customer_id,
     )
+
+
+async def _handle_setup_intent_succeeded(setup_intent: dict[str, Any], db: DB) -> None:
+    """Persist a card the customer just saved on the public card-setup page.
+
+    A new top-level branch rather than another arm of the
+    ``checkout.session.completed`` metadata chain: that chain's ordering is
+    load-bearing (invoice before quote before generic payment) and card-on-file
+    has nothing to do with Checkout Sessions.
+
+    Idempotent — the save is keyed on the unique payment-method id, so Stripe
+    retrying this event cannot store the same card twice.
+    """
+    from app.services.payments import card_on_file_service
+
+    await card_on_file_service.save_payment_method_from_setup_intent(db, setup_intent)
+
+
+async def _handle_payment_intent_failed(payment_intent: dict[str, Any], db: DB) -> None:
+    """Reconcile a failed off-session charge the synchronous path may have missed.
+
+    The charge call normally learns about a decline from the raised
+    ``CardError`` and records it there. This covers the case it cannot: the
+    connection dropped after Stripe decided, so the only record of the failure is
+    this event. Ignores PaymentIntents that are not card-on-file charges.
+    """
+    from app.services.payments import card_on_file_service
+
+    await card_on_file_service.reconcile_failed_payment_intent(db, payment_intent)
 
 
 async def _handle_subscription_deleted(subscription: dict[str, Any], db: DB) -> None:
