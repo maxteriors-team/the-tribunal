@@ -215,6 +215,14 @@ class Contact(Base):
     )
     sms_consent_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Stripe Customer handle for card-on-file. An opaque reference (``cus_...``),
+    # not PII, so it is stored in plaintext exactly like
+    # ``invoices.stripe_checkout_session_id``. It lives here rather than on
+    # ``contact_payment_methods`` because one Stripe Customer is reused across all
+    # of a contact's saved cards. Indexed so a webhook can resolve the contact
+    # from the customer id alone.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
     # Engagement tracking
     last_engaged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
