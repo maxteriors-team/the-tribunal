@@ -1,0 +1,60 @@
+# Upload filter for `railway up`, which runs from the REPO ROOT.
+#
+# Why this file exists at the root
+# --------------------------------
+# The Railway service applies its own Root Directory (`backend`) to whatever
+# tree is uploaded, so `scripts/ops/deploy_backend.sh` uploads from here rather
+# than from `backend/` (uploading from inside `backend/` makes the builder look
+# for `backend/backend/` and the build fails outright).
+#
+# That means `backend/.railwayignore` is no longer the file governing the
+# upload -- the CLI reads the ignore file at the directory it is uploading
+# from. Without this file a deploy from a working checkout would try to tar the
+# whole repo: ~858M of `frontend/node_modules` plus ~489M of `backend/.venv`,
+# around 5G in total, which is slow at best and fails mid-stream at worst. A
+# fresh clone has neither, so this only bites on a real developer machine --
+# exactly where deploys are run from.
+#
+# The builder only ever reads `backend/`, so everything below is either
+# reproducible from a lockfile or irrelevant to the backend image.
+
+# Frontend: deployed separately on Vercel, never part of the backend image.
+frontend/
+
+# Python environments and caches -- recreated by `uv sync` in the builder.
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node tooling that can appear at the root.
+node_modules/
+
+# Database dumps: encrypted customer data, and never needed to build.
+backend/backups/
+*.dump
+*.dump.enc
+
+# Git metadata. Excluded deliberately -- see the build-stamp note in
+# scripts/ops/deploy_backend.sh: no git data reaches the builder, which is why
+# the deployed SHA ships as backend/app/build_info.json instead.
+.git/
+.github/
+
+# Local agent/editor state.
+.ezcoder/
+.vscode/
+.idea/
+.DS_Store
+
+# Local env files. Railway injects real config as service variables; shipping a
+# local .env into the image would both leak secrets and override them.
+.env
+.env.*
+!.env.example
