@@ -1,10 +1,15 @@
 "use client";
 
 /**
- * Step 4 — Enhancements: Care Plan, bistro string lighting, night preview.
- * Care/bistro money comes from the server preview document; only the
- * per-foot *display* rates on the complexity buttons are derived from config
- * (same gross-up the server applies), never totals.
+ * Add-ons: Care Plan and bistro string lighting, rendered at the foot of the
+ * builder's Line Items step. Care/bistro money comes from the server preview
+ * document; only the per-foot *display* rates on the complexity buttons are
+ * derived from config (same gross-up the server applies), never totals.
+ *
+ * The mockup gallery is defined here as `MockupsBlock` but is rendered by the
+ * Mockup step instead: uploading a photo of the house is not an add-on, and
+ * grouping it with the Light Designer is what makes that step every visual the
+ * customer will see rather than half of them.
  */
 import { useRef, useState } from "react";
 
@@ -24,7 +29,7 @@ interface EnhancementsStepProps {
  * as data URLs; they ride into the saved snapshot on save and render as a
  * gallery on both the rep preview and the client proposal.
  */
-function MockupsBlock({ wizard }: { wizard: UseSalesWizardReturn }) {
+export function MockupsBlock({ wizard }: { wizard: UseSalesWizardReturn }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const mockups = wizard.mockups;
@@ -190,9 +195,6 @@ export function EnhancementsStep({ wizard }: EnhancementsStepProps) {
 
   return (
     <>
-      {/* ── Design mockups (all quotes) ── */}
-      <MockupsBlock wizard={wizard} />
-
       {/* ── Care Plan (landscape) ── */}
       {showCare ? (
       <div className="care-block">

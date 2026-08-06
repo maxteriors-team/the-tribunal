@@ -1,10 +1,15 @@
 "use client";
 
 /**
- * Sales Wizard root — hosts the calculator and presentation screens inside the
- * scoped `.sales-wizard` dark/gold theme, plus the shared Light Designer for the
- * photo work. All state lives in `useSalesWizard`, which mirrors the selection
- * to the backend for authoritative pricing.
+ * Sales Wizard root — hosts the quote builder inside the scoped `.sales-wizard`
+ * dark/gold theme, plus the shared Light Designer for the photo work. All state
+ * lives in `useSalesWizard`, which mirrors the selection to the backend for
+ * authoritative pricing.
+ *
+ * Only two screens now: the builder and the full-bleed Light Designer. The
+ * client presentation used to be a third, reached sideways from the review
+ * step; it is a step of the builder itself ("Preview"), between pricing the
+ * quote and sending it.
  *
  * The designer is the same component the Quotes hub renders, so there is one
  * photo tool: what the rep draws here saves onto the proposal and pushes its
@@ -22,11 +27,10 @@ import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services"
 
 import { CalculatorScreen } from "./calculator-screen";
 import { salesWizardFontVars } from "./fonts";
-import { PresentationScreen } from "./presentation-screen";
 import { useSalesWizard, type ServiceKey } from "./use-sales-wizard";
 import "./theme.css";
 
-type Screen = "calc" | "present" | "design";
+type Screen = "calc" | "design";
 
 interface SalesWizardProps {
   workspaceId: string;
@@ -150,18 +154,11 @@ export function SalesWizard({
             </div>
           </div>
         </div>
-      ) : screen === "calc" ? (
+      ) : (
         <CalculatorScreen
           wizard={wizard}
           brandName={brandName}
-          onPresent={() => show("present")}
           onOpenNight={() => show("design")}
-        />
-      ) : (
-        <PresentationScreen
-          wizard={wizard}
-          brandName={brandName}
-          onBack={() => show("calc")}
         />
       )}
     </div>
