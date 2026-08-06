@@ -17,6 +17,7 @@ from app.api.v1 import (
     calls,
     campaign_reports,
     campaigns,
+    card_setup,
     catalog,
     contact_attachments,
     contacts,
@@ -47,6 +48,7 @@ from app.api.v1 import (
     offers,
     opportunities,
     outbound_missions,
+    payment_methods,
     pending_actions,
     phone_numbers,
     prebooking,
@@ -94,6 +96,12 @@ api_router.include_router(
     contact_attachments.router,
     prefix="/workspaces/{workspace_id}",
     tags=["Contacts"],
+)
+# Cards a contact has saved for future charges (operator side).
+api_router.include_router(
+    payment_methods.router,
+    prefix="/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods",
+    tags=["Card on File"],
 )
 api_router.include_router(
     tags.router,
@@ -227,6 +235,12 @@ api_router.include_router(
     invoices.public_router,
     prefix="/p/invoices",
     tags=["Public Invoices"],
+)
+# Public card-setup page (no auth, single-use expiring token, rate limited)
+api_router.include_router(
+    card_setup.public_router,
+    prefix="/p/card-setup",
+    tags=["Public Card Setup"],
 )
 api_router.include_router(
     quotes.router,

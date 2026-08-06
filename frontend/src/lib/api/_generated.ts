@@ -380,6 +380,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/card-setup/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Card Setup Page
+         * @description Render the customer's card-setup page. Expired or spent links are refused.
+         */
+        get: operations["get_card_setup_page_api_v1_p_card_setup__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/card-setup/{token}/intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Card Setup Intent
+         * @description Create the SetupIntent the browser confirms the card against.
+         *
+         *     The token is spent here rather than on success, because a SetupIntent is a
+         *     billable Stripe object and one link must not be able to mint several. The
+         *     customer's IP and user agent are read from *this* request — that is the
+         *     written-agreement record, so it has to be observed rather than reported.
+         */
+        post: operations["create_card_setup_intent_api_v1_p_card_setup__token__intent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/compare/{token}": {
         parameters: {
             query?: never;
@@ -3822,6 +3867,122 @@ export interface paths {
          *     This endpoint finds or creates a conversation for the contact and sends the message.
          */
         post: operations["send_message_to_contact_api_v1_workspaces__workspace_id__contacts__contact_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Payment Methods
+         * @description List the cards this contact has authorised us to keep, default first.
+         */
+        get: operations["list_payment_methods_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/charge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Charge Card On File
+         * @description Charge this contact's saved card for a stated amount.
+         *
+         *     An explicit operator action, so it is **not** suppressed by the
+         *     ``no-automation`` tag — that tag mutes automation, not the human.
+         *
+         *     The idempotency key is derived from the operator, the contact, the amount and
+         *     the invoice, so a double-clicked button charges once. A different amount, or
+         *     a later deliberate re-charge of the same amount, produces a different key and
+         *     is allowed through — this dedupes accidents, not intent.
+         *
+         *     Never raises for a declined card: the outcome is in ``status``.
+         */
+        post: operations["charge_card_on_file_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_charge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/setup-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Setup Link
+         * @description Mint a single-use, 72-hour link the customer opens to save their card.
+         *
+         *     Minting a new link invalidates any earlier unused one for the same contact,
+         *     so "send it again" never leaves two live card-entry URLs for one customer.
+         */
+        post: operations["create_setup_link_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_setup_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/{payment_method_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Payment Method
+         * @description Forget a saved card: detached at Stripe, marked removed here.
+         *
+         *     A soft delete. The row stays because charge attempts point at it and those
+         *     are the record of money already taken, but the card can no longer be charged.
+         */
+        delete: operations["remove_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/payment-methods/{payment_method_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Default Payment Method
+         * @description Choose which saved card automatic charges use.
+         */
+        post: operations["set_default_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__default_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13275,6 +13436,21 @@ export interface components {
             urgency: string;
         };
         /**
+         * CardSetupLinkResponse
+         * @description A freshly minted, single-use card-setup link for a customer.
+         */
+        CardSetupLinkResponse: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Token */
+            token: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * CarePlanConfig
          * @description Auto-priced maintenance plan, keyed off the proposal's fixture count.
          */
@@ -13574,6 +13750,63 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * ChargeCardRequest
+         * @description Charge a contact's saved card for a specific amount.
+         */
+        ChargeCardRequest: {
+            /**
+             * Amount
+             * @description Amount in major units (e.g. dollars).
+             */
+            amount: number;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Invoice Id */
+            invoice_id?: string | null;
+            /** Payment Method Id */
+            payment_method_id?: string | null;
+            /**
+             * Trigger
+             * @default manual
+             * @enum {string}
+             */
+            trigger: "invoice" | "deposit" | "recurring_job" | "no_show_fee" | "manual";
+        };
+        /**
+         * ChargeCardResponse
+         * @description Outcome of an off-session charge.
+         *
+         *     ``status`` is the whole point: ``succeeded``, ``requires_action`` (the
+         *     customer must authenticate — recoverable), and ``declined`` (hard no, not
+         *     retried) are three different things and the UI must not blur them.
+         */
+        ChargeCardResponse: {
+            /** Amount */
+            amount: number;
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Currency */
+            currency: string;
+            /** Decline Code */
+            decline_code?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Payment Intent Id */
+            payment_intent_id?: string | null;
+            /** Recovery Url */
+            recovery_url?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "succeeded" | "declined" | "requires_action" | "error" | "no_card_on_file" | "skipped_no_automation";
         };
         /**
          * ChatRequest
@@ -21519,6 +21752,46 @@ export interface components {
             username: string;
         };
         /**
+         * PaymentMethodResponse
+         * @description A saved card as the operator dashboard sees it.
+         */
+        PaymentMethodResponse: {
+            /** Brand */
+            brand?: string | null;
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Exp Month */
+            exp_month?: number | null;
+            /** Exp Year */
+            exp_year?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Default */
+            is_default: boolean;
+            /** Last4 */
+            last4?: string | null;
+            /**
+             * Mandate Accepted At
+             * Format: date-time
+             */
+            mandate_accepted_at: string;
+            /** Mandate Text Version */
+            mandate_text_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "removed" | "expired";
+        };
+        /**
          * PendingActionListResponse
          * @description Schema for paginated pending action list.
          */
@@ -23208,6 +23481,58 @@ export interface components {
          * @enum {string}
          */
         ProspectStatus: "new" | "enriching" | "enriched" | "queued" | "contacted" | "replied" | "qualified" | "converted" | "suppressed" | "archived";
+        /**
+         * PublicCardSetup
+         * @description What the customer's card-setup page needs before it can render a form.
+         */
+        PublicCardSetup: {
+            /** Business Name */
+            business_name: string;
+            /** Contact Name */
+            contact_name: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Mandate Text */
+            mandate_text: string;
+            /** Mandate Text Version */
+            mandate_text_version: string;
+            /** Publishable Key */
+            publishable_key: string;
+        };
+        /**
+         * PublicCardSetupIntent
+         * @description The SetupIntent client secret for one customer's card entry.
+         *
+         *     Scoped to a single customer and a single card entry. It is returned once, to
+         *     the browser that holds the setup token, and is never logged or persisted.
+         */
+        PublicCardSetupIntent: {
+            /** Client Secret */
+            client_secret: string;
+            /** Publishable Key */
+            publishable_key: string;
+        };
+        /**
+         * PublicCardSetupIntentRequest
+         * @description The customer's explicit opt-in, sent with the request that starts setup.
+         *
+         *     ``accept_terms`` is ``Literal[True]``, so a request that omits it or sends
+         *     ``false`` is rejected by FastAPI's own validation with a 422 **before the
+         *     handler runs** — no Stripe object is created for an unconsented save. The
+         *     service re-checks it anyway; this is the boundary, not the only guard.
+         */
+        PublicCardSetupIntentRequest: {
+            /**
+             * Accept Terms
+             * @constant
+             */
+            accept_terms: true;
+            /** Mandate Text Version */
+            mandate_text_version: string;
+        };
         /**
          * PublicChristmasComparison
          * @description Seasonal side as the client sees it.
@@ -29216,6 +29541,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VerifyCalcomResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_card_setup_page_api_v1_p_card_setup__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCardSetup"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_card_setup_intent_api_v1_p_card_setup__token__intent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicCardSetupIntentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCardSetupIntent"];
                 };
             };
             /** @description Validation Error */
@@ -36379,6 +36770,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["app__schemas__contact__MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_payment_methods_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    charge_card_on_file_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_charge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChargeCardRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChargeCardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_setup_link_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods_setup_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSetupLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                payment_method_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_payment_method_api_v1_workspaces__workspace_id__contacts__contact_id__payment_methods__payment_method_id__default_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                payment_method_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodResponse"];
                 };
             };
             /** @description Validation Error */
