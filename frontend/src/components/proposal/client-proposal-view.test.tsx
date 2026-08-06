@@ -288,3 +288,180 @@ describe("client package selection", () => {
     expect(onApprove).toHaveBeenCalledWith("best");
   });
 });
+
+/**
+ * A Christmas quote is a different sale, so it is a different page.
+ *
+ * The default proposal sells design, craftsmanship, and a workmanship warranty.
+ * A homeowner buying seasonal lighting is deciding something else entirely: who
+ * owns the lights, who fixes a dark bulb in December, and who takes it all down.
+ * These tests pin the swap in both directions, because leaking either pitch onto
+ * the other product tells the customer something untrue about what they bought.
+ */
+describe("ClientProposalView — seasonal Christmas", () => {
+  const VALUE_PROPS = [
+    {
+      title: "A Worry-Free Christmas",
+      body: "Maintenance is included through December 23.",
+    },
+    {
+      title: "Every Light Is Ours",
+      body: "We own the bulbs, strands, and clips.",
+    },
+  ];
+
+  const christmasSection = (
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    key: "christmas",
+    label: "Christmas Lighting",
+    lines: [{ label: "Roofline", line_total: 1800, quantity: 300 }],
+    value_props: VALUE_PROPS,
+    financed_total: 1800,
+    cash_total: 1800,
+    cash_savings: 0,
+    monthly_payment: 0,
+    min_applied: false,
+    takedown: true,
+    storage: false,
+    ...overrides,
+  });
+
+  function christmasDoc(overrides: Record<string, unknown> = {}) {
+    return {
+      version: 1,
+      service: "christmas",
+      client: { first_name: "Dana", last_name: "Homeowner" },
+      tier_order: [],
+      tiers: [],
+      additional_charges: [],
+      category_sections: [christmasSection()],
+      grand_financed_total: 1800,
+      mockups: [],
+      ...overrides,
+    };
+  }
+
+  function renderChristmas(doc: Record<string, unknown> = christmasDoc()) {
+    const data = proposal({
+      packages: [],
+      total: 1800,
+      subtotal: 1800,
+      deposit_required: false,
+      deposit_amount: 0,
+      deposit_percentage: 0,
+      proposal_document: doc as unknown as Record<string, unknown>,
+    });
+    render(
+      <ClientProposalView
+        data={data}
+        document={parseProposalDocument(data.proposal_document)!}
+        justApproved={false}
+        justDeclined={false}
+        busy={false}
+        actionError={false}
+        onApprove={vi.fn()}
+        onDecline={vi.fn()}
+      />,
+      { wrapper },
+    );
+  }
+
+  const root = () => document.querySelector(".proposal-view");
+
+  it("dresses the page for Christmas and sells the season, not a build", () => {
+    renderChristmas();
+
+    expect(root()).toHaveClass("is-christmas");
+    // The section owns the pitch; each promise is a heading beneath it, so a
+    // screen reader can jump the list instead of hearing one wall of text.
+    expect(
+      screen.getByRole("heading", { level: 2, name: /worry-free christmas/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: /worry-free christmas/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/maintenance is included through december 23/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/we own the bulbs/i)).toBeInTheDocument();
+    // Seasonal-only structure the homeowner is actually buying.
+    expect(screen.getByText(/we take it down/i)).toBeInTheDocument();
+    expect(screen.getByText(/off-season storage/i)).toBeInTheDocument();
+    // The permanent-install pitch must not survive the swap: a seasonal job has
+    // no workmanship warranty and is not "designed around how you live in it".
+    expect(screen.queryByText(/1-year workmanship warranty/i)).toBeNull();
+    expect(screen.queryByText(/a designer, not a salesperson/i)).toBeNull();
+  });
+
+  it("never quotes a monthly payment on a seasonal job", () => {
+    // Christmas is sold as one up-front seasonal price — the proposal says so in
+    // as many words ("Affordable, Up-Front Pricing"). A financing estimate
+    // beside that copy contradicts it, and the snapshot still carries a
+    // financing block from the workspace config, so this must be suppressed at
+    // render rather than assumed absent.
+    renderChristmas(
+      christmasDoc({
+        financing: {
+          enabled: true,
+          provider: "Wisetack",
+          terms: [24],
+          default_term: 24,
+          max_amount: 25000,
+          headline: "A monthly payment may fit your project.",
+          body: null,
+          points: [],
+          disclaimer: "Estimates only.",
+        },
+        grand_monthly_payment: 156,
+      }),
+    );
+
+    expect(document.querySelector(".financing-estimate")).toBeNull();
+    expect(screen.queryByText(/\/month/i)).toBeNull();
+    expect(screen.queryByText(/wisetack/i)).toBeNull();
+    expect(screen.queryByText(/monthly payment/i)).toBeNull();
+    // The one-time price it was actually sold at still shows.
+    expect(screen.getAllByText("$1,800").length).toBeGreaterThan(0);
+  });
+
+  it("leaves a landscape proposal completely undressed", () => {
+    renderView();
+
+    expect(root()).not.toHaveClass("is-christmas");
+    expect(screen.queryByText(/worry-free christmas/i)).toBeNull();
+    expect(screen.getByText(/a designer, not a salesperson/i)).toBeInTheDocument();
+  });
+
+  it("stays neutral on a mixed quote, which is not only Christmas", () => {
+    renderChristmas(
+      christmasDoc({
+        service: "mixed",
+        category_sections: [
+          christmasSection(),
+          { ...christmasSection(), key: "permanent", label: "Permanent" },
+        ],
+      }),
+    );
+
+    expect(root()).not.toHaveClass("is-christmas");
+  });
+
+  it("renders nothing for a snapshot saved before value props existed", () => {
+    // Legacy snapshots have no `service` and no `value_props`. The page must
+    // still present as Christmas (the section key proves it) and must simply
+    // omit the promises rather than render an empty block.
+    renderChristmas(
+      christmasDoc({
+        service: undefined,
+        category_sections: [christmasSection({ value_props: undefined })],
+      }),
+    );
+
+    expect(root()).toHaveClass("is-christmas");
+    expect(document.querySelector(".xv-section")).toBeNull();
+    expect(screen.queryByText(/maintenance is included/i)).toBeNull();
+    // The price it was sold at still renders.
+    expect(screen.getByText("Christmas Lighting")).toBeInTheDocument();
+  });
+});
