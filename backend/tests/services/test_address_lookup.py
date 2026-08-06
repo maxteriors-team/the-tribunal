@@ -57,7 +57,10 @@ CENSUS_MATCH = {
 
 async def test_census_suggestion_carries_structured_parts() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert "geocoding.geo.census.gov" in str(request.url)
+        # Match the host exactly rather than searching the whole URL: a
+        # substring check would also pass for an attacker-shaped host that
+        # merely contains this one, so it proves less than it appears to.
+        assert request.url.host == "geocoding.geo.census.gov"
         assert request.url.params["benchmark"] == "Public_AR_Current"
         return httpx.Response(200, json=CENSUS_MATCH)
 
