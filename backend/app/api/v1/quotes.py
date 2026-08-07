@@ -48,6 +48,7 @@ from app.schemas.quote import (
     QuoteDetailResponse,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
+    QuoteServiceCreate,
     QuoteUpdate,
 )
 from app.services.quotes import QuoteService
@@ -343,6 +344,48 @@ async def deliver_comparison(
     return await service.deliver_comparison(
         workspace_id, token, channel=payload.channel, to=payload.to
     )
+
+
+# Service sub-resource: "add gutters to that quote we already sent".
+#
+# Deliberately separate from the line-item endpoints below, which write straight
+# to ``quote_line_items``. That is the correct persistence only for a plain
+# quote. On a quote built by the sales wizard the line items are *derived* from
+# ``proposal_document`` and get rebuilt from it whenever the quote reprices, so a
+# line item written directly here would never reach the client proposal (which
+# renders the document) and would be deleted outright the next time the client
+# picked a different package. These endpoints take the operator's intent and let
+# the service pick the persistence that actually survives on that quote.
+@router.post(
+    "/{quote_id}/services",
+    response_model=QuoteDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_service(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: QuoteServiceCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Add a service to an existing quote and reprice it."""
+    service = QuoteService(db)
+    return await service.add_service(workspace_id, quote_id, payload)
+
+
+@router.delete("/{quote_id}/services/{service_id}", response_model=QuoteDetailResponse)
+async def remove_service(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    service_id: str,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Remove a service previously added to a quote and reprice it."""
+    service = QuoteService(db)
+    return await service.remove_service(workspace_id, quote_id, service_id)
 
 
 # Line-item sub-resource. Mutations return the full quote because totals change.

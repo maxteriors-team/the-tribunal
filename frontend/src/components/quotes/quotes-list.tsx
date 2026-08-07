@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -63,6 +64,7 @@ import type { Quote, QuoteDeliverChannel, QuoteStatus } from "@/types";
 
 import { ConvertQuoteDialog } from "./convert-quote-dialog";
 import { QuoteEditDialog } from "./quote-edit-dialog";
+import { QuoteServicesDialog } from "./quote-services-dialog";
 
 const STATUS_VARIANT: Record<
   QuoteStatus,
@@ -81,6 +83,7 @@ export function QuotesList() {
   const queryClient = useQueryClient();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [editing, setEditing] = useState<Quote | null>(null);
+  const [servicesQuote, setServicesQuote] = useState<Quote | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Quote | null>(null);
 
   const query = useQuery({
@@ -286,6 +289,7 @@ export function QuotesList() {
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
                     onConvert={() => setConvertQuote(quote)}
+                    onAddServices={() => setServicesQuote(quote)}
                     onCopyLink={() => copyClientLink(quote)}
                     onPreview={() => openClientProposal(quote)}
                     onDelete={() => setPendingDelete(quote)}
@@ -311,6 +315,15 @@ export function QuotesList() {
           if (!open) setConvertQuote(null);
         }}
       />
+      <QuoteServicesDialog
+        workspaceId={workspaceId ?? ""}
+        quote={servicesQuote}
+        open={servicesQuote !== null}
+        onOpenChange={(open) => {
+          if (!open) setServicesQuote(null);
+        }}
+      />
+
       <QuoteEditDialog
         quote={editing}
         open={editing !== null}
@@ -369,6 +382,7 @@ interface RowActionsProps {
   onApprove: () => void;
   onDecline: () => void;
   onConvert: () => void;
+  onAddServices: () => void;
   onCopyLink: () => void;
   onPreview: () => void;
   onDelete: () => void;
@@ -389,6 +403,7 @@ function RowActions({
   onApprove,
   onDecline,
   onConvert,
+  onAddServices,
   onCopyLink,
   onPreview,
   onDelete,
@@ -414,13 +429,18 @@ function RowActions({
       <DropdownMenuContent align="end">
         {isOpen && (
           <>
-            {/* Editing leads: a sent quote is the one an operator actually
-                needs to change (extend the expiry, fix a typo, move the
-                deposit), and the edit lands on the link the customer already
-                has. */}
+            {/* Changing the quote leads, because a sent quote is the one an
+                operator actually needs to change: extend the expiry, fix a
+                typo, move the deposit, or add the work the customer asked for
+                after reading it. Both land on the link they already have, so
+                neither needs a re-send. */}
             <DropdownMenuItem onClick={onEdit}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit quote
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddServices}>
+              <Wrench className="mr-2 h-4 w-4" />
+              Add services
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {/* Emailing and texting come next: they are what "send it to them"

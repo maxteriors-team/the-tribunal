@@ -71,11 +71,41 @@ export interface Quote {
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */
   line_items?: QuoteLineItem[];
   /**
+   * Services an operator may add to or remove from this quote, on detail
+   * responses. Not the same list as `line_items`: on a wizard quote these are
+   * the add-on charges only, because a tier's fixture lines are priced by the
+   * design and can't be changed without rebuilding it.
+   */
+  services?: QuoteService[];
+  /**
    * Sales-wizard snapshot; null/absent on a plain quote. Detail responses only —
    * a list row never carries it. Its presence is what marks a quote as priced by
    * the wizard: the document *is* the price, and line items are derived from it.
    */
   proposal_document?: Record<string, unknown> | null;
+}
+
+/**
+ * A service an operator added to an existing quote.
+ *
+ * Server-projected into one shape from whichever place the quote stores its
+ * money — a `proposal_document` add-on charge on a sales-wizard quote, a line
+ * item on a plain one — so nothing here has to know which. `id` is whatever
+ * `quotesApi.removeService` needs in order to take it off again.
+ */
+export interface QuoteService {
+  id: string;
+  name: string;
+  description?: string | null;
+  amount: number;
+}
+
+export interface QuoteServiceInput {
+  name: string;
+  /** Net the business keeps; the server adds the finance buffer on a wizard quote. */
+  amount: number;
+  /** Price-book item this came from, so the add registers as an attach. */
+  catalog_item_id?: string;
 }
 
 export interface QuoteLineItemInput {

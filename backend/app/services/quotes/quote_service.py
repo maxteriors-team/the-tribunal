@@ -88,6 +88,8 @@ from app.schemas.quote import (
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
     QuoteResponse,
+    QuoteServiceCreate,
+    QuoteServiceResponse,
     QuoteUpdate,
 )
 from app.services.automations.events import (
@@ -107,7 +109,10 @@ from app.services.quotes.attach_rules_config import get_attach_rules_config
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import (
     CatalogEntry,
+    add_charge,
     build_proposal_document,
+    remove_charge,
+    reprice_document,
     reselect_tier,
     select_tier,
     sellable_tier_keys,
@@ -472,7 +477,49 @@ class QuoteService:
         response = QuoteDetailResponse.model_validate(quote)
         config = await self._pricing_config_for_quote(quote)
         response.financing = self._financing_for_quote(quote, config)
+        response.services = self._services_for(quote)
         return response
+
+    def _services_for(self, quote: Quote) -> list[QuoteServiceResponse]:
+        """Project this quote's operator-addable services into one shape.
+
+        Which persistence answers depends on how the quote was built. A wizard
+        quote's line items are *derived* from its snapshot and are rebuilt from
+        scratch whenever the document is repriced, so its editable services are
+        the document's add-on charges. A plain quote has no document and its line
+        items are the truth, so they are the services.
+
+        A snapshot that no longer parses returns nothing rather than raising:
+        this runs on every quote read, and one bad document must not 500 a list.
+        """
+        raw = quote.proposal_document
+        if not raw:
+            return [
+                QuoteServiceResponse(
+                    id=str(li.id),
+                    name=li.name,
+                    description=li.description,
+                    amount=float(li.total or 0),
+                )
+                for li in quote.line_items
+            ]
+        try:
+            document = ProposalDocument.model_validate(raw)
+        except Exception:  # noqa: BLE001 - a malformed snapshot must not 500 a read
+            self.log.warning("proposal_document_unreadable", quote_id=str(quote.id))
+            return []
+        return [
+            QuoteServiceResponse(
+                id=str(charge.id),
+                name=charge.description,
+                amount=float(charge.amount),
+            )
+            for charge in document.additional_charges
+            # A charge with no id predates the addressable-charge migration and
+            # cannot be targeted for removal; omitting it is honest, whereas
+            # listing an un-deletable row is a button that does nothing.
+            if charge.id
+        ]
 
     @classmethod
     def _summary_response(cls, quote: Quote, config: PricingSettings) -> QuoteResponse:
@@ -1483,14 +1530,7 @@ class QuoteService:
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
-        quote.line_items.clear()
-        categories = await self._catalog_categories(quote.workspace_id, line_items)
-        for item in line_items:
-            quote.line_items.append(self._build_line_item(item, categories))
-        quote.proposal_document = updated.model_dump(mode="json")
-        self._recompute_totals(quote)
-        await self.db.commit()
-        await self.db.refresh(quote, ["line_items"])
+        await self._persist_repriced_document(quote, updated, line_items)
         self.log.info(
             "quote_package_selected_by_client",
             quote_id=str(quote.id),
@@ -1498,6 +1538,167 @@ class QuoteService:
             selected_tier=tier_key,
             total=float(quote.total or 0),
         )
+
+    async def _persist_repriced_document(
+        self,
+        quote: Quote,
+        document: ProposalDocument,
+        line_items: list[QuoteLineItemCreate],
+    ) -> None:
+        """Write a repriced snapshot and the lines it derives, as one commit.
+
+        Every line is replaced rather than diffed, because on a wizard quote the
+        line items are output, not state: the document is the only thing that is
+        edited, and rebuilding from it is what guarantees the two cannot drift.
+        This is also why a service added to such a quote has to live on the
+        document — a line item written directly here would be erased the next
+        time anything repriced.
+        """
+        quote.line_items.clear()
+        categories = await self._catalog_categories(quote.workspace_id, line_items)
+        for item in line_items:
+            quote.line_items.append(self._build_line_item(item, categories))
+        quote.proposal_document = document.model_dump(mode="json")
+        self._recompute_totals(quote)
+        await self.db.commit()
+        await self.db.refresh(quote, ["line_items"])
+
+    # ------------------------------------------------------------------
+    # Services (post-save adds)
+    # ------------------------------------------------------------------
+
+    async def add_service(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        payload: QuoteServiceCreate,
+    ) -> QuoteDetailResponse:
+        """Add one service to an existing quote, whichever shape it is.
+
+        The caller names a service and an amount; where that lands is this
+        method's problem. A wizard quote gets a document add-on charge and is
+        repriced from the document, so the service reaches the client proposal,
+        raises every package total, and survives the client switching packages. A
+        plain quote gets a line item, which is where its money already lives.
+        """
+        quote = await self._get_mutable_quote(workspace_id, quote_id)
+        before = float(quote.total or 0)
+        wizard = bool(quote.proposal_document)
+
+        if wizard:
+            document = self._parse_document(quote)
+            config = await self._config_for_edit(quote)
+            try:
+                updated, service_id = add_charge(
+                    document,
+                    description=payload.name,
+                    net_amount=payload.amount,
+                    config=config,
+                    catalog_item_id=payload.catalog_item_id,
+                )
+            except ValueError as exc:
+                raise ValidationError(str(exc)) from exc
+            catalog = await self._resolve_wizard_catalog(workspace_id)
+            repriced, line_items = reprice_document(updated, config=config, catalog=catalog)
+            await self._persist_repriced_document(quote, repriced, line_items)
+        else:
+            item = QuoteLineItemCreate(
+                name=payload.name,
+                quantity=1,
+                unit_price=payload.amount,
+                catalog_item_id=payload.catalog_item_id,
+            )
+            categories = await self._catalog_categories(workspace_id, [item])
+            line = self._build_line_item(item, categories)
+            quote.line_items.append(line)
+            self._recompute_totals(quote)
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
+            service_id = str(line.id)
+
+        self.log.info(
+            "quote_service_added",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            service_id=service_id,
+            wizard=wizard,
+            total_before=before,
+            total_after=float(quote.total or 0),
+        )
+        return await self._detail_response(quote)
+
+    async def remove_service(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        service_id: str,
+    ) -> QuoteDetailResponse:
+        """Remove a previously added service, mirroring :meth:`add_service`."""
+        quote = await self._get_mutable_quote(workspace_id, quote_id)
+        before = float(quote.total or 0)
+
+        if quote.proposal_document:
+            document = self._parse_document(quote)
+            config = await self._config_for_edit(quote)
+            try:
+                updated = remove_charge(document, service_id)
+            except ValueError as exc:
+                raise NotFoundError(str(exc)) from exc
+            catalog = await self._resolve_wizard_catalog(workspace_id)
+            repriced, line_items = reprice_document(updated, config=config, catalog=catalog)
+            await self._persist_repriced_document(quote, repriced, line_items)
+        else:
+            try:
+                line_id = uuid.UUID(service_id)
+            except ValueError as exc:
+                raise NotFoundError("That service is no longer on this quote") from exc
+            line = next((li for li in quote.line_items if li.id == line_id), None)
+            if line is None:
+                raise NotFoundError("That service is no longer on this quote")
+            quote.line_items.remove(line)
+            await self.db.delete(line)
+            self._recompute_totals(quote)
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
+
+        self.log.info(
+            "quote_service_removed",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            service_id=service_id,
+            total_before=before,
+            total_after=float(quote.total or 0),
+        )
+        return await self._detail_response(quote)
+
+    def _parse_document(self, quote: Quote) -> ProposalDocument:
+        """Parse a quote's snapshot, as a 422 rather than a 500 when it is bad."""
+        try:
+            return ProposalDocument.model_validate(quote.proposal_document)
+        except Exception as exc:  # noqa: BLE001 - surfaced as a 422, never a 500
+            raise ValidationError("This quote can no longer be changed.") from exc
+
+    async def _config_for_edit(self, quote: Quote) -> PricingSettings:
+        """Pricing config for repricing a snapshot, or a 422 when unavailable.
+
+        Deliberately *not* :meth:`_pricing_config_for_quote`, which falls back to
+        default :class:`PricingSettings` for a missing workspace. That is right
+        for decorating a read, and wrong here: this config sets the finance
+        buffer every line on the document is grossed up by, so defaulting it
+        would quietly reprice the customer's whole quote off the wrong numbers.
+        Refusing the edit leaves the quote exactly as the rep last saw it.
+        """
+        workspace = quote.__dict__.get("workspace")
+        if not isinstance(workspace, Workspace):
+            workspace = await self.db.get(Workspace, quote.workspace_id)
+        if not isinstance(workspace, Workspace):
+            self.log.warning(
+                "quote_service_edit_workspace_missing",
+                quote_id=str(quote.id),
+                workspace_id=str(quote.workspace_id),
+            )
+            raise ValidationError("This quote can no longer be changed.")
+        return get_pricing_config(workspace)
 
     async def approve_public(
         self, token: str, *, selected_tier: str | None = None
@@ -2760,7 +2961,12 @@ class QuoteService:
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
     ) -> Quote:
-        """Load a quote (with line items) and reject edits once decided/expired."""
+        """Load a quote (with line items) and reject edits once decided/expired.
+
+        The message reaches an operator verbatim through ``ServiceErrorRoute``,
+        and this guard now covers services as well as line items, so it names the
+        quote's state rather than one of the two things that might be edited.
+        """
         quote = await get_or_404(
             self.db,
             Quote,
@@ -2769,5 +2975,5 @@ class QuoteService:
             options=[selectinload(Quote.line_items)],
         )
         if quote.status in _LOCKED_STATUSES:
-            raise ConflictError(f"Cannot edit line items on a {quote.status} quote")
+            raise ConflictError(f"This quote is {quote.status} and can no longer be changed")
         return quote

@@ -187,6 +187,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         if amount > 0:
             charges.append(
                 ProposalCharge(
+                    id=new_charge_id(),
                     description=(c.description or "").strip() or "Additional Services",
                     amount=float(amount),
                     catalog_item_id=c.catalog_item_id,
@@ -592,6 +593,56 @@ def select_tier(
     )
 
 
+def new_charge_id() -> str:
+    """Mint a stable handle for one :class:`ProposalCharge` within a document."""
+    return uuid.uuid4().hex
+
+
+def add_charge(
+    document: ProposalDocument,
+    *,
+    description: str,
+    net_amount: float,
+    config: PricingSettings,
+    catalog_item_id: uuid.UUID | None = None,
+) -> tuple[ProposalDocument, str]:
+    """Append one add-on charge to a snapshot, returning it and the new charge id.
+
+    ``net_amount`` is what the rep keeps; it is grossed up by the finance buffer
+    exactly as :func:`build_proposal_document` does for a charge typed during the
+    original build, so a service added afterwards prices identically to the same
+    service added before saving.
+
+    Does **not** reprice — the caller pairs this with :func:`reprice_document`,
+    which is what turns the charge into quote lines and totals.
+    """
+    amount = pp.gross_up_price(net_amount, config)
+    if amount <= 0:
+        raise ValueError("A service needs an amount above zero")
+    charge = ProposalCharge(
+        id=new_charge_id(),
+        description=description.strip() or "Additional Services",
+        amount=float(amount),
+        catalog_item_id=catalog_item_id,
+    )
+    updated = document.model_copy(
+        update={"additional_charges": [*document.additional_charges, charge]},
+        deep=True,
+    )
+    return updated, str(charge.id)
+
+
+def remove_charge(document: ProposalDocument, charge_id: str) -> ProposalDocument:
+    """Drop one add-on charge by id. Raises :class:`ValueError` if it isn't there.
+
+    Does not reprice; see :func:`add_charge`.
+    """
+    remaining = [c for c in document.additional_charges if c.id != charge_id]
+    if len(remaining) == len(document.additional_charges):
+        raise ValueError("That service is no longer on this quote")
+    return document.model_copy(update={"additional_charges": remaining}, deep=True)
+
+
 def sellable_tier_keys(document: ProposalDocument) -> list[str]:
     """Package keys a client may actually buy, in the document's own order.
 
@@ -601,6 +652,55 @@ def sellable_tier_keys(document: ProposalDocument) -> list[str]:
     priced = {v.key for v in document.tiers if v.pricing.base > 0}
     order = [k for k in document.tier_order if k in priced]
     return order or [v.key for v in document.tiers if v.key in priced]
+
+
+def reprice_document(
+    document: ProposalDocument,
+    *,
+    config: PricingSettings,
+    catalog: dict[str, CatalogEntry] | None = None,
+) -> tuple[ProposalDocument, list[QuoteLineItemCreate]]:
+    """Re-derive a saved snapshot's money from its own current contents.
+
+    The single place a stored document's totals, fulfillment sheet and canonical
+    line items are recomputed. Used whenever something *inside* the document
+    changes after it was first built — today, a service added to or removed from
+    ``additional_charges`` — and by :func:`reselect_tier` once it has pointed the
+    document at a different package. Keeping both on one path is what stops a
+    post-save edit from pricing differently than the rep's original build.
+
+    ``deposit_amount`` is recomputed too: it is a function of the all-in total,
+    so leaving it alone here would leave a stale money figure sitting in a
+    snapshot whose total just moved.
+    """
+    selection = select_tier(
+        tier_views=document.tiers,
+        selected=document.selected_tier,
+        charges=document.additional_charges,
+        bistro=document.bistro,
+        category_sections=document.category_sections,
+        config=config,
+        catalog=catalog,
+    )
+    update: dict[str, Any] = {
+        "selected_financed_total": selection.selected_financed,
+        "selected_cash_total": selection.selected_cash,
+        "selected_monthly_payment": selection.selected_monthly,
+        "grand_financed_total": selection.grand_financed,
+        "grand_cash_total": selection.grand_cash,
+        "grand_monthly_payment": selection.grand_monthly,
+        "fulfillment": selection.fulfillment,
+    }
+    if document.deposit_mode and document.deposit_value > 0:
+        # Imported here rather than at module scope: the payments package reads
+        # quote models, and this module is deliberately DB-free.
+        from app.services.payments.quote_deposit_service import resolve_deposit
+
+        update["deposit_amount"] = resolve_deposit(
+            document.deposit_mode, document.deposit_value, selection.grand_financed
+        )
+    updated = document.model_copy(update=update, deep=True)
+    return updated, selection.line_items
 
 
 def reselect_tier(
@@ -620,26 +720,8 @@ def reselect_tier(
     if tier_key not in sellable_tier_keys(document):
         raise ValueError(f"Unknown package: {tier_key}")
 
-    selection = select_tier(
-        tier_views=document.tiers,
-        selected=tier_key,
-        charges=document.additional_charges,
-        bistro=document.bistro,
-        category_sections=document.category_sections,
+    return reprice_document(
+        document.model_copy(update={"selected_tier": tier_key}),
         config=config,
         catalog=catalog,
     )
-    updated = document.model_copy(
-        update={
-            "selected_tier": tier_key,
-            "selected_financed_total": selection.selected_financed,
-            "selected_cash_total": selection.selected_cash,
-            "selected_monthly_payment": selection.selected_monthly,
-            "grand_financed_total": selection.grand_financed,
-            "grand_cash_total": selection.grand_cash,
-            "grand_monthly_payment": selection.grand_monthly,
-            "fulfillment": selection.fulfillment,
-        },
-        deep=True,
-    )
-    return updated, selection.line_items

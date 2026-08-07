@@ -7754,6 +7754,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Service
+         * @description Add a service to an existing quote and reprice it.
+         */
+        post: operations["add_service_api_v1_workspaces__workspace_id__quotes__quote_id__services_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/services/{service_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Service
+         * @description Remove a service previously added to a quote and reprice it.
+         */
+        delete: operations["remove_service_api_v1_workspaces__workspace_id__quotes__quote_id__services__service_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/recurring-jobs": {
         parameters: {
             query?: never;
@@ -22967,6 +23007,8 @@ export interface components {
             catalog_item_id?: string | null;
             /** Description */
             description: string;
+            /** Id */
+            id?: string | null;
             /** Tier Key */
             tier_key?: string | null;
         };
@@ -24375,6 +24417,8 @@ export interface components {
             sent_at?: string | null;
             /** Service Location Id */
             service_location_id?: string | null;
+            /** Services */
+            services?: components["schemas"]["QuoteServiceResponse"][];
             /**
              * Status
              * @enum {string}
@@ -24747,6 +24791,52 @@ export interface components {
             offset_days: number;
             /** Template Id */
             template_id?: string | null;
+        };
+        /**
+         * QuoteServiceCreate
+         * @description Add one service to a quote that already exists.
+         *
+         *     Deliberately amount-only, with no quantity. A quote built by the sales wizard
+         *     stores its money in ``proposal_document`` and only *derives* line items from
+         *     it, so an added service has to persist as a
+         *     :class:`~app.schemas.proposal_wizard.ProposalCharge` to survive the client
+         *     switching packages (which rebuilds every line from the document). A charge
+         *     carries an amount and no quantity, and offering a quantity that the wizard
+         *     shape cannot keep would be a field that silently collapses to 1 on most
+         *     quotes.
+         *
+         *     ``amount`` is the **net** the business keeps on a wizard quote — grossed up
+         *     by the finance buffer server-side like every other price on that document —
+         *     and the plain unit price on a quote that has no document. This mirrors the
+         *     wizard's own add-on row, where a price-book price is entered as net.
+         */
+        QuoteServiceCreate: {
+            /** Amount */
+            amount: number;
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Name */
+            name: string;
+        };
+        /**
+         * QuoteServiceResponse
+         * @description One operator-added service, in a shape that hides where it is stored.
+         *
+         *     A quote keeps added services in one of two places depending on how it was
+         *     built: a document charge for wizard quotes, a line item for plain ones. That
+         *     split is a persistence detail rather than something a caller should branch
+         *     on, so both project into this one shape, and ``id`` is whatever the delete
+         *     endpoint needs in order to remove it.
+         */
+        QuoteServiceResponse: {
+            /** Amount */
+            amount: number;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * QuoteUpdate
@@ -45046,6 +45136,75 @@ export interface operations {
             path: {
                 workspace_id: string;
                 quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_service_api_v1_workspaces__workspace_id__quotes__quote_id__services_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteServiceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_service_api_v1_workspaces__workspace_id__quotes__quote_id__services__service_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+                service_id: string;
             };
             cookie?: never;
         };

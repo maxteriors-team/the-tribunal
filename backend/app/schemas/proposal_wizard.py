@@ -252,6 +252,12 @@ class ProposalCharge(BaseModel):
     correctly without the original wizard payload.
     """
 
+    # Stable handle for one charge within a document, so a service added after
+    # the quote was saved can later be removed by name-independent id. Assigned
+    # server-side at build time and backfilled onto older documents by
+    # migration ``a7f3c21d9e04``; optional only so a snapshot written before
+    # that still validates. Never read from a client request.
+    id: str | None = None
     description: str
     amount: float
     tier_key: str | None = None

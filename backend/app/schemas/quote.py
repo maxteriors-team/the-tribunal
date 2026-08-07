@@ -144,6 +144,59 @@ class QuoteUpdate(BaseModel):
         return self
 
 
+# --------------------------------------------------------------------------- #
+# Services (post-save adds)
+# --------------------------------------------------------------------------- #
+class QuoteServiceCreate(BaseModel):
+    """Add one service to a quote that already exists.
+
+    Deliberately amount-only, with no quantity. A quote built by the sales wizard
+    stores its money in ``proposal_document`` and only *derives* line items from
+    it, so an added service has to persist as a
+    :class:`~app.schemas.proposal_wizard.ProposalCharge` to survive the client
+    switching packages (which rebuilds every line from the document). A charge
+    carries an amount and no quantity, and offering a quantity that the wizard
+    shape cannot keep would be a field that silently collapses to 1 on most
+    quotes.
+
+    ``amount`` is the **net** the business keeps on a wizard quote — grossed up
+    by the finance buffer server-side like every other price on that document —
+    and the plain unit price on a quote that has no document. This mirrors the
+    wizard's own add-on row, where a price-book price is entered as net.
+    """
+
+    name: str = Field(min_length=1, max_length=300)
+    amount: float = Field(gt=0)
+    # Price-book provenance so the resulting quote line snapshots the item's
+    # service category and the add registers as an attach. A request-only hint,
+    # resolved within the workspace; an id that no longer resolves is ignored.
+    catalog_item_id: uuid.UUID | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Name is required")
+        return cleaned
+
+
+class QuoteServiceResponse(BaseModel):
+    """One operator-added service, in a shape that hides where it is stored.
+
+    A quote keeps added services in one of two places depending on how it was
+    built: a document charge for wizard quotes, a line item for plain ones. That
+    split is a persistence detail rather than something a caller should branch
+    on, so both project into this one shape, and ``id`` is whatever the delete
+    endpoint needs in order to remove it.
+    """
+
+    id: str
+    name: str
+    description: str | None = None
+    amount: float
+
+
 class QuoteDeclineRequest(BaseModel):
     """Operator decline with an optional reason."""
 
@@ -301,6 +354,12 @@ class QuoteDetailResponse(QuoteResponse):
     """Quote with its line items and (when built by the wizard) its rich snapshot."""
 
     line_items: list[QuoteLineItemResponse] = Field(default_factory=list)
+    # Services an operator may add to or remove from this quote, already resolved
+    # to one shape across both persistences (see :class:`QuoteServiceResponse`).
+    # On a wizard quote this is the document's add-on charges, *not* its fixture
+    # lines: a fixture is priced by the tier and can only be changed by rebuilding
+    # the design, so offering it here would promise an edit the server refuses.
+    services: list[QuoteServiceResponse] = Field(default_factory=list)
     # Multi-tier sales-wizard snapshot; null for quotes created outside the wizard.
     proposal_document: dict[str, Any] | None = None
     # The cross-sell prompt this save earned, when an advisory attach rule
