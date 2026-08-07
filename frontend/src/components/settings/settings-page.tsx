@@ -23,6 +23,7 @@ import { SalesTargetsSettingsTab } from "@/components/settings/sales-targets-set
 import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
 import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-settings-tab";
 import { TeamSettingsTab } from "@/components/settings/team-settings-tab";
+import { UpsellRanksSettingsCard } from "@/components/settings/upsell-ranks-settings-card";
 import { TagManagement } from "@/components/tags/tag-management";
 import { QueryErrorBoundary } from "@/components/ui/query-error-boundary";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,6 +125,7 @@ export function SettingsPage() {
           <QueryErrorBoundary message="Failed to load pricing settings. Please try again.">
             <div className="space-y-6">
               <FinancingSettingsCard />
+              <UpsellRanksSettingsCard />
               <PermanentPricingSettingsCard />
               <SeasonalPricingSettingsTab />
             </div>
