@@ -127,6 +127,12 @@ class InvoiceResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Display label for the bill-to contact, so a list can say whose invoice this
+    # is instead of only its number. Populated by ``serialize_invoice`` when the
+    # ``contact`` relationship is eager loaded; ``None`` means either no bill-to
+    # contact or a caller that did not load one -- never a failed lookup.
+    contact_name: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 

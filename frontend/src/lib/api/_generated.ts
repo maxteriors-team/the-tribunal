@@ -17161,6 +17161,8 @@ export interface components {
             amount_paid: number;
             /** Contact Id */
             contact_id?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -17316,6 +17318,8 @@ export interface components {
             amount_paid: number;
             /** Contact Id */
             contact_id?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -17380,6 +17384,8 @@ export interface components {
             amount_paid: number;
             /** Contact Id */
             contact_id?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /**
              * Created At
              * Format: date-time

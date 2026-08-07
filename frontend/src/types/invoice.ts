@@ -25,6 +25,8 @@ export interface Invoice {
   id: string;
   workspace_id: string;
   contact_id?: number | null;
+  /** Bill-to contact's display name. Null when the invoice has no contact. */
+  contact_name?: string | null;
   opportunity_id?: string | null;
   number: string;
   status: InvoiceStatus;
