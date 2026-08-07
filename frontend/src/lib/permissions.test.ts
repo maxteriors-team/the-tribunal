@@ -9,6 +9,7 @@ describe("roleTier", () => {
     ["manager", "manager"],
     ["dispatcher", "manager"],
     ["sales_rep", "sales"],
+    ["lead_technician", "lead"],
     ["technician", "field"],
     ["member", "tech"],
   ];
@@ -29,7 +30,7 @@ describe("capability matrix (mirror of backend)", () => {
     const all = new Set<Capability>(TIER_CAPABILITIES.admin);
     expect(TIER_CAPABILITIES.admin.length).toBe(all.size); // no dupes
     // admin is the superset of every other tier
-    for (const tier of ["manager", "sales", "tech", "field"] as Tier[]) {
+    for (const tier of ["manager", "sales", "tech", "lead", "field"] as Tier[]) {
       for (const cap of TIER_CAPABILITIES[tier]) {
         expect(all.has(cap)).toBe(true);
       }
@@ -51,6 +52,43 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
+  it("lead technicians are field techs who may sell past the on-site limit", () => {
+    // The entire delta between the two roles is one capability — a lead tech is
+    // still a field worker with no contact book, price book, or pipeline.
+    expect(TIER_CAPABILITIES.lead).toEqual([
+      "jobs:read",
+      "upsell:sell",
+      "upsell:sell_uncapped",
+    ]);
+    expect(can("lead_technician", "upsell:sell_uncapped")).toBe(true);
+    for (const cap of [
+      "crm:read",
+      "billing:read",
+      "comms:send",
+      "jobs:write",
+      "reports:view",
+    ] as Capability[]) {
+      expect(can("lead_technician", cap)).toBe(false);
+    }
+  });
+
+  it("only the plain technician is capped by the on-site proposal limit", () => {
+    for (const role of [
+      "owner",
+      "admin",
+      "manager",
+      "dispatcher",
+      "sales_rep",
+      "lead_technician",
+      "member",
+    ]) {
+      expect(can(role, "upsell:sell_uncapped")).toBe(true);
+    }
+    expect(can("technician", "upsell:sell_uncapped")).toBe(false);
+    // Unknown roles fail closed to field, so they stay capped too.
+    expect(can("wizard", "upsell:sell_uncapped")).toBe(false);
+  });
+
   it("upsell:sell reaches every tier without widening the field tier", () => {
     // Held by all tiers, which is what keeps the matrix's nested containment
     // intact. It is not a general grant: the /upsell routes re-scope each call
@@ -61,6 +99,7 @@ describe("capability matrix (mirror of backend)", () => {
       "manager",
       "dispatcher",
       "sales_rep",
+      "lead_technician",
       "technician",
       "member",
     ]) {

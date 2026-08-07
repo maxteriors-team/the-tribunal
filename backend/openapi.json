@@ -5946,6 +5946,7 @@
               "manager",
               "dispatcher",
               "sales_rep",
+              "lead_technician",
               "technician",
               "member"
             ],
@@ -18726,6 +18727,7 @@
               "manager",
               "dispatcher",
               "sales_rep",
+              "lead_technician",
               "technician",
               "member"
             ],
@@ -33335,6 +33337,9 @@
             },
             "title": "Tiers",
             "type": "array"
+          },
+          "upsell": {
+            "$ref": "#/components/schemas/UpsellConfig"
           }
         },
         "title": "PricingSettings",
@@ -33531,6 +33536,16 @@
               }
             ],
             "title": "Tiers"
+          },
+          "upsell": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpsellConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "PricingSettingsUpdate",
@@ -46688,6 +46703,7 @@
               "manager",
               "dispatcher",
               "sales_rep",
+              "lead_technician",
               "technician",
               "member"
             ],
@@ -46826,7 +46842,7 @@
         "type": "object"
       },
       "UpsellCatalogResponse": {
-        "description": "The attachable add-on menu.",
+        "description": "The attachable add-on menu, and what the caller is allowed to sell off it.",
         "properties": {
           "items": {
             "items": {
@@ -46834,6 +46850,17 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "proposal_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Limit"
           },
           "total": {
             "title": "Total",
@@ -46845,6 +46872,25 @@
           "total"
         ],
         "title": "UpsellCatalogResponse",
+        "type": "object"
+      },
+      "UpsellConfig": {
+        "description": "Limits on what a field technician may sell from the on-site upsell screen.\n\n``field_proposal_limit`` caps the one-time total a plain ``technician`` may\nput on a proposal, in major units. A ``lead_technician`` (and every role\nabove them) is exempt — that exemption is the entire difference between the\ntwo roles — so this is the number separating \"sell small add-ons\" from \"sell\na full fixture package\".\n\n``None`` means **no cap**, which is the default: adding this block must not\nretroactively restrict technicians in a workspace that never asked for a\nlimit. Owners opt in by setting a number.\n\nCompared against the *grossed-up* total the client is actually charged, not\nthe net price-book figure, so the limit means what an owner thinks it means.\nRecurring care plans sit deliberately outside the cap: signing an existing\nsystem onto maintenance is retention every technician should be closing, and\nit is cancellable service rather than a capital purchase.",
+        "properties": {
+          "field_proposal_limit": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Proposal Limit"
+          }
+        },
+        "title": "UpsellConfig",
         "type": "object"
       },
       "UpsellCustomer": {
@@ -85225,7 +85271,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/upsell/catalog": {
       "get": {
-        "description": "The add-on menu: active, attachable price-book items only.",
+        "description": "The add-on menu: active, attachable price-book items only.\n\n``proposal_limit`` on the response is the most this caller may sell at once\n(null for a lead technician, or when the workspace configured no cap).",
         "operationId": "list_upsell_catalog_api_v1_workspaces__workspace_id__upsell_catalog_get",
         "parameters": [
           {

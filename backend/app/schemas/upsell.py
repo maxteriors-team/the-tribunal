@@ -80,10 +80,15 @@ class UpsellCatalogItem(BaseModel):
 
 
 class UpsellCatalogResponse(BaseModel):
-    """The attachable add-on menu."""
+    """The attachable add-on menu, and what the caller is allowed to sell off it."""
 
     items: list[UpsellCatalogItem]
     total: int
+    # The most this caller may put on one proposal, or ``None`` for no limit
+    # (a lead technician, anyone above them, or a workspace that configured no
+    # cap). Sent so the UI can warn *before* the technician builds a proposal
+    # they are not allowed to send — the server still enforces it either way.
+    proposal_limit: float | None = None
 
 
 class UpsellCarePlanResponse(BaseModel):

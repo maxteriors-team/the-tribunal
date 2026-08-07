@@ -6,12 +6,18 @@
  * items, action buttons, route guards). Keep the two in lockstep — if you change
  * the matrix here, change it there (and vice versa), and update both unit tests.
  *
- * Five tiers, admin broadest → field narrowest:
+ * Six tiers, admin broadest → field narrowest:
  *   admin   ← owner, admin
  *   manager ← manager, dispatcher
  *   sales   ← sales_rep
  *   tech    ← member
+ *   lead    ← lead_technician
  *   field   ← technician  (and any unknown/legacy role, fail-closed)
+ *
+ * `lead` is a crew lead on a job site, not an office role: it sees exactly what
+ * `field` sees. The single difference is `upsell:sell_uncapped` — exemption from
+ * the workspace's on-site proposal limit, so a lead tech can sell a full fixture
+ * package while a regular technician is held to small add-ons.
  *
  * Field technicians are operational-only: the jobs schedule and nothing else
  * (no contacts, pipeline, campaigns, billing/pricing, or other CRM surface).
@@ -40,9 +46,10 @@ export type Capability =
   | "members:manage"
   | "workspace:manage"
   | "locations:manage"
-  | "upsell:sell";
+  | "upsell:sell"
+  | "upsell:sell_uncapped";
 
-export type Tier = "admin" | "manager" | "sales" | "tech" | "field";
+export type Tier = "admin" | "manager" | "sales" | "tech" | "lead" | "field";
 
 const ROLE_TIERS: Record<string, Tier> = {
   owner: "admin",
@@ -50,6 +57,7 @@ const ROLE_TIERS: Record<string, Tier> = {
   manager: "manager",
   dispatcher: "manager",
   sales_rep: "sales",
+  lead_technician: "lead",
   technician: "field",
   member: "tech",
 };
@@ -71,6 +79,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "workspace:manage",
   "locations:manage",
   "upsell:sell",
+  "upsell:sell_uncapped",
 ];
 
 export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
@@ -88,6 +97,7 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "billing:write",
     "locations:manage",
     "upsell:sell",
+    "upsell:sell_uncapped",
   ],
   // Sales authors outreach (campaigns/segments/automations) but has no
   // crm:write, so it cannot delete/import contacts — mirror of the backend.
@@ -98,9 +108,14 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "jobs:read",
     "comms:send",
     "upsell:sell",
+    "upsell:sell_uncapped",
   ],
-  tech: ["crm:read", "jobs:read", "comms:send", "upsell:sell"],
-  // Field technicians: the jobs schedule plus the scoped on-site upsell surface.
+  tech: ["crm:read", "jobs:read", "comms:send", "upsell:sell", "upsell:sell_uncapped"],
+  // Crew lead: the field tier's visibility exactly, plus exemption from the
+  // on-site proposal limit. Still no contact book, price book, or pipeline.
+  lead: ["jobs:read", "upsell:sell", "upsell:sell_uncapped"],
+  // Field technicians: the jobs schedule plus the scoped on-site upsell surface,
+  // capped by the workspace's proposal limit.
   field: ["jobs:read", "upsell:sell"],
 };
 

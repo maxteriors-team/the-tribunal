@@ -154,6 +154,29 @@ class DepositConfig(BaseModel):
     value: float = Field(default=50, ge=0)
 
 
+class UpsellConfig(BaseModel):
+    """Limits on what a field technician may sell from the on-site upsell screen.
+
+    ``field_proposal_limit`` caps the one-time total a plain ``technician`` may
+    put on a proposal, in major units. A ``lead_technician`` (and every role
+    above them) is exempt — that exemption is the entire difference between the
+    two roles — so this is the number separating "sell small add-ons" from "sell
+    a full fixture package".
+
+    ``None`` means **no cap**, which is the default: adding this block must not
+    retroactively restrict technicians in a workspace that never asked for a
+    limit. Owners opt in by setting a number.
+
+    Compared against the *grossed-up* total the client is actually charged, not
+    the net price-book figure, so the limit means what an owner thinks it means.
+    Recurring care plans sit deliberately outside the cap: signing an existing
+    system onto maintenance is retention every technician should be closing, and
+    it is cancellable service rather than a capital purchase.
+    """
+
+    field_proposal_limit: float | None = Field(default=None, ge=0)
+
+
 # --------------------------------------------------------------------------- #
 # Tiers (Good / Better / Best) — named groups of catalog items + copy
 # --------------------------------------------------------------------------- #
@@ -843,6 +866,7 @@ class PricingSettings(BaseModel):
     cash_discount: CashDiscountConfig = Field(default_factory=CashDiscountConfig)
     commission: CommissionConfig = Field(default_factory=CommissionConfig)
     deposit: DepositConfig = Field(default_factory=DepositConfig)
+    upsell: UpsellConfig = Field(default_factory=UpsellConfig)
     tier_order: list[str] = Field(default_factory=list)
     tiers: list[TierConfig] = Field(default_factory=list)
     care_plan: CarePlanConfig = Field(default_factory=CarePlanConfig)
@@ -1168,6 +1192,7 @@ class PricingSettingsUpdate(BaseModel):
     cash_discount: CashDiscountConfig | None = None
     commission: CommissionConfig | None = None
     deposit: DepositConfig | None = None
+    upsell: UpsellConfig | None = None
     tier_order: list[str] | None = None
     tiers: list[TierConfig] | None = None
     care_plan: CarePlanConfig | None = None

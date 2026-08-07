@@ -8976,6 +8976,9 @@ export interface paths {
         /**
          * List Upsell Catalog
          * @description The add-on menu: active, attachable price-book items only.
+         *
+         *     ``proposal_limit`` on the response is the most this caller may sell at once
+         *     (null for a lead technician, or when the workspace configured no cap).
          */
         get: operations["list_upsell_catalog_api_v1_workspaces__workspace_id__upsell_catalog_get"];
         put?: never;
@@ -12059,7 +12062,7 @@ export interface components {
              * @default member
              * @enum {string}
              */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "lead_technician" | "technician" | "member";
         };
         /**
          * BulkMemberResultItem
@@ -17153,7 +17156,7 @@ export interface components {
              * @default member
              * @enum {string}
              */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "lead_technician" | "technician" | "member";
         };
         /**
          * InvitationPublicResponse
@@ -22640,6 +22643,7 @@ export interface components {
             tier_order?: string[];
             /** Tiers */
             tiers?: components["schemas"]["TierConfig"][];
+            upsell?: components["schemas"]["UpsellConfig"];
         };
         /**
          * PricingSettingsUpdate
@@ -22673,6 +22677,7 @@ export interface components {
             tier_order?: string[] | null;
             /** Tiers */
             tiers?: components["schemas"]["TierConfig"][] | null;
+            upsell?: components["schemas"]["UpsellConfig"] | null;
         };
         /**
          * PromptVersionActivateResponse
@@ -27885,7 +27890,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+            role: "admin" | "manager" | "dispatcher" | "sales_rep" | "lead_technician" | "technician" | "member";
         };
         /**
          * UpsellCarePlanResponse
@@ -27951,13 +27956,39 @@ export interface components {
         };
         /**
          * UpsellCatalogResponse
-         * @description The attachable add-on menu.
+         * @description The attachable add-on menu, and what the caller is allowed to sell off it.
          */
         UpsellCatalogResponse: {
             /** Items */
             items: components["schemas"]["UpsellCatalogItem"][];
+            /** Proposal Limit */
+            proposal_limit?: number | null;
             /** Total */
             total: number;
+        };
+        /**
+         * UpsellConfig
+         * @description Limits on what a field technician may sell from the on-site upsell screen.
+         *
+         *     ``field_proposal_limit`` caps the one-time total a plain ``technician`` may
+         *     put on a proposal, in major units. A ``lead_technician`` (and every role
+         *     above them) is exempt — that exemption is the entire difference between the
+         *     two roles — so this is the number separating "sell small add-ons" from "sell
+         *     a full fixture package".
+         *
+         *     ``None`` means **no cap**, which is the default: adding this block must not
+         *     retroactively restrict technicians in a workspace that never asked for a
+         *     limit. Owners opt in by setting a number.
+         *
+         *     Compared against the *grossed-up* total the client is actually charged, not
+         *     the net price-book figure, so the limit means what an owner thinks it means.
+         *     Recurring care plans sit deliberately outside the cap: signing an existing
+         *     system onto maintenance is retention every technician should be closing, and
+         *     it is cancellable service rather than a capital purchase.
+         */
+        UpsellConfig: {
+            /** Field Proposal Limit */
+            field_proposal_limit?: number | null;
         };
         /**
          * UpsellCustomer

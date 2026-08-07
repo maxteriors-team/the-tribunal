@@ -78,9 +78,15 @@ async def list_upsell_catalog(
         Query(description="Only add-ons that attach to this service category"),
     ] = None,
 ) -> UpsellCatalogResponse:
-    """The add-on menu: active, attachable price-book items only."""
+    """The add-on menu: active, attachable price-book items only.
+
+    ``proposal_limit`` on the response is the most this caller may sell at once
+    (null for a lead technician, or when the workspace configured no cap).
+    """
     service = UpsellService(db)
-    return await service.list_attachable_catalog(workspace_id, attach_target=attach_target)
+    return await service.list_attachable_catalog(
+        workspace_id, attach_target=attach_target, role=membership.role
+    )
 
 
 @router.get("/care-plans", response_model=UpsellCarePlanResponse)

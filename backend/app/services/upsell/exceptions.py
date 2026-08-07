@@ -48,6 +48,25 @@ class UpsellCarePlanUnavailableError(ValidationError):
         super().__init__(message)
 
 
+class UpsellProposalLimitError(ValidationError):
+    """The proposal exceeds what this technician may sell on their own. [400]
+
+    Raised only for the ``field`` tier, and only when the workspace configured
+    ``PricingSettings.upsell.field_proposal_limit``. A ``lead_technician`` holds
+    ``upsell:sell_uncapped`` and never sees this.
+
+    The message names both numbers and the way forward: a technician standing in
+    a customer's yard needs to know what to do next, not merely that they were
+    refused.
+    """
+
+    def __init__(self, total: float, limit: float) -> None:
+        super().__init__(
+            f"This proposal comes to ${total:,.2f}, over your ${limit:,.2f} "
+            "on-site limit. Ask a lead tech to send it."
+        )
+
+
 class UpsellQuoteNotForJobError(NotFoundError):
     """The quote does not belong to the customer on this job. [404]
 
