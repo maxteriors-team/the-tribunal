@@ -39,6 +39,7 @@ from app.models.contact import Contact
 from app.models.field_service import Job, JobAssignment, Technician
 from app.models.quote import Quote
 from app.models.workspace import Workspace
+from app.schemas.pricing import PricingSettings
 from app.schemas.proposal_wizard import ProposalCarePlan
 from app.schemas.quote import (
     QuoteCreate,
@@ -92,6 +93,40 @@ class UpsellService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.log = logger.bind(component="upsell_service")
+
+    # ------------------------------------------------------------------ #
+    # Pricing
+    # ------------------------------------------------------------------ #
+    async def _pricing_config(self, workspace_id: uuid.UUID) -> PricingSettings:
+        """The workspace's sales-pricing config (defaults when unset/invalid)."""
+        workspace = await self.db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise JobNotFoundError("Workspace not found")
+        return get_pricing_config(workspace)
+
+    @staticmethod
+    def _sell_price(net: float, config: PricingSettings) -> float:
+        """Convert a price-book figure into the price a client is actually charged.
+
+        ``catalog_items.unit_price`` holds a **net** price. Every client-facing
+        sales surface grosses it up by the back-end buffer (the Wisetack dealer
+        fee, plus commission when ``commission.in_price`` is on) before showing a
+        number: the wizard does it per fixture and per ad-hoc charge —
+        ``proposal_builder`` calls it out as "rep enters net, we gross up (matches
+        every other price)" — and the bistro and roofline estimators do the same.
+
+        Skipping it would make this the one surface that sells at cost. On the
+        real seeded price book that is an 11% margin leak at the default buffer
+        (a $785 net uplight must sell for $882) and more wherever commission is
+        baked into price. It matters more here than anywhere else precisely
+        because of how this screen is designed: the technician cannot see the
+        price book and cannot override a price, so a net figure handed to them is
+        sold at net every time, with no human left to notice.
+
+        Same function the wizard uses, so a fixture quoted in a driveway and the
+        same fixture quoted from the office come out to the cent.
+        """
+        return float(pp.gross_up_price(net, config))
 
     # ------------------------------------------------------------------ #
     # Job scoping — the security boundary every other method sits behind
@@ -260,7 +295,11 @@ class UpsellService:
         case-insensitive because ``attach_targets`` is operator-typed free text,
         and an item with an empty ``attach_targets`` is treated as unrestricted —
         the column's documented meaning is "no restriction recorded".
+
+        Prices are **grossed up** to what a client is charged — see
+        :meth:`_sell_price`.
         """
+        config = await self._pricing_config(workspace_id)
         query = select(CatalogItem).where(
             CatalogItem.workspace_id == workspace_id,
             CatalogItem.is_active.is_(True),
@@ -284,7 +323,7 @@ class UpsellService:
                 id=item.id,
                 name=item.name,
                 description=item.description,
-                unit_price=float(item.unit_price),
+                unit_price=self._sell_price(float(item.unit_price), config),
                 taxable=item.taxable,
                 service_category=item.service_category,
                 attach_targets=list(item.attach_targets or []),
@@ -399,12 +438,17 @@ class UpsellService:
                 "These items are not available as add-ons: " + ", ".join(sorted(set(missing)))
             )
 
+        # Grossed up here too, not just on the menu: the number the technician
+        # read aloud must be the number on the proposal the customer approves.
+        config = await self._pricing_config(workspace_id)
         line_items = [
             QuoteLineItemCreate(
                 name=sellable[line.catalog_item_id].name,
                 description=sellable[line.catalog_item_id].description,
                 quantity=line.quantity,
-                unit_price=float(sellable[line.catalog_item_id].unit_price),
+                unit_price=self._sell_price(
+                    float(sellable[line.catalog_item_id].unit_price), config
+                ),
                 catalog_item_id=line.catalog_item_id,
             )
             for line in payload.line_items

@@ -10,6 +10,16 @@ per-workspace data model:
     attribute and internal SKU bill-of-materials) plus the two per-linear-foot
     bistro string-lighting services from the wizard's ``CONFIG.bistro``.
 
+    Both are seeded ``is_attachable`` so a technician can sell them from the
+    on-site upsell screen — adding fixtures to an installed system is the core
+    upsell for this trade, and an item that is not attachable never reaches
+    that menu. The flag is set on **create only** (see the upsert), so an
+    operator can retire an item from the field menu for good.
+
+    Prices here are **net**. Every client-facing surface (the wizard, the
+    estimators, and the field upsell screen) grosses them up by the back-end
+    buffer at quote time; nothing should ever charge ``unit_price`` raw.
+
 Idempotent: re-running updates catalog items in place (matched by sku) and
 overwrites the ``pricing`` settings block. Nothing else in the workspace is
 touched. "Fork the data, not the code": a second lighting brand is this script
@@ -626,6 +636,11 @@ async def seed(workspace_ref: str) -> None:
                         unit_price=fx["price"],
                         taxable=True,
                         is_active=True,
+                        # Sellable from the field. Adding fixtures to a system
+                        # already installed is the core upsell for this trade,
+                        # and an item that is not attachable never reaches the
+                        # technician's on-site menu at all.
+                        is_attachable=True,
                         attributes=attributes,
                         components=components,
                     )
@@ -638,6 +653,9 @@ async def seed(workspace_ref: str) -> None:
                 item.is_active = True
                 item.attributes = attributes
                 item.components = components
+                # ``is_attachable`` is deliberately NOT reasserted on update: an
+                # operator who pulled a fixture off the field menu in the Price
+                # Book UI must not have it silently restored by the next run.
                 updated += 1
 
         # ── Bistro string-lighting upsert (per-linear-foot service items) ──
@@ -654,6 +672,9 @@ async def seed(workspace_ref: str) -> None:
                         unit_price=bx["unit_price"],
                         taxable=True,
                         is_active=True,
+                        # Same reasoning as the fixtures above; string lighting
+                        # is a classic add-on sold standing in the yard.
+                        is_attachable=True,
                         attributes=bx["attributes"],
                     )
                 )
