@@ -16,6 +16,8 @@ export type UpsellJobList = Schemas["UpsellJobListResponse"];
 export type UpsellCustomer = Schemas["UpsellCustomer"];
 export type UpsellCatalogItem = Schemas["UpsellCatalogItem"];
 export type UpsellCatalog = Schemas["UpsellCatalogResponse"];
+export type UpsellCarePlan = Schemas["UpsellCarePlanResponse"];
+export type UpsellCarePlanOption = Schemas["CarePlanPricing"];
 export type UpsellQuoteRequest = Schemas["UpsellQuoteRequest"];
 export type UpsellDeliverRequest = Schemas["UpsellDeliverRequest"];
 export type UpsellQuote = Schemas["QuoteDetailResponse"];
@@ -39,6 +41,16 @@ export const upsellApi = {
     apiClient.get("/api/v1/workspaces/{workspace_id}/upsell/catalog", {
       path: { workspace_id: workspaceId },
       query: attachTarget ? { attach_target: attachTarget } : {},
+    }),
+
+  /**
+   * Price the workspace's Care Plan tiers for a fixture count counted on site.
+   * Returns `configured: false` when the workspace sells no maintenance plans.
+   */
+  listCarePlans: (workspaceId: string, fixtureCount: number): Promise<UpsellCarePlan> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/upsell/care-plans", {
+      path: { workspace_id: workspaceId },
+      query: { fixture_count: fixtureCount },
     }),
 
   /** Build a draft proposal. Prices are resolved server-side from the price book. */

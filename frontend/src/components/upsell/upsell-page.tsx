@@ -41,6 +41,7 @@ import {
   PageLoadingState,
 } from "@/components/ui/page-state";
 import { UpsellAddonRow } from "@/components/upsell/upsell-addon-row";
+import { UpsellCarePlanSection } from "@/components/upsell/upsell-care-plan";
 import { UpsellSummaryBar } from "@/components/upsell/upsell-summary-bar";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { upsellApi, type UpsellJob, type UpsellQuote } from "@/lib/api/upsell";
@@ -73,6 +74,10 @@ export function UpsellPage() {
   const [createdQuote, setCreatedQuote] = useState<UpsellQuote | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sent, setSent] = useState(false);
+  // Care Plan state. The fixture count is a pricing input, so it lives here and
+  // drives the query key rather than being posted blind with the proposal.
+  const [fixtureCount, setFixtureCount] = useState(0);
+  const [carePlanKey, setCarePlanKey] = useState<string | null>(null);
 
   const jobsQuery = useQuery({
     queryKey: queryKeys.upsell.jobs(workspaceId ?? ""),
@@ -102,6 +107,18 @@ export function UpsellPage() {
     ...STATIC,
   });
 
+  const carePlanQuery = useQuery({
+    queryKey: queryKeys.upsell.carePlans(workspaceId ?? "", fixtureCount),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return upsellApi.listCarePlans(workspaceId, fixtureCount);
+    },
+    enabled: !!workspaceId && !!activeJob,
+    // Keep the previous prices on screen while a new count is priced, so the
+    // tier list does not blank out under the technician's thumb mid-count.
+    placeholderData: (previous) => previous,
+  });
+
   const createQuote = useMutation({
     mutationFn: () => {
       if (!workspaceId || !activeJob) throw new Error("No job");
@@ -109,6 +126,9 @@ export function UpsellPage() {
         line_items: Object.entries(quantities)
           .filter(([, qty]) => qty > 0)
           .map(([catalog_item_id, quantity]) => ({ catalog_item_id, quantity })),
+        care_plan: carePlanKey
+          ? { tier_key: carePlanKey, fixture_count: fixtureCount }
+          : null,
       });
     },
     onSuccess: (quote) => {
@@ -160,7 +180,28 @@ export function UpsellPage() {
     setQuantities({});
     setCreatedQuote(null);
     setSent(false);
+    setFixtureCount(0);
+    setCarePlanKey(null);
   };
+
+  const carePlanOptions = carePlanQuery.data?.options ?? [];
+  const selectedCarePlan =
+    carePlanOptions.find((option) => option.key === carePlanKey) ?? null;
+  // The plan a *created* quote carries comes from its frozen snapshot, not from
+  // local state: once the server has priced it, the server's number is the one
+  // the customer will see.
+  const quotedCarePlan = createdQuote
+    ? ((createdQuote.proposal_document?.care_plan ?? null) as {
+        selected?: string | null;
+        options?: { key: string; name: string; price: number }[];
+      } | null)
+    : null;
+  const quotedCarePlanOption =
+    quotedCarePlan?.options?.find((option) => option.key === quotedCarePlan.selected) ?? null;
+  const recurringTotal = createdQuote
+    ? (quotedCarePlanOption?.price ?? 0)
+    : (selectedCarePlan?.price ?? 0);
+  const nothingSelected = selectedCount === 0 && !carePlanKey;
 
   // ---------------------------------------------------------------- step 1
   if (!activeJob) {
@@ -295,6 +336,7 @@ export function UpsellPage() {
             <h2 id="upsell-draft-heading" className="font-medium">
               Proposal {createdQuote.number} is ready
             </h2>
+
             <p className="mt-1 text-sm text-muted-foreground">
               Send it to {customer?.full_name ?? "the customer"} at{" "}
               {formatPhoneNumber(customer?.phone_number)}.
@@ -311,6 +353,16 @@ export function UpsellPage() {
                   </span>
                 </li>
               ))}
+              {quotedCarePlanOption ? (
+                <li className="flex justify-between gap-4 border-t pt-2">
+                  <span className="min-w-0 truncate">
+                    {quotedCarePlanOption.name} care plan
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {formatCurrency(quotedCarePlanOption.price)}/yr
+                  </span>
+                </li>
+              ) : null}
             </ul>
             {/* "Edit" lives with the proposal it edits rather than in the summary
                 bar: the bar carries exactly one action so the total never has to
@@ -323,7 +375,7 @@ export function UpsellPage() {
                 createQuote.reset();
               }}
             >
-              Edit add-ons
+              Edit selection
             </Button>
           </section>
         ) : catalogQuery.isPending ? (
@@ -343,6 +395,7 @@ export function UpsellPage() {
           <>
             <h2 className="sr-only">Add-ons</h2>
             <ul className="flex flex-col gap-2">
+
               {catalogItems.map((item) => {
                 const quantity = quantities[item.id] ?? 0;
                 return (
@@ -367,6 +420,15 @@ export function UpsellPage() {
                 );
               })}
             </ul>
+            <UpsellCarePlanSection
+              options={carePlanOptions}
+              freeFixtures={carePlanQuery.data?.free_fixtures ?? 0}
+              fixtureCount={fixtureCount}
+              selectedKey={carePlanKey}
+              disabled={createQuote.isPending}
+              onFixtureCountChange={setFixtureCount}
+              onSelect={setCarePlanKey}
+            />
           </>
         )}
       </div>
@@ -376,10 +438,11 @@ export function UpsellPage() {
           createdQuote ? (createdQuote.line_items ?? []).length : selectedCount
         }
         total={createdQuote ? createdQuote.total : previewTotal}
+        recurringTotal={recurringTotal}
         actionLabel={createdQuote ? "Send to customer" : "Build proposal"}
         pendingLabel={createdQuote ? "Sending…" : "Building…"}
         pending={createQuote.isPending}
-        disabled={createdQuote ? false : selectedCount === 0}
+        disabled={createdQuote ? false : nothingSelected}
         onAction={() => {
           if (createdQuote) {
             setConfirmOpen(true);
@@ -395,8 +458,22 @@ export function UpsellPage() {
             <DialogTitle>Send this proposal?</DialogTitle>
             <DialogDescription>
               {customer?.full_name ?? "The customer"} gets a text at{" "}
-              {formatPhoneNumber(customer?.phone_number)} with a link to approve{" "}
-              {createdQuote ? formatCurrency(createdQuote.total) : ""} of work.
+              {formatPhoneNumber(customer?.phone_number)} with a link to approve
+              {createdQuote && createdQuote.total > 0
+                ? ` ${formatCurrency(createdQuote.total)} of work`
+                : ""}
+              {createdQuote && createdQuote.total > 0 && quotedCarePlanOption
+                ? " plus"
+                : ""}
+              {/* Named as a subscription, never merged into the one-time figure:
+                  this dialog is the last thing shown before a real customer is
+                  billed, so it must not overstate or understate either number. */}
+              {quotedCarePlanOption
+                ? ` the ${quotedCarePlanOption.name} care plan at ${formatCurrency(
+                    quotedCarePlanOption.price,
+                  )} a year`
+                : ""}
+              .
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

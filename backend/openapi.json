@@ -46701,6 +46701,60 @@
         "title": "UpdateMemberRoleRequest",
         "type": "object"
       },
+      "UpsellCarePlanResponse": {
+        "description": "The Care Plan tiers available at a given fixture count.\n\nReuses :class:`~app.schemas.pricing.CarePlanPricing` rather than projecting a\nfield subset: this is the *same* priced option the sales wizard and the public\nproposal page render, and a technician's tier must never drift from the one\nthe customer sees on the page they approve.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "fixture_count": {
+            "title": "Fixture Count",
+            "type": "integer"
+          },
+          "free_fixtures": {
+            "title": "Free Fixtures",
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/CarePlanPricing"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fixture_count",
+          "free_fixtures",
+          "configured"
+        ],
+        "title": "UpsellCarePlanResponse",
+        "type": "object"
+      },
+      "UpsellCarePlanSelection": {
+        "description": "The Care Plan a technician signed the customer up for.\n\nCarries the tier *key* and the fixture count, never a price: the plan is\npriced server-side from the workspace's pricing config, exactly like the\nwizard prices it.\n\n``fixture_count`` is what the technician counted in the yard. It drives\n``base + per_fixture × (count - free_fixtures)``, so it is a real pricing\ninput rather than a note — hence the explicit bound instead of an open int.",
+        "properties": {
+          "fixture_count": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Fixture Count",
+            "type": "integer"
+          },
+          "tier_key": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tier Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_key",
+          "fixture_count"
+        ],
+        "title": "UpsellCarePlanSelection",
+        "type": "object"
+      },
       "UpsellCatalogItem": {
         "description": "One add-on on the on-site menu.",
         "properties": {
@@ -46971,8 +47025,18 @@
         "type": "object"
       },
       "UpsellQuoteRequest": {
-        "description": "Build an add-on proposal for the customer on a job.",
+        "description": "Build an add-on proposal for the customer on a job.\n\nA proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on\nits own is a complete sale — signing an existing system onto maintenance adds\nno hardware — so ``line_items`` may be empty when ``care_plan`` is set.",
         "properties": {
+          "care_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpsellCarePlanSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "line_items": {
             "items": {
               "$ref": "#/components/schemas/UpsellQuoteLine"
@@ -85096,6 +85160,69 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/upsell/care-plans": {
+      "get": {
+        "description": "Price the workspace's Care Plan tiers for a counted fixture count.\n\nPriced by the same engine as the sales wizard, so a plan quoted in a driveway\nmatches the one quoted from the office. Returns ``configured=false`` when the\nworkspace sells no maintenance plans.",
+        "operationId": "list_upsell_care_plans_api_v1_workspaces__workspace_id__upsell_care_plans_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Fixtures the technician counted on site",
+            "in": "query",
+            "name": "fixture_count",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Fixtures the technician counted on site",
+              "maximum": 1000,
+              "minimum": 0,
+              "title": "Fixture Count",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellCarePlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Upsell Care Plans",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/upsell/catalog": {
       "get": {
         "description": "The add-on menu: active, attachable price-book items only.",
@@ -85273,7 +85400,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote": {
       "post": {
-        "description": "Build a draft add-on proposal for the customer on this job.\n\nPrices come from the price book, never from the request body, and the quote is\nattributed to the caller so attach-rate reporting can credit the sale.",
+        "description": "Build a draft add-on proposal for the customer on this job.\n\nPrices come from the price book, never from the request body, and the quote is\nattributed to the caller so attach-rate reporting can credit the sale.\n\nMay carry hardware add-ons, a Care Plan, or both. A Care Plan is written to\n``proposal_document`` (not as a line item) so approving the proposal actually\nprovisions the recurring maintenance visits.",
         "operationId": "create_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote_post",
         "parameters": [
           {

@@ -35,6 +35,19 @@ class UpsellItemNotAttachableError(ValidationError):
         super().__init__(message)
 
 
+class UpsellCarePlanUnavailableError(ValidationError):
+    """The requested Care Plan tier is not offered by this workspace. [400]
+
+    Covers an unknown tier key and a workspace with no tiers configured at all.
+    Tier keys come from the workspace's pricing config, which an operator can
+    edit at any time, so a technician's phone can hold a key that stopped
+    existing mid-shift — that must read as "pick again", not a 500.
+    """
+
+    def __init__(self, message: str = "That care plan is no longer offered") -> None:
+        super().__init__(message)
+
+
 class UpsellQuoteNotForJobError(NotFoundError):
     """The quote does not belong to the customer on this job. [404]
 

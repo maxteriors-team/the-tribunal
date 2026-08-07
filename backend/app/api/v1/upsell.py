@@ -26,6 +26,7 @@ from app.api.deps import DB, CanUpsell, CurrentUser, TransactionalDB
 from app.api.service_errors import ServiceErrorRoute
 from app.schemas.quote import QuoteDeliverResult, QuoteDetailResponse
 from app.schemas.upsell import (
+    UpsellCarePlanResponse,
     UpsellCatalogResponse,
     UpsellCustomer,
     UpsellDeliverRequest,
@@ -82,6 +83,27 @@ async def list_upsell_catalog(
     return await service.list_attachable_catalog(workspace_id, attach_target=attach_target)
 
 
+@router.get("/care-plans", response_model=UpsellCarePlanResponse)
+async def list_upsell_care_plans(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanUpsell,
+    fixture_count: Annotated[
+        int,
+        Query(ge=0, le=1000, description="Fixtures the technician counted on site"),
+    ] = 0,
+) -> UpsellCarePlanResponse:
+    """Price the workspace's Care Plan tiers for a counted fixture count.
+
+    Priced by the same engine as the sales wizard, so a plan quoted in a driveway
+    matches the one quoted from the office. Returns ``configured=false`` when the
+    workspace sells no maintenance plans.
+    """
+    service = UpsellService(db)
+    return await service.list_care_plans(workspace_id, fixture_count=fixture_count)
+
+
 @router.post("/jobs/{job_id}/quote", response_model=QuoteDetailResponse, status_code=201)
 async def create_upsell_quote(
     workspace_id: uuid.UUID,
@@ -95,6 +117,10 @@ async def create_upsell_quote(
 
     Prices come from the price book, never from the request body, and the quote is
     attributed to the caller so attach-rate reporting can credit the sale.
+
+    May carry hardware add-ons, a Care Plan, or both. A Care Plan is written to
+    ``proposal_document`` (not as a line item) so approving the proposal actually
+    provisions the recurring maintenance visits.
     """
     service = UpsellService(db)
     return await service.create_quote(

@@ -38,6 +38,8 @@ from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.field_service import Job, JobAssignment, Technician
 from app.models.quote import Quote
+from app.models.workspace import Workspace
+from app.schemas.proposal_wizard import ProposalCarePlan
 from app.schemas.quote import (
     QuoteCreate,
     QuoteDeliverResult,
@@ -45,6 +47,8 @@ from app.schemas.quote import (
     QuoteLineItemCreate,
 )
 from app.schemas.upsell import (
+    UpsellCarePlanResponse,
+    UpsellCarePlanSelection,
     UpsellCatalogItem,
     UpsellCatalogResponse,
     UpsellCustomer,
@@ -53,8 +57,11 @@ from app.schemas.upsell import (
     UpsellQuoteRequest,
 )
 from app.services.field_service.exceptions import JobNotFoundError
+from app.services.quotes import proposal_pricing as pp
+from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.quote_service import QuoteService
 from app.services.upsell.exceptions import (
+    UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
     UpsellQuoteNotForJobError,
@@ -287,6 +294,43 @@ class UpsellService:
         ]
         return UpsellCatalogResponse(items=items, total=len(items))
 
+    async def list_care_plans(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        fixture_count: int,
+    ) -> UpsellCarePlanResponse:
+        """Price every Care Plan tier for a counted number of fixtures.
+
+        Priced through :func:`app.services.quotes.proposal_pricing.price_care_plan`
+        — the same function the sales wizard and the public proposal page use — so
+        a technician quoting Gold in a driveway and an office rep quoting Gold in
+        the wizard cannot arrive at different numbers.
+
+        A workspace with no configured tiers returns ``configured=False`` with an
+        empty list rather than an error: not selling maintenance is a normal
+        state, and the UI renders it as guidance.
+        """
+        workspace = await self.db.get(Workspace, workspace_id)
+        if workspace is None:
+            raise JobNotFoundError("Workspace not found")
+
+        config = get_pricing_config(workspace)
+        if not config.care_plan.tiers:
+            return UpsellCarePlanResponse(
+                fixture_count=fixture_count,
+                free_fixtures=config.care_plan.free_fixtures,
+                options=[],
+                configured=False,
+            )
+
+        return UpsellCarePlanResponse(
+            fixture_count=fixture_count,
+            free_fixtures=config.care_plan.free_fixtures,
+            options=pp.price_care_plan(fixture_count, config),
+            configured=True,
+        )
+
     # ------------------------------------------------------------------ #
     # Write
     # ------------------------------------------------------------------ #
@@ -310,14 +354,23 @@ class UpsellService:
         The quote is attributed to the caller (``created_by_id``) so attach-rate
         and attach-value reporting can pay the right person a spiff.
 
+        A Care Plan rides in ``proposal_document`` rather than as a line item —
+        see :meth:`_care_plan_document` for why that distinction is the whole
+        feature and not a storage detail.
+
         Raises:
-            UpsellNoLineItemsError: an empty proposal. [400]
+            UpsellNoLineItemsError: nothing sold at all — no add-ons and no plan.
+                [400]
             UpsellItemNotAttachableError: an item that is missing, archived, in
                 another workspace, or simply not flagged ``is_attachable``. [400]
+            UpsellCarePlanUnavailableError: an unknown or no-longer-offered tier.
+                [400]
         """
         job = await self._visible_job(workspace_id, job_id, user_id, role)
 
-        if not payload.line_items:
+        # A Care Plan on its own is a complete sale: signing an existing system
+        # onto maintenance adds no hardware, so "empty" means neither.
+        if not payload.line_items and payload.care_plan is None:
             raise UpsellNoLineItemsError()
 
         requested_ids = [line.catalog_item_id for line in payload.line_items]
@@ -357,24 +410,106 @@ class UpsellService:
             for line in payload.line_items
         ]
 
+        # Priced and validated BEFORE the quote is written: a bad tier key must
+        # fail without leaving a stray draft behind, because ``create_quote``
+        # commits on its own.
+        care_plan_document = (
+            await self._care_plan_document(workspace_id, payload.care_plan)
+            if payload.care_plan is not None
+            else None
+        )
+
         quote_in = QuoteCreate(
             contact_id=job.contact_id,
             service_location_id=job.service_location_id,
-            title=payload.title or f"Add-on for {job.title}",
+            title=payload.title or self._default_title(job, payload, care_plan_document),
             line_items=line_items,
             notes=payload.notes,
         )
+
+        created = await QuoteService(self.db).create_quote(
+            workspace_id, quote_in, created_by_id=user_id
+        )
+
+        if care_plan_document is not None:
+            quote = await self.db.get(Quote, created.id)
+            if quote is not None:
+                # Merge rather than assign: an upsell quote has no other snapshot
+                # today, but clobbering a document is how a future caller silently
+                # loses a customer's tier selection.
+                document = dict(quote.proposal_document or {})
+                document["care_plan"] = care_plan_document
+                quote.proposal_document = document
+                await self.db.flush()
+                created.proposal_document = document
 
         self.log.info(
             "upsell_quote_created",
             workspace_id=str(workspace_id),
             job_id=str(job_id),
+            quote_id=str(created.id),
             user_id=user_id,
             line_count=len(line_items),
+            care_plan_tier=(care_plan_document or {}).get("selected"),
         )
-        return await QuoteService(self.db).create_quote(
-            workspace_id, quote_in, created_by_id=user_id
+        return created
+
+    @staticmethod
+    def _default_title(
+        job: Job,
+        payload: UpsellQuoteRequest,
+        care_plan_document: dict[str, Any] | None,
+    ) -> str:
+        """Name the proposal after what it actually sells.
+
+        A care-plan-only proposal titled "Add-on for Roof soft wash" reads as a
+        mistake to the customer approving it.
+        """
+        if care_plan_document is not None and not payload.line_items:
+            return f"Care plan for {job.title}"[:200]
+        return f"Add-on for {job.title}"[:200]
+
+    async def _care_plan_document(
+        self,
+        workspace_id: uuid.UUID,
+        selection: UpsellCarePlanSelection,
+    ) -> dict[str, Any]:
+        """Build the frozen ``care_plan`` snapshot for a technician's selection.
+
+        **A Care Plan is a subscription, not a line item, and that is the whole
+        point of this method.** On approval,
+        :class:`~app.services.recurring_jobs.service_plan_provisioner.ServicePlanProvisioner`
+        reads ``proposal_document.care_plan.selected`` and creates the recurring
+        template that puts maintenance visits on the dispatch board. Selling the
+        plan as a catalog line item instead would take the customer's money once,
+        provision nothing, and schedule no visits — the client would be "on Gold"
+        in nobody's records. Writing the snapshot is what makes the sale real.
+
+        The full priced ``options`` list is written, not just the chosen key,
+        because the provisioner reads the selected option's ``visits`` to derive
+        the plan's recurrence and its ``name`` for the plan title — and because
+        freezing the snapshot means a later pricing-config edit cannot
+        retroactively change what this customer bought. This is the same shape
+        :func:`app.services.quotes.proposal_builder.build_proposal_document`
+        writes, so the public proposal page renders it with no special-casing.
+        """
+        priced = await self.list_care_plans(workspace_id, fixture_count=selection.fixture_count)
+        if not priced.configured:
+            raise UpsellCarePlanUnavailableError("This workspace does not offer care plans yet")
+
+        chosen = next(
+            (option for option in priced.options if option.key == selection.tier_key),
+            None,
         )
+        if chosen is None:
+            raise UpsellCarePlanUnavailableError()
+
+        return ProposalCarePlan(
+            fixture_count=priced.fixture_count,
+            free_fixtures=priced.free_fixtures,
+            options=priced.options,
+            selected=chosen.key,
+        ).model_dump(mode="json")
 
     async def deliver_quote(
         self,

@@ -14,6 +14,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.pricing import CarePlanPricing
+
 
 class UpsellJob(BaseModel):
     """A job the caller may sell an add-on on."""
@@ -84,6 +86,40 @@ class UpsellCatalogResponse(BaseModel):
     total: int
 
 
+class UpsellCarePlanResponse(BaseModel):
+    """The Care Plan tiers available at a given fixture count.
+
+    Reuses :class:`~app.schemas.pricing.CarePlanPricing` rather than projecting a
+    field subset: this is the *same* priced option the sales wizard and the public
+    proposal page render, and a technician's tier must never drift from the one
+    the customer sees on the page they approve.
+    """
+
+    fixture_count: int
+    free_fixtures: int
+    options: list[CarePlanPricing] = Field(default_factory=list)
+    # False when the workspace has not configured any Care Plan tiers, which is a
+    # normal state (not every trade sells maintenance) and renders as guidance
+    # rather than an error.
+    configured: bool
+
+
+class UpsellCarePlanSelection(BaseModel):
+    """The Care Plan a technician signed the customer up for.
+
+    Carries the tier *key* and the fixture count, never a price: the plan is
+    priced server-side from the workspace's pricing config, exactly like the
+    wizard prices it.
+
+    ``fixture_count`` is what the technician counted in the yard. It drives
+    ``base + per_fixture × (count - free_fixtures)``, so it is a real pricing
+    input rather than a note — hence the explicit bound instead of an open int.
+    """
+
+    tier_key: str = Field(min_length=1, max_length=64)
+    fixture_count: int = Field(ge=0, le=1000)
+
+
 class UpsellQuoteLine(BaseModel):
     """A requested add-on line.
 
@@ -97,9 +133,15 @@ class UpsellQuoteLine(BaseModel):
 
 
 class UpsellQuoteRequest(BaseModel):
-    """Build an add-on proposal for the customer on a job."""
+    """Build an add-on proposal for the customer on a job.
+
+    A proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on
+    its own is a complete sale — signing an existing system onto maintenance adds
+    no hardware — so ``line_items`` may be empty when ``care_plan`` is set.
+    """
 
     line_items: list[UpsellQuoteLine] = Field(default_factory=list)
+    care_plan: UpsellCarePlanSelection | None = None
     title: str | None = Field(default=None, max_length=200)
     notes: str | None = None
 

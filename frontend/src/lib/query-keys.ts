@@ -592,6 +592,10 @@ export const queryKeys = {
       ["upsell", workspaceId, "jobs", jobId, "customer"] as const,
     catalog: (workspaceId: string, attachTarget?: string | null) =>
       ["upsell", workspaceId, "catalog", attachTarget ?? null] as const,
+    // Keyed by fixture count: the price is a function of it, so two counts are
+    // genuinely different data rather than a filtered view of one list.
+    carePlans: (workspaceId: string, fixtureCount: number) =>
+      ["upsell", workspaceId, "care-plans", fixtureCount] as const,
   },
   voiceCampaigns: createResourceQueryKeys("voice-campaigns"),
   workspaces: {
