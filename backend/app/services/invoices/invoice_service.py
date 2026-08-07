@@ -27,7 +27,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -73,6 +73,25 @@ logger = structlog.get_logger()
 # Statuses that mean the invoice has been issued to the customer; line-item edits
 # and hard deletes are blocked once an invoice reaches any of these.
 _ISSUED_STATUSES = frozenset({"sent", "paid", "partial", "overdue"})
+
+
+def serialize_invoice[R: InvoiceResponse](invoice: Invoice, model: type[R]) -> R:
+    """Serialize an invoice, adding the bill-to contact's display name.
+
+    ``Invoice.contact`` lazy-loads by default, and a lazy load on an async
+    session raises ``MissingGreenlet``. Callers that want the name must eager
+    load the relationship (``selectinload(Invoice.contact)``); when it is not
+    loaded we leave ``contact_name`` as ``None`` rather than failing a whole
+    response over a display label. Mirrors ``serialize_conversation``.
+
+    Only the name is exposed. A contact's email, phone, and address are
+    ``EncryptedString`` columns and stay out of invoice payloads.
+    """
+    response = model.model_validate(invoice)
+    if "contact" not in inspect(invoice).unloaded:
+        contact = invoice.contact
+        response.contact_name = contact.full_name if contact else None
+    return response
 
 
 class InvoiceService:
@@ -188,8 +207,17 @@ class InvoiceService:
         status: str | None = None,
         contact_id: int | None = None,
     ) -> PaginatedInvoices:
-        """List a workspace's invoices, newest first, with optional filters."""
-        query = select(Invoice).where(Invoice.workspace_id == workspace_id)
+        """List a workspace's invoices, newest first, with optional filters.
+
+        The bill-to contact is eager loaded so each row can name whose invoice it
+        is. ``selectinload`` issues one extra query for the whole page rather than
+        one per row, so naming 100 invoices costs 2 queries, not 101.
+        """
+        query = (
+            select(Invoice)
+            .where(Invoice.workspace_id == workspace_id)
+            .options(selectinload(Invoice.contact))
+        )
         if status:
             query = query.where(Invoice.status == status)
         if contact_id is not None:
@@ -198,7 +226,7 @@ class InvoiceService:
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         return result.build_response(
-            item_model=InvoiceResponse,
+            item_mapper=lambda invoice: serialize_invoice(invoice, InvoiceResponse),
             response_builder=PaginatedInvoices,
         )
 
@@ -276,7 +304,7 @@ class InvoiceService:
             total=float(invoice.total),
             amount_paid=float(invoice.amount_paid),
         )
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def get_invoice(
         self,
@@ -289,9 +317,9 @@ class InvoiceService:
             Invoice,
             invoice_id,
             workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items)],
+            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
         )
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def update_invoice(
         self,
@@ -305,7 +333,7 @@ class InvoiceService:
             Invoice,
             invoice_id,
             workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items)],
+            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
         )
         if invoice.status == "void":
             raise ConflictError("Cannot edit a voided invoice")
@@ -356,7 +384,7 @@ class InvoiceService:
         self._recompute_totals(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def delete_invoice(
         self,
@@ -439,7 +467,7 @@ class InvoiceService:
         await self._transition_to_sent(workspace_id, invoice)
 
         delivery, delivered_to = await self._email_invoice(workspace_id, invoice)
-        detail = InvoiceDetailResponse.model_validate(invoice)
+        detail = serialize_invoice(invoice, InvoiceDetailResponse)
         return InvoiceSendResponse(
             **detail.model_dump(),
             delivery=delivery,
@@ -592,14 +620,14 @@ class InvoiceService:
             Invoice,
             invoice_id,
             workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items)],
+            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
         )
         if invoice.status == "paid":
             raise ConflictError("Cannot void a fully paid invoice")
         invoice.status = "void"
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def record_payment(
         self,
@@ -716,7 +744,7 @@ class InvoiceService:
         self._recompute_totals(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def update_line_item(
         self,
@@ -753,7 +781,7 @@ class InvoiceService:
         self._recompute_totals(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def remove_line_item(
         self,
@@ -776,7 +804,7 @@ class InvoiceService:
         self._recompute_totals(invoice)
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
-        return InvoiceDetailResponse.model_validate(invoice)
+        return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def _get_mutable_invoice(
         self,
@@ -789,7 +817,7 @@ class InvoiceService:
             Invoice,
             invoice_id,
             workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items)],
+            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
         )
         if invoice.status in ("paid", "void"):
             raise ConflictError(f"Cannot edit line items on a {invoice.status} invoice")

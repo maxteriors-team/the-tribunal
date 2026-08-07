@@ -19065,6 +19065,17 @@
             ],
             "title": "Contact Id"
           },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -19452,6 +19463,17 @@
             ],
             "title": "Contact Id"
           },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -19625,6 +19647,17 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
           },
           "created_at": {
             "format": "date-time",

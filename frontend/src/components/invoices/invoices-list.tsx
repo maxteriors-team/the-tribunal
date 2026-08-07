@@ -168,6 +168,7 @@ export function InvoicesList() {
           <TableHeader>
             <TableRow>
               <TableHead>Number</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">Paid</TableHead>
@@ -179,6 +180,14 @@ export function InvoicesList() {
             {invoices.map((invoice: Invoice) => (
               <TableRow key={invoice.id}>
                 <TableCell className="font-medium">{invoice.number}</TableCell>
+                {/* An invoice can legitimately have no bill-to contact (an
+                    unattached draft), so say so rather than leaving a blank
+                    cell that reads as a loading failure. */}
+                <TableCell>
+                  {invoice.contact_name ?? (
+                    <span className="text-muted-foreground">No customer</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[invoice.status]}>
                     {invoice.status}

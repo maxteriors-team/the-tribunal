@@ -1170,3 +1170,59 @@ async def test_a_notification_outage_never_undoes_a_payment(
         await db.refresh(invoice)
         assert invoice.status == "paid"
         assert float(invoice.amount_paid) == 500.0
+
+
+async def test_list_names_the_bill_to_contact() -> None:
+    """A list row says whose invoice it is, not just its number.
+
+    An invoice with no bill-to contact is a legitimate state (an unattached
+    draft), so its name is ``None`` rather than a placeholder -- the UI decides
+    how to render the gap.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        contact.last_name = "Reyes"
+        await db.flush()
+        svc = InvoiceService(db)
+
+        named = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Gutter clean", unit_price=180.0)],
+            ),
+        )
+        unattached = await svc.create_invoice(ws.id, InvoiceCreate(line_items=[]))
+
+        listed = await svc.list_invoices(ws.id)
+        by_id = {item.id: item for item in listed.items}
+
+        # First and last name are joined for display; neither is encrypted.
+        assert by_id[named.id].contact_name == "Pat Reyes"
+        assert by_id[named.id].contact_id == contact.id
+        # No bill-to contact means no name, not an empty string or a crash.
+        assert by_id[unattached.id].contact_name is None
+
+        # The single-invoice read carries the same label, so a detail view and a
+        # list row never disagree about who is being billed.
+        assert (await svc.get_invoice(ws.id, named.id)).contact_name == "Pat Reyes"
+
+
+async def test_contact_name_is_not_leaked_across_workspaces() -> None:
+    """Listing one workspace never surfaces another tenant's contact name."""
+    async with AsyncSessionLocal() as db:
+        ws_a = await _make_workspace(db)
+        ws_b = await _make_workspace(db)
+        contact_a = await _make_contact(db, ws_a.id)
+        contact_a.last_name = "Private"
+        await db.flush()
+        svc = InvoiceService(db)
+
+        await svc.create_invoice(ws_a.id, InvoiceCreate(contact_id=contact_a.id, line_items=[]))
+        await svc.create_invoice(ws_b.id, InvoiceCreate(line_items=[]))
+
+        listed_b = await svc.list_invoices(ws_b.id)
+        assert listed_b.total == 1
+        assert all(item.contact_name != "Pat Private" for item in listed_b.items)
+        assert listed_b.items[0].contact_name is None
