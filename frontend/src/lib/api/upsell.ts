@@ -18,6 +18,7 @@ export type UpsellCatalogItem = Schemas["UpsellCatalogItem"];
 export type UpsellCatalog = Schemas["UpsellCatalogResponse"];
 export type UpsellCarePlan = Schemas["UpsellCarePlanResponse"];
 export type UpsellCarePlanOption = Schemas["CarePlanPricing"];
+export type UpsellMyStats = Schemas["UpsellMyStats"];
 export type UpsellQuoteRequest = Schemas["UpsellQuoteRequest"];
 export type UpsellDeliverRequest = Schemas["UpsellDeliverRequest"];
 export type UpsellQuote = Schemas["QuoteDetailResponse"];
@@ -51,6 +52,15 @@ export const upsellApi = {
     apiClient.get("/api/v1/workspaces/{workspace_id}/upsell/care-plans", {
       path: { workspace_id: workspaceId },
       query: { fixture_count: fixtureCount },
+    }),
+
+  /**
+   * The caller's own selling numbers for the current month. Always self-scoped —
+   * there is no user parameter, so this cannot be pointed at a colleague.
+   */
+  myStats: (workspaceId: string): Promise<UpsellMyStats> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/upsell/my-stats", {
+      path: { workspace_id: workspaceId },
     }),
 
   /** Build a draft proposal. Prices are resolved server-side from the price book. */

@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/page-state";
 import { UpsellAddonRow } from "@/components/upsell/upsell-addon-row";
 import { UpsellCarePlanSection } from "@/components/upsell/upsell-care-plan";
+import { UpsellScoreboard } from "@/components/upsell/upsell-scoreboard";
 import { UpsellSummaryBar } from "@/components/upsell/upsell-summary-bar";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { upsellApi, type UpsellJob, type UpsellQuote } from "@/lib/api/upsell";
@@ -113,6 +114,17 @@ export function UpsellPage() {
     ...STATIC,
   });
 
+  // Only needed on the job-picker step, so it is not fetched while the technician
+  // is mid-proposal.
+  const statsQuery = useQuery({
+    queryKey: queryKeys.upsell.myStats(workspaceId ?? ""),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return upsellApi.myStats(workspaceId);
+    },
+    enabled: !!workspaceId && !activeJob,
+  });
+
   const carePlanQuery = useQuery({
     queryKey: queryKeys.upsell.carePlans(workspaceId ?? "", fixtureCount),
     queryFn: () => {
@@ -158,6 +170,10 @@ export function UpsellPage() {
       setConfirmOpen(false);
       setSent(true);
       toast.success("Proposal sent.");
+      // The scoreboard's sent-count just changed.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.upsell.myStats(workspaceId ?? ""),
+      });
     },
     onError: (error) => {
       // Keep the dialog open and the draft intact: the tech can retry the other
@@ -288,6 +304,10 @@ export function UpsellPage() {
               })}
             </ul>
           )}
+
+          {/* Below the job list: the job is why they opened the app; their
+              numbers are what they check on the way past. */}
+          {statsQuery.data ? <UpsellScoreboard stats={statsQuery.data} /> : null}
         </div>
       </div>
     );

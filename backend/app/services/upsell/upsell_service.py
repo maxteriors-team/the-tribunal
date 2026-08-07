@@ -27,6 +27,7 @@ for a workspace's job ids.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import structlog
@@ -39,7 +40,7 @@ from app.models.contact import Contact
 from app.models.field_service import Job, JobAssignment, Technician
 from app.models.quote import Quote
 from app.models.workspace import Workspace
-from app.schemas.pricing import PricingSettings
+from app.schemas.pricing import PricingSettings, UpsellRankConfig
 from app.schemas.proposal_wizard import ProposalCarePlan
 from app.schemas.quote import (
     QuoteCreate,
@@ -55,7 +56,9 @@ from app.schemas.upsell import (
     UpsellCustomer,
     UpsellJob,
     UpsellJobListResponse,
+    UpsellMyStats,
     UpsellQuoteRequest,
+    UpsellRankProgress,
 )
 from app.services.field_service.exceptions import JobNotFoundError
 from app.services.quotes import proposal_pricing as pp
@@ -70,6 +73,55 @@ from app.services.upsell.exceptions import (
 )
 
 logger = structlog.get_logger()
+
+
+def _rank_progress(revenue: float, ranks: list[UpsellRankConfig]) -> UpsellRankProgress | None:
+    """Place ``revenue`` on the workspace's selling ladder.
+
+    Returns ``None`` when no ranks are configured — the default — so a workspace
+    that has not defined a compensation ladder simply shows none, rather than
+    this codebase inventing rank names and payouts on an operator's behalf.
+
+    ``ranks`` arrives sorted ascending (enforced by ``UpsellConfig``). Progress is
+    measured from the *current* rung's threshold rather than from zero, so a
+    technician who just ranked up sees an almost-empty bar toward the next rung
+    instead of an almost-full one.
+    """
+    if not ranks:
+        return None
+
+    current = None
+    nxt = None
+    for rank in ranks:
+        if revenue >= rank.threshold:
+            current = rank
+        else:
+            nxt = rank
+            break
+
+    if nxt is None:
+        # Top of the ladder: no target left to chase.
+        return UpsellRankProgress(
+            current_key=current.key if current else None,
+            current_name=current.name if current else None,
+            current_reward=current.reward if current else None,
+        )
+
+    floor = current.threshold if current else 0.0
+    span = nxt.threshold - floor
+    return UpsellRankProgress(
+        current_key=current.key if current else None,
+        current_name=current.name if current else None,
+        current_reward=current.reward if current else None,
+        next_name=nxt.name,
+        next_threshold=nxt.threshold,
+        next_reward=nxt.reward,
+        amount_to_next=round(nxt.threshold - revenue, 2),
+        # A zero-width span (two ranks at the same threshold) would divide by
+        # zero; treat the rung as already reached.
+        progress=round(min(1.0, max(0.0, (revenue - floor) / span)), 4) if span > 0 else 1.0,
+    )
+
 
 # ``attributes`` flag -> human unit shown next to the price. The price book stores
 # a rate in ``unit_price`` and marks *how* it is measured out of band, so without
@@ -378,6 +430,72 @@ class UpsellService:
             free_fixtures=config.care_plan.free_fixtures,
             options=pp.price_care_plan(fixture_count, config),
             configured=True,
+        )
+
+    async def my_selling_stats(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: int,
+        *,
+        today: date | None = None,
+    ) -> UpsellMyStats:
+        """This technician's own selling numbers for the current calendar month.
+
+        Scoped to ``created_by_id == user_id`` and nothing else. A technician sees
+        their own performance and no colleague's: the workspace-wide breakdown
+        already exists behind ``reports:view`` for owners
+        (``sales_performance_service.by_closer``), and surfacing peers' revenue to
+        the narrowest tier in the product would be a data leak wearing a
+        leaderboard costume.
+
+        Cohorted on **creation**, matching the sales-performance report, so a
+        proposal and the decision it earns stay in the same month and the close
+        rate answers "of what I sent in June, how much closed?".
+
+        Drafts are excluded throughout: a draft never reached a customer, so it is
+        not a sales attempt. ``close_rate`` is ``None`` rather than ``0`` when
+        nothing was sent, so a quiet month never renders as a 0% close rate.
+        """
+        reference = today or datetime.now(UTC).date()
+        period_start = reference.replace(day=1)
+        period_end = (period_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+        rows = (
+            (
+                await self.db.execute(
+                    select(
+                        Quote.status,
+                        Quote.total,
+                        Quote.proposal_document,
+                    ).where(
+                        Quote.workspace_id == workspace_id,
+                        Quote.created_by_id == user_id,
+                        Quote.status != "draft",
+                        Quote.created_at >= datetime.combine(period_start, time.min, tzinfo=UTC),
+                        Quote.created_at
+                        < datetime.combine(period_end + timedelta(days=1), time.min, tzinfo=UTC),
+                    )
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+        sent = len(rows)
+        approved = [row for row in rows if row[0] == "approved"]
+        revenue = round(sum(float(row[1]) for row in approved), 2)
+        care_plans = sum(1 for row in approved if (row[2] or {}).get("care_plan"))
+
+        config = await self._pricing_config(workspace_id)
+        return UpsellMyStats(
+            period_start=period_start,
+            period_end=period_end,
+            proposals_sent=sent,
+            proposals_approved=len(approved),
+            revenue_approved=revenue,
+            care_plans_sold=care_plans,
+            close_rate=round(len(approved) / sent, 4) if sent else None,
+            rank=_rank_progress(revenue, config.upsell.ranks),
         )
 
     # ------------------------------------------------------------------ #

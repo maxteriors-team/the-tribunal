@@ -10,7 +10,7 @@ added to the CRM.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -123,6 +123,46 @@ class UpsellCarePlanSelection(BaseModel):
 
     tier_key: str = Field(min_length=1, max_length=64)
     fixture_count: int = Field(ge=0, le=1000)
+
+
+class UpsellRankProgress(BaseModel):
+    """Where the technician stands on the workspace's selling ladder."""
+
+    current_key: str | None = None
+    current_name: str | None = None
+    current_reward: str | None = None
+    next_name: str | None = None
+    next_threshold: float | None = None
+    next_reward: str | None = None
+    # Revenue still needed to reach ``next_name``. None at the top rung.
+    amount_to_next: float | None = None
+    # 0..1 toward the next rung, measured from the current rung's threshold so a
+    # technician who just ranked up starts near empty rather than near full.
+    progress: float | None = None
+
+
+class UpsellMyStats(BaseModel):
+    """One technician's own selling numbers for a calendar month.
+
+    Deliberately singular. A technician sees their own performance and nobody
+    else's: a leaderboard exposing colleagues' revenue is both a data leak from
+    the narrowest tier in the product and a morale problem an owner should opt
+    into, not something the field surface leaks by default.
+    """
+
+    period_start: date
+    period_end: date
+    # Proposals this technician created in the window that left draft.
+    proposals_sent: int
+    proposals_approved: int
+    # Approved revenue — the number a rank threshold is measured against.
+    revenue_approved: float
+    # Recurring plans sold, counted separately from one-time revenue for the same
+    # reason the summary bar keeps them apart: they are different money.
+    care_plans_sold: int
+    # Share (0..1) of sent proposals the customer approved; null with none sent.
+    close_rate: float | None = None
+    rank: UpsellRankProgress | None = None
 
 
 class UpsellQuoteLine(BaseModel):

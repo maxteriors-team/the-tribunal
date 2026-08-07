@@ -574,6 +574,158 @@ async def test_empty_proposal_is_refused() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Selling KPIs — a technician's own numbers, never a colleague's
+# --------------------------------------------------------------------------- #
+RANK_PRICING = {
+    "pricing": {
+        "financing": {"enabled": False},
+        "upsell": {
+            "ranks": [
+                # Deliberately out of order: the config sorts them.
+                {"key": "gold", "name": "Gold", "threshold": 10000, "reward": "$500 bonus"},
+                {"key": "bronze", "name": "Bronze", "threshold": 2000, "reward": "$100 bonus"},
+                {"key": "silver", "name": "Silver", "threshold": 5000, "reward": "$250 bonus"},
+            ]
+        },
+    }
+}
+
+
+async def _sold_quote(
+    db, ws: Workspace, contact: Contact, *, user_id: int, total: float, status: str = "approved"
+) -> Quote:
+    quote = Quote(
+        workspace_id=ws.id,
+        contact_id=contact.id,
+        number=f"QUO-{uuid.uuid4().hex[:6]}",
+        title="Add-on",
+        status=status,
+        total=total,
+        created_by_id=user_id,
+    )
+    db.add(quote)
+    await db.flush()
+    return quote
+
+
+async def test_my_stats_counts_only_the_callers_own_proposals() -> None:
+    """The isolation guarantee: a technician never sees a colleague's revenue."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        await _sold_quote(db, ws, contact, user_id=1, total=1200.0)
+        await _sold_quote(db, ws, contact, user_id=2, total=9999.0)
+
+        stats = await UpsellService(db).my_selling_stats(ws.id, 1)
+        assert stats.revenue_approved == 1200.0
+        assert stats.proposals_approved == 1
+
+
+async def test_my_stats_ignores_drafts_and_other_workspaces() -> None:
+    async with AsyncSessionLocal() as db:
+        ws, other = await _workspace(db), await _workspace(db)
+        contact = await _contact(db, ws)
+        other_contact = await _contact(db, other)
+        await _sold_quote(db, ws, contact, user_id=1, total=500.0, status="draft")
+        await _sold_quote(db, other, other_contact, user_id=1, total=800.0)
+
+        stats = await UpsellService(db).my_selling_stats(ws.id, 1)
+        assert stats.proposals_sent == 0
+        assert stats.revenue_approved == 0
+
+
+async def test_my_stats_close_rate_is_null_not_zero_when_nothing_was_sent() -> None:
+    """A quiet month must not render as a 0% close rate."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        stats = await UpsellService(db).my_selling_stats(ws.id, 1)
+        assert stats.proposals_sent == 0
+        assert stats.close_rate is None
+
+
+async def test_my_stats_close_rate_and_care_plan_count() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        approved = await _sold_quote(db, ws, contact, user_id=1, total=1000.0)
+        approved.proposal_document = {"care_plan": {"selected": "gold"}}
+        await _sold_quote(db, ws, contact, user_id=1, total=400.0, status="declined")
+        await db.flush()
+
+        stats = await UpsellService(db).my_selling_stats(ws.id, 1)
+        assert stats.proposals_sent == 2
+        assert stats.proposals_approved == 1
+        assert stats.close_rate == 0.5
+        assert stats.care_plans_sold == 1
+
+
+async def test_no_configured_ranks_means_no_ladder_not_an_invented_one() -> None:
+    """Rank names and payouts are an operator's comp policy, never a default."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        await _sold_quote(db, ws, contact, user_id=1, total=50000.0)
+
+        stats = await UpsellService(db).my_selling_stats(ws.id, 1)
+        # The facts still report; only the ladder is absent.
+        assert stats.revenue_approved == 50000.0
+        assert stats.rank is None
+
+
+async def test_rank_progress_is_measured_from_the_current_rung() -> None:
+    """Just-ranked-up must read as near-empty toward the next rung, not near-full."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=RANK_PRICING)
+        contact = await _contact(db, ws)
+        # 2,600 — just past Bronze (2,000), chasing Silver (5,000).
+        await _sold_quote(db, ws, contact, user_id=1, total=2600.0)
+
+        rank = (await UpsellService(db).my_selling_stats(ws.id, 1)).rank
+        assert rank is not None
+        assert rank.current_name == "Bronze"
+        assert rank.next_name == "Silver"
+        assert rank.amount_to_next == 2400.0
+        # 600 of the 3,000 between Bronze and Silver — not 2600/5000.
+        assert rank.progress == 0.2
+
+
+async def test_rank_below_the_first_rung_still_shows_the_target() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=RANK_PRICING)
+        contact = await _contact(db, ws)
+        await _sold_quote(db, ws, contact, user_id=1, total=500.0)
+
+        rank = (await UpsellService(db).my_selling_stats(ws.id, 1)).rank
+        assert rank is not None
+        assert rank.current_name is None
+        assert rank.next_name == "Bronze"
+        assert rank.progress == 0.25
+        assert rank.next_reward == "$100 bonus"
+
+
+async def test_top_rank_has_no_next_target() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=RANK_PRICING)
+        contact = await _contact(db, ws)
+        await _sold_quote(db, ws, contact, user_id=1, total=12000.0)
+
+        rank = (await UpsellService(db).my_selling_stats(ws.id, 1)).rank
+        assert rank is not None
+        assert rank.current_name == "Gold"
+        assert rank.current_reward == "$500 bonus"
+        assert rank.next_name is None
+        assert rank.amount_to_next is None
+
+
+async def test_ranks_are_sorted_however_the_operator_entered_them() -> None:
+    """RANK_PRICING lists Gold first; the ladder must still count upwards."""
+    from app.schemas.pricing import PricingSettings
+
+    config = PricingSettings.model_validate(RANK_PRICING["pricing"])
+    assert [rank.name for rank in config.upsell.ranks] == ["Bronze", "Silver", "Gold"]
+
+
+# --------------------------------------------------------------------------- #
 # Lead technician — the on-site proposal limit is the whole of the role
 # --------------------------------------------------------------------------- #
 async def test_technician_is_refused_past_the_workspace_limit() -> None:

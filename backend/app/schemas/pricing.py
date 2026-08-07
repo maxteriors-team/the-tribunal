@@ -154,6 +154,21 @@ class DepositConfig(BaseModel):
     value: float = Field(default=50, ge=0)
 
 
+class UpsellRankConfig(BaseModel):
+    """One rung on the technician selling ladder.
+
+    ``threshold`` is approved upsell revenue within the reporting month, in major
+    units. ``reward`` is free text shown to the technician ("$150 bonus", "1 extra
+    PTO day") — this codebase tracks progress and never pays anything, so the
+    payout mechanism stays wherever payroll already lives.
+    """
+
+    key: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=60)
+    threshold: float = Field(ge=0)
+    reward: str | None = Field(default=None, max_length=120)
+
+
 class UpsellConfig(BaseModel):
     """Limits on what a field technician may sell from the on-site upsell screen.
 
@@ -175,6 +190,23 @@ class UpsellConfig(BaseModel):
     """
 
     field_proposal_limit: float | None = Field(default=None, ge=0)
+    # Selling ranks a technician climbs, lowest threshold first. Empty by
+    # default and deliberately so: rank names, the revenue needed to reach them,
+    # and what a technician earns there are an operator's compensation policy,
+    # not something this codebase should invent. With no ranks configured the
+    # technician still sees their own sold/approved/attach numbers — those are
+    # facts — and simply sees no ladder.
+    ranks: list[UpsellRankConfig] = Field(default_factory=list)
+
+    @field_validator("ranks")
+    @classmethod
+    def _sort_ranks(cls, value: list[UpsellRankConfig]) -> list[UpsellRankConfig]:
+        """Keep ranks in ascending threshold order however they were entered.
+
+        Progress maths walks this list, so an operator listing Gold before Bronze
+        must not produce a ladder that counts downwards.
+        """
+        return sorted(value, key=lambda rank: rank.threshold)
 
 
 # --------------------------------------------------------------------------- #
