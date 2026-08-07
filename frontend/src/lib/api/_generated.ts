@@ -8942,6 +8942,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/upsell/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Upsell Catalog
+         * @description The add-on menu: active, attachable price-book items only.
+         */
+        get: operations["list_upsell_catalog_api_v1_workspaces__workspace_id__upsell_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Upsell Jobs
+         * @description Jobs the caller can sell an add-on on.
+         *
+         *     Empty (not an error) when the login has no technician record — a login simply
+         *     isn't a field worker yet.
+         */
+        get: operations["list_upsell_jobs_api_v1_workspaces__workspace_id__upsell_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/customer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Upsell Customer
+         * @description The customer on a job the caller is assigned to (404 when it isn't theirs).
+         */
+        get: operations["get_upsell_customer_api_v1_workspaces__workspace_id__upsell_jobs__job_id__customer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upsell Quote
+         * @description Build a draft add-on proposal for the customer on this job.
+         *
+         *     Prices come from the price book, never from the request body, and the quote is
+         *     attributed to the caller so attach-rate reporting can credit the sale.
+         */
+        post: operations["create_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver Upsell Quote
+         * @description Text or email the add-on proposal to the customer on this job.
+         *
+         *     The service verifies both that the job is the caller's *and* that the quote
+         *     belongs to that job's customer, so a valid job id cannot be paired with an
+         *     unrelated quote to send someone else's proposal. No ``to`` override is
+         *     accepted — delivery goes to the contact's own phone/email.
+         */
+        post: operations["deliver_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/voice-campaigns": {
         parameters: {
             query?: never;
@@ -27747,6 +27858,143 @@ export interface components {
              * @enum {string}
              */
             role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
+        };
+        /**
+         * UpsellCatalogItem
+         * @description One add-on on the on-site menu.
+         */
+        UpsellCatalogItem: {
+            /** Attach Targets */
+            attach_targets?: string[];
+            /** Description */
+            description?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Price Unit */
+            price_unit?: string | null;
+            /** Service Category */
+            service_category?: string | null;
+            /** Taxable */
+            taxable: boolean;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
+         * UpsellCatalogResponse
+         * @description The attachable add-on menu.
+         */
+        UpsellCatalogResponse: {
+            /** Items */
+            items: components["schemas"]["UpsellCatalogItem"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * UpsellCustomer
+         * @description The customer on a job — greeting and address detail only.
+         *
+         *     No pipeline, notes, tags, lifecycle, or message history: a technician needs
+         *     to know who answers the door and where to put the work, nothing more.
+         */
+        UpsellCustomer: {
+            /** Address City */
+            address_city?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address State */
+            address_state?: string | null;
+            /** Address Zip */
+            address_zip?: string | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Email */
+            email?: string | null;
+            /** Full Name */
+            full_name: string;
+            /** Phone Number */
+            phone_number: string;
+        };
+        /**
+         * UpsellDeliverRequest
+         * @description Deliver the add-on proposal to the customer.
+         *
+         *     ``to`` is intentionally absent: delivery always goes to the destination
+         *     already on the contact record. Letting a technician type an arbitrary
+         *     recipient would turn the scoped upsell surface into a general-purpose send
+         *     rail for the one tier that does not hold ``comms:send``.
+         */
+        UpsellDeliverRequest: {
+            /**
+             * Channel
+             * @default sms
+             */
+            channel: string;
+        };
+        /**
+         * UpsellJob
+         * @description A job the caller may sell an add-on on.
+         */
+        UpsellJob: {
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Scheduled Start */
+            scheduled_start?: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * UpsellJobListResponse
+         * @description The caller's upsellable jobs.
+         */
+        UpsellJobListResponse: {
+            /** Items */
+            items: components["schemas"]["UpsellJob"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * UpsellQuoteLine
+         * @description A requested add-on line.
+         *
+         *     Carries **no price**. The server resolves ``unit_price`` and ``name`` from the
+         *     catalog item, so the pricing on an upsell proposal can never be set by the
+         *     device in the driveway.
+         */
+        UpsellQuoteLine: {
+            /**
+             * Catalog Item Id
+             * Format: uuid
+             */
+            catalog_item_id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+        };
+        /**
+         * UpsellQuoteRequest
+         * @description Build an add-on proposal for the customer on a job.
+         */
+        UpsellQuoteRequest: {
+            /** Line Items */
+            line_items?: components["schemas"]["UpsellQuoteLine"][];
+            /** Notes */
+            notes?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * UrgencyType
@@ -47346,6 +47594,176 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_upsell_catalog_api_v1_workspaces__workspace_id__upsell_catalog_get: {
+        parameters: {
+            query?: {
+                /** @description Only add-ons that attach to this service category */
+                attach_target?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsellCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_upsell_jobs_api_v1_workspaces__workspace_id__upsell_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsellJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_upsell_customer_api_v1_workspaces__workspace_id__upsell_jobs__job_id__customer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsellCustomer"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsellQuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deliver_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__deliver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                job_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsellDeliverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDeliverResult"];
+                };
             };
             /** @description Validation Error */
             422: {

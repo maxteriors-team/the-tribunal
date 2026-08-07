@@ -15,6 +15,13 @@
  *
  * Field technicians are operational-only: the jobs schedule and nothing else
  * (no contacts, pipeline, campaigns, billing/pricing, or other CRM surface).
+ *
+ * The lone exception is `upsell:sell`, held by every tier including `field`, so
+ * a technician can sell an add-on from the driveway. It widens nothing on its
+ * own — only the `/upsell` endpoints honour it, and those re-scope every call to
+ * the caller's assigned jobs and to attachable price-book items. Note it does
+ * NOT come with `comms:send`: proposal delivery rides the scoped upsell route so
+ * the field tier still cannot message arbitrary contacts.
  */
 
 export type Capability =
@@ -32,7 +39,8 @@ export type Capability =
   | "reports:view"
   | "members:manage"
   | "workspace:manage"
-  | "locations:manage";
+  | "locations:manage"
+  | "upsell:sell";
 
 export type Tier = "admin" | "manager" | "sales" | "tech" | "field";
 
@@ -62,6 +70,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "members:manage",
   "workspace:manage",
   "locations:manage",
+  "upsell:sell",
 ];
 
 export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
@@ -78,13 +87,21 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "billing:read",
     "billing:write",
     "locations:manage",
+    "upsell:sell",
   ],
   // Sales authors outreach (campaigns/segments/automations) but has no
   // crm:write, so it cannot delete/import contacts — mirror of the backend.
-  sales: ["crm:read", "outreach:write", "pipeline:write_own", "jobs:read", "comms:send"],
-  tech: ["crm:read", "jobs:read", "comms:send"],
-  // Field technicians: operational-only — the jobs schedule and nothing else.
-  field: ["jobs:read"],
+  sales: [
+    "crm:read",
+    "outreach:write",
+    "pipeline:write_own",
+    "jobs:read",
+    "comms:send",
+    "upsell:sell",
+  ],
+  tech: ["crm:read", "jobs:read", "comms:send", "upsell:sell"],
+  // Field technicians: the jobs schedule plus the scoped on-site upsell surface.
+  field: ["jobs:read", "upsell:sell"],
 };
 
 /** Resolve a role string to its access tier (unknown/legacy → `field`, fail-closed). */

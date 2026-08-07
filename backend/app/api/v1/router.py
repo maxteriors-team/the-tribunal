@@ -65,6 +65,7 @@ from app.api.v1 import (
     segments,
     settings,
     tags,
+    upsell,
     voice_campaigns,
     workspaces,
 )
@@ -396,6 +397,14 @@ api_router.include_router(
     field_service.technicians_router,
     prefix="/workspaces/{workspace_id}/technicians",
     tags=["Field Service"],
+)
+# On-site upsell: the scoped surface a field technician sells add-ons through.
+# Gated on ``upsell:sell``, then re-scoped per call to the caller's assigned jobs
+# and to attachable price-book items (see app.services.upsell).
+api_router.include_router(
+    upsell.router,
+    prefix="/workspaces/{workspace_id}/upsell",
+    tags=["Upsell"],
 )
 api_router.include_router(
     jobs.router,

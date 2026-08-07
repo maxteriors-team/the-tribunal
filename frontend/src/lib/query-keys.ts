@@ -582,6 +582,17 @@ export const queryKeys = {
     ...technicians,
     active: (workspaceId: string) => technicians.list(workspaceId, { is_active: true }),
   },
+  // On-site upsell: the technician's own jobs and the attachable add-on menu.
+  // Keyed separately from `jobs`/`catalogItems` because these are different,
+  // server-scoped projections of those resources, not cacheable as the same data.
+  upsell: {
+    all: (workspaceId: string) => ["upsell", workspaceId] as const,
+    jobs: (workspaceId: string) => ["upsell", workspaceId, "jobs"] as const,
+    customer: (workspaceId: string, jobId: string) =>
+      ["upsell", workspaceId, "jobs", jobId, "customer"] as const,
+    catalog: (workspaceId: string, attachTarget?: string | null) =>
+      ["upsell", workspaceId, "catalog", attachTarget ?? null] as const,
+  },
   voiceCampaigns: createResourceQueryKeys("voice-campaigns"),
   workspaces: {
     all: () => ["workspaces"] as const,

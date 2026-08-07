@@ -46701,6 +46701,312 @@
         "title": "UpdateMemberRoleRequest",
         "type": "object"
       },
+      "UpsellCatalogItem": {
+        "description": "One add-on on the on-site menu.",
+        "properties": {
+          "attach_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attach Targets",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Unit"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
+          },
+          "taxable": {
+            "title": "Taxable",
+            "type": "boolean"
+          },
+          "unit_price": {
+            "title": "Unit Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "unit_price",
+          "taxable"
+        ],
+        "title": "UpsellCatalogItem",
+        "type": "object"
+      },
+      "UpsellCatalogResponse": {
+        "description": "The attachable add-on menu.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UpsellCatalogItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "UpsellCatalogResponse",
+        "type": "object"
+      },
+      "UpsellCustomer": {
+        "description": "The customer on a job — greeting and address detail only.\n\nNo pipeline, notes, tags, lifecycle, or message history: a technician needs\nto know who answers the door and where to put the work, nothing more.",
+        "properties": {
+          "address_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address City"
+          },
+          "address_line1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line1"
+          },
+          "address_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address State"
+          },
+          "address_zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Zip"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "phone_number": {
+            "title": "Phone Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contact_id",
+          "full_name",
+          "phone_number"
+        ],
+        "title": "UpsellCustomer",
+        "type": "object"
+      },
+      "UpsellDeliverRequest": {
+        "description": "Deliver the add-on proposal to the customer.\n\n``to`` is intentionally absent: delivery always goes to the destination\nalready on the contact record. Letting a technician type an arbitrary\nrecipient would turn the scoped upsell surface into a general-purpose send\nrail for the one tier that does not hold ``comms:send``.",
+        "properties": {
+          "channel": {
+            "default": "sms",
+            "pattern": "^(sms|email)$",
+            "title": "Channel",
+            "type": "string"
+          }
+        },
+        "title": "UpsellDeliverRequest",
+        "type": "object"
+      },
+      "UpsellJob": {
+        "description": "A job the caller may sell an add-on on.",
+        "properties": {
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "scheduled_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Start"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "contact_id"
+        ],
+        "title": "UpsellJob",
+        "type": "object"
+      },
+      "UpsellJobListResponse": {
+        "description": "The caller's upsellable jobs.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UpsellJob"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "UpsellJobListResponse",
+        "type": "object"
+      },
+      "UpsellQuoteLine": {
+        "description": "A requested add-on line.\n\nCarries **no price**. The server resolves ``unit_price`` and ``name`` from the\ncatalog item, so the pricing on an upsell proposal can never be set by the\ndevice in the driveway.",
+        "properties": {
+          "catalog_item_id": {
+            "format": "uuid",
+            "title": "Catalog Item Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "catalog_item_id"
+        ],
+        "title": "UpsellQuoteLine",
+        "type": "object"
+      },
+      "UpsellQuoteRequest": {
+        "description": "Build an add-on proposal for the customer on a job.",
+        "properties": {
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/UpsellQuoteLine"
+            },
+            "title": "Line Items",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpsellQuoteRequest",
+        "type": "object"
+      },
       "UrgencyType": {
         "description": "Urgency type options.",
         "enum": [
@@ -84787,6 +85093,329 @@
         "summary": "Update Technician",
         "tags": [
           "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/catalog": {
+      "get": {
+        "description": "The add-on menu: active, attachable price-book items only.",
+        "operationId": "list_upsell_catalog_api_v1_workspaces__workspace_id__upsell_catalog_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only add-ons that attach to this service category",
+            "in": "query",
+            "name": "attach_target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only add-ons that attach to this service category",
+              "title": "Attach Target"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellCatalogResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Upsell Catalog",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs": {
+      "get": {
+        "description": "Jobs the caller can sell an add-on on.\n\nEmpty (not an error) when the login has no technician record — a login simply\nisn't a field worker yet.",
+        "operationId": "list_upsell_jobs_api_v1_workspaces__workspace_id__upsell_jobs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellJobListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Upsell Jobs",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/customer": {
+      "get": {
+        "description": "The customer on a job the caller is assigned to (404 when it isn't theirs).",
+        "operationId": "get_upsell_customer_api_v1_workspaces__workspace_id__upsell_jobs__job_id__customer_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellCustomer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Upsell Customer",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote": {
+      "post": {
+        "description": "Build a draft add-on proposal for the customer on this job.\n\nPrices come from the price book, never from the request body, and the quote is\nattributed to the caller so attach-rate reporting can credit the sale.",
+        "operationId": "create_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellQuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Upsell Quote",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/deliver": {
+      "post": {
+        "description": "Text or email the add-on proposal to the customer on this job.\n\nThe service verifies both that the job is the caller's *and* that the quote\nbelongs to that job's customer, so a valid job id cannot be paired with an\nunrelated quote to send someone else's proposal. No ``to`` override is\naccepted — delivery goes to the contact's own phone/email.",
+        "operationId": "deliver_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__deliver_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellDeliverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDeliverResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Deliver Upsell Quote",
+        "tags": [
+          "Upsell"
         ]
       }
     },

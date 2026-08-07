@@ -34,6 +34,7 @@ import {
   Settings,
   Sparkles,
   Star,
+  Tag,
   Target,
   TreePine,
   UserSearch,
@@ -396,6 +397,16 @@ export const operationsNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    // Reachable by every tier that can sell (see `upsell:sell`), and the only
+    // CRM surface besides jobs/calendar a field technician can open.
+    title: "Sell add-on",
+    url: "/upsell",
+    icon: Tag,
+    sidebar: true,
+    commandPalette: true,
+    requires: "upsell:sell",
+  },
+  {
     title: "Service Plans",
     url: "/service-plans",
     icon: CalendarSync,
@@ -583,6 +594,9 @@ export const breadcrumbLabels: Record<string, string> = {
   experiments: "Experiments",
   calendar: "Calendar",
   jobs: "Jobs",
+  // "Upsell" is internal jargon; the technician using this screen calls it
+  // selling an add-on.
+  upsell: "Sell add-on",
   "service-plans": "Service Plans",
   catalog: "Price Book",
   inventory: "Inventory",
@@ -610,9 +624,18 @@ export function isNavItemVisible(item: AppNavItem) {
 
 /**
  * Route prefixes a field technician (operational-only tier) may see and reach.
- * Field techs get the jobs schedule and its calendar — nothing else in the CRM.
+ * Field techs get the jobs schedule, its calendar, and the on-site upsell flow —
+ * nothing else in the CRM.
+ *
+ * `/upsell` is safe to expose to the narrowest tier because the surface behind it
+ * is scoped server-side (assigned jobs + attachable catalog items only); see
+ * `backend/app/api/v1/upsell.py`. This list is UX, not the security boundary.
  */
-export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = ["/jobs", "/calendar"];
+export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = [
+  "/jobs",
+  "/calendar",
+  "/upsell",
+];
 
 /** Whether a path is inside the field-technician operational allowlist. */
 export function isFieldOperationalPath(pathname: string): boolean {

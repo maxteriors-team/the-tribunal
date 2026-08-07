@@ -15,13 +15,22 @@ tier           maps from roles                intent
 ``manager``    ``manager``, ``dispatcher``    run operations (CRM, jobs, billing); **no** reports
 ``sales``      ``sales_rep``                  own pipeline; read CRM; author outreach; text/call
 ``tech``       ``member``                     read CRM + jobs; log time; text/call
-``field``      ``technician``                 operational only: view assigned jobs on the schedule
+``field``      ``technician``                 operational only: assigned jobs + on-site upsell
 ============== ============================== ==========================================
 
 Field technicians are deliberately the narrowest tier: they see only the jobs
 schedule, with no access to contacts, pipeline, campaigns, billing/pricing, or
 any other CRM surface. Reads on those surfaces are capability-gated, so the
 matrix here is the enforcement point, not just a nav filter.
+
+The one exception is :data:`Capability.UPSELL_SELL`, which lets a technician
+sell an add-on from the driveway. It deliberately does **not** widen any of the
+tier's other surfaces: it is only honoured by the dedicated upsell router
+(:mod:`app.api.v1.upsell`), which re-scopes every read and write to the jobs the
+caller is actually assigned to and to catalog items flagged ``is_attachable``.
+Note it is *not* accompanied by ``comms:send``: blanket messaging would let a
+technician text any contact in the workspace, so proposal delivery rides on the
+scoped upsell endpoint instead.
 
 Unknown / legacy role strings fall through to the **field** tier (lowest
 privilege) so a corrupted or unrecognised value fails closed rather than
@@ -71,6 +80,13 @@ class Capability(StrEnum):
     # still *read* the list (reads use plain membership, not this capability) so
     # the location filter dropdown works for all members.
     LOCATIONS_MANAGE = "locations:manage"
+    # ``upsell:sell`` = sell an add-on while on a job: read the customer for a
+    # job you are assigned to, browse the *attachable* price book, and build and
+    # deliver a proposal for it. Granted to every tier including ``field``. It
+    # confers nothing on its own — only :mod:`app.api.v1.upsell` honours it, and
+    # that router scopes each call to the caller's own assigned jobs (see
+    # :func:`upsell_job_scope_required`).
+    UPSELL_SELL = "upsell:sell"
 
 
 class Tier(StrEnum):
@@ -115,6 +131,7 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
         Capability.LOCATIONS_MANAGE,
+        Capability.UPSELL_SELL,
     }
     sales: set[Capability] = {
         Capability.CRM_READ,
@@ -124,16 +141,21 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.PIPELINE_WRITE_OWN,
         Capability.JOBS_READ,
         Capability.COMMS_SEND,
+        Capability.UPSELL_SELL,
     }
     tech: set[Capability] = {
         Capability.CRM_READ,
         Capability.JOBS_READ,
         Capability.COMMS_SEND,
+        Capability.UPSELL_SELL,
     }
-    # Field technicians are operational-only: the jobs schedule and nothing else.
-    # No CRM/pipeline/campaigns/billing, so pricing and customer data stay hidden.
+    # Field technicians are operational-only: the jobs schedule, plus the scoped
+    # on-site upsell surface. No CRM/pipeline/campaigns/billing, so the contact
+    # book and the full price book stay hidden; ``upsell:sell`` exposes only the
+    # customer on a job they are assigned to and the attachable add-on menu.
     field: set[Capability] = {
         Capability.JOBS_READ,
+        Capability.UPSELL_SELL,
     }
 
     matrix: dict[Tier, set[Capability]] = {
@@ -195,3 +217,19 @@ def pipeline_owner_scope(role: str, user_id: int) -> int | None:
     if role_can(role, Capability.PIPELINE_WRITE_OWN):
         return user_id
     return None
+
+
+def upsell_job_scope_required(role: str) -> bool:
+    """Return True when ``role`` may only upsell on jobs assigned to the caller.
+
+    Object-level scoping for the on-site upsell surface. The restriction keys off
+    ``billing:write`` rather than naming tiers: a caller who already holds it can
+    create any quote for any contact through the normal quotes API, so narrowing
+    them here would be theatre that only costs a query. Everyone below that line
+    (sales, tech, and the field technicians this surface exists for) is confined
+    to the jobs they are actually on.
+
+    Fail-closed: unknown/legacy roles resolve to the field tier, which lacks
+    ``billing:write``, so they get the restricted path.
+    """
+    return not role_can(role, Capability.BILLING_WRITE)

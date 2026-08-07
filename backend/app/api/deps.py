@@ -492,6 +492,12 @@ CanManageWorkspace = Annotated[
 CanManageLocations = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.LOCATIONS_MANAGE))
 ]
+# On-site upsell. Held by every tier *including* ``field``, so this gate alone is
+# deliberately NOT sufficient authorization: routes behind it must re-scope to
+# the caller's own assigned jobs and to attachable catalog items. See
+# :mod:`app.services.upsell.upsell_service`, which does exactly that — pass the
+# membership's ``role`` through so it can.
+CanUpsell = Annotated[WorkspaceMembership, Depends(require_capability(Capability.UPSELL_SELL))]
 
 # Capability gate for routes that act on the caller's active workspace without a
 # ``workspace_id`` path parameter (self-serve onboarding). Adds no parameters to
