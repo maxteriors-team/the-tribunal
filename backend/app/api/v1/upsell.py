@@ -31,6 +31,7 @@ from app.schemas.upsell import (
     UpsellCustomer,
     UpsellDeliverRequest,
     UpsellJobListResponse,
+    UpsellMyStats,
     UpsellQuoteRequest,
 )
 from app.services.upsell import UpsellService
@@ -108,6 +109,23 @@ async def list_upsell_care_plans(
     """
     service = UpsellService(db)
     return await service.list_care_plans(workspace_id, fixture_count=fixture_count)
+
+
+@router.get("/my-stats", response_model=UpsellMyStats)
+async def get_my_selling_stats(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanUpsell,
+) -> UpsellMyStats:
+    """The caller's own selling numbers for the current calendar month.
+
+    Always scoped to the caller — there is no user parameter, so this endpoint
+    cannot be pointed at a colleague. Workspace-wide comparison lives behind
+    ``reports:view`` for owners.
+    """
+    service = UpsellService(db)
+    return await service.my_selling_stats(workspace_id, current_user.id)
 
 
 @router.post("/jobs/{job_id}/quote", response_model=QuoteDetailResponse, status_code=201)

@@ -596,6 +596,9 @@ export const queryKeys = {
     // genuinely different data rather than a filtered view of one list.
     carePlans: (workspaceId: string, fixtureCount: number) =>
       ["upsell", workspaceId, "care-plans", fixtureCount] as const,
+    // Self-scoped by the server; no user id in the key because the endpoint has
+    // no user parameter and the auth token already decides whose stats these are.
+    myStats: (workspaceId: string) => ["upsell", workspaceId, "my-stats"] as const,
   },
   voiceCampaigns: createResourceQueryKeys("voice-campaigns"),
   workspaces: {
