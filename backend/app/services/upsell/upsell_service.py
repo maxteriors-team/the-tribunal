@@ -33,7 +33,7 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import upsell_job_scope_required
+from app.core.permissions import Capability, role_can, upsell_job_scope_required
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.field_service import Job, JobAssignment, Technician
@@ -65,6 +65,7 @@ from app.services.upsell.exceptions import (
     UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
+    UpsellProposalLimitError,
     UpsellQuoteNotForJobError,
 )
 
@@ -287,6 +288,7 @@ class UpsellService:
         workspace_id: uuid.UUID,
         *,
         attach_target: str | None = None,
+        role: str | None = None,
     ) -> UpsellCatalogResponse:
         """The add-on menu: active, attachable catalog items only.
 
@@ -298,6 +300,11 @@ class UpsellService:
 
         Prices are **grossed up** to what a client is charged — see
         :meth:`_sell_price`.
+
+        ``role`` resolves ``proposal_limit`` on the response so the UI can warn a
+        capped technician before they build. Omitting it reports no limit, which
+        is display-only — the cap is enforced on write in
+        :meth:`_enforce_proposal_limit` regardless of what this read says.
         """
         config = await self._pricing_config(workspace_id)
         query = select(CatalogItem).where(
@@ -331,7 +338,10 @@ class UpsellService:
             )
             for item in rows
         ]
-        return UpsellCatalogResponse(items=items, total=len(items))
+        limit = config.upsell.field_proposal_limit
+        if role is None or role_can(role, Capability.UPSELL_SELL_UNCAPPED):
+            limit = None
+        return UpsellCatalogResponse(items=items, total=len(items), proposal_limit=limit)
 
     async def list_care_plans(
         self,
@@ -404,6 +414,8 @@ class UpsellService:
                 another workspace, or simply not flagged ``is_attachable``. [400]
             UpsellCarePlanUnavailableError: an unknown or no-longer-offered tier.
                 [400]
+            UpsellProposalLimitError: over a plain technician's on-site limit.
+                [400]
         """
         job = await self._visible_job(workspace_id, job_id, user_id, role)
 
@@ -454,6 +466,11 @@ class UpsellService:
             for line in payload.line_items
         ]
 
+        # Enforced BEFORE the quote is written, for the same reason as the tier
+        # check below: ``create_quote`` commits on its own, so refusing after it
+        # would leave an orphaned draft the technician cannot see or delete.
+        self._enforce_proposal_limit(line_items, config, role)
+
         # Priced and validated BEFORE the quote is written: a bad tier key must
         # fail without leaving a stray draft behind, because ``create_quote``
         # commits on its own.
@@ -497,6 +514,42 @@ class UpsellService:
             care_plan_tier=(care_plan_document or {}).get("selected"),
         )
         return created
+
+    @staticmethod
+    def _enforce_proposal_limit(
+        line_items: list[QuoteLineItemCreate],
+        config: PricingSettings,
+        role: str,
+    ) -> None:
+        """Hold a plain technician to the workspace's on-site proposal limit.
+
+        This is the whole of what separates ``technician`` from
+        ``lead_technician``: a crew lead holds ``upsell:sell_uncapped`` and is
+        waved through, so they can sell a full fixture package while a regular
+        technician stays on small add-ons.
+
+        Server-side by necessity, not convenience. The technician's device cannot
+        be trusted with this — it is the same phone that cannot be trusted with a
+        ``unit_price`` — so the client's warning is a courtesy and this is the
+        control.
+
+        Measured on the **grossed-up** one-time total (what the customer is
+        charged), and deliberately not on the recurring care plan: see
+        :class:`~app.schemas.pricing.UpsellConfig`.
+
+        No limit configured (the default) means no cap, so a workspace that never
+        asked for one is unaffected.
+
+        Raises:
+            UpsellProposalLimitError: over the limit. [400]
+        """
+        limit = config.upsell.field_proposal_limit
+        if limit is None or role_can(role, Capability.UPSELL_SELL_UNCAPPED):
+            return
+
+        total = sum(item.unit_price * item.quantity for item in line_items)
+        if total > limit:
+            raise UpsellProposalLimitError(total, limit)
 
     @staticmethod
     def _default_title(

@@ -224,6 +224,14 @@ export function UpsellPage() {
     : (selectedCarePlan?.price ?? 0);
   const nothingSelected = selectedCount === 0 && !carePlanKey;
 
+  // What this technician may sell on their own. Null for a lead tech, or when
+  // the workspace configured no limit. The server enforces it either way — this
+  // only stops the technician from building a proposal they cannot send, which
+  // is the difference between a blocked button and a failure in front of the
+  // customer. The care plan is outside the cap, so only hardware counts.
+  const proposalLimit = catalogQuery.data?.proposal_limit ?? null;
+  const overLimit = proposalLimit !== null && previewTotal > proposalLimit;
+
   // ---------------------------------------------------------------- step 1
   if (!activeJob) {
     return (
@@ -487,7 +495,12 @@ export function UpsellPage() {
         actionLabel={createdQuote ? "Send to customer" : "Build proposal"}
         pendingLabel={createdQuote ? "Sending…" : "Building…"}
         pending={createQuote.isPending}
-        disabled={createdQuote ? false : nothingSelected}
+        disabled={createdQuote ? false : nothingSelected || overLimit}
+        notice={
+          !createdQuote && overLimit && proposalLimit !== null
+            ? `Over your ${formatCurrency(proposalLimit)} limit — ask a lead tech to send it.`
+            : null
+        }
         onAction={() => {
           if (createdQuote) {
             setConfirmOpen(true);

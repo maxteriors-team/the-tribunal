@@ -16,6 +16,7 @@ export const ASSIGNABLE_ROLES = [
   "manager",
   "dispatcher",
   "sales_rep",
+  "lead_technician",
   "technician",
   "member",
 ] as const;
@@ -29,22 +30,26 @@ export const ROLE_LABELS: Record<string, string> = {
   manager: "Manager",
   dispatcher: "Dispatcher",
   sales_rep: "Sales Rep",
+  lead_technician: "Lead Technician",
   technician: "Technician",
   member: "Member",
 };
 
 /**
  * Short description shown beneath each role option in pickers. These summarize
- * the four access tiers enforced by `@/lib/permissions` (admin ⊃ manager ⊃ sales
- * ⊃ tech): admin alone sees reports and manages members/numbers; managers run
- * CRM, jobs, and billing; sales own their pipeline; tech/member read and message.
+ * the access tiers enforced by `@/lib/permissions`
+ * (admin ⊃ manager ⊃ sales ⊃ tech ⊃ lead ⊃ field): admin alone sees reports and
+ * manages members/numbers; managers run CRM, jobs, and billing; sales own their
+ * pipeline; member reads and messages; lead and regular technicians see only
+ * their own jobs, and differ solely in whether the on-site selling limit applies.
  */
 export const ROLE_DESCRIPTIONS: Record<AssignableRole, string> = {
   admin: "Full access — team, billing, reports, and settings",
   manager: "Run CRM, jobs, and billing (no reports or member management)",
   dispatcher: "Run CRM, jobs, and billing (no reports or member management)",
   sales_rep: "Manage your own sales pipeline; text and call customers",
-  technician: "View work, log time on jobs, and message customers",
+  lead_technician: "Same as Technician, plus sell add-ons with no on-site limit",
+  technician: "See assigned jobs and sell add-ons up to your on-site limit",
   member: "View contacts and pipeline; text and call customers",
 };
 

@@ -8,9 +8,12 @@ privilege ordering used by the role-gated API dependencies in
 
 Historically only ``owner``/``admin``/``member`` were used. The field-service
 and sales features add operational roles (``manager``, ``dispatcher``,
-``sales_rep``, ``technician``) so dispatch boards, maintenance management, and
-the sales portal can be scoped per login. Existing string values remain valid —
-no data migration is required.
+``sales_rep``, ``technician``, ``lead_technician``) so dispatch boards,
+maintenance management, and the sales portal can be scoped per login. Existing
+string values remain valid — no data migration is required.
+
+The ``role`` column is a plain ``String(50)`` with no database enum or check
+constraint, so adding a role here is a code-only change.
 """
 
 from enum import StrEnum
@@ -28,6 +31,11 @@ class WorkspaceRole(StrEnum):
     MANAGER = "manager"
     DISPATCHER = "dispatcher"
     SALES_REP = "sales_rep"
+    # The senior technician who runs a crew on site. Operationally identical to
+    # ``TECHNICIAN`` — same schedule, same scoped customer access — but trusted
+    # to sell big-ticket work: they are exempt from the on-site proposal limit
+    # that caps a regular technician (see :data:`Capability.UPSELL_SELL_UNCAPPED`).
+    LEAD_TECHNICIAN = "lead_technician"
     TECHNICIAN = "technician"
     MEMBER = "member"
 
@@ -42,6 +50,9 @@ ROLE_RANK: dict[str, int] = {
     WorkspaceRole.MANAGER.value: 60,
     WorkspaceRole.DISPATCHER.value: 40,
     WorkspaceRole.SALES_REP.value: 40,
+    # Above ``technician`` (more selling authority), below ``dispatcher`` (a lead
+    # tech runs a crew on a job, not the board).
+    WorkspaceRole.LEAD_TECHNICIAN.value: 30,
     WorkspaceRole.TECHNICIAN.value: 20,
     WorkspaceRole.MEMBER.value: 10,
 }
@@ -55,6 +66,7 @@ AssignableRole = Literal[
     "manager",
     "dispatcher",
     "sales_rep",
+    "lead_technician",
     "technician",
     "member",
 ]

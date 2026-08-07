@@ -4,9 +4,9 @@ This is the policy layer that sits on top of the role *vocabulary* in
 :mod:`app.core.roles`. Where ``roles.py`` answers "what role string does this
 membership hold", this module answers "what is that role allowed to do".
 
-The CRM has accumulated seven role strings (``owner, admin, manager, dispatcher,
-sales_rep, technician, member``). For access control they collapse into **five
-graded tiers**, admin broadest:
+The CRM has accumulated eight role strings (``owner, admin, manager, dispatcher,
+sales_rep, lead_technician, technician, member``). For access control they
+collapse into **six graded tiers**, admin broadest:
 
 ============== ============================== ==========================================
 tier           maps from roles                intent
@@ -15,8 +15,15 @@ tier           maps from roles                intent
 ``manager``    ``manager``, ``dispatcher``    run operations (CRM, jobs, billing); **no** reports
 ``sales``      ``sales_rep``                  own pipeline; read CRM; author outreach; text/call
 ``tech``       ``member``                     read CRM + jobs; log time; text/call
+``lead``       ``lead_technician``            field, plus sell big-ticket work uncapped
 ``field``      ``technician``                 operational only: assigned jobs + on-site upsell
 ============== ============================== ==========================================
+
+``lead`` is a **crew lead on a job site**, not an office role: it sees exactly
+what ``field`` sees (their own schedule, and a customer only through a job they
+are assigned to). The single difference is selling authority — a lead technician
+is exempt from the workspace's on-site proposal limit, so they can sell a
+full fixture package while a regular technician is held to small add-ons.
 
 Field technicians are deliberately the narrowest tier: they see only the jobs
 schedule, with no access to contacts, pipeline, campaigns, billing/pricing, or
@@ -87,6 +94,13 @@ class Capability(StrEnum):
     # that router scopes each call to the caller's own assigned jobs (see
     # :func:`upsell_job_scope_required`).
     UPSELL_SELL = "upsell:sell"
+    # ``upsell:sell_uncapped`` = sell on site without the workspace's proposal
+    # limit applying. Held by ``lead`` and every tier above it; the *only* tier it
+    # is withheld from is ``field``. A lead technician runs the crew and is
+    # trusted with a full fixture package; a regular technician is held to the
+    # limit an owner configures (``PricingSettings.upsell.field_proposal_limit``).
+    # Enforced in :mod:`app.services.upsell.upsell_service`, never client-side.
+    UPSELL_SELL_UNCAPPED = "upsell:sell_uncapped"
 
 
 class Tier(StrEnum):
@@ -96,6 +110,7 @@ class Tier(StrEnum):
     MANAGER = "manager"
     SALES = "sales"
     TECH = "tech"
+    LEAD = "lead"
     FIELD = "field"
 
 
@@ -107,6 +122,7 @@ _ROLE_TIERS: dict[str, Tier] = {
     WorkspaceRole.MANAGER.value: Tier.MANAGER,
     WorkspaceRole.DISPATCHER.value: Tier.MANAGER,
     WorkspaceRole.SALES_REP.value: Tier.SALES,
+    WorkspaceRole.LEAD_TECHNICIAN.value: Tier.LEAD,
     WorkspaceRole.TECHNICIAN.value: Tier.FIELD,
     WorkspaceRole.MEMBER.value: Tier.TECH,
 }
@@ -157,23 +173,35 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.JOBS_READ,
         Capability.UPSELL_SELL,
     }
+    # A crew lead: the field tier's visibility exactly, plus the authority to
+    # sell past the on-site proposal limit. Nothing else — a lead technician
+    # still cannot open the contact book, the price book, or the pipeline.
+    lead: set[Capability] = field | {Capability.UPSELL_SELL_UNCAPPED}
 
     matrix: dict[Tier, set[Capability]] = {
         Tier.ADMIN: set(Capability),
         Tier.MANAGER: manager,
         Tier.SALES: sales,
         Tier.TECH: tech,
+        Tier.LEAD: lead,
         Tier.FIELD: field,
     }
 
     # Invariants, enforced here rather than trusting each tier's hand-written set:
     #   * anyone who can write any opportunity can write their own;
     #   * anyone who can write contacts (crm:write) can author outreach.
-    for caps in matrix.values():
+    for tier, caps in matrix.items():
         if Capability.PIPELINE_WRITE in caps:
             caps.add(Capability.PIPELINE_WRITE_OWN)
         if Capability.CRM_WRITE in caps:
             caps.add(Capability.OUTREACH_WRITE)
+        # Every tier except ``field`` sells uncapped. Applied as an invariant so
+        # the tiers stay properly nested (field ⊂ lead ⊂ tech ⊂ sales ⊂ manager
+        # ⊂ admin) and a future tier cannot silently forget it. Capping the upper
+        # tiers would be theatre in any case: a ``billing:write`` holder can
+        # already write a quote of any size through the full quotes API.
+        if tier is not Tier.FIELD:
+            caps.add(Capability.UPSELL_SELL_UNCAPPED)
 
     return {tier: frozenset(caps) for tier, caps in matrix.items()}
 

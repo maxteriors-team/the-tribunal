@@ -1,12 +1,13 @@
 """Unit tests for the RBAC capability matrix (:mod:`app.core.permissions`).
 
-Pure functions, no DB — these pin the five-tier policy so a careless edit to the
+Pure functions, no DB — these pin the six-tier policy so a careless edit to the
 matrix fails loudly. Tiers (admin broadest → field narrowest):
 
     admin ← owner, admin
     manager ← manager, dispatcher
     sales ← sales_rep
     tech ← member
+    lead ← lead_technician
     field ← technician  (and any unknown/legacy string, fail-closed)
 """
 
@@ -24,7 +25,16 @@ from app.core.permissions import (
     upsell_job_scope_required,
 )
 
-ALL_ROLES = ["owner", "admin", "manager", "dispatcher", "sales_rep", "technician", "member"]
+ALL_ROLES = [
+    "owner",
+    "admin",
+    "manager",
+    "dispatcher",
+    "sales_rep",
+    "lead_technician",
+    "technician",
+    "member",
+]
 
 
 @pytest.mark.parametrize(
@@ -35,6 +45,7 @@ ALL_ROLES = ["owner", "admin", "manager", "dispatcher", "sales_rep", "technician
         ("manager", Tier.MANAGER),
         ("dispatcher", Tier.MANAGER),
         ("sales_rep", Tier.SALES),
+        ("lead_technician", Tier.LEAD),
         ("technician", Tier.FIELD),
         ("member", Tier.TECH),
     ],
@@ -60,9 +71,10 @@ def test_capabilities_are_graded_admin_superset_of_all() -> None:
     manager = capabilities_for("manager")
     sales = capabilities_for("sales_rep")
     tech = capabilities_for("member")
+    lead = capabilities_for("lead_technician")
     field = capabilities_for("technician")
-    # admin ⊇ manager ⊇ sales ⊇ tech ⊇ field (nested containment).
-    assert field < tech < sales < manager < admin
+    # admin ⊇ manager ⊇ sales ⊇ tech ⊇ lead ⊇ field (nested containment).
+    assert field < lead < tech < sales < manager < admin
 
 
 def test_manager_runs_operations_but_not_reports_or_members() -> None:
@@ -79,6 +91,7 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         Capability.BILLING_WRITE,
         Capability.LOCATIONS_MANAGE,
         Capability.UPSELL_SELL,
+        Capability.UPSELL_SELL_UNCAPPED,
     }
     assert capabilities_for("manager") == frozenset(granted)
     for denied in (
@@ -99,6 +112,7 @@ def test_sales_owns_pipeline_and_authors_outreach() -> None:
             Capability.JOBS_READ,
             Capability.COMMS_SEND,
             Capability.UPSELL_SELL,
+            Capability.UPSELL_SELL_UNCAPPED,
         }
     )
     # Sales can author outreach (campaigns/segments/automations)…
@@ -140,6 +154,7 @@ def test_member_is_read_plus_messaging_only() -> None:
             Capability.JOBS_READ,
             Capability.COMMS_SEND,
             Capability.UPSELL_SELL,
+            Capability.UPSELL_SELL_UNCAPPED,
         }
     )
 
@@ -242,6 +257,56 @@ class TestUpsellSell:
         # only because the scope check below still confines it to assigned jobs.
         assert role_can("wizard", Capability.UPSELL_SELL)
         assert upsell_job_scope_required("wizard")
+
+
+class TestLeadTechnician:
+    """The crew lead: a field technician trusted to sell big-ticket work.
+
+    The role exists to answer one question — who may sell a full fixture package
+    on site — so the tests here are mostly about what it does *not* also grant.
+    """
+
+    def test_lead_is_field_plus_uncapped_selling_and_nothing_else(self) -> None:
+        assert capabilities_for("lead_technician") == frozenset(
+            {
+                Capability.JOBS_READ,
+                Capability.UPSELL_SELL,
+                Capability.UPSELL_SELL_UNCAPPED,
+            }
+        )
+
+    def test_promoting_a_tech_to_lead_opens_no_other_door(self) -> None:
+        # The entire delta between the two roles is one capability. A lead tech
+        # is still a field worker: no contact book, no price book, no pipeline,
+        # and no blanket messaging.
+        assert capabilities_for("lead_technician") - capabilities_for("technician") == {
+            Capability.UPSELL_SELL_UNCAPPED
+        }
+        for denied in (
+            Capability.CRM_READ,
+            Capability.CRM_WRITE,
+            Capability.BILLING_READ,
+            Capability.BILLING_WRITE,
+            Capability.COMMS_SEND,
+            Capability.JOBS_WRITE,
+            Capability.REPORTS_VIEW,
+            Capability.MEMBERS_MANAGE,
+        ):
+            assert not role_can("lead_technician", denied), denied
+
+    def test_lead_is_still_confined_to_its_own_assigned_jobs(self) -> None:
+        # Selling authority is not visibility: a crew lead sees exactly the jobs
+        # a regular technician sees.
+        assert upsell_job_scope_required("lead_technician")
+
+    def test_only_the_plain_technician_is_capped(self) -> None:
+        for role in ALL_ROLES:
+            capped = not role_can(role, Capability.UPSELL_SELL_UNCAPPED)
+            assert capped is (role == "technician"), role
+
+    def test_unknown_roles_stay_capped(self) -> None:
+        # Fail-closed lands on ``field``, the one tier the limit applies to.
+        assert not role_can("wizard", Capability.UPSELL_SELL_UNCAPPED)
 
 
 class TestUpsellJobScope:

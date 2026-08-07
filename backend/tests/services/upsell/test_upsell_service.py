@@ -44,13 +44,24 @@ from app.services.upsell.exceptions import (
     UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
+    UpsellProposalLimitError,
     UpsellQuoteNotForJobError,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 FIELD = "technician"
+LEAD = "lead_technician"
 ADMIN = "admin"
+
+# A workspace that caps what a plain technician may sell on site. Zero buffer so
+# the arithmetic in these tests is the price book figure, not a grossed one.
+LIMIT_PRICING = {
+    "pricing": {
+        "financing": {"enabled": False},
+        "upsell": {"field_proposal_limit": 500},
+    }
+}
 
 
 @pytest.fixture(autouse=True)
@@ -560,6 +571,228 @@ async def test_empty_proposal_is_refused() -> None:
             await UpsellService(db).create_quote(
                 ws.id, job.id, UpsellQuoteRequest(line_items=[]), user_id=1, role=FIELD
             )
+
+
+# --------------------------------------------------------------------------- #
+# Lead technician — the on-site proposal limit is the whole of the role
+# --------------------------------------------------------------------------- #
+async def test_technician_is_refused_past_the_workspace_limit() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=640.0)
+
+        with pytest.raises(UpsellProposalLimitError) as excinfo:
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+        # The message has to tell a technician standing in a yard what to do.
+        message = str(excinfo.value)
+        assert "$640.00" in message
+        assert "$500.00" in message
+        assert "lead tech" in message
+
+
+async def test_lead_technician_sells_the_same_basket_freely() -> None:
+    """The entire point of the role, on identical data."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=640.0)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]
+            ),
+            user_id=1,
+            role=LEAD,
+        )
+        assert quote.total == 2560.0
+
+
+async def test_limit_counts_the_whole_basket_not_the_line() -> None:
+    """Four $200 add-ons is an $800 proposal, however it is split up."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Path light", price=200.0)
+
+        with pytest.raises(UpsellProposalLimitError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_a_basket_exactly_on_the_limit_is_allowed() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Path light", price=250.0)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+        assert quote.total == 500.0
+
+
+async def test_limit_is_measured_on_the_grossed_up_price_the_client_pays() -> None:
+    """A $460 net item bills at $517 and must count as $517 against a $500 cap.
+
+    Measuring the net figure would let a technician sell past the owner's limit
+    by exactly the back-end buffer.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(
+            db,
+            settings={
+                "pricing": {
+                    "financing": {"enabled": True, "fee_buffer": 0.11},
+                    "upsell": {"field_proposal_limit": 500},
+                }
+            },
+        )
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Borderline", price=460.0)
+
+        with pytest.raises(UpsellProposalLimitError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_no_configured_limit_means_no_cap() -> None:
+    """Opt-in: a workspace that never asked for a limit is unaffected."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings={"pricing": {"financing": {"enabled": False}}})
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Big package", price=9000.0)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+        assert quote.total == 9000.0
+
+
+async def test_a_refused_proposal_leaves_no_orphaned_draft() -> None:
+    """``create_quote`` commits, so the limit must be checked before it runs."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=640.0)
+
+        with pytest.raises(UpsellProposalLimitError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+        remaining = (
+            (await db.execute(select(Quote).where(Quote.workspace_id == ws.id))).scalars().all()
+        )
+        assert remaining == []
+
+
+async def test_a_care_plan_does_not_count_against_the_limit() -> None:
+    """Retention is what every technician should be closing; it is not capital."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(
+            db,
+            settings={
+                "pricing": {
+                    "financing": {"enabled": False},
+                    "upsell": {"field_proposal_limit": 100},
+                    "care_plan": CARE_PLAN_PRICING["pricing"]["care_plan"],
+                }
+            },
+        )
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        # $667/yr on a $100 cap — allowed, because the cap is on one-time work.
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=24)
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+        assert quote.total == 0
+        assert quote.proposal_document["care_plan"]["selected"] == "gold"
+
+
+async def test_menu_reports_the_limit_to_a_capped_technician_only() -> None:
+    """So the UI can warn before the technician builds something they can't send."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        await _catalog_item(db, ws, name="Uplighting", price=640.0)
+
+        service = UpsellService(db)
+        assert (await service.list_attachable_catalog(ws.id, role=FIELD)).proposal_limit == 500
+        assert (await service.list_attachable_catalog(ws.id, role=LEAD)).proposal_limit is None
+        assert (await service.list_attachable_catalog(ws.id, role=ADMIN)).proposal_limit is None
 
 
 # --------------------------------------------------------------------------- #
