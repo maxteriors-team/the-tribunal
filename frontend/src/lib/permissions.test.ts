@@ -36,8 +36,8 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("field technicians are operational-only (jobs:read and nothing else)", () => {
-    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read"]);
+  it("field technicians are operational-only (jobs:read + scoped upsell)", () => {
+    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read", "upsell:sell"]);
     expect(can("technician", "jobs:read")).toBe(true);
     for (const cap of [
       "crm:read",
@@ -49,6 +49,27 @@ describe("capability matrix (mirror of backend)", () => {
     ] as Capability[]) {
       expect(can("technician", cap)).toBe(false);
     }
+  });
+
+  it("upsell:sell reaches every tier without widening the field tier", () => {
+    // Held by all tiers, which is what keeps the matrix's nested containment
+    // intact. It is not a general grant: the /upsell routes re-scope each call
+    // to the caller's assigned jobs and to attachable price-book items.
+    for (const role of [
+      "owner",
+      "admin",
+      "manager",
+      "dispatcher",
+      "sales_rep",
+      "technician",
+      "member",
+    ]) {
+      expect(can(role, "upsell:sell")).toBe(true);
+    }
+    // Unknown roles fail closed to field, which still holds it — safe only
+    // because the backend confines that tier to its own assigned jobs.
+    expect(can("wizard", "upsell:sell")).toBe(true);
+    expect(can("wizard", "crm:read")).toBe(false);
   });
 
   it("reports:view is admin-only", () => {

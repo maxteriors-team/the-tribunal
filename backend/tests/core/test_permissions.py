@@ -21,6 +21,7 @@ from app.core.permissions import (
     pipeline_owner_scope,
     role_can,
     role_tier,
+    upsell_job_scope_required,
 )
 
 ALL_ROLES = ["owner", "admin", "manager", "dispatcher", "sales_rep", "technician", "member"]
@@ -77,6 +78,7 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
         Capability.LOCATIONS_MANAGE,
+        Capability.UPSELL_SELL,
     }
     assert capabilities_for("manager") == frozenset(granted)
     for denied in (
@@ -96,6 +98,7 @@ def test_sales_owns_pipeline_and_authors_outreach() -> None:
             Capability.PIPELINE_WRITE_OWN,
             Capability.JOBS_READ,
             Capability.COMMS_SEND,
+            Capability.UPSELL_SELL,
         }
     )
     # Sales can author outreach (campaigns/segments/automations)…
@@ -132,14 +135,21 @@ def test_outreach_write_holders() -> None:
 
 def test_member_is_read_plus_messaging_only() -> None:
     assert capabilities_for("member") == frozenset(
-        {Capability.CRM_READ, Capability.JOBS_READ, Capability.COMMS_SEND}
+        {
+            Capability.CRM_READ,
+            Capability.JOBS_READ,
+            Capability.COMMS_SEND,
+            Capability.UPSELL_SELL,
+        }
     )
 
 
 def test_field_technician_is_operational_only() -> None:
-    # A field technician sees only the jobs schedule: no CRM, pipeline,
-    # campaigns, billing/pricing, comms, or reports.
-    assert capabilities_for("technician") == frozenset({Capability.JOBS_READ})
+    # A field technician sees the jobs schedule and the scoped on-site upsell
+    # surface — no CRM, pipeline, campaigns, billing/pricing, comms, or reports.
+    assert capabilities_for("technician") == frozenset(
+        {Capability.JOBS_READ, Capability.UPSELL_SELL}
+    )
     for denied in (
         Capability.CRM_READ,
         Capability.CRM_WRITE,
@@ -190,6 +200,71 @@ def test_reports_view_is_admin_only() -> None:
     assert role_can("owner", Capability.REPORTS_VIEW)
     for role in ["manager", "dispatcher", "sales_rep", "technician", "member"]:
         assert not role_can(role, Capability.REPORTS_VIEW), role
+
+
+class TestUpsellSell:
+    """``upsell:sell`` lets a field technician sell an add-on on their own job.
+
+    The capability is held by every tier, which is what keeps the matrix's nested
+    containment intact. It is not a general grant: only ``app.api.v1.upsell``
+    honours it, and those routes re-scope to the caller's assigned jobs.
+    """
+
+    def test_every_tier_including_field_can_upsell(self) -> None:
+        for role in ALL_ROLES:
+            assert role_can(role, Capability.UPSELL_SELL), role
+
+    def test_field_tier_is_exactly_jobs_read_plus_upsell(self) -> None:
+        # The whole point of the feature: technicians gain the ability to sell an
+        # add-on WITHOUT gaining the contact book, the price book, or the pipeline.
+        assert capabilities_for("technician") == frozenset(
+            {Capability.JOBS_READ, Capability.UPSELL_SELL}
+        )
+
+    def test_upsell_does_not_smuggle_in_crm_billing_or_comms(self) -> None:
+        # Regression guard for the tempting shortcut of "just give techs crm:read
+        # and comms:send". Delivery rides the scoped upsell route instead, so a
+        # technician still cannot read the contact book or text arbitrary people.
+        for denied in (
+            Capability.CRM_READ,
+            Capability.CRM_WRITE,
+            Capability.BILLING_READ,
+            Capability.BILLING_WRITE,
+            Capability.COMMS_SEND,
+            Capability.PIPELINE_WRITE_OWN,
+            Capability.JOBS_WRITE,
+            Capability.REPORTS_VIEW,
+        ):
+            assert not role_can("technician", denied), denied
+
+    def test_unknown_roles_get_upsell_but_stay_job_scoped(self) -> None:
+        # Fail-closed lands on the field tier, which holds upsell:sell — harmless
+        # only because the scope check below still confines it to assigned jobs.
+        assert role_can("wizard", Capability.UPSELL_SELL)
+        assert upsell_job_scope_required("wizard")
+
+
+class TestUpsellJobScope:
+    """``upsell_job_scope_required`` decides who is confined to their own jobs."""
+
+    def test_billing_writers_are_unrestricted(self) -> None:
+        # They can already quote any contact through the quotes API, so scoping
+        # them here would cost a query and buy nothing.
+        for role in ("owner", "admin", "manager", "dispatcher"):
+            assert not upsell_job_scope_required(role), role
+
+    def test_field_sales_and_tech_are_confined_to_assigned_jobs(self) -> None:
+        for role in ("technician", "sales_rep", "member"):
+            assert upsell_job_scope_required(role), role
+
+    def test_restriction_tracks_billing_write_not_a_role_list(self) -> None:
+        # The rule is derived from the capability, so a future tier that gains
+        # billing:write is automatically unrestricted and one that loses it is
+        # automatically confined — no second list to keep in sync.
+        for role in ALL_ROLES:
+            assert upsell_job_scope_required(role) is not role_can(
+                role, Capability.BILLING_WRITE
+            ), role
 
 
 class TestPipelineOwnerScope:
