@@ -46888,6 +46888,13 @@
               }
             ],
             "title": "Field Proposal Limit"
+          },
+          "ranks": {
+            "items": {
+              "$ref": "#/components/schemas/UpsellRankConfig"
+            },
+            "title": "Ranks",
+            "type": "array"
           }
         },
         "title": "UpsellConfig",
@@ -47049,6 +47056,68 @@
         "title": "UpsellJobListResponse",
         "type": "object"
       },
+      "UpsellMyStats": {
+        "description": "One technician's own selling numbers for a calendar month.\n\nDeliberately singular. A technician sees their own performance and nobody\nelse's: a leaderboard exposing colleagues' revenue is both a data leak from\nthe narrowest tier in the product and a morale problem an owner should opt\ninto, not something the field surface leaks by default.",
+        "properties": {
+          "care_plans_sold": {
+            "title": "Care Plans Sold",
+            "type": "integer"
+          },
+          "close_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Rate"
+          },
+          "period_end": {
+            "format": "date",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "proposals_approved": {
+            "title": "Proposals Approved",
+            "type": "integer"
+          },
+          "proposals_sent": {
+            "title": "Proposals Sent",
+            "type": "integer"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpsellRankProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revenue_approved": {
+            "title": "Revenue Approved",
+            "type": "number"
+          }
+        },
+        "required": [
+          "period_start",
+          "period_end",
+          "proposals_sent",
+          "proposals_approved",
+          "revenue_approved",
+          "care_plans_sold"
+        ],
+        "title": "UpsellMyStats",
+        "type": "object"
+      },
       "UpsellQuoteLine": {
         "description": "A requested add-on line.\n\nCarries **no price**. The server resolves ``unit_price`` and ``name`` from the\ncatalog item, so the pricing on an upsell proposal can never be set by the\ndevice in the driveway.",
         "properties": {
@@ -47115,6 +47184,142 @@
           }
         },
         "title": "UpsellQuoteRequest",
+        "type": "object"
+      },
+      "UpsellRankConfig": {
+        "description": "One rung on the technician selling ladder.\n\n``threshold`` is approved upsell revenue within the reporting month, in major\nunits. ``reward`` is free text shown to the technician (\"$150 bonus\", \"1 extra\nPTO day\") — this codebase tracks progress and never pays anything, so the\npayout mechanism stays wherever payroll already lives.",
+        "properties": {
+          "key": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reward": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reward"
+          },
+          "threshold": {
+            "minimum": 0.0,
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "threshold"
+        ],
+        "title": "UpsellRankConfig",
+        "type": "object"
+      },
+      "UpsellRankProgress": {
+        "description": "Where the technician stands on the workspace's selling ladder.",
+        "properties": {
+          "amount_to_next": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount To Next"
+          },
+          "current_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Key"
+          },
+          "current_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Name"
+          },
+          "current_reward": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Reward"
+          },
+          "next_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Name"
+          },
+          "next_reward": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Reward"
+          },
+          "next_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Threshold"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          }
+        },
+        "title": "UpsellRankProgress",
         "type": "object"
       },
       "UrgencyType": {
@@ -85587,6 +85792,55 @@
           }
         ],
         "summary": "Deliver Upsell Quote",
+        "tags": [
+          "Upsell"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/upsell/my-stats": {
+      "get": {
+        "description": "The caller's own selling numbers for the current calendar month.\n\nAlways scoped to the caller — there is no user parameter, so this endpoint\ncannot be pointed at a colleague. Workspace-wide comparison lives behind\n``reports:view`` for owners.",
+        "operationId": "get_my_selling_stats_api_v1_workspaces__workspace_id__upsell_my_stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpsellMyStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get My Selling Stats",
         "tags": [
           "Upsell"
         ]
