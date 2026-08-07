@@ -21,6 +21,7 @@ import {
   ChevronRight,
   MapPin,
   PackageOpen,
+  Search,
   Send,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -35,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   PageEmptyState,
   PageErrorState,
@@ -53,6 +55,9 @@ import { formatPhoneNumber } from "@/lib/utils/phone";
 
 /** Shared content rail: header, list, and the summary bar's inner content. */
 const RAIL = "mx-auto w-full max-w-screen-sm px-4";
+
+/** Above this many add-ons, a search field beats scrolling on a phone. */
+const FILTER_THRESHOLD = 8;
 
 function formatWhen(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -78,6 +83,7 @@ export function UpsellPage() {
   // drives the query key rather than being posted blind with the proposal.
   const [fixtureCount, setFixtureCount] = useState(0);
   const [carePlanKey, setCarePlanKey] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   const jobsQuery = useQuery({
     queryKey: queryKeys.upsell.jobs(workspaceId ?? ""),
@@ -161,6 +167,21 @@ export function UpsellPage() {
   });
 
   const catalogItems = useMemo(() => catalogQuery.data?.items ?? [], [catalogQuery.data]);
+
+  // Filters on name and description so "path" finds "ZDC Modern Color Path
+  // Light" and "bistro" finds an item that only says so in its blurb. A selected
+  // item stays visible regardless, so filtering can never hide something the
+  // technician has already added to the proposal.
+  const visibleItems = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    if (!needle) return catalogItems;
+    return catalogItems.filter(
+      (item) =>
+        (quantities[item.id] ?? 0) > 0 ||
+        item.name.toLowerCase().includes(needle) ||
+        (item.description ?? "").toLowerCase().includes(needle),
+    );
+  }, [catalogItems, filter, quantities]);
 
   const { selectedCount, previewTotal } = useMemo(() => {
     let count = 0;
@@ -394,9 +415,33 @@ export function UpsellPage() {
         ) : (
           <>
             <h2 className="sr-only">Add-ons</h2>
+            {/* A real lighting price book is ~22 items. Scrolling that one-handed
+                in a yard to find "path light" is the slow path; typing three
+                letters is the fast one. Shown only once the list is long enough
+                to be worth filtering. */}
+            {catalogItems.length > FILTER_THRESHOLD ? (
+              <div className="relative mb-2">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder={`Search ${catalogItems.length} add-ons…`}
+                  aria-label="Search add-ons"
+                  className="h-11 pl-9 text-base"
+                />
+              </div>
+            ) : null}
+            {visibleItems.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nothing matches “{filter}”.
+              </p>
+            ) : null}
             <ul className="flex flex-col gap-2">
-
-              {catalogItems.map((item) => {
+              {visibleItems.map((item) => {
                 const quantity = quantities[item.id] ?? 0;
                 return (
                   <UpsellAddonRow

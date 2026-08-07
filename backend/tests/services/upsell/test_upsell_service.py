@@ -36,6 +36,8 @@ from app.schemas.upsell import (
     UpsellQuoteRequest,
 )
 from app.services.field_service.exceptions import JobNotFoundError
+from app.services.quotes import proposal_pricing as pp
+from app.services.quotes.pricing_config import get_pricing_config
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 from app.services.upsell import UpsellService
 from app.services.upsell.exceptions import (
@@ -61,6 +63,10 @@ async def _fresh_engine_pool():
 
 # A workspace's Care Plan tiers live in ``settings.pricing``. Mirrors the shape
 # ``scripts/demo/seed_lighting_workspace.py`` seeds.
+# The back-end buffer every client-facing price is grossed up by. 11% is the
+# schema default (the Wisetack dealer fee); ``price / (1 - 0.11)``.
+BUFFER_PRICING = {"pricing": {"financing": {"enabled": True, "fee_buffer": 0.11}}}
+
 CARE_PLAN_PRICING = {
     "pricing": {
         "care_plan": {
@@ -362,6 +368,95 @@ async def test_a_truthy_flag_labels_the_rate_even_when_it_is_not_a_real_bool() -
 # --------------------------------------------------------------------------- #
 # Quote creation — server-side pricing
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Gross-up — the price book holds NET, clients are charged the grossed price
+# --------------------------------------------------------------------------- #
+async def test_menu_prices_are_grossed_up_not_sold_at_net() -> None:
+    """The technician's menu must never show the net (cost) figure.
+
+    ``catalog_items.unit_price`` is net; every client-facing surface grosses it
+    up (``proposal_builder``: "rep enters net, we gross up — matches every other
+    price"). This screen is the one place nobody can catch the mistake, because
+    the technician cannot see the price book or override a price.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=BUFFER_PRICING)
+        await _catalog_item(db, ws, name="ZDC Color Uplight", price=785.0)
+
+        listed = await UpsellService(db).list_attachable_catalog(ws.id)
+        # 785 / (1 - 0.11) = 882, not 785.
+        assert listed.items[0].unit_price == 882.0
+
+
+async def test_quoted_price_matches_the_menu_price_the_technician_read_aloud() -> None:
+    """Menu and proposal must agree, or the tech quotes a number that then changes."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=BUFFER_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="ZDC Color Uplight", price=785.0)
+
+        service = UpsellService(db)
+        menu_price = (await service.list_attachable_catalog(ws.id)).items[0].unit_price
+        quote = await service.create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+
+        assert menu_price == 882.0
+        assert quote.line_items[0].unit_price == menu_price
+        assert quote.total == 1764.0
+
+
+async def test_technician_price_equals_the_wizards_price_for_the_same_item() -> None:
+    """A fixture quoted in a driveway must match one quoted from the office."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=BUFFER_PRICING)
+        await _catalog_item(db, ws, name="ZD Uplight", price=411.0)
+
+        listed = await UpsellService(db).list_attachable_catalog(ws.id)
+        config = get_pricing_config(ws)
+        assert listed.items[0].unit_price == float(pp.gross_up_price(411.0, config))
+
+
+async def test_commission_in_price_widens_the_gross_up() -> None:
+    """The buffer is fee + commission when commission is baked into price."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(
+            db,
+            settings={
+                "pricing": {
+                    "financing": {"enabled": True, "fee_buffer": 0.11},
+                    "commission": {"enabled": True, "in_price": True, "rate": 0.10},
+                }
+            },
+        )
+        await _catalog_item(db, ws, name="ZDC Color Uplight", price=785.0)
+
+        listed = await UpsellService(db).list_attachable_catalog(ws.id)
+        # 785 / (1 - 0.21) = 994 — materially more than the 882 above.
+        assert listed.items[0].unit_price == 994.0
+
+
+async def test_zero_buffer_workspace_sells_at_the_book_price() -> None:
+    """No financing, no in-price commission → gross-up is a no-op, not a markup."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(
+            db, settings={"pricing": {"financing": {"enabled": False, "fee_buffer": 0.11}}}
+        )
+        await _catalog_item(db, ws, name="Flat rate service", price=320.0)
+
+        listed = await UpsellService(db).list_attachable_catalog(ws.id)
+        assert listed.items[0].unit_price == 320.0
+
+
 async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
@@ -381,8 +476,10 @@ async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
         assert len(quote.line_items) == 1
         line = quote.line_items[0]
         assert line.name == "Landscape lighting"
-        assert line.unit_price == 2400.0
-        assert line.total == 4800.0
+        # The book's 2400 is NET; the client is charged the grossed-up figure
+        # (2400 / 0.89 = 2697). Either way the *request's* numbers are ignored.
+        assert line.unit_price == 2697.0
+        assert line.total == 5394.0
         # Attributed to the technician so attach-rate reporting can pay the spiff.
         assert quote.contact_id == contact.id
 
@@ -590,7 +687,8 @@ async def test_care_plan_and_hardware_sell_together_on_one_proposal() -> None:
             role=FIELD,
         )
 
-        assert quote.total == 640.0
+        # 640 net → 719 charged. The care plan stays out of the one-time total.
+        assert quote.total == 719.0
         assert quote.proposal_document["care_plan"]["selected"] == "essential"
 
 
