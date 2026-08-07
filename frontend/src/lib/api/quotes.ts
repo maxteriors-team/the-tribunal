@@ -6,6 +6,7 @@ import type {
   QuoteDeliverChannel,
   QuoteDeliverResult,
   QuoteLineItemInput,
+  QuoteServiceInput,
   UpdateQuoteRequest,
 } from "@/types";
 
@@ -99,6 +100,37 @@ export const quotesApi = {
         scheduled_start: options?.scheduled_start ?? null,
         scheduled_end: options?.scheduled_end ?? null,
       }
+    );
+  },
+
+  /**
+   * Add a service to an existing quote ("they also want the gutters done").
+   *
+   * Prefer this over `addLineItem` for anything an operator adds after the
+   * quote was saved. Nearly every quote is built by the sales wizard, and on
+   * those the line items are *derived* from `proposal_document`: a raw line
+   * item never appears on the client's proposal and is wiped the next time the
+   * quote reprices. This endpoint stores the service wherever it survives on
+   * that particular quote and returns the repriced quote.
+   *
+   * `amount` is the net the business keeps — the server adds the finance buffer
+   * on a wizard quote, exactly like the wizard's own add-on row.
+   */
+  addService: async (
+    workspaceId: string,
+    quoteId: string,
+    data: QuoteServiceInput
+  ): Promise<Quote> => {
+    return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/services`, data);
+  },
+
+  removeService: async (
+    workspaceId: string,
+    quoteId: string,
+    serviceId: string
+  ): Promise<Quote> => {
+    return apiDelete<Quote>(
+      `${quotePath(workspaceId, quoteId)}/services/${serviceId}`
     );
   },
 

@@ -34227,6 +34227,17 @@
             "title": "Description",
             "type": "string"
           },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "tier_key": {
             "anyOf": [
               {
@@ -38012,6 +38023,13 @@
             ],
             "title": "Service Location Id"
           },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteServiceResponse"
+            },
+            "title": "Services",
+            "type": "array"
+          },
           "status": {
             "enum": [
               "draft",
@@ -39075,6 +39093,75 @@
           "channel"
         ],
         "title": "QuoteRevivalTouchSettings",
+        "type": "object"
+      },
+      "QuoteServiceCreate": {
+        "description": "Add one service to a quote that already exists.\n\nDeliberately amount-only, with no quantity. A quote built by the sales wizard\nstores its money in ``proposal_document`` and only *derives* line items from\nit, so an added service has to persist as a\n:class:`~app.schemas.proposal_wizard.ProposalCharge` to survive the client\nswitching packages (which rebuilds every line from the document). A charge\ncarries an amount and no quantity, and offering a quantity that the wizard\nshape cannot keep would be a field that silently collapses to 1 on most\nquotes.\n\n``amount`` is the **net** the business keeps on a wizard quote — grossed up\nby the finance buffer server-side like every other price on that document —\nand the plain unit price on a quote that has no document. This mirrors the\nwizard's own add-on row, where a price-book price is entered as net.",
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
+          "name": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "amount"
+        ],
+        "title": "QuoteServiceCreate",
+        "type": "object"
+      },
+      "QuoteServiceResponse": {
+        "description": "One operator-added service, in a shape that hides where it is stored.\n\nA quote keeps added services in one of two places depending on how it was\nbuilt: a document charge for wizard quotes, a line item for plain ones. That\nsplit is a persistence detail rather than something a caller should branch\non, so both project into this one shape, and ``id`` is whatever the delete\nendpoint needs in order to remove it.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "amount"
+        ],
+        "title": "QuoteServiceResponse",
         "type": "object"
       },
       "QuoteUpdate": {
@@ -80151,6 +80238,143 @@
           }
         ],
         "summary": "Send Quote",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/services": {
+      "post": {
+        "description": "Add a service to an existing quote and reprice it.",
+        "operationId": "add_service_api_v1_workspaces__workspace_id__quotes__quote_id__services_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteServiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Add Service",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/services/{service_id}": {
+      "delete": {
+        "description": "Remove a service previously added to a quote and reprice it.",
+        "operationId": "remove_service_api_v1_workspaces__workspace_id__quotes__quote_id__services__service_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Remove Service",
         "tags": [
           "Quotes"
         ]
