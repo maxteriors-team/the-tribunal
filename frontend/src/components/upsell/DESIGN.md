@@ -12,8 +12,9 @@ The technician-facing surface for the scoped upsell API
 - **Audience:** A field technician on the `field` tier. Not a CRM user: they wash
   houses and hang lights. They have never seen the pipeline, and by design never
   will. Outdoors, bright sun, one hand, gloves on, possibly weak signal.
-- **Single job:** Turn *"this yard would look great with path lights"* into a sent
-  proposal before the technician leaves the driveway.
+- **Single job:** Turn _"this yard would look great with path lights"_ into a sent
+  proposal before the technician leaves the driveway — hardware, a recurring Care
+  Plan, or both.
 - **Task and risk:** A few times a week per tech, so nothing may rely on
   memorised affordances. Building a draft is cheap and reversible. **Sending is
   not** — a real customer receives it — so send is the one action behind a
@@ -61,11 +62,16 @@ screen worse.
 - **Second glance:** which add-ons are on the list.
 - **Primary action:** the pinned bar. Exactly one per step.
 
+**One-time money and recurring money never merge.** Hardware totals and a Care
+Plan's yearly price sit on separate lines in the summary bar, the draft, and the
+send confirmation. Summing them would state a number the customer never agreed
+to, and every Care Plan price carries an explicit `/yr`.
+
 Composition is a single 640px content rail, shared by the header, list, and the
 inner content of the pinned bar so their edges align at every breakpoint.
 
 **Semantic roles.** Neutral surfaces throughout; the product accent marks
-*selection only*, because selection is the one piece of state the technician is
+_selection only_, because selection is the one piece of state the technician is
 actively manipulating. Money is `tabular-nums` so the total does not shift
 horizontally as it changes. No semantic tint-on-tint: a selected row is a
 neutral surface with an accent border and a check, not a wash of accent at 10%.
@@ -73,6 +79,21 @@ neutral surface with an accent border and a check, not a wash of accent at 10%.
 **Motion.** Border, background, and icon colour transitions at the token
 duration, named properties only. The stepper and total do not animate position.
 Reduced motion removes transitions, and nothing depends on them for meaning.
+
+## Care Plan section
+
+Sits below the add-on list and is **hidden entirely** when the workspace
+configures no tiers — not every trade sells maintenance, and a dead section is
+worse than no section. Two things separate it from the list above it:
+
+1. **Its price is a function of an input the technician gathers.** Plans price as
+   `base + per_fixture × (count − free)`, so the fixture count is a pricing field
+   and sits _above_ the tiers: a number that moves under your thumb after you
+   have read it aloud is worse than one you set first. Previous prices stay on
+   screen while a new count is priced so the list never blanks out mid-count.
+2. **It is billed yearly.** Re-tapping the selected tier clears it, so a
+   technician who opened the plan to read a price aloud can get back to "no plan"
+   without restarting the proposal.
 
 ## States planned
 

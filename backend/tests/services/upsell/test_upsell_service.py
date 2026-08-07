@@ -21,6 +21,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
@@ -28,10 +29,17 @@ from app.models.contact import Contact
 from app.models.field_service import Crew, Job, JobAssignment, JobStatus, Technician
 from app.models.quote import Quote
 from app.models.workspace import Workspace
-from app.schemas.upsell import UpsellQuoteLine, UpsellQuoteRequest
+from app.models.recurring_job import ServicePlanType
+from app.schemas.upsell import (
+    UpsellCarePlanSelection,
+    UpsellQuoteLine,
+    UpsellQuoteRequest,
+)
 from app.services.field_service.exceptions import JobNotFoundError
+from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 from app.services.upsell import UpsellService
 from app.services.upsell.exceptions import (
+    UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
     UpsellQuoteNotForJobError,
@@ -51,8 +59,41 @@ async def _fresh_engine_pool():
     await engine.dispose()
 
 
-async def _workspace(db) -> Workspace:
-    ws = Workspace(id=uuid.uuid4(), name="Lights", slug=f"lights-{uuid.uuid4().hex[:8]}")
+# A workspace's Care Plan tiers live in ``settings.pricing``. Mirrors the shape
+# ``scripts/demo/seed_lighting_workspace.py`` seeds.
+CARE_PLAN_PRICING = {
+    "pricing": {
+        "care_plan": {
+            "free_fixtures": 10,
+            "tiers": [
+                {
+                    "key": "essential",
+                    "name": "Essential",
+                    "base": 179,
+                    "per_fixture": 15,
+                    "visits": 1,
+                },
+                {
+                    "key": "gold",
+                    "name": "Gold",
+                    "base": 359,
+                    "per_fixture": 22,
+                    "visits": 4,
+                    "repair_discount": 0.15,
+                },
+            ],
+        }
+    }
+}
+
+
+async def _workspace(db, *, settings: dict | None = None) -> Workspace:
+    ws = Workspace(
+        id=uuid.uuid4(),
+        name="Lights",
+        slug=f"lights-{uuid.uuid4().hex[:8]}",
+        settings=settings,
+    )
     db.add(ws)
     await db.flush()
     return ws
@@ -296,11 +337,26 @@ async def test_malformed_attributes_degrade_instead_of_breaking_the_menu() -> No
             db,
             ws,
             name="Sloppy import",
-            attributes={"per_linear_foot": "yes please", "minimum": "two thousand"},
+            attributes={"per_linear_foot": False, "unrelated": {"nested": [1, 2]}},
         )
 
         listed = await UpsellService(db).list_attachable_catalog(ws.id)
         assert listed.items[0].price_unit is None
+
+
+async def test_a_truthy_flag_labels_the_rate_even_when_it_is_not_a_real_bool() -> None:
+    """Permissive on purpose — the two failure directions are not symmetric.
+
+    An importer writing ``"true"`` instead of ``true`` should still get the label.
+    Over-labelling a flat price reads as an odd unit; *under*-labelling a per-foot
+    rate is the one that makes a technician quote $18.50 for a $900 patio.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        await _catalog_item(db, ws, name="Stringy flag", attributes={"per_linear_foot": "true"})
+
+        listed = await UpsellService(db).list_attachable_catalog(ws.id)
+        assert listed.items[0].price_unit == "per linear foot"
 
 
 # --------------------------------------------------------------------------- #
@@ -406,6 +462,254 @@ async def test_empty_proposal_is_refused() -> None:
         with pytest.raises(UpsellNoLineItemsError):
             await UpsellService(db).create_quote(
                 ws.id, job.id, UpsellQuoteRequest(line_items=[]), user_id=1, role=FIELD
+            )
+
+
+# --------------------------------------------------------------------------- #
+# Care Plans — recurring revenue, which is a subscription and not a line item
+# --------------------------------------------------------------------------- #
+async def test_care_plan_tiers_are_priced_by_fixture_count() -> None:
+    """``base + per_fixture × (count - free)``, priced by the shared engine."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+
+        priced = await UpsellService(db).list_care_plans(ws.id, fixture_count=18)
+        assert priced.configured
+        by_key = {option.key: option for option in priced.options}
+        # 18 fixtures, 10 free → 8 chargeable.
+        assert by_key["essential"].price == 179 + 15 * 8
+        assert by_key["gold"].price == 359 + 22 * 8
+        assert by_key["gold"].visits == 4
+
+
+async def test_fixture_count_at_or_below_the_free_allowance_is_base_price() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+
+        priced = await UpsellService(db).list_care_plans(ws.id, fixture_count=6)
+        assert {option.key: option.price for option in priced.options} == {
+            "essential": 179,
+            "gold": 359,
+        }
+
+
+async def test_workspace_without_tiers_reports_unconfigured_rather_than_erroring() -> None:
+    """Not selling maintenance is a normal state, not a failure."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+
+        priced = await UpsellService(db).list_care_plans(ws.id, fixture_count=12)
+        assert priced.configured is False
+        assert priced.options == []
+
+
+async def test_care_plan_is_not_billed_as_a_one_time_line_item() -> None:
+    """The plan is a subscription; the quote total stays the hardware sold.
+
+    Folding an annual plan price into ``line_items`` would bill a recurring
+    subscription once on the install invoice *and* still provision the recurring
+    visits on approval — charging the customer twice for different things.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+
+        assert quote.line_items == []
+        assert quote.total == 0
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["care_plan"]["selected"] == "gold"
+
+
+async def test_selling_a_care_plan_provisions_recurring_visits_on_approval() -> None:
+    """The end-to-end proof that a technician's sale becomes real recurring work.
+
+    Without the ``proposal_document`` snapshot this whole path is a no-op: the
+    customer would pay, and nothing would ever schedule a maintenance visit or
+    record that they are on Gold.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        created = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+
+        quote = await db.get(Quote, created.id)
+        assert quote is not None
+        plans = await ServicePlanProvisioner(db).provision_from_quote(quote)
+
+        assert len(plans) == 1
+        plan = plans[0]
+        assert plan.plan_type == ServicePlanType.LIGHTING_CARE_PLAN
+        assert plan.care_plan_tier == "gold"
+        assert plan.title == "Care Plan — Gold"
+        # 4 visits a year → a visit every three months.
+        assert plan.interval == 3
+
+
+async def test_care_plan_and_hardware_sell_together_on_one_proposal() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=640.0)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)],
+                care_plan=UpsellCarePlanSelection(tier_key="essential", fixture_count=12),
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+
+        assert quote.total == 640.0
+        assert quote.proposal_document["care_plan"]["selected"] == "essential"
+
+
+async def test_care_plan_snapshot_freezes_every_priced_option() -> None:
+    """The provisioner reads ``visits``/``name`` off the frozen option.
+
+    Freezing the whole list also means a later pricing-config edit cannot change
+    what this customer already bought.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+
+        document = quote.proposal_document["care_plan"]
+        assert document["fixture_count"] == 18
+        assert document["free_fixtures"] == 10
+        assert {option["key"] for option in document["options"]} == {"essential", "gold"}
+        gold = next(o for o in document["options"] if o["key"] == "gold")
+        assert gold["visits"] == 4
+        assert gold["price"] == 359 + 22 * 8
+
+
+async def test_unknown_care_plan_tier_is_refused_without_leaving_a_draft() -> None:
+    """An operator can retire a tier mid-shift; a stale phone must not orphan a quote."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        with pytest.raises(UpsellCarePlanUnavailableError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    care_plan=UpsellCarePlanSelection(tier_key="platinum", fixture_count=12)
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+        remaining = (
+            (await db.execute(select(Quote).where(Quote.workspace_id == ws.id))).scalars().all()
+        )
+        assert remaining == []
+
+
+async def test_care_plan_on_a_workspace_without_tiers_is_refused() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        with pytest.raises(UpsellCarePlanUnavailableError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_care_plan_only_proposal_is_titled_for_what_it_sells() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
+            ),
+            user_id=1,
+            role=FIELD,
+        )
+        assert quote.title == "Care plan for Pressure wash"
+
+
+async def test_care_plan_on_someone_elses_job_is_refused() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=CARE_PLAN_PRICING)
+        contact = await _contact(db, ws)
+        await _technician(db, ws, user_id=1)
+        other = await _technician(db, ws, user_id=2)
+        their_job = await _job(db, ws, contact)
+        await _assign(db, their_job, other)
+
+        with pytest.raises(JobNotFoundError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                their_job.id,
+                UpsellQuoteRequest(
+                    care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
+                ),
+                user_id=1,
+                role=FIELD,
             )
 
 

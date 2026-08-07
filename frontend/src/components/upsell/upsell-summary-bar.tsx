@@ -16,11 +16,18 @@
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/number";
 
 interface UpsellSummaryBarProps {
   itemCount: number;
   total: number;
+  /**
+   * Yearly subscription total, kept on its own line rather than added to
+   * `total`. A recurring plan summed into a one-time figure produces a number
+   * the customer never agreed to pay.
+   */
+  recurringTotal?: number;
   actionLabel: string;
   onAction: () => void;
   disabled?: boolean;
@@ -31,6 +38,7 @@ interface UpsellSummaryBarProps {
 export function UpsellSummaryBar({
   itemCount,
   total,
+  recurringTotal = 0,
   actionLabel,
   onAction,
   disabled = false,
@@ -46,15 +54,30 @@ export function UpsellSummaryBar({
       <div className="mx-auto flex w-full max-w-screen-sm items-center gap-4 px-4 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-muted-foreground">
-            {itemCount === 0
+            {itemCount === 0 && recurringTotal === 0
               ? "Nothing selected"
-              : `${itemCount} add-on${itemCount === 1 ? "" : "s"}`}
+              : itemCount === 0
+                ? "Care plan"
+                : `${itemCount} add-on${itemCount === 1 ? "" : "s"}`}
           </p>
-          {/* Polite live region: a screen-reader user hears the total change as
-              they add items, rather than having to hunt for it. */}
-          <p aria-live="polite" className="text-xl font-semibold tabular-nums">
-            {formatCurrency(total)}
-          </p>
+          {/* Polite live region wraps BOTH figures: a screen-reader user adding
+              a care plan must hear the yearly line appear, not just the total. */}
+          <div aria-live="polite">
+            {total > 0 || recurringTotal === 0 ? (
+              <p className="text-xl font-semibold tabular-nums">{formatCurrency(total)}</p>
+            ) : null}
+            {recurringTotal > 0 ? (
+              <p
+                className={cn(
+                  "tabular-nums",
+                  total > 0 ? "text-xs text-muted-foreground" : "text-xl font-semibold",
+                )}
+              >
+                {total > 0 ? "+ " : ""}
+                {formatCurrency(recurringTotal)}/yr
+              </p>
+            ) : null}
+          </div>
         </div>
         <Button
           size="lg"

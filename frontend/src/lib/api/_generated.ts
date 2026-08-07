@@ -8942,6 +8942,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/upsell/care-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Upsell Care Plans
+         * @description Price the workspace's Care Plan tiers for a counted fixture count.
+         *
+         *     Priced by the same engine as the sales wizard, so a plan quoted in a driveway
+         *     matches the one quoted from the office. Returns ``configured=false`` when the
+         *     workspace sells no maintenance plans.
+         */
+        get: operations["list_upsell_care_plans_api_v1_workspaces__workspace_id__upsell_care_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/upsell/catalog": {
         parameters: {
             query?: never;
@@ -9020,6 +9044,10 @@ export interface paths {
          *
          *     Prices come from the price book, never from the request body, and the quote is
          *     attributed to the caller so attach-rate reporting can credit the sale.
+         *
+         *     May carry hardware add-ons, a Care Plan, or both. A Care Plan is written to
+         *     ``proposal_document`` (not as a line item) so approving the proposal actually
+         *     provisions the recurring maintenance visits.
          */
         post: operations["create_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote_post"];
         delete?: never;
@@ -27860,6 +27888,43 @@ export interface components {
             role: "admin" | "manager" | "dispatcher" | "sales_rep" | "technician" | "member";
         };
         /**
+         * UpsellCarePlanResponse
+         * @description The Care Plan tiers available at a given fixture count.
+         *
+         *     Reuses :class:`~app.schemas.pricing.CarePlanPricing` rather than projecting a
+         *     field subset: this is the *same* priced option the sales wizard and the public
+         *     proposal page render, and a technician's tier must never drift from the one
+         *     the customer sees on the page they approve.
+         */
+        UpsellCarePlanResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Fixture Count */
+            fixture_count: number;
+            /** Free Fixtures */
+            free_fixtures: number;
+            /** Options */
+            options?: components["schemas"]["CarePlanPricing"][];
+        };
+        /**
+         * UpsellCarePlanSelection
+         * @description The Care Plan a technician signed the customer up for.
+         *
+         *     Carries the tier *key* and the fixture count, never a price: the plan is
+         *     priced server-side from the workspace's pricing config, exactly like the
+         *     wizard prices it.
+         *
+         *     ``fixture_count`` is what the technician counted in the yard. It drives
+         *     ``base + per_fixture × (count - free_fixtures)``, so it is a real pricing
+         *     input rather than a note — hence the explicit bound instead of an open int.
+         */
+        UpsellCarePlanSelection: {
+            /** Fixture Count */
+            fixture_count: number;
+            /** Tier Key */
+            tier_key: string;
+        };
+        /**
          * UpsellCatalogItem
          * @description One add-on on the on-site menu.
          */
@@ -27987,8 +28052,13 @@ export interface components {
         /**
          * UpsellQuoteRequest
          * @description Build an add-on proposal for the customer on a job.
+         *
+         *     A proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on
+         *     its own is a complete sale — signing an existing system onto maintenance adds
+         *     no hardware — so ``line_items`` may be empty when ``care_plan`` is set.
          */
         UpsellQuoteRequest: {
+            care_plan?: components["schemas"]["UpsellCarePlanSelection"] | null;
             /** Line Items */
             line_items?: components["schemas"]["UpsellQuoteLine"][];
             /** Notes */
@@ -47594,6 +47664,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_upsell_care_plans_api_v1_workspaces__workspace_id__upsell_care_plans_get: {
+        parameters: {
+            query?: {
+                /** @description Fixtures the technician counted on site */
+                fixture_count?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsellCarePlanResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
