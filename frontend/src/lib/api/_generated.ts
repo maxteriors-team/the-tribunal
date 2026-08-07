@@ -9084,6 +9084,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/upsell/my-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Selling Stats
+         * @description The caller's own selling numbers for the current calendar month.
+         *
+         *     Always scoped to the caller — there is no user parameter, so this endpoint
+         *     cannot be pointed at a colleague. Workspace-wide comparison lives behind
+         *     ``reports:view`` for owners.
+         */
+        get: operations["get_my_selling_stats_api_v1_workspaces__workspace_id__upsell_my_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/voice-campaigns": {
         parameters: {
             query?: never;
@@ -27989,6 +28013,8 @@ export interface components {
         UpsellConfig: {
             /** Field Proposal Limit */
             field_proposal_limit?: number | null;
+            /** Ranks */
+            ranks?: components["schemas"]["UpsellRankConfig"][];
         };
         /**
          * UpsellCustomer
@@ -28061,6 +28087,38 @@ export interface components {
             total: number;
         };
         /**
+         * UpsellMyStats
+         * @description One technician's own selling numbers for a calendar month.
+         *
+         *     Deliberately singular. A technician sees their own performance and nobody
+         *     else's: a leaderboard exposing colleagues' revenue is both a data leak from
+         *     the narrowest tier in the product and a morale problem an owner should opt
+         *     into, not something the field surface leaks by default.
+         */
+        UpsellMyStats: {
+            /** Care Plans Sold */
+            care_plans_sold: number;
+            /** Close Rate */
+            close_rate?: number | null;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            /** Proposals Approved */
+            proposals_approved: number;
+            /** Proposals Sent */
+            proposals_sent: number;
+            rank?: components["schemas"]["UpsellRankProgress"] | null;
+            /** Revenue Approved */
+            revenue_approved: number;
+        };
+        /**
          * UpsellQuoteLine
          * @description A requested add-on line.
          *
@@ -28096,6 +28154,47 @@ export interface components {
             notes?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * UpsellRankConfig
+         * @description One rung on the technician selling ladder.
+         *
+         *     ``threshold`` is approved upsell revenue within the reporting month, in major
+         *     units. ``reward`` is free text shown to the technician ("$150 bonus", "1 extra
+         *     PTO day") — this codebase tracks progress and never pays anything, so the
+         *     payout mechanism stays wherever payroll already lives.
+         */
+        UpsellRankConfig: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Reward */
+            reward?: string | null;
+            /** Threshold */
+            threshold: number;
+        };
+        /**
+         * UpsellRankProgress
+         * @description Where the technician stands on the workspace's selling ladder.
+         */
+        UpsellRankProgress: {
+            /** Amount To Next */
+            amount_to_next?: number | null;
+            /** Current Key */
+            current_key?: string | null;
+            /** Current Name */
+            current_name?: string | null;
+            /** Current Reward */
+            current_reward?: string | null;
+            /** Next Name */
+            next_name?: string | null;
+            /** Next Reward */
+            next_reward?: string | null;
+            /** Next Threshold */
+            next_threshold?: number | null;
+            /** Progress */
+            progress?: number | null;
         };
         /**
          * UrgencyType
@@ -47898,6 +47997,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDeliverResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_selling_stats_api_v1_workspaces__workspace_id__upsell_my_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpsellMyStats"];
                 };
             };
             /** @description Validation Error */
