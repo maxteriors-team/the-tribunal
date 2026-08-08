@@ -78,7 +78,7 @@ describe("UpsellRanksSettingsCard", () => {
 
     renderCard();
 
-    expect(await screen.findByLabelText("Technician on-site limit ($)")).toHaveValue(
+    expect(await screen.findByLabelText("Lead Technician on-site limit ($)")).toHaveValue(
       1500,
     );
     expect(screen.getByLabelText("Rank 1 name")).toHaveValue("Bronze");
@@ -94,7 +94,7 @@ describe("UpsellRanksSettingsCard", () => {
     const user = userEvent.setup();
 
     renderCard();
-    await user.clear(await screen.findByLabelText("Technician on-site limit ($)"));
+    await user.clear(await screen.findByLabelText("Lead Technician on-site limit ($)"));
     await user.click(screen.getByRole("button", { name: /save field selling/i }));
 
     await waitFor(() => expect(updatePricingMock).toHaveBeenCalled());
@@ -157,7 +157,7 @@ describe("UpsellRanksSettingsCard", () => {
     const user = userEvent.setup();
 
     renderCard();
-    const field = await screen.findByLabelText("Technician on-site limit ($)");
+    const field = await screen.findByLabelText("Lead Technician on-site limit ($)");
     await user.clear(field);
     await user.type(field, "-5");
     await user.click(screen.getByRole("button", { name: /save field selling/i }));

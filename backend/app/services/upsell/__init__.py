@@ -1,4 +1,4 @@
-"""On-site upsell: the scoped surface a field technician sells add-ons through."""
+"""On-site upsell: the scoped surface a crew lead sells add-ons through."""
 
 from app.services.upsell.upsell_service import UpsellService
 

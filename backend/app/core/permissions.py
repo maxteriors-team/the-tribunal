@@ -15,29 +15,30 @@ tier           maps from roles                intent
 ``manager``    ``manager``, ``dispatcher``    run operations (CRM, jobs, billing); **no** reports
 ``sales``      ``sales_rep``                  own pipeline; read CRM; author outreach; text/call
 ``tech``       ``member``                     read CRM + jobs; log time; text/call
-``lead``       ``lead_technician``            field, plus sell big-ticket work uncapped
-``field``      ``technician``                 operational only: assigned jobs + on-site upsell
+``lead``       ``lead_technician``            field, plus on-site selling
+``field``      ``technician``                 operational only: assigned jobs
 ============== ============================== ==========================================
 
 ``lead`` is a **crew lead on a job site**, not an office role: it sees exactly
 what ``field`` sees (their own schedule, and a customer only through a job they
 are assigned to). The single difference is selling authority — a lead technician
-is exempt from the workspace's on-site proposal limit, so they can sell a
-full fixture package while a regular technician is held to small add-ons.
+holds :data:`Capability.UPSELL_SELL` and a plain technician does not.
 
 Field technicians are deliberately the narrowest tier: they see only the jobs
 schedule, with no access to contacts, pipeline, campaigns, billing/pricing, or
-any other CRM surface. Reads on those surfaces are capability-gated, so the
-matrix here is the enforcement point, not just a nav filter.
+any other CRM surface, **and they cannot sell**. Quoting is a lead-technician
+responsibility: a regular technician who spots an opportunity hands the job to
+their crew lead rather than pricing it themselves. Reads on those surfaces are
+capability-gated, so the matrix here is the enforcement point, not just a nav
+filter.
 
-The one exception is :data:`Capability.UPSELL_SELL`, which lets a technician
-sell an add-on from the driveway. It deliberately does **not** widen any of the
-tier's other surfaces: it is only honoured by the dedicated upsell router
-(:mod:`app.api.v1.upsell`), which re-scopes every read and write to the jobs the
-caller is actually assigned to and to catalog items flagged ``is_attachable``.
-Note it is *not* accompanied by ``comms:send``: blanket messaging would let a
-technician text any contact in the workspace, so proposal delivery rides on the
-scoped upsell endpoint instead.
+:data:`Capability.UPSELL_SELL` is what lets a crew lead sell an add-on from the
+driveway. It deliberately does **not** widen any of the tier's other surfaces:
+it is only honoured by the dedicated upsell router (:mod:`app.api.v1.upsell`),
+which re-scopes every read and write to the jobs the caller is actually assigned
+to and to catalog items flagged ``is_attachable``. Note it is *not* accompanied
+by ``comms:send``: blanket messaging would let a lead text any contact in the
+workspace, so proposal delivery rides on the scoped upsell endpoint instead.
 
 Unknown / legacy role strings fall through to the **field** tier (lowest
 privilege) so a corrupted or unrecognised value fails closed rather than
@@ -165,18 +166,18 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.COMMS_SEND,
         Capability.UPSELL_SELL,
     }
-    # Field technicians are operational-only: the jobs schedule, plus the scoped
-    # on-site upsell surface. No CRM/pipeline/campaigns/billing, so the contact
-    # book and the full price book stay hidden; ``upsell:sell`` exposes only the
-    # customer on a job they are assigned to and the attachable add-on menu.
+    # Field technicians are operational-only: the jobs schedule and nothing else.
+    # No CRM/pipeline/campaigns/billing, and no selling — a plain technician does
+    # not quote, they escalate to their crew lead. This is the floor of the
+    # matrix, so anything added here is granted to every other tier too.
     field: set[Capability] = {
         Capability.JOBS_READ,
-        Capability.UPSELL_SELL,
     }
     # A crew lead: the field tier's visibility exactly, plus the authority to
-    # sell past the on-site proposal limit. Nothing else — a lead technician
-    # still cannot open the contact book, the price book, or the pipeline.
-    lead: set[Capability] = field | {Capability.UPSELL_SELL_UNCAPPED}
+    # sell on site. Nothing else — a lead technician still cannot open the
+    # contact book, the price book, or the pipeline. ``upsell:sell`` exposes only
+    # the customer on a job they are assigned to and the attachable add-on menu.
+    lead: set[Capability] = field | {Capability.UPSELL_SELL}
 
     matrix: dict[Tier, set[Capability]] = {
         Tier.ADMIN: set(Capability),
@@ -195,12 +196,15 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
             caps.add(Capability.PIPELINE_WRITE_OWN)
         if Capability.CRM_WRITE in caps:
             caps.add(Capability.OUTREACH_WRITE)
-        # Every tier except ``field`` sells uncapped. Applied as an invariant so
-        # the tiers stay properly nested (field ⊂ lead ⊂ tech ⊂ sales ⊂ manager
-        # ⊂ admin) and a future tier cannot silently forget it. Capping the upper
+        # Every tier that sells from an office seat sells uncapped; the crew lead
+        # on a driveway is the one held to the workspace's proposal limit.
+        # Applied as an invariant so the tiers stay properly nested (field ⊂ lead
+        # ⊂ tech ⊂ sales ⊂ manager ⊂ admin) and a future tier cannot silently
+        # forget it. ``field`` is excluded because it cannot sell at all, so an
+        # uncapped grant there would be a dangling capability. Capping the upper
         # tiers would be theatre in any case: a ``billing:write`` holder can
         # already write a quote of any size through the full quotes API.
-        if tier is not Tier.FIELD:
+        if tier not in (Tier.FIELD, Tier.LEAD):
             caps.add(Capability.UPSELL_SELL_UNCAPPED)
 
     return {tier: frozenset(caps) for tier, caps in matrix.items()}

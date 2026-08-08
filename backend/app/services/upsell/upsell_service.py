@@ -68,6 +68,7 @@ from app.services.upsell.exceptions import (
     UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
+    UpsellNotASellerError,
     UpsellProposalLimitError,
     UpsellQuoteNotForJobError,
 )
@@ -532,9 +533,10 @@ class UpsellService:
                 another workspace, or simply not flagged ``is_attachable``. [400]
             UpsellCarePlanUnavailableError: an unknown or no-longer-offered tier.
                 [400]
-            UpsellProposalLimitError: over a plain technician's on-site limit.
-                [400]
+            UpsellNotASellerError: the caller's role may not sell. [403]
+            UpsellProposalLimitError: over the crew lead's on-site limit. [400]
         """
+        self._require_seller(role)
         job = await self._visible_job(workspace_id, job_id, user_id, role)
 
         # A Care Plan on its own is a complete sale: signing an existing system
@@ -634,17 +636,32 @@ class UpsellService:
         return created
 
     @staticmethod
+    def _require_seller(role: str) -> None:
+        """Refuse a role that may not sell on site.
+
+        A plain ``technician`` does not quote — they hand the opportunity to their
+        crew lead. The router already gates this with ``CanUpsell``; repeating it
+        here means the rule survives a second caller that forgets the dependency,
+        and it is checked before any write so no orphaned draft is left behind.
+
+        Raises:
+            UpsellNotASellerError: the role lacks ``upsell:sell``. [403]
+        """
+        if not role_can(role, Capability.UPSELL_SELL):
+            raise UpsellNotASellerError()
+
+    @staticmethod
     def _enforce_proposal_limit(
         line_items: list[QuoteLineItemCreate],
         config: PricingSettings,
         role: str,
     ) -> None:
-        """Hold a plain technician to the workspace's on-site proposal limit.
+        """Hold a crew lead to the workspace's on-site proposal limit.
 
-        This is the whole of what separates ``technician`` from
-        ``lead_technician``: a crew lead holds ``upsell:sell_uncapped`` and is
-        waved through, so they can sell a full fixture package while a regular
-        technician stays on small add-ons.
+        The crew lead is the only on-site seller: a plain ``technician`` cannot
+        reach this code at all, lacking ``upsell:sell``. Office tiers hold
+        ``upsell:sell_uncapped`` and are waved through, so this is the ceiling
+        on what gets committed from a driveway without office review.
 
         Server-side by necessity, not convenience. The technician's device cannot
         be trusted with this — it is the same phone that cannot be trusted with a
@@ -753,10 +770,12 @@ class UpsellService:
         falls back to the contact's own phone/email.
 
         Raises:
+            UpsellNotASellerError: the caller's role may not sell. [403]
             JobNotFoundError: the job is not the caller's. [404]
             UpsellQuoteNotForJobError: the quote is missing, in another
                 workspace, or belongs to a different customer. [404]
         """
+        self._require_seller(role)
         job = await self._visible_job(workspace_id, job_id, user_id, role)
 
         quote = (

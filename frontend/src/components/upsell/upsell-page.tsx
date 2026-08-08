@@ -46,6 +46,7 @@ import { UpsellAddonRow } from "@/components/upsell/upsell-addon-row";
 import { UpsellCarePlanSection } from "@/components/upsell/upsell-care-plan";
 import { UpsellScoreboard } from "@/components/upsell/upsell-scoreboard";
 import { UpsellSummaryBar } from "@/components/upsell/upsell-summary-bar";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { upsellApi, type UpsellJob, type UpsellQuote } from "@/lib/api/upsell";
 import { queryKeys } from "@/lib/query-keys";
@@ -74,6 +75,7 @@ function formatWhen(value: string | null | undefined): string | null {
 export function UpsellPage() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const { can } = useCapabilities();
 
   const [activeJob, setActiveJob] = useState<UpsellJob | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -86,13 +88,18 @@ export function UpsellPage() {
   const [carePlanKey, setCarePlanKey] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
+  // Every query below is gated on this: a technician cannot sell, so firing
+  // these would earn a row of 403s and error toasts that read as a broken app
+  // rather than as a role boundary. The server refuses them regardless.
+  const canSell = can("upsell:sell");
+
   const jobsQuery = useQuery({
     queryKey: queryKeys.upsell.jobs(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return upsellApi.listJobs(workspaceId);
     },
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && canSell,
   });
 
   const customerQuery = useQuery({
@@ -101,7 +108,7 @@ export function UpsellPage() {
       if (!workspaceId || !activeJob) throw new Error("No job");
       return upsellApi.getCustomer(workspaceId, activeJob.id);
     },
-    enabled: !!workspaceId && !!activeJob,
+    enabled: !!workspaceId && !!activeJob && canSell,
   });
 
   const catalogQuery = useQuery({
@@ -110,7 +117,7 @@ export function UpsellPage() {
       if (!workspaceId) throw new Error("No workspace");
       return upsellApi.listCatalog(workspaceId);
     },
-    enabled: !!workspaceId && !!activeJob,
+    enabled: !!workspaceId && !!activeJob && canSell,
     ...STATIC,
   });
 
@@ -122,7 +129,7 @@ export function UpsellPage() {
       if (!workspaceId) throw new Error("No workspace");
       return upsellApi.myStats(workspaceId);
     },
-    enabled: !!workspaceId && !activeJob,
+    enabled: !!workspaceId && !activeJob && canSell,
   });
 
   const carePlanQuery = useQuery({
@@ -131,9 +138,9 @@ export function UpsellPage() {
       if (!workspaceId) throw new Error("No workspace");
       return upsellApi.listCarePlans(workspaceId, fixtureCount);
     },
-    enabled: !!workspaceId && !!activeJob,
+    enabled: !!workspaceId && !!activeJob && canSell,
     // Keep the previous prices on screen while a new count is priced, so the
-    // tier list does not blank out under the technician's thumb mid-count.
+    // tier list does not blank out under the lead's thumb mid-count.
     placeholderData: (previous) => previous,
   });
 
@@ -240,13 +247,26 @@ export function UpsellPage() {
     : (selectedCarePlan?.price ?? 0);
   const nothingSelected = selectedCount === 0 && !carePlanKey;
 
-  // What this technician may sell on their own. Null for a lead tech, or when
+  // What this crew lead may sell on their own. Null for an office tier, or when
   // the workspace configured no limit. The server enforces it either way — this
-  // only stops the technician from building a proposal they cannot send, which
-  // is the difference between a blocked button and a failure in front of the
+  // only stops the lead from building a proposal they cannot send, which is the
+  // difference between a blocked button and a failure in front of the
   // customer. The care plan is outside the cap, so only hardware counts.
   const proposalLimit = catalogQuery.data?.proposal_limit ?? null;
   const overLimit = proposalLimit !== null && previewTotal > proposalLimit;
+
+  // Selling is a Lead Technician responsibility, so a regular technician who
+  // still has the URL bookmarked gets told why rather than a wall of 403s.
+  // Placed after the hooks (never before) so the hook order stays stable; the
+  // queries are already scoped and the server refuses them regardless.
+  if (!can("upsell:sell")) {
+    return (
+      <PageEmptyState
+        title="Only lead techs can sell add-ons"
+        description="Spotted an upgrade on this job? Hand it to your lead tech and they can quote it on site."
+      />
+    );
+  }
 
   // ---------------------------------------------------------------- step 1
   if (!activeJob) {
@@ -518,7 +538,7 @@ export function UpsellPage() {
         disabled={createdQuote ? false : nothingSelected || overLimit}
         notice={
           !createdQuote && overLimit && proposalLimit !== null
-            ? `Over your ${formatCurrency(proposalLimit)} limit — ask a lead tech to send it.`
+            ? `Over your ${formatCurrency(proposalLimit)} limit — ask the office to send it.`
             : null
         }
         onAction={() => {

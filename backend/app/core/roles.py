@@ -33,8 +33,8 @@ class WorkspaceRole(StrEnum):
     SALES_REP = "sales_rep"
     # The senior technician who runs a crew on site. Operationally identical to
     # ``TECHNICIAN`` — same schedule, same scoped customer access — but trusted
-    # to sell big-ticket work: they are exempt from the on-site proposal limit
-    # that caps a regular technician (see :data:`Capability.UPSELL_SELL_UNCAPPED`).
+    # to quote: this is the only field role that may sell an add-on on site (see
+    # :data:`Capability.UPSELL_SELL`), held to the workspace's proposal limit.
     LEAD_TECHNICIAN = "lead_technician"
     TECHNICIAN = "technician"
     MEMBER = "member"
