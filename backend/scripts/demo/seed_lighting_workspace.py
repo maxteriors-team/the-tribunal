@@ -10,7 +10,7 @@ per-workspace data model:
     attribute and internal SKU bill-of-materials) plus the two per-linear-foot
     bistro string-lighting services from the wizard's ``CONFIG.bistro``.
 
-    Both are seeded ``is_attachable`` so a technician can sell them from the
+    Both are seeded ``is_attachable`` so a crew lead can sell them from the
     on-site upsell screen — adding fixtures to an installed system is the core
     upsell for this trade, and an item that is not attachable never reaches
     that menu. The flag is set on **create only** (see the upsert), so an

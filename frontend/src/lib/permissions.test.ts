@@ -37,8 +37,8 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("field technicians are operational-only (jobs:read + scoped upsell)", () => {
-    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read", "upsell:sell"]);
+  it("field technicians are operational-only (jobs:read, no selling)", () => {
+    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read"]);
     expect(can("technician", "jobs:read")).toBe(true);
     for (const cap of [
       "crm:read",
@@ -52,15 +52,11 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("lead technicians are field techs who may sell past the on-site limit", () => {
+  it("lead technicians are field techs who may sell on site", () => {
     // The entire delta between the two roles is one capability — a lead tech is
     // still a field worker with no contact book, price book, or pipeline.
-    expect(TIER_CAPABILITIES.lead).toEqual([
-      "jobs:read",
-      "upsell:sell",
-      "upsell:sell_uncapped",
-    ]);
-    expect(can("lead_technician", "upsell:sell_uncapped")).toBe(true);
+    expect(TIER_CAPABILITIES.lead).toEqual(["jobs:read", "upsell:sell"]);
+    expect(can("lead_technician", "upsell:sell")).toBe(true);
     for (const cap of [
       "crm:read",
       "billing:read",
@@ -72,27 +68,30 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("only the plain technician is capped by the on-site proposal limit", () => {
+  it("the crew lead is the seller the on-site proposal limit applies to", () => {
+    // Office tiers sell uncapped; the lead sells under the workspace limit.
     for (const role of [
       "owner",
       "admin",
       "manager",
       "dispatcher",
       "sales_rep",
-      "lead_technician",
       "member",
     ]) {
       expect(can(role, "upsell:sell_uncapped")).toBe(true);
     }
+    expect(can("lead_technician", "upsell:sell_uncapped")).toBe(false);
+    // The plain technician cannot sell at all, so "capped" is moot there.
     expect(can("technician", "upsell:sell_uncapped")).toBe(false);
     // Unknown roles fail closed to field, so they stay capped too.
     expect(can("wizard", "upsell:sell_uncapped")).toBe(false);
   });
 
-  it("upsell:sell reaches every tier without widening the field tier", () => {
-    // Held by all tiers, which is what keeps the matrix's nested containment
-    // intact. It is not a general grant: the /upsell routes re-scope each call
-    // to the caller's assigned jobs and to attachable price-book items.
+  it("upsell:sell stops at the crew lead — a plain technician cannot sell", () => {
+    // The business rule: regular techs do not quote, they hand the opportunity
+    // to their crew lead. It is not a general grant for those who hold it: the
+    // /upsell routes re-scope each call to the caller's assigned jobs and to
+    // attachable price-book items.
     for (const role of [
       "owner",
       "admin",
@@ -100,14 +99,13 @@ describe("capability matrix (mirror of backend)", () => {
       "dispatcher",
       "sales_rep",
       "lead_technician",
-      "technician",
       "member",
     ]) {
       expect(can(role, "upsell:sell")).toBe(true);
     }
-    // Unknown roles fail closed to field, which still holds it — safe only
-    // because the backend confines that tier to its own assigned jobs.
-    expect(can("wizard", "upsell:sell")).toBe(true);
+    expect(can("technician", "upsell:sell")).toBe(false);
+    // Unknown roles fail closed to field, which cannot sell.
+    expect(can("wizard", "upsell:sell")).toBe(false);
     expect(can("wizard", "crm:read")).toBe(false);
   });
 

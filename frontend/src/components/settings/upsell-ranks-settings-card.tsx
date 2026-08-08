@@ -206,14 +206,14 @@ export function UpsellRanksSettingsCard() {
         <div className="space-y-1.5">
           <CardTitle>Field Selling</CardTitle>
           <CardDescription>
-            What technicians can sell from a job site, and the targets they see on
-            their own scoreboard. Lead technicians are never limited.
+            What a Lead Technician can sell from a job site, and the targets they
+            see on their own scoreboard. Regular Technicians cannot sell.
           </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="upsell-field-limit">Technician on-site limit ($)</Label>
+          <Label htmlFor="upsell-field-limit">Lead Technician on-site limit ($)</Label>
           <Input
             id="upsell-field-limit"
             type="number"
@@ -227,9 +227,9 @@ export function UpsellRanksSettingsCard() {
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            The most a Technician can put on one proposal without help. Leave
-            blank for no limit. Care plans don&rsquo;t count toward it, and Lead
-            Technicians are exempt.
+            The most a Lead Technician can put on one proposal without the
+            office. Leave blank for no limit. Care plans don&rsquo;t count
+            toward it.
           </p>
         </div>
 

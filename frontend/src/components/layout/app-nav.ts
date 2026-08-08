@@ -631,6 +631,11 @@ export function isNavItemVisible(item: AppNavItem) {
  * is scoped server-side (assigned jobs + attachable catalog items only); see
  * `backend/app/api/v1/upsell.py`. This list is UX, not the security boundary.
  */
+/**
+ * Paths an on-site tier (`field`, `lead`) may reach. `/upsell` is listed here
+ * but is additionally capability-gated in {@link canSeeNavItem}, so only a crew
+ * lead sees it.
+ */
 export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = [
   "/jobs",
   "/calendar",
@@ -647,15 +652,23 @@ export function isFieldOperationalPath(pathname: string): boolean {
 /**
  * Whether a nav item should be shown to a caller.
  *
- * Field technicians are fail-closed to an explicit operational allowlist, so a
- * newly added CRM nav item never leaks to them by default. Every other tier
- * uses the capability gate (`requires`).
+ * On-site tiers (`field` and `lead`) are fail-closed to an explicit operational
+ * allowlist, so a newly added CRM nav item never leaks to them by default. Most
+ * nav items carry no `requires` at all, so without the allowlist a crew lead
+ * would see the whole CRM sidebar and click into pages the API then refuses.
+ *
+ * The allowlist is necessary but not sufficient: allowlisted items are still
+ * capability-gated, which is what keeps "Sell add-on" visible to a `lead` and
+ * hidden from a plain `field` technician who cannot quote.
  */
 export function canSeeNavItem(
   item: AppNavItem,
   tier: Tier,
   can: (capability: Capability) => boolean,
 ): boolean {
-  if (tier === "field") return isFieldOperationalPath(item.url);
-  return !item.requires || can(item.requires);
+  const allowed = !item.requires || can(item.requires);
+  if (tier === "field" || tier === "lead") {
+    return isFieldOperationalPath(item.url) && allowed;
+  }
+  return allowed;
 }

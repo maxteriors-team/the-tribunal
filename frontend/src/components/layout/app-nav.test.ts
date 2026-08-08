@@ -122,14 +122,46 @@ describe("canSeeNavItem — field technician is fail-closed to operational route
   });
 });
 
-describe("real nav items under the field tier", () => {
+describe("canSeeNavItem — the crew lead is fail-closed too", () => {
+  // Regression guard. `lead` used to fall through to the capability branch,
+  // and most nav items carry no `requires` at all — so a crew lead saw the
+  // whole CRM sidebar (Contacts, Campaigns, Calls, Settings...) and clicked
+  // into pages the API then refused.
+  it("hides ungated CRM items from a lead technician", () => {
+    for (const path of ["/contacts", "/campaigns", "/calls", "/settings", "/today"]) {
+      expect(canSeeNavItem(navItem(path), "lead", canAll)).toBe(false);
+    }
+  });
+
+  it("shows the lead exactly the on-site surface", () => {
+    expect(canSeeNavItem(navItem("/jobs"), "lead", canAll)).toBe(true);
+    expect(canSeeNavItem(navItem("/calendar"), "lead", canAll)).toBe(true);
+  });
+
+  it("a newly added CRM nav item does not leak to leads either", () => {
+    expect(canSeeNavItem(navItem("/brand-new-feature"), "lead", canAll)).toBe(false);
+  });
+});
+
+describe("real nav items under the on-site tiers", () => {
+  const contacts = allNavItems.find((i) => i.url === "/contacts")!;
+  const jobs = allNavItems.find((i) => i.url === "/jobs")!;
+  const calendar = allNavItems.find((i) => i.url === "/calendar")!;
+  const upsell = allNavItems.find((i) => i.url === "/upsell")!;
+
   it("hides Contacts/Campaigns but shows Jobs & Calendar", () => {
-    const contacts = allNavItems.find((i) => i.url === "/contacts")!;
-    const jobs = allNavItems.find((i) => i.url === "/jobs")!;
-    const calendar = allNavItems.find((i) => i.url === "/calendar")!;
     expect(canSeeNavItem(contacts, "field", canAll)).toBe(false);
     expect(canSeeNavItem(jobs, "field", canAll)).toBe(true);
     expect(canSeeNavItem(calendar, "field", canAll)).toBe(true);
+  });
+
+  it("shows 'Sell add-on' to a crew lead and hides it from a plain technician", () => {
+    // The allowlist alone is not enough here: /upsell is operational for both
+    // tiers, so the capability gate is what separates them.
+    const canSell = (c: string) => c === "upsell:sell" || c === "jobs:read";
+    const jobsOnly = (c: string) => c === "jobs:read";
+    expect(canSeeNavItem(upsell, "lead", canSell as typeof canAll)).toBe(true);
+    expect(canSeeNavItem(upsell, "field", jobsOnly as typeof canAll)).toBe(false);
   });
 });
 

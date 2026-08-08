@@ -44,6 +44,7 @@ from app.services.upsell.exceptions import (
     UpsellCarePlanUnavailableError,
     UpsellItemNotAttachableError,
     UpsellNoLineItemsError,
+    UpsellNotASellerError,
     UpsellProposalLimitError,
     UpsellQuoteNotForJobError,
 )
@@ -197,7 +198,7 @@ async def test_technician_sees_only_their_assigned_job() -> None:
         await _assign(db, my_job, tech)
         await _assign(db, their_job, other)
 
-        listed = await UpsellService(db).list_jobs(ws.id, 1, FIELD)
+        listed = await UpsellService(db).list_jobs(ws.id, 1, LEAD)
         assert [job.id for job in listed.items] == [my_job.id]
         assert listed.total == 1
 
@@ -213,7 +214,7 @@ async def test_crew_routed_job_is_visible_without_a_direct_assignment() -> None:
         await _technician(db, ws, user_id=1, crew=crew)
         job = await _job(db, ws, contact, crew=crew)
 
-        listed = await UpsellService(db).list_jobs(ws.id, 1, FIELD)
+        listed = await UpsellService(db).list_jobs(ws.id, 1, LEAD)
         assert [row.id for row in listed.items] == [job.id]
 
 
@@ -228,7 +229,7 @@ async def test_another_technicians_job_is_404_not_403() -> None:
         await _assign(db, their_job, other)
 
         with pytest.raises(JobNotFoundError):
-            await UpsellService(db).job_customer(ws.id, their_job.id, 1, FIELD)
+            await UpsellService(db).job_customer(ws.id, their_job.id, 1, LEAD)
 
 
 async def test_login_without_a_technician_record_owns_nothing() -> None:
@@ -239,10 +240,10 @@ async def test_login_without_a_technician_record_owns_nothing() -> None:
 
         service = UpsellService(db)
         # Listing is a normal empty state, not an error…
-        assert (await service.list_jobs(ws.id, 999, FIELD)).total == 0
+        assert (await service.list_jobs(ws.id, 999, LEAD)).total == 0
         # …but reaching for a specific job still fails closed.
         with pytest.raises(JobNotFoundError):
-            await service.job_customer(ws.id, job.id, 999, FIELD)
+            await service.job_customer(ws.id, job.id, 999, LEAD)
 
 
 async def test_cross_workspace_job_is_invisible_even_to_an_admin() -> None:
@@ -275,7 +276,7 @@ async def test_customer_projection_is_narrow() -> None:
         job = await _job(db, ws, contact)
         await _assign(db, job, tech)
 
-        customer = await UpsellService(db).job_customer(ws.id, job.id, 1, FIELD)
+        customer = await UpsellService(db).job_customer(ws.id, job.id, 1, LEAD)
         assert customer.full_name == "Dana Homeowner"
         exposed = customer.model_dump().keys()
         for leaked in ("lifecycle_stage", "notes", "tags", "lead_source_id", "owner_id"):
@@ -418,7 +419,7 @@ async def test_quoted_price_matches_the_menu_price_the_technician_read_aloud() -
                 line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
 
         assert menu_price == 882.0
@@ -482,7 +483,7 @@ async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
             job.id,
             UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
         assert len(quote.line_items) == 1
         line = quote.line_items[0]
@@ -512,7 +513,7 @@ async def test_quote_rejects_a_non_attachable_item() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=forbidden.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -533,7 +534,7 @@ async def test_quote_rejects_another_workspaces_catalog_item() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=foreign_item.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -555,7 +556,7 @@ async def test_quote_on_someone_elses_job_is_refused() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -569,7 +570,7 @@ async def test_empty_proposal_is_refused() -> None:
 
         with pytest.raises(UpsellNoLineItemsError):
             await UpsellService(db).create_quote(
-                ws.id, job.id, UpsellQuoteRequest(line_items=[]), user_id=1, role=FIELD
+                ws.id, job.id, UpsellQuoteRequest(line_items=[]), user_id=1, role=LEAD
             )
 
 
@@ -726,9 +727,94 @@ async def test_ranks_are_sorted_however_the_operator_entered_them() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Lead technician — the on-site proposal limit is the whole of the role
+# Who may sell at all — a plain technician does not quote, they escalate
 # --------------------------------------------------------------------------- #
-async def test_technician_is_refused_past_the_workspace_limit() -> None:
+async def test_a_plain_technician_cannot_create_a_proposal() -> None:
+    """The business rule, enforced in the service and not only in the router.
+
+    A technician holds no ``upsell:sell``, so ``CanUpsell`` already 403s them at
+    the edge. This pins the same answer one layer down, where a future caller
+    (a job-completion hook, a script) could otherwise sell as a technician by
+    forgetting the dependency.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=120.0)
+
+        with pytest.raises(UpsellNotASellerError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+                ),
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_a_plain_technician_cannot_deliver_a_proposal() -> None:
+    """Refused on the way out too, not just on the way in."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=120.0)
+
+        service = UpsellService(db)
+        quote = await service.create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+            ),
+            user_id=1,
+            role=LEAD,
+        )
+
+        # The lead built it; the technician must still not be able to send it.
+        with pytest.raises(UpsellNotASellerError):
+            await service.deliver_quote(
+                ws.id,
+                job.id,
+                quote.id,
+                channel="sms",
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_an_unknown_role_cannot_sell() -> None:
+    """Fail-closed: a corrupt or legacy role string lands on the field tier."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="Uplighting", price=120.0)
+
+        with pytest.raises(UpsellNotASellerError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
+                ),
+                user_id=1,
+                role="wizard",
+            )
+
+# --------------------------------------------------------------------------- #
+# The on-site proposal limit — the ceiling on what a crew lead commits alone
+# --------------------------------------------------------------------------- #
+async def test_crew_lead_is_refused_past_the_workspace_limit() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db, settings=LIMIT_PRICING)
         contact = await _contact(db, ws)
@@ -745,18 +831,21 @@ async def test_technician_is_refused_past_the_workspace_limit() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
-        # The message has to tell a technician standing in a yard what to do.
+        # The message has to tell the person standing in the yard what to do,
+        # and that person IS the crew lead — so it cannot tell them to go find
+        # one.
         message = str(excinfo.value)
         assert "$640.00" in message
         assert "$500.00" in message
-        assert "lead tech" in message
+        assert "the office" in message
+        assert "lead tech" not in message
 
 
-async def test_lead_technician_sells_the_same_basket_freely() -> None:
-    """The entire point of the role, on identical data."""
+async def test_an_office_tier_sells_the_same_basket_freely() -> None:
+    """The limit is a field control, not a company-wide one."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db, settings=LIMIT_PRICING)
         contact = await _contact(db, ws)
@@ -772,7 +861,7 @@ async def test_lead_technician_sells_the_same_basket_freely() -> None:
                 line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]
             ),
             user_id=1,
-            role=LEAD,
+            role=ADMIN,
         )
         assert quote.total == 2560.0
 
@@ -795,7 +884,7 @@ async def test_limit_counts_the_whole_basket_not_the_line() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -815,7 +904,7 @@ async def test_a_basket_exactly_on_the_limit_is_allowed() -> None:
                 line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
         assert quote.total == 500.0
 
@@ -850,7 +939,7 @@ async def test_limit_is_measured_on_the_grossed_up_price_the_client_pays() -> No
                     line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -871,7 +960,7 @@ async def test_no_configured_limit_means_no_cap() -> None:
                 line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
         assert quote.total == 9000.0
 
@@ -894,7 +983,7 @@ async def test_a_refused_proposal_leaves_no_orphaned_draft() -> None:
                     line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
         remaining = (
@@ -929,21 +1018,20 @@ async def test_a_care_plan_does_not_count_against_the_limit() -> None:
                 care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=24)
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
         assert quote.total == 0
         assert quote.proposal_document["care_plan"]["selected"] == "gold"
 
 
-async def test_menu_reports_the_limit_to_a_capped_technician_only() -> None:
-    """So the UI can warn before the technician builds something they can't send."""
+async def test_menu_reports_the_limit_to_the_capped_seller_only() -> None:
+    """So the UI can warn before the lead builds something they can't send."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db, settings=LIMIT_PRICING)
         await _catalog_item(db, ws, name="Uplighting", price=640.0)
 
         service = UpsellService(db)
-        assert (await service.list_attachable_catalog(ws.id, role=FIELD)).proposal_limit == 500
-        assert (await service.list_attachable_catalog(ws.id, role=LEAD)).proposal_limit is None
+        assert (await service.list_attachable_catalog(ws.id, role=LEAD)).proposal_limit == 500
         assert (await service.list_attachable_catalog(ws.id, role=ADMIN)).proposal_limit is None
 
 
@@ -1006,7 +1094,7 @@ async def test_care_plan_is_not_billed_as_a_one_time_line_item() -> None:
                 care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
 
         assert quote.line_items == []
@@ -1036,7 +1124,7 @@ async def test_selling_a_care_plan_provisions_recurring_visits_on_approval() -> 
                 care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
 
         quote = await db.get(Quote, created.id)
@@ -1069,7 +1157,7 @@ async def test_care_plan_and_hardware_sell_together_on_one_proposal() -> None:
                 care_plan=UpsellCarePlanSelection(tier_key="essential", fixture_count=12),
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
 
         # 640 net → 719 charged. The care plan stays out of the one-time total.
@@ -1097,7 +1185,7 @@ async def test_care_plan_snapshot_freezes_every_priced_option() -> None:
                 care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=18)
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
 
         document = quote.proposal_document["care_plan"]
@@ -1126,7 +1214,7 @@ async def test_unknown_care_plan_tier_is_refused_without_leaving_a_draft() -> No
                     care_plan=UpsellCarePlanSelection(tier_key="platinum", fixture_count=12)
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
         remaining = (
@@ -1151,7 +1239,7 @@ async def test_care_plan_on_a_workspace_without_tiers_is_refused() -> None:
                     care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -1170,7 +1258,7 @@ async def test_care_plan_only_proposal_is_titled_for_what_it_sells() -> None:
                 care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
             ),
             user_id=1,
-            role=FIELD,
+            role=LEAD,
         )
         assert quote.title == "Care plan for Pressure wash"
 
@@ -1192,7 +1280,7 @@ async def test_care_plan_on_someone_elses_job_is_refused() -> None:
                     care_plan=UpsellCarePlanSelection(tier_key="gold", fixture_count=12)
                 ),
                 user_id=1,
-                role=FIELD,
+                role=LEAD,
             )
 
 
@@ -1224,5 +1312,5 @@ async def test_delivery_refuses_a_quote_for_a_different_customer() -> None:
 
         with pytest.raises(UpsellQuoteNotForJobError):
             await UpsellService(db).deliver_quote(
-                ws.id, my_job.id, stranger_quote.id, channel="sms", user_id=1, role=FIELD
+                ws.id, my_job.id, stranger_quote.id, channel="sms", user_id=1, role=LEAD
             )

@@ -170,23 +170,23 @@ class UpsellRankConfig(BaseModel):
 
 
 class UpsellConfig(BaseModel):
-    """Limits on what a field technician may sell from the on-site upsell screen.
+    """Limits on what a crew lead may sell from the on-site upsell screen.
 
-    ``field_proposal_limit`` caps the one-time total a plain ``technician`` may
-    put on a proposal, in major units. A ``lead_technician`` (and every role
-    above them) is exempt — that exemption is the entire difference between the
-    two roles — so this is the number separating "sell small add-ons" from "sell
-    a full fixture package".
+    ``field_proposal_limit`` caps the one-time total a ``lead_technician`` may
+    put on a proposal, in major units. Office roles are exempt, and a plain
+    ``technician`` cannot sell at all, so the crew lead is the only role this
+    number governs: it separates "sell small add-ons" from "sell a full fixture
+    package without the office seeing it first".
 
     ``None`` means **no cap**, which is the default: adding this block must not
-    retroactively restrict technicians in a workspace that never asked for a
-    limit. Owners opt in by setting a number.
+    retroactively restrict a workspace that never asked for a limit. Owners opt
+    in by setting a number.
 
     Compared against the *grossed-up* total the client is actually charged, not
     the net price-book figure, so the limit means what an owner thinks it means.
     Recurring care plans sit deliberately outside the cap: signing an existing
-    system onto maintenance is retention every technician should be closing, and
-    it is cancellable service rather than a capital purchase.
+    system onto maintenance is retention every lead should be closing, and it is
+    cancellable service rather than a capital purchase.
     """
 
     field_proposal_limit: float | None = Field(default=None, ge=0)

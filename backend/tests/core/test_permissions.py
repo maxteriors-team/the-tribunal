@@ -160,11 +160,9 @@ def test_member_is_read_plus_messaging_only() -> None:
 
 
 def test_field_technician_is_operational_only() -> None:
-    # A field technician sees the jobs schedule and the scoped on-site upsell
-    # surface — no CRM, pipeline, campaigns, billing/pricing, comms, or reports.
-    assert capabilities_for("technician") == frozenset(
-        {Capability.JOBS_READ, Capability.UPSELL_SELL}
-    )
+    # A field technician sees the jobs schedule and nothing else — no CRM,
+    # pipeline, campaigns, billing/pricing, comms, reports, and no selling.
+    assert capabilities_for("technician") == frozenset({Capability.JOBS_READ})
     for denied in (
         Capability.CRM_READ,
         Capability.CRM_WRITE,
@@ -218,28 +216,35 @@ def test_reports_view_is_admin_only() -> None:
 
 
 class TestUpsellSell:
-    """``upsell:sell`` lets a field technician sell an add-on on their own job.
+    """``upsell:sell`` lets a crew lead sell an add-on on their own job.
 
-    The capability is held by every tier, which is what keeps the matrix's nested
-    containment intact. It is not a general grant: only ``app.api.v1.upsell``
-    honours it, and those routes re-scope to the caller's assigned jobs.
+    A plain technician does **not** hold it: quoting is a lead-technician
+    responsibility. It is not a general grant even for those who do hold it —
+    only ``app.api.v1.upsell`` honours it, and those routes re-scope to the
+    caller's assigned jobs.
     """
 
-    def test_every_tier_including_field_can_upsell(self) -> None:
+    def test_a_plain_technician_cannot_sell(self) -> None:
+        # The business rule: regular techs do not quote, they escalate to their
+        # crew lead. Enforced in the matrix, so every upsell route refuses them.
+        assert not role_can("technician", Capability.UPSELL_SELL)
+
+    def test_every_tier_from_lead_up_can_upsell(self) -> None:
         for role in ALL_ROLES:
+            if role == "technician":
+                continue
             assert role_can(role, Capability.UPSELL_SELL), role
 
-    def test_field_tier_is_exactly_jobs_read_plus_upsell(self) -> None:
-        # The whole point of the feature: technicians gain the ability to sell an
-        # add-on WITHOUT gaining the contact book, the price book, or the pipeline.
-        assert capabilities_for("technician") == frozenset(
-            {Capability.JOBS_READ, Capability.UPSELL_SELL}
-        )
+    def test_field_tier_is_exactly_jobs_read(self) -> None:
+        # Field is the floor of the matrix: anything added here is granted to
+        # every other tier, so it stays deliberately empty of selling power.
+        assert capabilities_for("technician") == frozenset({Capability.JOBS_READ})
 
     def test_upsell_does_not_smuggle_in_crm_billing_or_comms(self) -> None:
-        # Regression guard for the tempting shortcut of "just give techs crm:read
-        # and comms:send". Delivery rides the scoped upsell route instead, so a
-        # technician still cannot read the contact book or text arbitrary people.
+        # Regression guard for the tempting shortcut of "just give the seller
+        # crm:read and comms:send". Delivery rides the scoped upsell route
+        # instead, so a crew lead still cannot read the contact book or text
+        # arbitrary people.
         for denied in (
             Capability.CRM_READ,
             Capability.CRM_WRITE,
@@ -250,28 +255,27 @@ class TestUpsellSell:
             Capability.JOBS_WRITE,
             Capability.REPORTS_VIEW,
         ):
+            assert not role_can("lead_technician", denied), denied
             assert not role_can("technician", denied), denied
 
-    def test_unknown_roles_get_upsell_but_stay_job_scoped(self) -> None:
-        # Fail-closed lands on the field tier, which holds upsell:sell — harmless
-        # only because the scope check below still confines it to assigned jobs.
-        assert role_can("wizard", Capability.UPSELL_SELL)
+    def test_unknown_roles_cannot_sell(self) -> None:
+        # Fail-closed lands on the field tier, which can no longer sell at all.
+        assert not role_can("wizard", Capability.UPSELL_SELL)
         assert upsell_job_scope_required("wizard")
 
 
 class TestLeadTechnician:
-    """The crew lead: a field technician trusted to sell big-ticket work.
+    """The crew lead: the one field worker trusted to sell on site.
 
-    The role exists to answer one question — who may sell a full fixture package
-    on site — so the tests here are mostly about what it does *not* also grant.
+    The role exists to answer one question — who may quote from a driveway — so
+    the tests here are mostly about what it does *not* also grant.
     """
 
-    def test_lead_is_field_plus_uncapped_selling_and_nothing_else(self) -> None:
+    def test_lead_is_field_plus_selling_and_nothing_else(self) -> None:
         assert capabilities_for("lead_technician") == frozenset(
             {
                 Capability.JOBS_READ,
                 Capability.UPSELL_SELL,
-                Capability.UPSELL_SELL_UNCAPPED,
             }
         )
 
@@ -280,7 +284,7 @@ class TestLeadTechnician:
         # is still a field worker: no contact book, no price book, no pipeline,
         # and no blanket messaging.
         assert capabilities_for("lead_technician") - capabilities_for("technician") == {
-            Capability.UPSELL_SELL_UNCAPPED
+            Capability.UPSELL_SELL
         }
         for denied in (
             Capability.CRM_READ,
@@ -299,14 +303,20 @@ class TestLeadTechnician:
         # a regular technician sees.
         assert upsell_job_scope_required("lead_technician")
 
-    def test_only_the_plain_technician_is_capped(self) -> None:
+    def test_the_crew_lead_is_the_one_seller_the_limit_applies_to(self) -> None:
+        # Office tiers sell uncapped; the lead sells under the workspace limit;
+        # the plain technician does not sell at all, so "capped" is moot there.
         for role in ALL_ROLES:
-            capped = not role_can(role, Capability.UPSELL_SELL_UNCAPPED)
-            assert capped is (role == "technician"), role
+            if role in ("technician", "lead_technician"):
+                assert not role_can(role, Capability.UPSELL_SELL_UNCAPPED), role
+            else:
+                assert role_can(role, Capability.UPSELL_SELL_UNCAPPED), role
+        assert role_can("lead_technician", Capability.UPSELL_SELL)
 
     def test_unknown_roles_stay_capped(self) -> None:
-        # Fail-closed lands on ``field``, the one tier the limit applies to.
+        # Fail-closed lands on ``field``, which cannot sell at all.
         assert not role_can("wizard", Capability.UPSELL_SELL_UNCAPPED)
+        assert not role_can("wizard", Capability.UPSELL_SELL)
 
 
 class TestUpsellJobScope:

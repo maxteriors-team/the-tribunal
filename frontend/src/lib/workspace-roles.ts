@@ -41,15 +41,15 @@ export const ROLE_LABELS: Record<string, string> = {
  * (admin ⊃ manager ⊃ sales ⊃ tech ⊃ lead ⊃ field): admin alone sees reports and
  * manages members/numbers; managers run CRM, jobs, and billing; sales own their
  * pipeline; member reads and messages; lead and regular technicians see only
- * their own jobs, and differ solely in whether the on-site selling limit applies.
+ * their own jobs, and differ solely in whether they may sell on site.
  */
 export const ROLE_DESCRIPTIONS: Record<AssignableRole, string> = {
   admin: "Full access — team, billing, reports, and settings",
   manager: "Run CRM, jobs, and billing (no reports or member management)",
   dispatcher: "Run CRM, jobs, and billing (no reports or member management)",
   sales_rep: "Manage your own sales pipeline; text and call customers",
-  lead_technician: "Same as Technician, plus sell add-ons with no on-site limit",
-  technician: "See assigned jobs and sell add-ons up to your on-site limit",
+  lead_technician: "Same as Technician, plus sell add-ons on site",
+  technician: "See assigned jobs only — cannot quote or sell",
   member: "View contacts and pipeline; text and call customers",
 };
 

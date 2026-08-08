@@ -12,7 +12,28 @@ job ids exist in the workspace.
 
 from __future__ import annotations
 
-from app.services.exceptions import NotFoundError, ValidationError
+from app.services.exceptions import NotFoundError, PermissionDeniedError, ValidationError
+
+
+class UpsellNotASellerError(PermissionDeniedError):
+    """The caller's role may not sell on site. [403]
+
+    Belt to the router's ``CanUpsell`` braces. The service takes ``role`` as a
+    plain string, so this keeps "a plain technician does not quote" true of the
+    service itself rather than only of the one router that currently mounts it —
+    a second caller (a job-completion hook, a script, a future route) cannot sell
+    as a technician by forgetting a dependency.
+
+    403 rather than the 404 used for job scoping: this leaks nothing about which
+    jobs or items exist, only that the caller's own role cannot sell, which they
+    can already see in their own nav.
+    """
+
+    def __init__(
+        self,
+        message: str = "Your role cannot send proposals. Ask a lead tech to send it.",
+    ) -> None:
+        super().__init__(message)
 
 
 class UpsellNoLineItemsError(ValidationError):
@@ -63,7 +84,7 @@ class UpsellProposalLimitError(ValidationError):
     def __init__(self, total: float, limit: float) -> None:
         super().__init__(
             f"This proposal comes to ${total:,.2f}, over your ${limit:,.2f} "
-            "on-site limit. Ask a lead tech to send it."
+            "on-site limit. Ask the office to send it."
         )
 
 

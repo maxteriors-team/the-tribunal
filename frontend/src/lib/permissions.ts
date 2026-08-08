@@ -15,19 +15,18 @@
  *   field   ← technician  (and any unknown/legacy role, fail-closed)
  *
  * `lead` is a crew lead on a job site, not an office role: it sees exactly what
- * `field` sees. The single difference is `upsell:sell_uncapped` — exemption from
- * the workspace's on-site proposal limit, so a lead tech can sell a full fixture
- * package while a regular technician is held to small add-ons.
+ * `field` sees. The single difference is `upsell:sell` — a crew lead may quote
+ * an add-on on site and a plain technician may not.
  *
  * Field technicians are operational-only: the jobs schedule and nothing else
- * (no contacts, pipeline, campaigns, billing/pricing, or other CRM surface).
+ * (no contacts, pipeline, campaigns, billing/pricing, or other CRM surface),
+ * and they cannot sell. A technician who spots an upsell hands it to their lead.
  *
- * The lone exception is `upsell:sell`, held by every tier including `field`, so
- * a technician can sell an add-on from the driveway. It widens nothing on its
- * own — only the `/upsell` endpoints honour it, and those re-scope every call to
- * the caller's assigned jobs and to attachable price-book items. Note it does
- * NOT come with `comms:send`: proposal delivery rides the scoped upsell route so
- * the field tier still cannot message arbitrary contacts.
+ * `upsell:sell` widens nothing on its own — only the `/upsell` endpoints honour
+ * it, and those re-scope every call to the caller's assigned jobs and to
+ * attachable price-book items. Note it does NOT come with `comms:send`:
+ * proposal delivery rides the scoped upsell route, so a lead technician still
+ * cannot message arbitrary contacts.
  */
 
 export type Capability =
@@ -111,12 +110,12 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "upsell:sell_uncapped",
   ],
   tech: ["crm:read", "jobs:read", "comms:send", "upsell:sell", "upsell:sell_uncapped"],
-  // Crew lead: the field tier's visibility exactly, plus exemption from the
-  // on-site proposal limit. Still no contact book, price book, or pipeline.
-  lead: ["jobs:read", "upsell:sell", "upsell:sell_uncapped"],
-  // Field technicians: the jobs schedule plus the scoped on-site upsell surface,
-  // capped by the workspace's proposal limit.
-  field: ["jobs:read", "upsell:sell"],
+  // Crew lead: the field tier's visibility exactly, plus the authority to sell
+  // on site, held to the workspace's proposal limit. Still no contact book,
+  // price book, or pipeline.
+  lead: ["jobs:read", "upsell:sell"],
+  // Field technicians: the jobs schedule and nothing else. No selling.
+  field: ["jobs:read"],
 };
 
 /** Resolve a role string to its access tier (unknown/legacy → `field`, fail-closed). */
