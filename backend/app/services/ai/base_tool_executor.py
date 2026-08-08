@@ -15,13 +15,17 @@ Usage:
             ...  # channel-specific formatting
 """
 
+import uuid
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
 from app.services.calendar.booking import BookingService
 
 logger = structlog.get_logger()
+
+DEFAULT_BOOKING_TIMEZONE = "America/New_York"
 
 
 class BaseToolExecutor:
@@ -49,6 +53,20 @@ class BaseToolExecutor:
     def _assignment_strategy(self) -> str:
         """Return the agent's booking assignment strategy (defaults to single)."""
         return getattr(self.agent, "assignment_strategy", "single") or "single"
+
+    def _get_timezone(self) -> ZoneInfo:
+        """Return ZoneInfo for the configured timezone (default NY).
+
+        The ``date``/``time`` arguments the model passes to ``book_appointment``
+        are wall-clock times in *this* zone, because that is the zone
+        ``BookingService`` generated the offered slots in. Anything that turns
+        those strings into a ``datetime`` must attach this tzinfo — stamping
+        them UTC silently shifts every booking by the UTC offset.
+        """
+        try:
+            return ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            return ZoneInfo(DEFAULT_BOOKING_TIMEZONE)
 
     async def _resolve_assigned_staff(
         self, required_skill: str | None, *, record: bool = True
@@ -87,6 +105,22 @@ class BaseToolExecutor:
                     self.assigned_staff = staff_to_assignment_dict(staff)
         except Exception as e:  # pragma: no cover - defensive; fall back to no staff
             self.log.warning("staff_assignment_failed", error=str(e))
+
+    def assigned_staff_id(self) -> uuid.UUID | None:
+        """Return the staff member already routed for this booking, if any.
+
+        Booking passes this to the finalizer rather than letting it re-resolve:
+        a second resolution would consume another round-robin turn and could
+        pick a different rep than the one the customer was quoted.
+        """
+        raw_id = (self.assigned_staff or {}).get("id")
+        if not raw_id:
+            return None
+        try:
+            return uuid.UUID(str(raw_id))
+        except (ValueError, TypeError):
+            self.log.warning("assigned_staff_id_invalid", raw_id=str(raw_id))
+            return None
 
     def _create_booking_service(self) -> BookingService:
         """Create a local BookingService scoped to the agent's workspace."""

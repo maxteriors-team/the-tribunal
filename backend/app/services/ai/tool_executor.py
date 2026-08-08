@@ -365,7 +365,7 @@ class VoiceToolExecutor(BaseToolExecutor):
         duration_minutes: int,
         notes: str | None,
     ) -> None:
-        """Create Appointment record linked to the call's message."""
+        """Create the Appointment linked to the call's message and notify."""
         if not self.call_control_id:
             return
 
@@ -373,8 +373,9 @@ class VoiceToolExecutor(BaseToolExecutor):
         from sqlalchemy.orm import selectinload
 
         from app.db.session import AsyncSessionLocal
-        from app.models.appointment import Appointment
+        from app.models.contact import Contact
         from app.models.conversation import Message as MessageModel
+        from app.services.appointments.booking_finalizer import finalize_booking, load_agent
 
         async with AsyncSessionLocal() as db:
             try:
@@ -391,44 +392,41 @@ class VoiceToolExecutor(BaseToolExecutor):
                     )
                     return
 
-                # Parse scheduled time
+                contact = await db.get(Contact, message.conversation.contact_id)
+                if contact is None:
+                    self.log.warning(
+                        "post_booking_no_contact",
+                        call_control_id=self.call_control_id,
+                    )
+                    return
+
+                # Parse scheduled time. ``date_str``/``time_str`` are wall-clock
+                # in the agent's timezone (that is the zone the offered slots
+                # were generated in), NOT UTC.
                 try:
                     scheduled_at = datetime.strptime(
                         f"{date_str} {time_str}", "%Y-%m-%d %H:%M"
-                    ).replace(tzinfo=UTC)
+                    ).replace(tzinfo=self._get_timezone())
                 except ValueError:
                     scheduled_at = datetime.now(UTC)
 
-                # Resolve campaign_id from conversation
-                campaign_id_val = getattr(message.conversation, "campaign_id", None)
-
-                assigned_staff_id = None
-                if self.assigned_staff and self.assigned_staff.get("id"):
-                    try:
-                        assigned_staff_id = uuid.UUID(str(self.assigned_staff["id"]))
-                    except (ValueError, TypeError):
-                        assigned_staff_id = None
-
-                appointment = Appointment(
+                appointment = await finalize_booking(
+                    db,
                     workspace_id=message.conversation.workspace_id,
-                    contact_id=message.conversation.contact_id,
-                    agent_id=message.agent_id,
-                    message_id=message.id,
-                    campaign_id=campaign_id_val,
-                    bookable_staff_id=assigned_staff_id,
+                    contact=contact,
+                    agent=await load_agent(db, message.agent_id),
                     scheduled_at=scheduled_at,
                     duration_minutes=duration_minutes,
-                    status="scheduled",
+                    campaign_id=getattr(message.conversation, "campaign_id", None),
+                    message_id=message.id,
+                    notes=notes,
+                    assigned_staff_id=self.assigned_staff_id(),
                     calcom_booking_uid=result.booking_uid,
                     calcom_booking_id=result.booking_id,
-                    sync_status="synced",
-                    last_synced_at=datetime.now(UTC),
-                    notes=notes,
                 )
-                db.add(appointment)
-                await db.commit()
                 self.log.info(
                     "appointment_created_from_voice",
+                    appointment_id=appointment.id,
                     appointment_message_id=str(message.id),
                     booking_uid=result.booking_uid,
                 )
