@@ -70,6 +70,12 @@ export interface Quote {
   updated_at: string;
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */
   line_items?: QuoteLineItem[];
+  /**
+   * Sales-wizard snapshot; null/absent on a plain quote. Detail responses only —
+   * a list row never carries it. Its presence is what marks a quote as priced by
+   * the wizard: the document *is* the price, and line items are derived from it.
+   */
+  proposal_document?: Record<string, unknown> | null;
 }
 
 export interface QuoteLineItemInput {

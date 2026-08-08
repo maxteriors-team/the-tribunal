@@ -10,7 +10,9 @@ import {
   Mail,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -18,6 +20,16 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FinancingEstimate } from "@/components/proposal/financing-estimate";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +62,7 @@ import { formatCurrency } from "@/lib/utils/number";
 import type { Quote, QuoteDeliverChannel, QuoteStatus } from "@/types";
 
 import { ConvertQuoteDialog } from "./convert-quote-dialog";
+import { QuoteEditDialog } from "./quote-edit-dialog";
 
 const STATUS_VARIANT: Record<
   QuoteStatus,
@@ -67,6 +80,8 @@ export function QuotesList() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
+  const [editing, setEditing] = useState<Quote | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Quote | null>(null);
 
   const query = useQuery({
     queryKey: queryKeys.quotes.list(workspaceId ?? ""),
@@ -136,6 +151,17 @@ export function QuotesList() {
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to decline quote")),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (quote: Quote) => quotesApi.delete(workspaceId ?? "", quote.id),
+    onSuccess: (_result, quote) => {
+      toast.success(`Quote ${quote.number} deleted`);
+      setPendingDelete(null);
+      invalidate();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to delete quote")),
   });
 
   const busy =
@@ -252,6 +278,7 @@ export function QuotesList() {
                   <RowActions
                     quote={quote}
                     busy={busy}
+                    onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
                     onDeliver={(channel) =>
                       deliverMutation.mutate({ id: quote.id, channel })
@@ -261,6 +288,7 @@ export function QuotesList() {
                     onConvert={() => setConvertQuote(quote)}
                     onCopyLink={() => copyClientLink(quote)}
                     onPreview={() => openClientProposal(quote)}
+                    onDelete={() => setPendingDelete(quote)}
                   />
                 </TableCell>
               </TableRow>
@@ -283,6 +311,51 @@ export function QuotesList() {
           if (!open) setConvertQuote(null);
         }}
       />
+      <QuoteEditDialog
+        quote={editing}
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
+
+      {/* A quote can be deleted right up until it is decided, including after
+          it went out — so the confirmation has to say which one, and warn when
+          a customer is holding a link that is about to stop resolving. */}
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(next) => {
+          if (!next && !deleteMutation.isPending) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete quote {pendingDelete?.number}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.public_token
+                ? "This quote has already been sent. Deleting it breaks the proposal link the customer has — if they open it again they'll get a dead page. This can't be undone."
+                : "This quote has never been sent, so deleting it removes it for good. This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                // Keep the dialog mounted while the request is in flight.
+                event.preventDefault();
+                if (pendingDelete) deleteMutation.mutate(pendingDelete);
+              }}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting\u2026" : "Delete quote"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -290,6 +363,7 @@ export function QuotesList() {
 interface RowActionsProps {
   quote: Quote;
   busy: boolean;
+  onEdit: () => void;
   onSend: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
@@ -297,11 +371,19 @@ interface RowActionsProps {
   onConvert: () => void;
   onCopyLink: () => void;
   onPreview: () => void;
+  onDelete: () => void;
 }
 
+/**
+ * Row menu. Each item mirrors a backend rule rather than guessing: the service
+ * blocks edits and deletes only once a quote is decided (`approved`,
+ * `declined`) or lapsed (`expired`) — a *sent* quote is still live work, so it
+ * stays editable and deletable here too.
+ */
 function RowActions({
   quote,
   busy,
+  onEdit,
   onSend,
   onDeliver,
   onApprove,
@@ -309,6 +391,7 @@ function RowActions({
   onConvert,
   onCopyLink,
   onPreview,
+  onDelete,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
   const isApproved = quote.status === "approved";
@@ -331,7 +414,16 @@ function RowActions({
       <DropdownMenuContent align="end">
         {isOpen && (
           <>
-            {/* Emailing and texting come first: they are what "send it to them"
+            {/* Editing leads: a sent quote is the one an operator actually
+                needs to change (extend the expiry, fix a typo, move the
+                deposit), and the edit lands on the link the customer already
+                has. */}
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit quote
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {/* Emailing and texting come next: they are what "send it to them"
                 actually means to a rep. Both work straight from a draft — the
                 server marks the quote sent and mints its client link on the way
                 out, so there is no "send first, then deliver" two-step. */}
@@ -375,6 +467,15 @@ function RowActions({
             {(isOpen || hasClientLink) && <DropdownMenuSeparator />}
             <DropdownMenuItem onClick={onConvert}>
               Convert to job &amp; invoice
+            </DropdownMenuItem>
+          </>
+        )}
+        {isOpen && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete quote
             </DropdownMenuItem>
           </>
         )}
