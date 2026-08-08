@@ -237,6 +237,9 @@ async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noq
                             contact_name=contact_name,
                             contact_phone=contact.phone_number or "",
                             appointment_time=appointment.scheduled_at,
+                            timezone=((workspace.settings if workspace else None) or {}).get(
+                                "timezone"
+                            ),
                         ),
                         name="appointment_booked_email:calcom_webhook",
                     )

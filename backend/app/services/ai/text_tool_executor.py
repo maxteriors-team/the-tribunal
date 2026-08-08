@@ -20,11 +20,9 @@ Usage:
 """
 
 import json
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 import structlog
@@ -33,15 +31,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
-from app.models.appointment import Appointment
 from app.models.contact import Contact
 from app.models.conversation import Conversation
-from app.models.user import User
-from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
+from app.models.workspace import WorkspaceIntegration
 from app.services.ai.base_tool_executor import BaseToolExecutor
+from app.services.appointments.booking_finalizer import finalize_booking
 from app.services.approval.approval_gate_service import approval_gate_service
-from app.services.email import send_appointment_booked_notification
-from app.utils.background_tasks import spawn_background_task
 
 logger = structlog.get_logger()
 
@@ -380,9 +375,9 @@ class TextToolExecutor(BaseToolExecutor):
         duration_minutes: int,
         notes: str | None,
     ) -> None:
-        """Create Appointment record in database after successful booking."""
+        """Create the Appointment record and fire its downstream notifications."""
         self.log.info(
-            "calcom_booking_created",
+            "booking_created",
             booking_uid=result.booking_uid,
             booking_id=result.booking_id,
         )
@@ -390,65 +385,30 @@ class TextToolExecutor(BaseToolExecutor):
         contact = self._contact
         assert contact is not None
 
-        # Resolve campaign_id from conversation
-        campaign_id_val = getattr(self.conversation, "campaign_id", None)
-
-        assigned_staff_id = None
+        assigned_staff_id = self.assigned_staff_id()
         resolved_event_type_id = self.agent.calcom_event_type_id
-        if self.assigned_staff and self.assigned_staff.get("id"):
-            try:
-                assigned_staff_id = uuid.UUID(str(self.assigned_staff["id"]))
-            except (ValueError, TypeError):
-                assigned_staff_id = None
+        if self.assigned_staff:
             resolved_event_type_id = (
                 self.assigned_staff.get("calcom_event_type_id") or resolved_event_type_id
             )
 
-        appointment = Appointment(
+        appointment = await finalize_booking(
+            self.db,
             workspace_id=self.conversation.workspace_id,
-            contact_id=contact.id,
-            agent_id=self.agent.id,
-            campaign_id=campaign_id_val,
-            bookable_staff_id=assigned_staff_id,
+            contact=contact,
+            agent=self.agent,
             scheduled_at=self._appointment_datetime,
             duration_minutes=duration_minutes,
-            status="scheduled",
-            service_type="video_call",
+            campaign_id=getattr(self.conversation, "campaign_id", None),
             notes=notes,
+            service_type="video_call",
+            assigned_staff_id=assigned_staff_id,
             calcom_booking_uid=result.booking_uid,
             calcom_booking_id=result.booking_id,
             calcom_event_type_id=resolved_event_type_id,
-            sync_status="synced",
-            last_synced_at=datetime.now(UTC),
         )
-        self.db.add(appointment)
-        await self.db.commit()
-        await self.db.refresh(appointment)
 
         self.log.info("appointment_created", appointment_id=appointment.id)
-
-        # Fire-and-forget email notification to the workspace owner/admin
-        try:
-            owner = await self._get_workspace_owner()
-            if owner:
-                owner_email, owner_name = owner
-                spawn_background_task(
-                    send_appointment_booked_notification(
-                        to_email=owner_email,
-                        owner_name=owner_name,
-                        contact_name=contact.full_name or "Unknown",
-                        contact_phone=contact.phone_number or "",
-                        appointment_time=appointment.scheduled_at,
-                    ),
-                    name="appointment_booked_email:text_tool_executor",
-                )
-                self.log.info(
-                    "appointment_booked_email_queued",
-                    to_email=owner_email,
-                    appointment_id=appointment.id,
-                )
-        except Exception:
-            self.log.exception("appointment_booked_email_failed")
 
     # ── Text-only helpers ───────────────────────────────────────────
 
@@ -590,26 +550,6 @@ class TextToolExecutor(BaseToolExecutor):
             return None
         return event_type.get("slug") or None
 
-    async def _get_workspace_owner(self) -> "tuple[str, str] | None":
-        """Return (email, full_name) for the workspace owner or first admin/member."""
-        workspace_id = self.conversation.workspace_id
-        for role in ("owner", "admin", "member"):
-            result = await self.db.execute(
-                select(User.email, User.full_name)
-                .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-                .where(
-                    WorkspaceMembership.workspace_id == workspace_id,
-                    WorkspaceMembership.role == role,
-                )
-                .limit(1)
-            )
-            row = result.first()
-            if row:
-                email: str = row[0]
-                full_name: str = row[1] or email.split("@")[0]
-                return email, full_name
-        return None
-
     async def _get_contact(self) -> Contact | None:
         """Get contact for this conversation."""
         if not self.conversation.contact_id:
@@ -630,13 +570,6 @@ class TextToolExecutor(BaseToolExecutor):
             found=contact is not None,
         )
         return contact
-
-    def _get_timezone(self) -> ZoneInfo:
-        """Get ZoneInfo for configured timezone."""
-        try:
-            return ZoneInfo(self.timezone)
-        except ZoneInfoNotFoundError:
-            return ZoneInfo("America/New_York")
 
     def _clean_phone_number(self, phone: str | None) -> str | None:
         """Clean phone number to E.164 format for Cal.com."""

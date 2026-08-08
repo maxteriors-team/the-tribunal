@@ -13,14 +13,28 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.contact import Contact
+from app.models.conversation import Conversation
 from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
+from app.models.workspace import Workspace
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEZONE = "America/New_York"
+
+
+def _zone_info(timezone: str) -> ZoneInfo:
+    """Return ZoneInfo for ``timezone``, falling back to the default zone."""
+    try:
+        return ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo(DEFAULT_TIMEZONE)
 
 
 class ApprovalActionExecutionError(RuntimeError):
@@ -131,29 +145,149 @@ class LaunchCampaignHandler:
 
 @dataclass(slots=True, frozen=True)
 class BookAppointmentActionHandler:
-    """Execute a book_appointment pending action via BookingService."""
+    """Execute a book_appointment pending action and persist the appointment.
+
+    ``BookingService`` only validates the slot against workspace hours — since the
+    Cal.com sync was removed, the ``appointments`` row *is* the booking. The live
+    tool executors write that row in their ``post_booking_success`` hook, which
+    the approval path never runs, so this handler must write it too. Without it
+    an approved booking reports success and appears on no calendar.
+    """
 
     action_type: str = "book_appointment"
 
     async def execute(self, db: AsyncSession, action: PendingAction) -> dict[str, Any]:
+        from app.services.appointments.booking_finalizer import finalize_booking, load_agent
         from app.services.calendar.booking import BookingService
 
         payload = action.action_payload
-        timezone: str = payload.get("timezone", "America/New_York")
 
-        service = BookingService(
-            workspace_id=action.workspace_id,
-            timezone=timezone,
-        )
+        contact = await self._resolve_contact(db, action)
+        if contact is None:
+            logger.error(
+                "book_appointment action %s has no resolvable contact (context=%s)",
+                action.id,
+                action.context,
+            )
+            return {"error": "contact_not_found", "action_id": str(action.id)}
+
+        timezone = await self._resolve_timezone(db, action)
+        date_str = str(payload.get("date", ""))
+        time_str = str(payload.get("time", ""))
+        duration_minutes = int(payload.get("duration_minutes") or 30)
+
+        try:
+            scheduled_at = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(
+                tzinfo=_zone_info(timezone)
+            )
+        except ValueError:
+            logger.error(
+                "book_appointment action %s has invalid date/time (%r %r)",
+                action.id,
+                date_str,
+                time_str,
+            )
+            return {"error": "invalid_datetime", "date": date_str, "time": time_str}
+
+        service = BookingService(workspace_id=action.workspace_id, timezone=timezone)
         booking_result = await service.book_appointment(
-            date_str=payload.get("date", ""),
-            time_str=payload.get("time", ""),
-            email=payload.get("email", ""),
-            contact_name=payload.get("name", ""),
-            duration_minutes=payload.get("duration_minutes", 30),
-            phone_number=payload.get("phone_number"),
+            date_str=date_str,
+            time_str=time_str,
+            email=str(payload.get("email") or contact.email or ""),
+            contact_name=str(payload.get("name") or contact.full_name or "Customer"),
+            duration_minutes=duration_minutes,
+            phone_number=payload.get("phone_number") or contact.phone_number,
         )
-        return {"status": "booked", "booking": str(booking_result)}
+        if not booking_result.success:
+            return {"error": "slot_unavailable", "detail": booking_result.error}
+
+        agent = await load_agent(db, action.agent_id)
+        appointment = await finalize_booking(
+            db,
+            workspace_id=action.workspace_id,
+            contact=contact,
+            agent=agent,
+            scheduled_at=scheduled_at,
+            duration_minutes=duration_minutes,
+            notes=payload.get("notes"),
+        )
+
+        logger.info(
+            "Approved action %s booked appointment %s at %s",
+            action.id,
+            appointment.id,
+            scheduled_at.isoformat(),
+        )
+        return {
+            "status": "booked",
+            "appointment_id": appointment.id,
+            "scheduled_at": scheduled_at.isoformat(),
+            "timezone": timezone,
+        }
+
+    @staticmethod
+    async def _resolve_contact(db: AsyncSession, action: PendingAction) -> Contact | None:
+        """Find the contact this booking belongs to from the action's context.
+
+        The LLM tool arguments carry no contact reference, so the linkage comes
+        from the context recorded when the action was queued: ``contact_id``
+        directly, a ``conversation_id`` (text channel), or a ``call_id`` that
+        matches the call's message (voice channel).
+        """
+        from app.models.conversation import Message
+
+        context = action.context or {}
+
+        raw_contact_id = context.get("contact_id")
+        if raw_contact_id is not None:
+            try:
+                contact_id = int(raw_contact_id)
+            except (TypeError, ValueError):
+                contact_id = None
+            if contact_id is not None:
+                contact = await db.get(Contact, contact_id)
+                if contact is not None and contact.workspace_id == action.workspace_id:
+                    return contact
+
+        raw_conversation_id = context.get("conversation_id")
+        if raw_conversation_id is not None:
+            try:
+                conversation_id = uuid.UUID(str(raw_conversation_id))
+            except (TypeError, ValueError):
+                conversation_id = None
+            if conversation_id is not None:
+                conversation = await db.get(Conversation, conversation_id)
+                if conversation is not None and conversation.workspace_id == action.workspace_id:
+                    return await db.get(Contact, conversation.contact_id)
+
+        raw_call_id = context.get("call_id")
+        if raw_call_id:
+            result = await db.execute(
+                select(Conversation)
+                .join(Message, Message.conversation_id == Conversation.id)
+                .where(
+                    Message.provider_message_id == str(raw_call_id),
+                    Conversation.workspace_id == action.workspace_id,
+                )
+                .limit(1)
+            )
+            conversation = result.scalar_one_or_none()
+            if conversation is not None:
+                return await db.get(Contact, conversation.contact_id)
+
+        return None
+
+    @staticmethod
+    async def _resolve_timezone(db: AsyncSession, action: PendingAction) -> str:
+        """Return the workspace's IANA zone; the tool payload never carries one."""
+        payload_tz = action.action_payload.get("timezone")
+        if isinstance(payload_tz, str) and payload_tz:
+            return payload_tz
+
+        workspace = await db.get(Workspace, action.workspace_id)
+        settings = (workspace.settings if workspace else None) or {}
+        workspace_tz = settings.get("timezone")
+        return workspace_tz if isinstance(workspace_tz, str) and workspace_tz else DEFAULT_TIMEZONE
 
 
 @dataclass(slots=True, frozen=True)
@@ -431,9 +565,9 @@ class ApprovalGateService:
             )
             raise ApprovalActionExecutionError(action.id, action.action_type) from exc
 
-        action.status = (
-            "failed" if execution_result.get("error") == "unsupported_action_type" else "executed"
-        )
+        # Any handler-reported error means the action did not take effect. Marking
+        # it "executed" would hide a booking that was never written.
+        action.status = "failed" if execution_result.get("error") else "executed"
         action.executed_at = datetime.now(UTC)
         action.execution_result = execution_result
         await db.commit()

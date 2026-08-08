@@ -1,9 +1,10 @@
 """Email service for sending transactional emails via Resend."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from html import escape as html_escape
 from typing import TYPE_CHECKING, Any, Protocol, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
@@ -39,6 +40,28 @@ def _from_address() -> str:
     name = settings.resend_from_name or "Maxteriors"
     email = settings.resend_from_email or "noreply@example.com"
     return f"{name} <{email}>"
+
+
+DEFAULT_DISPLAY_TIMEZONE = "America/New_York"
+
+
+def format_local_datetime(value: datetime, timezone: str | None = None) -> str:
+    """Render a datetime in the workspace's zone, e.g. "Monday, August 10 at 2:00 PM EDT".
+
+    Appointment rows are stored as UTC-normalised ``timestamptz``. Formatting one
+    without converting shows the operator a UTC wall-clock labelled as their
+    local time — a silently wrong appointment time in every notification. Naive
+    values are assumed UTC, matching what the DB hands back.
+    """
+    try:
+        tz = ZoneInfo(timezone or DEFAULT_DISPLAY_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = ZoneInfo(DEFAULT_DISPLAY_TIMEZONE)
+
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    local = aware.astimezone(tz)
+    label = local.strftime("%Z") or timezone or ""
+    return f"{local.strftime('%A, %B %-d at %-I:%M %p')} {label}".strip()
 
 
 async def _send(
@@ -844,11 +867,21 @@ async def send_appointment_booked_notification(
     appointment_time: datetime,
     calcom_booking_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
+    timezone: str | None = None,
+    ics_content: str | None = None,
 ) -> bool:
-    """Send an email notification to the workspace owner when an appointment is booked."""
+    """Notify the assigned rep (or workspace owner) that an appointment was booked.
+
+    ``timezone`` is the workspace's IANA zone; the time is rendered there rather
+    than in the UTC the row is stored in.
+
+    ``ics_content`` is a rendered iCalendar document. Attaching it is what puts
+    the appointment on the recipient's real calendar (Google/Apple/Outlook) —
+    without it the notification is just an email they have to transcribe by hand.
+    """
     subject = f"New Appointment Booked — {contact_name}"
 
-    formatted_time = appointment_time.strftime("%A, %B %-d at %-I:%M %p UTC")
+    formatted_time = format_local_datetime(appointment_time, timezone)
 
     calcom_button = ""
     if calcom_booking_url:
@@ -906,6 +939,17 @@ async def send_appointment_booked_notification(
         "subject": subject,
         "html": html_content,
     }
+
+    if ics_content:
+        params["attachments"] = [
+            {
+                "filename": "invite.ics",
+                "content": list(ics_content.encode("utf-8")),
+                # ``method=REQUEST`` is what makes mail clients render the invite
+                # with Accept/Decline instead of a generic file attachment.
+                "content_type": "text/calendar; charset=utf-8; method=REQUEST",
+            }
+        ]
 
     response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
