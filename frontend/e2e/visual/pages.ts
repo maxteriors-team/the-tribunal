@@ -48,6 +48,7 @@ export const APP_PAGES: VisualPage[] = [
   { slug: "calendar", title: "Calendar", path: "/calendar" },
   { slug: "pending-actions", title: "Pending actions", path: "/pending-actions" },
   { slug: "offers", title: "Offers", path: "/offers" },
+  { slug: "quotes", title: "Quotes", path: "/quotes" },
   { slug: "settings", title: "Settings", path: "/settings" },
 ];
 
