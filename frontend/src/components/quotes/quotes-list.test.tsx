@@ -11,19 +11,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QuotesList } from "@/components/quotes/quotes-list";
 import type { Quote } from "@/types";
 
-const { listMock, deliverMock, sendMock, pushMock, useWorkspaceIdMock, toastMock } =
-  vi.hoisted(() => ({
-    listMock: vi.fn(),
-    deliverMock: vi.fn(),
-    sendMock: vi.fn(),
-    pushMock: vi.fn(),
-    useWorkspaceIdMock: vi.fn(),
-    toastMock: { success: vi.fn(), error: vi.fn() },
-  }));
+const {
+  listMock,
+  deliverMock,
+  sendMock,
+  getMock,
+  deleteMock,
+  pushMock,
+  useWorkspaceIdMock,
+  toastMock,
+} = vi.hoisted(() => ({
+  listMock: vi.fn(),
+  deliverMock: vi.fn(),
+  sendMock: vi.fn(),
+  getMock: vi.fn(),
+  deleteMock: vi.fn(),
+  pushMock: vi.fn(),
+  useWorkspaceIdMock: vi.fn(),
+  toastMock: { success: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock("@/lib/api/quotes", () => ({
   quotesApi: {
     list: listMock,
+    get: getMock,
+    update: vi.fn(),
+    delete: deleteMock,
     send: sendMock,
     deliver: deliverMock,
     approve: vi.fn(),
@@ -275,5 +288,107 @@ describe("QuotesList proposal delivery", () => {
 
     expect(screen.queryByText("Email proposal to client")).not.toBeInTheDocument();
     expect(screen.queryByText("Text proposal to client")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Editing and deleting after the quote is out the door.
+ *
+ * "Sent" is not a lock: the customer asked for a change, or the quote should
+ * never have gone out at all. What must stay locked is a *decided* quote —
+ * approved, declined or expired — because the service refuses those, and a menu
+ * item that only ever produces a 409 is worse than no menu item.
+ */
+describe("QuotesList editing and deleting", () => {
+  const listOne = (overrides: Partial<Quote> = {}) =>
+    listMock.mockResolvedValue({
+      items: [quote(overrides)],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    });
+
+  const openMenu = async () => {
+    renderList();
+    await screen.findByText("QUO-000123");
+    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+  };
+
+  it("offers edit and delete on a quote the customer already has", async () => {
+    listOne({ status: "sent" });
+
+    await openMenu();
+
+    expect(await screen.findByText("Edit quote")).toBeInTheDocument();
+    expect(screen.getByText("Delete quote")).toBeInTheDocument();
+  });
+
+  it("warns that deleting a sent quote kills the customer's link", async () => {
+    // The proposal URL is already in someone's inbox; deleting it turns that
+    // link into a dead page, which is not what "delete" implies on a draft.
+    listOne({ status: "sent" });
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Delete quote"));
+
+    expect(
+      await screen.findByText(/breaks the proposal link the customer has/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the plain-draft wording when nothing was ever sent", async () => {
+    listOne({ status: "draft", public_token: null });
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Delete quote"));
+
+    expect(
+      await screen.findByText(/never been sent/i),
+    ).toBeInTheDocument();
+  });
+
+  it("deletes only after the confirmation is accepted", async () => {
+    listOne({ status: "sent" });
+    deleteMock.mockResolvedValue(undefined);
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Delete quote"));
+    expect(deleteMock).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete quote" }),
+    );
+
+    await waitFor(() =>
+      expect(deleteMock).toHaveBeenCalledWith("ws-1", "quote-1"),
+    );
+    expect(toastMock.success).toHaveBeenCalledWith("Quote QUO-000123 deleted");
+  });
+
+  it("surfaces the server's refusal instead of a success toast", async () => {
+    listOne({ status: "sent" });
+    deleteMock.mockRejectedValue({
+      response: { status: 409, data: { detail: "Cannot delete a approved quote" } },
+    });
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Delete quote"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete quote" }),
+    );
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it("hides both once the quote is decided, matching the service's own lock", async () => {
+    listOne({ status: "approved" });
+
+    await openMenu();
+    await screen.findByText("Preview client proposal");
+
+    expect(screen.queryByText("Edit quote")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete quote")).not.toBeInTheDocument();
   });
 });

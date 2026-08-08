@@ -577,6 +577,75 @@ async def test_locked_quote_rejects_edits() -> None:
             await svc.add_line_item(ws.id, quote.id, QuoteLineItemCreate(name="Y", unit_price=1.0))
 
 
+async def test_sent_quote_stays_editable_and_deletable() -> None:
+    """Sending is not a lock, and the dashboard's edit/delete actions rely on it.
+
+    Only a *decided* quote (approved/declined/expired) is frozen. A sent one is
+    live work: the customer asks for another week, or the quote should never
+    have gone out at all. This pins the boundary, because tightening
+    ``_LOCKED_STATUSES`` to include ``sent`` would leave the row menu offering
+    two actions that can only ever return 409.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(
+            ws.id, QuoteCreate(line_items=[QuoteLineItemCreate(name="X", unit_price=10.0)])
+        )
+        sent = await svc.mark_sent(ws.id, quote.id)
+        assert sent.status == "sent"
+        assert sent.public_token is not None
+
+        edited = await svc.update_quote(
+            ws.id,
+            quote.id,
+            QuoteUpdate(title="Now with gutters", expiry_date=date.today() + timedelta(days=30)),
+        )
+        # Editing must not un-send the quote or reissue the customer's link.
+        assert edited.title == "Now with gutters"
+        assert edited.status == "sent"
+        assert edited.public_token == sent.public_token
+
+        # Deleting a quote that already has a public token exercises the
+        # line-item cascade on a real engine, which a mocked session cannot.
+        await svc.delete_quote(ws.id, quote.id)
+        with pytest.raises(HTTPException):
+            await svc.get_quote(ws.id, quote.id)
+
+
+async def test_zero_percentage_clears_a_deposit() -> None:
+    """``deposit_percentage=0`` is how a deposit is removed.
+
+    ``update_quote`` skips ``None`` (it means "leave this field alone"), so there
+    is no way to null a deposit column back out. 0 is the escape hatch: it
+    stores, clears the other mode, and reads back as no deposit at all. The edit
+    dialog's "No deposit" option sends exactly this.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                line_items=[QuoteLineItemCreate(name="Job", unit_price=1000.0)],
+                deposit_percentage=25.0,
+            ),
+        )
+        assert quote.deposit_amount == 250.0
+        assert quote.deposit_required is True
+
+        cleared = await svc.update_quote(ws.id, quote.id, QuoteUpdate(deposit_percentage=0))
+        assert cleared.deposit_amount is None
+        assert cleared.deposit_required is False
+
+        # And switching modes leaves exactly one column populated, so the
+        # schema's "one deposit mode" validator can never see both.
+        fixed = await svc.update_quote(ws.id, quote.id, QuoteUpdate(deposit_amount_fixed=300.0))
+        assert fixed.deposit_amount == 300.0
+        row = await _orm_quote(db, quote.id)
+        assert row.deposit_percentage is None
+
+
 async def test_expired_quote_surfaces_on_read() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
