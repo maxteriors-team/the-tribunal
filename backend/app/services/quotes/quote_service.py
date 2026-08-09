@@ -1011,6 +1011,10 @@ class QuoteService:
         quote = await self._load_for_send(workspace_id, quote_id)
         await self._ensure_sent_state(quote)
 
+        # Deliberately ignoring the result: "mark sent" is a status change an
+        # operator makes after sending by their own means, and the courtesy
+        # email riding along must not fail the transition. ``deliver`` is the
+        # path that promises delivery, and that one does check.
         await self._email_quote(quote)
         return await self._detail_response(quote)
 
@@ -1120,7 +1124,17 @@ class QuoteService:
                 raise ValidationError(
                     "No client email on this proposal — add one or pass a destination."
                 )
-            await self._email_quote(quote, override_email=email_to)
+            # An operator who clicked "Email quote" is telling the customer it
+            # is on its way. Reporting ok on a send Resend never accepted means
+            # the quote sits unread while the dashboard says delivered — the
+            # failure surfaces days later as "they never got back to me". The
+            # SMS rail below already raises when its rail isn't ready; this
+            # matches it.
+            if not await self._email_quote(quote, override_email=email_to):
+                raise ValidationError(
+                    "Couldn't send that email — the quote is saved and still marked sent, "
+                    "so you can retry or copy the client link instead."
+                )
             self.log.info("quote_delivered", quote_id=str(quote.id), channel="email")
             return QuoteDeliverResult(ok=True, channel="email", to=email_to)
 
@@ -1301,12 +1315,17 @@ class QuoteService:
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
         return await self._detail_response(quote)
 
-    async def _email_quote(self, quote: Quote, *, override_email: str | None = None) -> None:
-        """Email the quote's proposal link (best-effort; never raises).
+    async def _email_quote(self, quote: Quote, *, override_email: str | None = None) -> bool:
+        """Email the quote's proposal link. Never raises; reports whether it sent.
 
         Destination: explicit override → wizard snapshot's client email → the
         linked contact's email. Wizard proposals usually have no Contact row,
         so the snapshot fallback is what makes their sends actually deliver.
+
+        Returns ``True`` only when Resend accepted the message. The caller
+        decides what a ``False`` means: emailing a quote *on purpose* has to
+        surface the failure, while the email tacked onto ``mark_sent`` is a side
+        effect that must not undo the status change.
         """
         from app.core.config import settings
         from app.services.email import send_quote_email
@@ -1320,7 +1339,7 @@ class QuoteService:
         )
         if not contact_email:
             self.log.info("quote_email_skipped_no_contact", quote_id=str(quote.id))
-            return
+            return False
 
         workspace_name = quote.workspace.name if quote.workspace else ""
         amount_str = f"{float(quote.total or 0):.2f} {quote.currency.upper()}"
@@ -1334,7 +1353,7 @@ class QuoteService:
         )
 
         try:
-            await send_quote_email(
+            return await send_quote_email(
                 to_email=contact_email,
                 workspace_name=workspace_name,
                 quote_number=quote.number,
@@ -1347,6 +1366,7 @@ class QuoteService:
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))
+            return False
 
     # ------------------------------------------------------------------
     # Public client proposal (no auth, token-keyed)
