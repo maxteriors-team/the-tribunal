@@ -2,7 +2,6 @@
 
 import logging
 import uuid
-import zoneinfo
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -19,6 +18,7 @@ from app.services.outbound.delivery import (
     outbound_delivery_service,
 )
 from app.services.telephony.phone_number_resolver import get_workspace_sms_number
+from app.utils.timezones import resolve_workspace_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -190,14 +190,9 @@ class NudgeDeliveryService:
         # Quiet hours are configured as workspace-local wall-clock times, so the
         # comparison must happen in the workspace timezone. Evaluating in UTC
         # would fire nudges in the middle of the night for non-UTC workspaces
-        # (e.g. "quiet until 08:00" ends at 08:00 UTC = 03:00 US-Eastern).
-        tz_name = (workspace.settings or {}).get("timezone", "UTC")
-        try:
-            tz = zoneinfo.ZoneInfo(str(tz_name))
-        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-            tz = zoneinfo.ZoneInfo("UTC")
-
-        now = datetime.now(tz)
+        # (e.g. "quiet until 08:00" ends at 08:00 UTC = 03:00 US-Eastern) — which
+        # is exactly what the UTC fallback did, since no workspace sets this key.
+        now = datetime.now(resolve_workspace_timezone(workspace))
         current_minutes = now.hour * 60 + now.minute
         start_minutes = start_hour * 60 + start_min
         end_minutes = end_hour * 60 + end_min

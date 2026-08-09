@@ -249,7 +249,8 @@ class TestQuietHoursRespected:
         worse, in the small hours for other offsets.
         """
         instant = datetime(2026, 3, 28, 11, 0, 0, tzinfo=UTC)
-        ws_utc = _make_workspace()  # no timezone -> defaults to UTC
+        ws_utc = _make_workspace()
+        ws_utc.settings["timezone"] = "UTC"
         ws_eastern = _make_workspace()
         ws_eastern.settings["timezone"] = "America/New_York"
 
@@ -259,6 +260,23 @@ class TestQuietHoursRespected:
 
             assert delivery._is_quiet_hours(ws_utc) is False
             assert delivery._is_quiet_hours(ws_eastern) is True
+
+    def test_unconfigured_workspace_uses_eastern_not_utc(
+        self, delivery: NudgeDeliveryService
+    ) -> None:
+        """No workspace sets ``settings['timezone']``, so the fallback is the real path.
+
+        A UTC fallback made "quiet until 08:00" expire at 03:00 Eastern, which is
+        the middle of the night for the operators these nudges page.
+        """
+        instant = datetime(2026, 3, 28, 11, 0, 0, tzinfo=UTC)  # 07:00 EDT
+        ws = _make_workspace()  # no timezone configured
+
+        with patch("app.services.nudges.nudge_delivery.datetime") as mock_dt:
+            mock_dt.now.side_effect = lambda tz=None: instant.astimezone(tz) if tz else instant
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            assert delivery._is_quiet_hours(ws) is True
 
 
 class TestNudgeMarkedSent:

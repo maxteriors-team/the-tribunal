@@ -7,7 +7,6 @@ without duplicating code.
 
 import re
 import uuid
-import zoneinfo
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,6 +24,7 @@ from app.models.workspace import Workspace
 from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
+from app.utils.timezones import resolve_workspace_timezone
 
 logger = structlog.get_logger()
 
@@ -132,15 +132,10 @@ def render_reminder_body(
       {appointment_datetime}, {reschedule_link}
 
     Falls back to a hardcoded default when no template is set.
-    Times are formatted in the workspace timezone (falls back to UTC).
+    Times are formatted in the workspace timezone — the zone the appointment was
+    booked in, so a reminder cannot quote a different hour than the confirmation.
     """
-    tz_name = (workspace.settings or {}).get("timezone", "UTC")
-    try:
-        tz = zoneinfo.ZoneInfo(str(tz_name))
-    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-        tz = zoneinfo.ZoneInfo("UTC")
-
-    local_dt = appointment.scheduled_at.astimezone(tz)
+    local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
     date_str = local_dt.strftime("%A, %B %-d")
     time_str = local_dt.strftime("%-I:%M %p")
     datetime_str = f"{date_str} at {time_str}"

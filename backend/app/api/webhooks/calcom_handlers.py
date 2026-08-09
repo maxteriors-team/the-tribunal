@@ -8,7 +8,6 @@ live in :mod:`calcom_parser`, side-effect dispatch in :mod:`calcom_events`.
 
 from __future__ import annotations
 
-import zoneinfo
 from datetime import UTC, datetime
 from typing import Any
 
@@ -35,6 +34,7 @@ from app.services.email import send_appointment_booked_notification
 from app.services.push_notifications import push_notification_service
 from app.services.tags import TagService
 from app.utils.background_tasks import spawn_background_task
+from app.utils.timezones import resolve_workspace_timezone
 
 
 async def handle_booking_created(data: dict[str, Any], log: Any) -> None:  # noqa: PLR0912, PLR0915
@@ -403,13 +403,9 @@ async def handle_booking_rescheduled(data: dict[str, Any], log: Any) -> None:  #
                 workspace = ws_result.scalar_one_or_none()
 
                 # Format new date/time in workspace timezone
-                tz_name = ((workspace.settings if workspace else None) or {}).get("timezone", "UTC")
-                try:
-                    tz = zoneinfo.ZoneInfo(str(tz_name))
-                except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-                    tz = zoneinfo.ZoneInfo("UTC")
-
-                local_dt = appointment.scheduled_at.astimezone(tz)
+                local_dt = appointment.scheduled_at.astimezone(
+                    resolve_workspace_timezone(workspace)
+                )
                 new_date = local_dt.strftime("%A, %B %-d")  # e.g. "Monday, March 24"
                 new_time = local_dt.strftime("%-I:%M %p")  # e.g. "3:00 PM"
 

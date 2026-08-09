@@ -45,6 +45,7 @@ from app.services.rate_limiting.number_pool import NumberPoolManager
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import get_text_message_provider
 from app.utils.phone import normalize_phone_safe
+from app.utils.timezones import workspace_timezone_name
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -478,10 +479,7 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
                 now=now,
                 quiet_hours_start=config.quiet_hours_start,
                 quiet_hours_end=config.quiet_hours_end,
-                timezone=(
-                    config.timezone
-                    or str((quote.workspace.settings or {}).get("timezone") or "UTC")
-                ),
+                timezone=config.timezone or workspace_timezone_name(quote.workspace),
             ),
             db,
         )

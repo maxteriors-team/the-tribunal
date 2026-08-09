@@ -55,6 +55,7 @@ from app.services.outbound.delivery import (
     outbound_delivery_service,
 )
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.utils.timezones import workspace_timezone_name
 
 logger = structlog.get_logger()
 
@@ -108,7 +109,7 @@ def is_within_quiet_hours(
     now: datetime | None = None,
 ) -> bool:
     """Return True when ``now`` falls inside the workspace quiet-hours window."""
-    timezone_name = config.timezone or (workspace.settings or {}).get("timezone") or "UTC"
+    timezone_name = config.timezone or workspace_timezone_name(workspace)
     return _in_quiet_window(
         config.quiet_hours_start,
         config.quiet_hours_end,

@@ -16,7 +16,6 @@ integer ``VR_SENTINEL`` (-1) so it is compatible with the existing
 """
 
 import re
-import zoneinfo
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -36,6 +35,7 @@ from app.services.calendar.reminder_service import resolve_from_number
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
+from app.utils.timezones import resolve_workspace_timezone
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -430,16 +430,10 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
         Falls back to the original hardcoded message when no template is set.
 
-        Times are formatted in the workspace timezone (falls back to UTC).
+        Times are formatted in the workspace timezone — the zone the appointment
+        was booked in, so a reminder cannot contradict the confirmation.
         """
-        # Resolve timezone
-        tz_name = (workspace.settings or {}).get("timezone", "UTC")
-        try:
-            tz = zoneinfo.ZoneInfo(str(tz_name))
-        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-            tz = zoneinfo.ZoneInfo("UTC")
-
-        local_dt = appointment.scheduled_at.astimezone(tz)
+        local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
         # e.g. "Monday, March 24"
         date_str = local_dt.strftime("%A, %B %-d")
         # e.g. "3:00 PM"
@@ -496,15 +490,10 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         Renders the template with placeholders:
           {first_name}, {appointment_date}, {appointment_time}
 
-        Times are formatted in the workspace timezone (falls back to UTC).
+        Times are formatted in the workspace timezone — the zone the appointment
+        was booked in, so a reminder cannot contradict the confirmation.
         """
-        tz_name = (workspace.settings or {}).get("timezone", "UTC")
-        try:
-            tz = zoneinfo.ZoneInfo(str(tz_name))
-        except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-            tz = zoneinfo.ZoneInfo("UTC")
-
-        local_dt = appointment.scheduled_at.astimezone(tz)
+        local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
         date_str = local_dt.strftime("%A, %B %-d")
         time_str = local_dt.strftime("%-I:%M %p")
 
