@@ -38,6 +38,12 @@ from app.services.ai.opt_out_detector import (
 from app.services.ai.text_response_generator import generate_text_response
 from app.services.ai.text_response_timing import calculate_text_response_delay_ms
 from app.services.notifications import notify_workspace_event
+from app.services.quotes.acceptance_detector import (
+    classify_quote_acceptance,
+    find_outstanding_quote,
+    has_potential_acceptance_keywords,
+)
+from app.services.quotes.acceptance_handoff import hand_off_accepted_quote
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.sla.speed_to_lead import get_speed_to_lead_settings
 
@@ -170,6 +176,21 @@ async def process_inbound_with_ai(  # noqa: PLR0911
             )
             # Not a genuine opt-out - proceed with normal response
 
+    # === QUOTE ACCEPTANCE INTERCEPT ===
+    # Runs before generation because the agent cannot be trusted to handle this
+    # in-prompt: its booking instructions treat any agreement as buying intent,
+    # so a "yes" to a proposal came back as two discovery-call slots for work the
+    # customer had already bought. Accepting a quote hands off to a human instead.
+    if last_inbound and await _handle_quote_acceptance(
+        db=db,
+        conversation=conversation,
+        agent=agent,
+        inbound_message=last_inbound,
+        credential=credential,
+        log=log,
+    ):
+        return
+
     # Generate response
     response_text = await generate_text_response(
         agent=agent,
@@ -230,6 +251,67 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         wait_ms=send_wait_ms,
         log=log,
     )
+
+
+async def _handle_quote_acceptance(
+    *,
+    db: AsyncSession,
+    conversation: Conversation,
+    agent: Agent,
+    inbound_message: Message,
+    credential: Any,
+    log: Any,
+) -> bool:
+    """Park the conversation on a human when the customer accepts their quote.
+
+    Returns ``True`` when the acceptance was handled and the caller must not
+    generate a reply.
+
+    Ordered cheapest-check-first so the overwhelming majority of inbound texts
+    cost nothing: keyword pre-filter, then a quote lookup, and only then the
+    classifier. Any failure returns ``False`` and falls through to the normal
+    reply — this guard must never be the reason a lead is left on read.
+    """
+    try:
+        if not has_potential_acceptance_keywords(inbound_message.body or ""):
+            return False
+
+        quote = await find_outstanding_quote(
+            db,
+            workspace_id=conversation.workspace_id,
+            contact_id=conversation.contact_id,
+        )
+        if quote is None:
+            return False
+
+        context = await build_message_context(conversation, db, max_messages=6)
+        accepted = await classify_quote_acceptance(
+            inbound_message.body or "",
+            context,
+            credential=credential,
+        )
+        if not accepted:
+            log.info("quote_acceptance_rejected_by_ai", quote_id=str(quote.id))
+            return False
+
+        contact = await db.get(Contact, conversation.contact_id)
+        if contact is None:
+            log.warning("quote_acceptance_contact_missing")
+            return False
+
+        log.info("quote_acceptance_detected", quote_id=str(quote.id))
+        await hand_off_accepted_quote(
+            db,
+            conversation=conversation,
+            contact=contact,
+            quote=quote,
+            agent_id=agent.id,
+            log=log,
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 - never block the nurture path
+        log.warning("quote_acceptance_intercept_failed", error=str(exc))
+        return False
 
 
 _AI_DARK_MESSAGES: dict[str, str] = {
