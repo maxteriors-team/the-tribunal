@@ -40,10 +40,11 @@ from app.services.calendar.ics import CalendarInvite, appointment_uid, render_in
 from app.services.email import send_appointment_booked_notification
 from app.services.idempotency import derive_outbound_key
 from app.utils.background_tasks import spawn_background_task
+from app.utils.timezones import DEFAULT_WORKSPACE_TIMEZONE, workspace_timezone_name
 
 logger = structlog.get_logger()
 
-DEFAULT_TIMEZONE = "America/New_York"
+DEFAULT_TIMEZONE = DEFAULT_WORKSPACE_TIMEZONE
 DEFAULT_SERVICE_SUMMARY = "Appointment"
 
 
@@ -359,8 +360,7 @@ def _organizer_email() -> str:
 
 def _workspace_timezone(workspace: Workspace | None) -> str:
     """Return the workspace's IANA zone, defaulting to Eastern."""
-    tz = ((workspace.settings if workspace else None) or {}).get("timezone")
-    return tz if isinstance(tz, str) and tz else DEFAULT_TIMEZONE
+    return workspace_timezone_name(workspace)
 
 
 def format_contact_address(contact: Contact) -> str:

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import re
 import uuid
-import zoneinfo
 
 import structlog
 from sqlalchemy import and_, select
@@ -29,6 +28,7 @@ from app.models.workspace import Workspace
 from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
+from app.utils.timezones import resolve_workspace_timezone
 
 logger = structlog.get_logger()
 
@@ -125,15 +125,10 @@ def build_confirmation_body(
     field may be added in a future iteration). Falls back to
     :data:`DEFAULT_CONFIRMATION_BODY`.
 
-    Times are formatted in the workspace timezone (falls back to UTC).
+    Times are formatted in the workspace timezone — the same zone the booking
+    was agreed in, so the text cannot quote a different hour than the agent did.
     """
-    tz_name = ((workspace.settings if workspace else None) or {}).get("timezone", "UTC")
-    try:
-        tz = zoneinfo.ZoneInfo(str(tz_name))
-    except (KeyError, zoneinfo.ZoneInfoNotFoundError):
-        tz = zoneinfo.ZoneInfo("UTC")
-
-    local_dt = appointment.scheduled_at.astimezone(tz)
+    local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
     date_str = local_dt.strftime("%A, %B %-d")  # e.g. "Monday, March 24"
     time_str = local_dt.strftime("%-I:%M %p")  # e.g. "3:00 PM"
 
