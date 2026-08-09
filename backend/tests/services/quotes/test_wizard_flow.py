@@ -351,9 +351,7 @@ async def test_deliver_quote_emails_snapshot_client(monkeypatch) -> None:
         payload.client.email = "sarah@example.com"
         saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
 
-        result = await svc.deliver_quote(
-            ws.id, uuid.UUID(str(saved.id)), channel="email", to=None
-        )
+        result = await svc.deliver_quote(ws.id, uuid.UUID(str(saved.id)), channel="email", to=None)
 
         assert result.ok is True
         assert result.to == "sarah@example.com"
@@ -363,6 +361,67 @@ async def test_deliver_quote_emails_snapshot_client(monkeypatch) -> None:
         refreshed = await svc.get_quote(ws.id, uuid.UUID(str(saved.id)))
         assert refreshed.status == "sent"
         assert refreshed.public_token
+
+
+async def test_deliver_quote_reports_a_failed_email_instead_of_ok(monkeypatch) -> None:
+    """A send Resend never accepted must not come back as a delivered quote.
+
+    ``send_quote_email`` returns False on failure rather than raising, so an
+    ignored return value produced the worst possible outcome: the operator sees
+    "emailed", the customer's inbox stays empty, and nobody finds out until the
+    follow-up call. The quote must still be ``sent`` with a live link, because
+    the token is already minted and copying that link is the operator's retry.
+    """
+    from app.services.exceptions import ValidationError
+
+    async def failing_send(**kwargs):  # noqa: ANN003
+        return False
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_quote_email", failing_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.client.email = "sarah@example.com"
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+
+        with pytest.raises(ValidationError, match="Couldn't send that email"):
+            await svc.deliver_quote(ws.id, uuid.UUID(str(saved.id)), channel="email", to=None)
+
+        refreshed = await svc.get_quote(ws.id, uuid.UUID(str(saved.id)))
+        assert refreshed.status == "sent"
+        assert refreshed.public_token
+
+
+async def test_mark_sent_survives_a_failed_courtesy_email(monkeypatch) -> None:
+    """``mark_sent`` is a status change, not a delivery promise.
+
+    An operator using it has usually sent the quote by their own means and is
+    recording that fact; the courtesy email riding along must never undo the
+    transition. This is the deliberate asymmetry with ``deliver_quote`` above.
+    """
+
+    async def failing_send(**kwargs):  # noqa: ANN003
+        return False
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_quote_email", failing_send)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.client.email = "sarah@example.com"
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+
+        result = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+
+        assert result.status == "sent"
+        assert result.public_token
 
 
 async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> None:
@@ -525,7 +584,6 @@ async def test_permanent_section_has_no_seasonal_value_props() -> None:
         )
         assert doc.category_sections[0].key == "permanent"
         assert doc.category_sections[0].value_props == []
-
 
 
 async def test_permanent_only_quote_is_its_own_service_path() -> None:
