@@ -7,7 +7,8 @@ transport client directly.
 """
 
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Callable
+from datetime import UTC, datetime, tzinfo
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -37,6 +38,20 @@ def _make_nudge(
     nudge.delivered_at = None
     nudge.delivered_via = None
     return nudge
+
+
+def _at(instant: datetime) -> Callable[..., datetime]:
+    """Build a ``datetime.now`` stand-in pinned to *instant*, honouring its tz arg.
+
+    Quiet-hours logic reads the wall clock in the workspace zone, so the stub has
+    to convert rather than return a fixed UTC value — otherwise the test passes
+    for the wrong reason.
+    """
+
+    def _now(tz: tzinfo | None = None) -> datetime:
+        return instant.astimezone(tz) if tz else instant
+
+    return _now
 
 
 def _make_workspace(nudge_settings: dict | None = None) -> MagicMock:
@@ -255,8 +270,8 @@ class TestQuietHoursRespected:
         ws_eastern.settings["timezone"] = "America/New_York"
 
         with patch("app.services.nudges.nudge_delivery.datetime") as mock_dt:
-            mock_dt.now.side_effect = lambda tz=None: instant.astimezone(tz) if tz else instant
-            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            mock_dt.now.side_effect = _at(instant)
+            mock_dt.side_effect = datetime
 
             assert delivery._is_quiet_hours(ws_utc) is False
             assert delivery._is_quiet_hours(ws_eastern) is True
@@ -273,8 +288,8 @@ class TestQuietHoursRespected:
         ws = _make_workspace()  # no timezone configured
 
         with patch("app.services.nudges.nudge_delivery.datetime") as mock_dt:
-            mock_dt.now.side_effect = lambda tz=None: instant.astimezone(tz) if tz else instant
-            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            mock_dt.now.side_effect = _at(instant)
+            mock_dt.side_effect = datetime
 
             assert delivery._is_quiet_hours(ws) is True
 
