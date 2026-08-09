@@ -46,6 +46,7 @@ from app.services.quotes.acceptance_detector import (
 from app.services.quotes.acceptance_handoff import hand_off_accepted_quote
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.sla.speed_to_lead import get_speed_to_lead_settings
+from app.services.telephony.text_provider import provider_for_conversation
 
 logger = structlog.get_logger()
 
@@ -482,7 +483,7 @@ async def _send_ai_text_response_after_delay(
     if current_conversation is None:
         return
 
-    provider_name = _preferred_provider_for_conversation(current_conversation)
+    provider_name = provider_for_conversation(current_conversation)
     sms_service = get_text_message_provider(provider_name)
     try:
         await sms_service.send_message(
@@ -542,13 +543,6 @@ async def _load_sendable_conversation(
         log.info("ai_response_skipped_after_delay")
         return None
     return current_conversation
-
-
-def _preferred_provider_for_conversation(conversation: Conversation) -> str | None:
-    """Keep AI replies on the same text transport as the inbound thread."""
-    if conversation.channel == "imessage":
-        return "mac_relay"
-    return None
 
 
 async def schedule_ai_response(

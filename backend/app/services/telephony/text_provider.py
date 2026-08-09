@@ -6,7 +6,7 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.conversation import Message
+from app.models.conversation import Conversation, Message
 from app.services.telephony.mac_relay import (
     MacRelayMessageService,
     build_configured_mac_relay_service,
@@ -37,6 +37,19 @@ class TextMessageProvider(Protocol):
         ...
 
 
+def provider_for_conversation(conversation: Conversation) -> str | None:
+    """Keep outbound replies on the same text transport as the inbound thread.
+
+    Lives here rather than beside any one sender because several unrelated
+    callers reply into an existing thread. Homing it in one of them makes the
+    others import that sender just to route a message, which is how the AI text
+    agent and the quote-acceptance handoff ended up in an import cycle.
+    """
+    if conversation.channel == "imessage":
+        return "mac_relay"
+    return None
+
+
 def get_text_message_provider(
     preferred_provider: str | None = None,
     *,
@@ -59,4 +72,5 @@ __all__ = [
     "TelnyxSMSService",
     "TextMessageProvider",
     "get_text_message_provider",
+    "provider_for_conversation",
 ]

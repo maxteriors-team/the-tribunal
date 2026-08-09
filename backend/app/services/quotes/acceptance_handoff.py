@@ -30,6 +30,10 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.quote import Quote
 from app.services.notifications import notify_workspace_event
+from app.services.telephony.text_provider import (
+    get_text_message_provider,
+    provider_for_conversation,
+)
 
 logger = structlog.get_logger()
 
@@ -121,13 +125,8 @@ async def _send_acknowledgement(
     log: Any,
 ) -> None:
     """Text the customer that their approval landed. Best-effort."""
-    # Imported lazily: ``text_agent`` imports this module at module scope, and the
-    # transport helper lives beside the AI sender it was written for.
-    from app.services.ai.text_agent import _preferred_provider_for_conversation
-    from app.services.telephony.text_provider import get_text_message_provider
-
     body = build_acknowledgement(contact)
-    sms_service = get_text_message_provider(_preferred_provider_for_conversation(conversation))
+    sms_service = get_text_message_provider(provider_for_conversation(conversation))
     try:
         await sms_service.send_message(
             to_number=conversation.contact_phone,

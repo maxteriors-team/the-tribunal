@@ -25,16 +25,12 @@ from app.schemas.conversation import (
 from app.services.ai.openai_credentials import get_openai_bearer_token
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
-from app.services.telephony.text_provider import get_text_message_provider
+from app.services.telephony.text_provider import (
+    get_text_message_provider,
+    provider_for_conversation,
+)
 
 logger = structlog.get_logger()
-
-
-def _preferred_provider_for_conversation(conversation: Conversation) -> str | None:
-    """Keep manual/follow-up replies on the conversation's text transport."""
-    if conversation.channel == "imessage":
-        return "mac_relay"
-    return None
 
 
 def serialize_conversation(conversation: Conversation) -> ConversationResponse:
@@ -196,7 +192,7 @@ class ConversationService:
         """Send a message in a conversation via the configured text provider."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
 
-        sms_service = get_text_message_provider(_preferred_provider_for_conversation(conversation))
+        sms_service = get_text_message_provider(provider_for_conversation(conversation))
         try:
             message = await sms_service.send_message(
                 to_number=conversation.contact_phone,
@@ -404,7 +400,7 @@ class ConversationService:
                     detail="Failed to generate follow-up message",
                 )
 
-        sms_service = get_text_message_provider(_preferred_provider_for_conversation(conversation))
+        sms_service = get_text_message_provider(provider_for_conversation(conversation))
         try:
             sent_msg = await sms_service.send_message(
                 to_number=conversation.contact_phone,

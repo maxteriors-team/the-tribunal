@@ -84,8 +84,12 @@ def _sender(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     """Capture the outbound acknowledgement instead of texting a real customer."""
     send_message = AsyncMock()
     service = types.SimpleNamespace(send_message=send_message, close=AsyncMock())
+    # Patch the name bound inside the handoff module, not its source. Patching
+    # the source leaves the module-scope import pointing at the real Telnyx
+    # client, and the test quietly tries to text a live number.
     monkeypatch.setattr(
-        "app.services.telephony.text_provider.get_text_message_provider",
+        acceptance_handoff,
+        "get_text_message_provider",
         lambda *_a, **_k: service,
     )
     return send_message
@@ -191,7 +195,8 @@ async def test_a_failed_text_still_pauses_the_ai(
         close=AsyncMock(),
     )
     monkeypatch.setattr(
-        "app.services.telephony.text_provider.get_text_message_provider",
+        acceptance_handoff,
+        "get_text_message_provider",
         lambda *_a, **_k: service,
     )
     conversation = _conversation()
