@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { use } from "react";
 
 import { ComparisonCard } from "@/components/estimator/comparison-card";
-import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { DeadPublicLink } from "@/components/shared/dead-public-link";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { publicComparisonsApi } from "@/lib/api/public-comparisons";
 import { clientThemeClass } from "@/lib/estimator/services";
 import { queryKeys } from "@/lib/query-keys";
@@ -37,12 +38,7 @@ export default function PublicComparisonPage({
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
-        <PageErrorState
-          className="min-h-screen"
-          message="This comparison link is invalid or has expired."
-        />
-      </div>
+      <DeadPublicLink subject="comparison" />
     );
   }
 

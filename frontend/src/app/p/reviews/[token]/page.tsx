@@ -5,10 +5,11 @@ import { CheckCircle2, Loader2, Star } from "lucide-react";
 import { use, useState } from "react";
 
 import { StarRating } from "@/components/reviews/star-rating";
+import { DeadPublicLink } from "@/components/shared/dead-public-link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { Textarea } from "@/components/ui/textarea";
 import { publicReviewsApi } from "@/lib/api/public-reviews";
 import { queryKeys } from "@/lib/query-keys";
@@ -83,12 +84,7 @@ export default function PublicReviewPage({ params }: PublicReviewPageProps) {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-        <PageErrorState
-          className="min-h-screen"
-          message="This review link is invalid or has expired."
-        />
-      </div>
+      <DeadPublicLink subject="review request" />
     );
   }
 

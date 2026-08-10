@@ -6,7 +6,8 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { ClientProposalView } from "@/components/proposal/client-proposal-view";
 import { parseProposalDocument } from "@/components/proposal/document";
 import { PlainQuoteView } from "@/components/proposal/plain-quote-view";
-import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { DeadPublicLink } from "@/components/shared/dead-public-link";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { publicProposalsApi } from "@/lib/api/public-proposals";
 import { queryKeys } from "@/lib/query-keys";
 import type { PublicProposal } from "@/types/proposal";
@@ -134,12 +135,7 @@ export default function PublicProposalPage({
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
-        <PageErrorState
-          className="min-h-screen"
-          message="This proposal link is invalid or has expired."
-        />
-      </div>
+      <DeadPublicLink subject="proposal" />
     );
   }
 
