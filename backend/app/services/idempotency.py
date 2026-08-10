@@ -64,6 +64,31 @@ def derive_outbound_key(scope: str, *parts: object) -> uuid.UUID:
     return uuid.uuid5(OUTBOUND_IDEMPOTENCY_NAMESPACE, body)
 
 
+def derive_document_send_key(
+    scope: str, document_id: object, revision: object, *parts: object
+) -> uuid.UUID:
+    """Idempotency key for emailing a document that can be edited and re-sent.
+
+    Same as :func:`derive_outbound_key`, except ``revision`` (normally the row's
+    ``updated_at``) participates in the hash. That distinction matters because
+    the provider's own idempotency is content-sensitive: replaying a key with a
+    *modified* body is rejected outright rather than de-duplicated. Keying only
+    on the document id therefore made the two cases indistinguishable --
+
+    * double-clicking Send on an unchanged quote *should* collapse to one email,
+    * sending a quote again *after editing it* should deliver the new version,
+
+    -- and the second one lost: the send was refused for the lifetime of the
+    provider's idempotency window, so the customer never saw the correction. A
+    document that cannot be re-sent after an edit makes editing it pointless.
+
+    Including the revision keeps the first case (an unchanged row has an
+    unchanged ``updated_at``, so retries still collapse) while letting an edited
+    document through under a key that has never been used.
+    """
+    return derive_outbound_key(scope, document_id, revision, *parts)
+
+
 def derive_worker_retry_key(scope: str, *parts: object) -> str:
     """Return a stable text key for ``RetryableWorker`` item/DLQ dedupe."""
     if not scope:
