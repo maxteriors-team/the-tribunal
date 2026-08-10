@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
@@ -542,6 +543,111 @@ class TestDuplicateGuard:
                 notify=False,
             )
             assert second.id != first.id
+
+
+class TestDuplicateIndexBackstop:
+    """The database rule behind the application guard.
+
+    ``_find_duplicate`` is a read followed by a write. Two tool calls racing (the
+    live incident: one model turn booked, the next turn booked again 61 seconds
+    later) can both read "no duplicate" and both insert. Only the partial unique
+    index actually prevents the second row.
+    """
+
+    async def test_index_rejects_a_second_live_row_on_the_same_slot(self, workspace_id) -> None:
+        """Insert straight past the application guard; the database must refuse."""
+        when = datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK)
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            await finalize_booking(
+                db,
+                workspace_id=workspace_id,
+                contact=contact,
+                scheduled_at=when,
+                duration_minutes=30,
+                notify=False,
+            )
+            contact_id = contact.id
+
+        async with AsyncSessionLocal() as db:
+            db.add(
+                Appointment(
+                    workspace_id=workspace_id,
+                    contact_id=contact_id,
+                    scheduled_at=when,
+                    duration_minutes=30,
+                    status=AppointmentStatus.SCHEDULED,
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await db.commit()
+
+    async def test_losing_the_race_returns_the_winning_booking(self, workspace_id) -> None:
+        """A booking the customer confirmed must not surface as an error.
+
+        Simulates the race by letting a competing row commit *after*
+        ``finalize_booking`` has run its duplicate check.
+        """
+        when = datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK)
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            await db.commit()
+            contact_id = contact.id
+
+        async with AsyncSessionLocal() as competitor:
+            winner = Appointment(
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                scheduled_at=when,
+                duration_minutes=30,
+                status=AppointmentStatus.SCHEDULED,
+            )
+            competitor.add(winner)
+            await competitor.commit()
+            winner_id = winner.id
+
+        async with AsyncSessionLocal() as db:
+            contact = await db.get(Contact, contact_id)
+            assert contact is not None
+            original_find = booking_finalizer._find_duplicate
+            calls = {"n": 0}
+
+            async def _blind_first_check(*args, **kwargs):
+                # First call runs before the competing row is visible to this
+                # session's snapshot; later calls (the recovery path) see it.
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    return None
+                return await original_find(*args, **kwargs)
+
+            booking_finalizer._find_duplicate = _blind_first_check
+            try:
+                result = await finalize_booking(
+                    db,
+                    workspace_id=workspace_id,
+                    contact=contact,
+                    scheduled_at=when,
+                    duration_minutes=30,
+                    notify=False,
+                )
+            finally:
+                booking_finalizer._find_duplicate = original_find
+
+            assert result.id == winner_id, "must return the booking that won the race"
+
+        async with AsyncSessionLocal() as db:
+            rows = (
+                (
+                    await db.execute(
+                        select(Appointment).where(Appointment.workspace_id == workspace_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(rows) == 1, "the losing insert must leave no row behind"
 
 
 class TestInviteOrganizer:
