@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import os
 import re
 import sys
@@ -46,11 +47,17 @@ CANCEL_INTENT = re.compile(
 )
 
 
-def _mask_email(email: str | None) -> str:
-    if not email or "@" not in email:
+def _fingerprint(value: str | None) -> str:
+    """A short, stable, non-reversible tag for a PII value.
+
+    An audit runs across every workspace, so its output is the last place
+    customer emails should land — terminal scrollback and CI logs outlive the
+    incident. The digest is enough to tell contacts apart and to correlate a
+    row with ``cancel_stale_appointments.py``, and useless to a later reader.
+    """
+    if not value:
         return "(none)"
-    local, _, domain = email.partition("@")
-    return f"{local[:2]}***@{domain}"
+    return hashlib.sha256(value.strip().lower().encode()).hexdigest()[:8]
 
 
 async def _duplicate_slots(db) -> list[tuple[int, datetime, int]]:
@@ -129,8 +136,8 @@ async def main() -> int:
             print("  none")
         for contact_id, slot, count in dupes:
             contact = await db.get(Contact, contact_id)
-            label = _mask_email(contact.email) if contact else "?"
-            print(f"  contact={contact_id} {label} slot={slot.isoformat()} rows={count}")
+            label = _fingerprint(contact.email) if contact else "?"
+            print(f"  contact={contact_id} fp={label} slot={slot.isoformat()} rows={count}")
 
         print("\n── live bookings the customer asked to cancel ──")
         stale = await _cancelled_in_conversation(db, args.lookback_days)
@@ -138,8 +145,8 @@ async def main() -> int:
             print("  none")
         for appt_id, contact_id, when in stale:
             contact = await db.get(Contact, contact_id)
-            label = _mask_email(contact.email) if contact else "?"
-            print(f"  appointment={appt_id} contact={contact_id} {label} asked_at={when}")
+            label = _fingerprint(contact.email) if contact else "?"
+            print(f"  appointment={appt_id} contact={contact_id} fp={label} asked_at={when}")
 
         print(f"\n{len(dupes)} duplicate slot(s), {len(stale)} ignored cancellation(s).")
 

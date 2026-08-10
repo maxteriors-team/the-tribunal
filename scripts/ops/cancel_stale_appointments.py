@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import os
 import sys
 from datetime import UTC, datetime
@@ -39,19 +40,18 @@ from app.models.contact import Contact  # noqa: E402
 from app.services.appointments.cancellation import cancel_upcoming_appointments  # noqa: E402
 
 
-def _mask_phone(phone: str | None) -> str:
-    """Show only the last 4 digits — enough to confirm the right person."""
-    if not phone:
-        return "(none)"
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    return f"***{digits[-4:]}" if len(digits) >= 4 else "***"
+def _fingerprint(value: str | None) -> str:
+    """A short, stable, non-reversible tag for a PII value.
 
-
-def _mask_email(email: str | None) -> str:
-    if not email or "@" not in email:
+    The operator already knows who they are cancelling — they passed the phone
+    or email in on the command line. Echoing it back adds nothing and puts
+    customer PII into terminal scrollback, shell history and CI logs, so this
+    prints a digest instead. Enough to tell two contacts apart, useless to
+    anyone reading the log later.
+    """
+    if not value:
         return "(none)"
-    local, _, domain = email.partition("@")
-    return f"{local[:2]}***@{domain}"
+    return hashlib.sha256(value.strip().lower().encode()).hexdigest()[:8]
 
 
 async def _find_contacts(db, phone: str | None, email: str | None) -> list[Contact]:
@@ -101,19 +101,17 @@ async def main() -> int:
         if len(contacts) > 1:
             print(f"⚠ {len(contacts)} contacts matched — refusing to guess:")
             for c in contacts:
-                print(f"    id={c.id} ws={c.workspace_id} {_mask_phone(c.phone_number)}")
+                print(f"    id={c.id} ws={c.workspace_id} fp={_fingerprint(c.email)}")
             return 1
 
         contact = contacts[0]
-        print(
-            f"▶ contact id={contact.id} ws={contact.workspace_id} "
-            f"name={contact.full_name!r} phone={_mask_phone(contact.phone_number)} "
-            f"email={_mask_email(contact.email)}"
-        )
+        contact_id = contact.id
+        workspace_id = contact.workspace_id
+        print(f"▶ contact id={contact_id} ws={workspace_id} fp={_fingerprint(contact.email)}")
 
         result = await db.execute(
             select(Appointment)
-            .where(Appointment.contact_id == contact.id)
+            .where(Appointment.contact_id == contact_id)
             .options(selectinload(Appointment.agent))
             .order_by(Appointment.scheduled_at)
         )
@@ -147,14 +145,15 @@ async def main() -> int:
 
         outcome = await cancel_upcoming_appointments(
             db,
-            workspace_id=contact.workspace_id,
-            contact_id=contact.id,
+            workspace_id=workspace_id,
+            contact_id=contact_id,
             reason=args.reason,
             cancelled_by="operator (incident cleanup)",
         )
+        # Appointment ids and UTC instants only — nothing contact-derived.
         print(f"\n✓ cancelled {outcome.count} appointment(s):")
         for item in outcome.cancelled:
-            print(f"    id={item.appointment_id} {item.local_label}")
+            print(f"    id={item.appointment_id} at={item.scheduled_at.isoformat()}")
 
     return 0
 
