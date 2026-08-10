@@ -33,6 +33,16 @@ export interface VisualPage {
 export const PUBLIC_PAGES: VisualPage[] = [
   { slug: "login", title: "Login", path: "/login" },
   { slug: "landing", title: "Landing page", path: "/p/landing" },
+  // A deliberately unresolvable token, so this always renders the dead-link
+  // screen. It is the one page whose whole audience is customers who cannot
+  // ask us anything, and the two bugs found building it (a dropped space, a
+  // layout crushed by the proposal theme's margin reset) were both invisible
+  // in the diff and obvious in a screenshot.
+  {
+    slug: "dead-link",
+    title: "Dead public link",
+    path: "/p/quotes/visual-regression-token-that-never-resolves",
+  },
 ];
 
 /**
