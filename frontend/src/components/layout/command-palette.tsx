@@ -6,7 +6,12 @@ import { Loader2, Megaphone, Search, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -151,6 +156,10 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg overflow-hidden border-primary/20 bg-card/95 p-0 shadow-2xl backdrop-blur-xl">
+        <DialogTitle className="sr-only">Search the workspace</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search pages, contacts, and campaigns, then choose a result to navigate.
+        </DialogDescription>
         <Command
           shouldFilter={false}
           className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:size-5"
