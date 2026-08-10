@@ -8,7 +8,7 @@
  * chose. Nothing here computes money — the page renders server figures.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -445,6 +445,44 @@ describe("ClientProposalView — seasonal Christmas", () => {
     );
 
     expect(root()).not.toHaveClass("is-christmas");
+  });
+
+  it("shows every designed photo, and still shows the one on older snapshots", () => {
+    // A rep designs several angles of the same house (front, back, walkway) and
+    // the client sees all of them. Snapshots saved before a design could span
+    // photos carry a single `image` — that one must still render.
+    renderView({
+      proposal_document: {
+        ...DOCUMENT,
+        night_preview: {
+          image: "data:image/jpeg;base64,FRONT",
+          images: [
+            "data:image/jpeg;base64,FRONT",
+            "data:image/jpeg;base64,BACK",
+          ],
+        },
+      } as unknown as Record<string, unknown>,
+    });
+
+    const frames = document.querySelectorAll(".pnight-frame img");
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toHaveAttribute("src", "data:image/jpeg;base64,FRONT");
+    expect(frames[1]).toHaveAttribute("src", "data:image/jpeg;base64,BACK");
+    expect(screen.getByText(/design preview \(2 of 2\)/i)).toBeInTheDocument();
+
+    cleanup();
+    renderView({
+      proposal_document: {
+        ...DOCUMENT,
+        night_preview: { image: "data:image/jpeg;base64,LEGACY" },
+      } as unknown as Record<string, unknown>,
+    });
+
+    const legacy = document.querySelectorAll(".pnight-frame img");
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0]).toHaveAttribute("src", "data:image/jpeg;base64,LEGACY");
+    // A lone photo isn't numbered — "1 of 1" is noise on a client page.
+    expect(screen.queryByText(/design preview \(/i)).toBeNull();
   });
 
   it("renders nothing for a snapshot saved before value props existed", () => {

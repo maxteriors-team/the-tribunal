@@ -6,6 +6,7 @@ import {
   designScale,
   designToEstimateInputs,
   hasDesign,
+  sumEstimateInputs,
 } from "./design";
 import type { Design, PlacedItem, Product, Run } from "./types";
 
@@ -278,6 +279,51 @@ describe("designToEstimateInputs — landscape", () => {
     // Landscape counts never leak into the holiday buckets.
     expect(out.feet).toBe(0);
     expect(out.christmas_items).toEqual({});
+  });
+
+  it("totals several photos of one job into a single set of inputs", () => {
+    // Front elevation + back patio: the quote covers both, and each photo was
+    // already measured on its own calibration before it got here.
+    const front = {
+      feet: 120,
+      christmas_items: { wreaths: { small: 2 } },
+      fixtures: { uplight: 4 },
+      bistro_feet: 0,
+    };
+    const back = {
+      feet: 40,
+      christmas_items: { wreaths: { small: 1 }, trees: { medium: 1 } },
+      fixtures: { uplight: 2, path: 6 },
+      bistro_feet: 35,
+    };
+
+    expect(sumEstimateInputs([front, back])).toEqual({
+      feet: 160,
+      christmas_items: { wreaths: { small: 3 }, trees: { medium: 1 } },
+      fixtures: { uplight: 6, path: 6 },
+      bistro_feet: 35,
+    });
+    // No photos is a zero job, never NaN or missing buckets.
+    expect(sumEstimateInputs([])).toEqual({
+      feet: 0,
+      christmas_items: {},
+      fixtures: {},
+      bistro_feet: 0,
+    });
+  });
+
+  it("does not mutate the per-photo inputs it totals", () => {
+    // The designer keeps these per shot, so summing must not fold one photo's
+    // counts into another photo's object.
+    const front = {
+      feet: 10,
+      christmas_items: { wreaths: { small: 1 } },
+      fixtures: { uplight: 1 },
+      bistro_feet: 0,
+    };
+    sumEstimateInputs([front, front]);
+    expect(front.christmas_items).toEqual({ wreaths: { small: 1 } });
+    expect(front.fixtures).toEqual({ uplight: 1 });
   });
 
   it("measures a traced bistro strand in whole feet", () => {

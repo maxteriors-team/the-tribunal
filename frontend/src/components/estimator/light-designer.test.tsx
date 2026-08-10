@@ -63,11 +63,13 @@ const MAPPED = {
   fixtures: {},
   bistro_feet: 0,
 };
-vi.mock("@/lib/estimator/design", () => ({
+// Partial mock: only the photo-dependent readings are faked. `sumEstimateInputs`
+// stays real, so the multi-photo totals under test are the production math.
+vi.mock("@/lib/estimator/design", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/estimator/design")>()),
   designToEstimateInputs: vi.fn(() => MAPPED),
   hasDesign: vi.fn(() => true),
   designScale: vi.fn(() => ({ ftPerPx: 0.05, pxPerFt: 20, calibrated: false })),
-  formatFeet: (n: number) => `${n} ft`,
 }));
 
 const ESTIMATE: LinearFeetEstimateResult = {
@@ -205,6 +207,18 @@ async function uploadPhoto(container: HTMLElement) {
   const file = new File(["x"], "house.png", { type: "image/png" });
   fireEvent.change(input!, { target: { files: [file] } });
   await waitFor(() => expect(container.querySelector("canvas")).not.toBeNull());
+}
+
+/** The photo thumbnails in the shot strip, in the order the rep added them. */
+function shotTabs() {
+  return screen.queryAllByRole("button", { name: /^Photo \d+/ });
+}
+
+/** The photo the canvas is currently showing, 1-based. */
+function activeShotIndex() {
+  return shotTabs().findIndex(
+    (tab) => tab.getAttribute("aria-current") === "true",
+  );
 }
 
 /**
@@ -568,15 +582,17 @@ describe("LightDesigner", () => {
   it("swaps the standalone share flow for save-to-proposal when the Quote Builder hosts it", async () => {
     const proposal: DesignerProposalHost = {
       onSave: vi.fn(),
-      onPhotoChange: vi.fn(),
+      onShotsChange: vi.fn(),
       onClose: vi.fn(),
     };
     const { container } = renderEstimator(proposal);
     await uploadPhoto(container);
 
-    expect(proposal.onPhotoChange).toHaveBeenCalledWith(
-      expect.objectContaining({ width: 1200 }),
-    );
+    expect(proposal.onShotsChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        photo: expect.objectContaining({ width: 1200 }),
+      }),
+    ]);
     expect(
       screen.getByRole("button", { name: /save to proposal/i }),
     ).toBeInTheDocument();
@@ -602,7 +618,7 @@ describe("LightDesigner", () => {
     const onSave = vi.fn();
     const proposal: DesignerProposalHost = {
       onSave,
-      onPhotoChange: vi.fn(),
+      onShotsChange: vi.fn(),
       onClose: vi.fn(),
     };
     const { container } = renderEstimator(proposal);
@@ -615,7 +631,9 @@ describe("LightDesigner", () => {
     // type to the product its chosen package sells.
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        image: "data:image/jpeg;base64,LIT",
+        shots: [
+          expect.objectContaining({ image: "data:image/jpeg;base64,LIT" }),
+        ],
         fixtures: { uplight: 4 },
         services: ["landscape"],
         rooflineFeet: 100,
@@ -623,7 +641,7 @@ describe("LightDesigner", () => {
       }),
     );
     expect(
-      await screen.findByText(/Saved to the proposal at/i),
+      await screen.findByText(/Saved 1 design to the proposal at/i),
     ).toBeInTheDocument();
   });
 
@@ -905,7 +923,7 @@ describe("LightDesigner", () => {
     // would never reach the quote. Absent beats silently dropped.
     const { container } = renderEstimator({
       onSave: vi.fn(),
-      onPhotoChange: vi.fn(),
+      onShotsChange: vi.fn(),
       onClose: vi.fn(),
       tierKey: "best",
     });
@@ -913,6 +931,148 @@ describe("LightDesigner", () => {
     await screen.findByRole("heading", { name: /^Tools$/i });
 
     expect(screen.queryByRole("button", { name: /Add line item/i })).toBeNull();
+  });
+
+  // ── Several photos in one design ────────────────────────────────────
+
+  it("adds a photo instead of replacing the one already designed", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    expect(shotTabs()).toHaveLength(1);
+
+    // The rep photographs the back of the house next. The front must survive:
+    // trading it away for the new angle is the bug this guards.
+    await uploadPhoto(container);
+
+    expect(shotTabs()).toHaveLength(2);
+    // The new photo opens for drawing, and the first is still there to go back to.
+    expect(activeShotIndex()).toBe(1);
+
+    fireEvent.click(shotTabs()[0]);
+    expect(activeShotIndex()).toBe(0);
+  });
+
+  it("totals the measurements across every photo", async () => {
+    // Each photo maps to 100 ft, so two shots is a 200 ft job — the quote has to
+    // cover the whole house, not whichever photo was on screen.
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ feet: 100 }),
+      ),
+    );
+
+    await uploadPhoto(container);
+
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ feet: 200 }),
+      ),
+    );
+  });
+
+  it("sends every drawn photo to the proposal in one save", async () => {
+    const onSave = vi.fn();
+    const { container } = renderEstimator({
+      onSave,
+      onShotsChange: vi.fn(),
+      onClose: vi.fn(),
+    });
+    await uploadPhoto(container);
+    await uploadPhoto(container);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /save 2 designs to proposal/i }),
+    );
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0].shots).toHaveLength(2);
+    expect(
+      await screen.findByText(/Saved 2 designs to the proposal at/i),
+    ).toBeInTheDocument();
+  });
+
+  it("drops a removed photo from the totals and the strip", async () => {
+    const onSave = vi.fn();
+    const onShotsChange = vi.fn();
+    const { container } = renderEstimator({
+      onSave,
+      onShotsChange,
+      onClose: vi.fn(),
+    });
+    await uploadPhoto(container);
+    await uploadPhoto(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove photo 2/i }));
+
+    expect(shotTabs()).toHaveLength(1);
+    expect(onShotsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ photo: expect.anything() }),
+    ]);
+    // What the quote is measured from, not just what's on screen: the deleted
+    // photo's 100 ft must leave with it.
+    fireEvent.click(screen.getByRole("button", { name: /save to proposal/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      rooflineFeet: 100,
+      shots: [expect.anything()],
+    });
+  });
+
+  it("returns to the welcome screen when the last photo is removed", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove photo 1/i }));
+
+    expect(container.querySelector("canvas")).toBeNull();
+    expect(
+      screen.getByText(/Design their lights on a photo/i),
+    ).toBeInTheDocument();
+  });
+
+  it("hands the photos to the host on the way back to the quote", async () => {
+    // The editor unmounts when the rep steps back to the quote, so the host is
+    // the only thing that can hold the work — saved or not.
+    const onShotsChange = vi.fn();
+    const { container } = renderEstimator({
+      onSave: vi.fn(),
+      onShotsChange,
+      onClose: vi.fn(),
+    });
+    await uploadPhoto(container);
+    await uploadPhoto(container);
+    onShotsChange.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /back to quote/i }));
+
+    expect(onShotsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ photo: expect.anything() }),
+      expect.objectContaining({ photo: expect.anything() }),
+    ]);
+  });
+
+  it("resumes every photo the host held from the last visit", async () => {
+    // Leaving the designer for the quote and coming back must restore the whole
+    // set, not just the shot that happened to be saved.
+    const photo = { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 };
+    renderEstimator({
+      onSave: vi.fn(),
+      onShotsChange: vi.fn(),
+      onClose: vi.fn(),
+      initial: {
+        shots: [
+          { id: "s1", photo, design: { runs: [], items: [], calibration: null }, dusk: 0.52 },
+          { id: "s2", photo, design: { runs: [], items: [], calibration: null }, dusk: 0.52 },
+        ],
+      },
+    });
+
+    expect(shotTabs()).toHaveLength(2);
+    expect(activeShotIndex()).toBe(0);
   });
 
   it("can share and quote a line item with nothing drawn on the photo", async () => {

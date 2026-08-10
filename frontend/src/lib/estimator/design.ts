@@ -131,6 +131,39 @@ export function designToEstimateInputs(
   };
 }
 
+/**
+ * Total the inputs from several photos of the same job.
+ *
+ * A rep designs the front of the house on one photo and the back on another;
+ * the quote has to carry both. Each photo is measured on its own calibration
+ * before it gets here, so the totals are a straight sum — the only shared unit
+ * is feet/counts, never pixels.
+ */
+export function sumEstimateInputs(
+  parts: DesignEstimateInputs[],
+): DesignEstimateInputs {
+  const total: DesignEstimateInputs = {
+    feet: 0,
+    christmas_items: {},
+    fixtures: {},
+    bistro_feet: 0,
+  };
+  for (const part of parts) {
+    total.feet += part.feet;
+    total.bistro_feet += part.bistro_feet;
+    for (const [type, count] of Object.entries(part.fixtures)) {
+      total.fixtures[type] = (total.fixtures[type] ?? 0) + count;
+    }
+    for (const [category, options] of Object.entries(part.christmas_items)) {
+      const bucket = (total.christmas_items[category] ??= {});
+      for (const [option, value] of Object.entries(options)) {
+        bucket[option] = (bucket[option] ?? 0) + value;
+      }
+    }
+  }
+  return total;
+}
+
 /** True when the design has anything drawn or placed. */
 export function hasDesign(design: Design): boolean {
   return design.runs.length > 0 || design.items.length > 0;

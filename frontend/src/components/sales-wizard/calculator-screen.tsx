@@ -214,6 +214,9 @@ export function CalculatorScreen({
   // photo; landscape work is placed fixture by fixture. The Mockup step says
   // which, so the rep knows what the designer is for on this quote.
   const isSeasonalService = isPermanentService || hasSeasonal;
+  // How many lit photos are already on this proposal. A rep can design several
+  // angles of the same house in one session, so this is a count, not a flag.
+  const savedDesigns = wizard.night.images.length;
   const seasonalStep = isPermanentService
     ? {
         // The progress chip clips past ~8 tracked characters, so the step reads
@@ -447,19 +450,21 @@ export function CalculatorScreen({
             </div>
             <button
               type="button"
-              className={`night-launch-btn${wizard.night.image ? " saved" : ""}`}
+              className={`night-launch-btn${savedDesigns ? " saved" : ""}`}
               onClick={onOpenNight}
             >
-              {wizard.night.image
-                ? "Design saved \u2014 edit the lit photo"
-                : "Open the Light Designer"}
+              {savedDesigns === 0
+                ? "Open the Light Designer"
+                : savedDesigns === 1
+                  ? "Design saved \u2014 edit the lit photo"
+                  : `${savedDesigns} designs saved \u2014 edit the lit photos`}
             </button>
             <div className="night-launch-sub">
-              {wizard.night.image
-                ? "Saved to this proposal \u2014 it shows on the client’s shared page and the quote is filed on their customer record."
+              {savedDesigns > 0
+                ? `${savedDesigns === 1 ? "Saved" : `All ${savedDesigns} saved`} to this proposal \u2014 ${savedDesigns === 1 ? "it shows" : "they show"} on the client\u2019s shared page and the quote is filed on their customer record.`
                 : isSeasonalService
-                  ? "Trace the rooflines and place decor on a photo of the home, then drag dusk down to show it lit. Saving pushes the measured roofline feet into this quote and files the image with the proposal."
-                  : "Place uplights, spots, path lights and wall washes on a photo of the home, then drag dusk down to show it lit. Saving pushes the fixture counts into this quote and files the image with the proposal."}
+                  ? "Trace the rooflines and place decor on a photo of the home, then drag dusk down to show it lit. Add a photo for each angle you\u2019re selling \u2014 the measured roofline feet from all of them push into this quote, and every lit photo files with the proposal."
+                  : "Place uplights, spots, path lights and wall washes on a photo of the home, then drag dusk down to show it lit. Add a photo for each angle you\u2019re selling \u2014 the fixture counts from all of them push into this quote, and every lit photo files with the proposal."}
             </div>
             <MockupsBlock wizard={wizard} />
             <div className="wizard-nav">

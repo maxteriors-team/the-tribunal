@@ -209,7 +209,9 @@ export function editorReducer(
       };
 
     case "RESET":
-      // New photo → drop the whole design and history.
+      // Switching photos → drop the history and load that shot's drawing (empty
+      // for a photo just added). Undo is per-photo on purpose: undoing into
+      // another photo's strokes would edit something that isn't on screen.
       return {
         ...initialEditorState(),
         dusk: state.dusk,

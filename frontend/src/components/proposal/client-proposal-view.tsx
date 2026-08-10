@@ -29,6 +29,7 @@ import { DepositPanel } from "./deposit-panel";
 import {
   fmt,
   isChristmasProposal,
+  nightImages,
   proposalValueProps,
   type ProposalDoc,
 } from "./document";
@@ -193,10 +194,8 @@ export function ClientProposalView({
     ? bistro.tier.charAt(0).toUpperCase() + bistro.tier.slice(1)
     : "Custom";
 
-  const nightImage =
-    typeof doc.night_preview?.image === "string"
-      ? doc.night_preview.image
-      : null;
+  // Every angle the rep designed, not just the hero shot.
+  const nightPhotos = nightImages(doc.night_preview);
 
   const decided = data.is_decided || justApproved || justDeclined;
   const contactLine = [branding.business_phone, branding.business_email]
@@ -325,13 +324,21 @@ export function ClientProposalView({
           </div>
         ) : null}
 
-        {nightImage ? (
+        {nightPhotos.length ? (
           <div className="pnight-section">
-            <div className="pnight-frame">
-              {/* eslint-disable-next-line @next/next/no-img-element -- canvas-composited data URL */}
-              <img src={nightImage} alt="Your home, design preview" />
-              <div className="pnight-cap">Your home &#8212; design preview</div>
-            </div>
+            {nightPhotos.map((image, i) => (
+              // Index keys: the list is render-only and never reordered here.
+              <div className="pnight-frame" key={i}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- canvas-composited data URL */}
+                <img src={image} alt="Your home, design preview" />
+                <div className="pnight-cap">
+                  Your home &#8212; design preview
+                  {nightPhotos.length > 1
+                    ? ` (${i + 1} of ${nightPhotos.length})`
+                    : ""}
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 

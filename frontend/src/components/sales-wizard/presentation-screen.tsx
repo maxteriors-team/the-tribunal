@@ -89,10 +89,11 @@ export function PresentationScreen({
     (t) => t.key === bistro?.tier,
   );
 
-  const nightImage =
-    typeof doc?.night_preview?.image === "string"
-      ? doc.night_preview.image
-      : null;
+  // Every angle the rep designed, not just the hero shot. Read from wizard
+  // state rather than the previewed document: the composites are stripped from
+  // the live preview request (they cost pricing nothing and weigh megabytes),
+  // so the document echo is empty until save. This is the same list that saves.
+  const nightPhotos = wizard.night.images;
 
   const shareLink = wizard.savedQuote?.public_token
     ? `${window.location.origin}/p/quotes/${wizard.savedQuote.public_token}`
@@ -221,15 +222,21 @@ export function PresentationScreen({
           </div>
         ) : null}
 
-        {nightImage ? (
+        {nightPhotos.length ? (
           <div className="pnight-section">
-            <div className="pnight-frame">
-              {/* eslint-disable-next-line @next/next/no-img-element -- canvas-composited data URL */}
-              <img src={nightImage} alt="Your home at night" />
-              <div className="pnight-cap">
-                Your home, after dark &#8212; design preview
+            {nightPhotos.map((image, i) => (
+              // Index keys: the list is render-only and never reordered here.
+              <div className="pnight-frame" key={i}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- canvas-composited data URL */}
+                <img src={image} alt="Your home at night" />
+                <div className="pnight-cap">
+                  Your home, after dark &#8212; design preview
+                  {nightPhotos.length > 1
+                    ? ` (${i + 1} of ${nightPhotos.length})`
+                    : ""}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         ) : null}
 
