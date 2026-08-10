@@ -190,6 +190,11 @@ class VoiceToolExecutor(BaseToolExecutor):
 
             return result
 
+        if function_name == "cancel_appointment":
+            return await self._execute_cancel_appointment(
+                reason=arguments.get("reason"),
+            )
+
         if function_name == "send_dtmf":
             return await self._execute_send_dtmf(
                 digits=arguments.get("digits", ""),
@@ -437,6 +442,90 @@ class VoiceToolExecutor(BaseToolExecutor):
                     error=str(e),
                     call_control_id=self.call_control_id,
                 )
+
+    # ── Cancellation ────────────────────────────────────────────────
+
+    async def _execute_cancel_appointment(self, reason: str | None = None) -> dict[str, Any]:
+        """Cancel the caller's upcoming appointments.
+
+        The voice agent had the same hole the text agent did: it could book but
+        not cancel, so a caller who said "cancel that" got a verbal confirmation
+        and kept every reminder. The caller is resolved the same way the other
+        call-scoped tools do it — through the call's message row.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.conversation import Message as MessageModel
+        from app.services.appointments.cancellation import cancel_upcoming_appointments
+
+        if not self.call_control_id:
+            return {"success": False, "error": "No active call found."}
+
+        async with AsyncSessionLocal() as db:
+            msg_result = await db.execute(
+                select(MessageModel)
+                .options(selectinload(MessageModel.conversation))
+                .where(MessageModel.provider_message_id == self.call_control_id)
+            )
+            call_message = msg_result.scalar_one_or_none()
+            if not call_message or not call_message.conversation:
+                self.log.warning(
+                    "cancel_appointment_no_call_message",
+                    call_control_id=self.call_control_id,
+                )
+                return {"success": False, "error": "Could not find the current call."}
+
+            conversation = call_message.conversation
+            contact_id = conversation.contact_id
+            if contact_id is None:
+                return {"success": False, "error": "No contact on this call."}
+
+            try:
+                result = await cancel_upcoming_appointments(
+                    db,
+                    workspace_id=self.workspace_id or conversation.workspace_id,
+                    contact_id=contact_id,
+                    reason=reason,
+                    cancelled_by="customer (voice)",
+                )
+            except Exception as e:
+                await db.rollback()
+                self.log.error(
+                    "cancel_appointment_failed",
+                    error=str(e),
+                    call_control_id=self.call_control_id,
+                )
+                return {
+                    "success": False,
+                    "error": (
+                        "Could not cancel it. Tell the caller you are having trouble "
+                        "and someone will follow up — do not say it is cancelled."
+                    ),
+                }
+
+            if result.count == 0:
+                return {
+                    "success": True,
+                    "cancelled_count": 0,
+                    "message": "No upcoming appointment was found for this caller.",
+                }
+
+            self.log.info(
+                "cancel_appointment_succeeded_voice",
+                contact_id=contact_id,
+                cancelled_count=result.count,
+            )
+            return {
+                "success": True,
+                "cancelled_count": result.count,
+                "cancelled": [
+                    {"appointment_id": item.appointment_id, "when": item.local_label}
+                    for item in result.cancelled
+                ],
+                "message": "Appointment cancelled. Confirm the cancellation to the caller.",
+            }
 
     # ── Voice-only tools ────────────────────────────────────────────
 

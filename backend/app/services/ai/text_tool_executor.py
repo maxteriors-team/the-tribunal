@@ -36,12 +36,19 @@ from app.models.conversation import Conversation
 from app.models.workspace import WorkspaceIntegration
 from app.services.ai.base_tool_executor import BaseToolExecutor
 from app.services.appointments.booking_finalizer import finalize_booking
+from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
 
 logger = structlog.get_logger()
 
-# Read-only tools that never mutate state and so bypass the HITL approval gate.
-GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge"})
+# Tools that bypass the HITL approval gate.
+#
+# ``search_knowledge`` is read-only. ``cancel_appointment`` is not, but it only
+# ever honours an explicit customer instruction, and queuing it for review
+# recreates the failure it exists to fix: the appointment stays ``scheduled``
+# while an operator sleeps, so the reminder worker keeps texting someone who
+# already cancelled. Declining to cancel is not the safe default here.
+GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge", "cancel_appointment"})
 
 
 class TextToolExecutor(BaseToolExecutor):
@@ -191,6 +198,10 @@ class TextToolExecutor(BaseToolExecutor):
                     "success": False,
                     "error": f"Failed to check availability: {e!s}",
                 }
+        if function_name == "cancel_appointment":
+            return await self._execute_cancel_appointment(
+                reason=arguments.get("reason"),
+            )
         if function_name == "search_knowledge":
             return await self._execute_search_knowledge(
                 query=arguments.get("query", ""),
@@ -224,6 +235,77 @@ class TextToolExecutor(BaseToolExecutor):
         )
 
     # ── Text-only booking wrapper ───────────────────────────────────
+
+    # ── Cancellation ────────────────────────────────────────────────
+
+    async def _execute_cancel_appointment(
+        self,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Cancel the contact's upcoming appointments.
+
+        Returns a structured result the model turns into its reply. The
+        ``nothing_to_cancel`` case is deliberately a success with a count of 0:
+        the customer's instruction was honoured, there was simply nothing on the
+        calendar, and reporting it as an error invites the model to apologise
+        for a failure that did not happen.
+        """
+        contact = await self._get_contact()
+        if not contact:
+            return {
+                "success": False,
+                "error": "Contact not found for this conversation",
+            }
+        self._contact = contact
+
+        try:
+            result = await cancel_upcoming_appointments(
+                self.db,
+                workspace_id=self.agent.workspace_id,
+                contact_id=contact.id,
+                reason=reason,
+                cancelled_by="customer",
+            )
+        except Exception as e:
+            # Never let the model claim success off a failed cancellation —
+            # that is the exact behaviour this tool was added to eliminate.
+            self.log.exception("cancel_appointment_failed", contact_id=contact.id, error=str(e))
+            return {
+                "success": False,
+                "error": (
+                    "Could not cancel the appointment. Tell the customer you are "
+                    "having trouble cancelling and a human will follow up — do not "
+                    "tell them it is cancelled."
+                ),
+            }
+
+        if result.count == 0:
+            self.log.info("cancel_appointment_nothing_upcoming", contact_id=contact.id)
+            return {
+                "success": True,
+                "cancelled_count": 0,
+                "message": "No upcoming appointment was found for this customer.",
+            }
+
+        self.log.info(
+            "cancel_appointment_succeeded",
+            contact_id=contact.id,
+            cancelled_count=result.count,
+        )
+        return {
+            "success": True,
+            "cancelled_count": result.count,
+            "cancelled": [
+                {"appointment_id": item.appointment_id, "when": item.local_label}
+                for item in result.cancelled
+            ],
+            "message": (
+                "Appointment cancelled. No further reminders will be sent. "
+                "Confirm the cancellation to the customer."
+            ),
+        }
+
+    # ── Booking ─────────────────────────────────────────────────────
 
     async def _execute_book_with_contact_lookup(
         self,
