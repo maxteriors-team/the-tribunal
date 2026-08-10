@@ -119,9 +119,9 @@ export function PlainQuoteView({
             <thead>
               <tr>
                 <th>Item</th>
-                <th>Qty</th>
-                <th>Unit Price</th>
-                <th>Discount</th>
+                <th className="pq-col-detail">Qty</th>
+                <th className="pq-col-detail">Unit Price</th>
+                <th className="pq-col-detail">Discount</th>
                 <th>Amount</th>
               </tr>
             </thead>
@@ -133,12 +133,18 @@ export function PlainQuoteView({
                     {item.description ? (
                       <div className="pq-item-desc">{item.description}</div>
                     ) : null}
+                    <div className="pq-item-meta">
+                      {item.quantity} × {formatCurrency(item.unit_price, currency)}
+                      {item.discount
+                        ? ` · ${formatCurrency(item.discount, currency)} discount`
+                        : ""}
+                    </div>
                   </td>
-                  <td className="pq-num">{item.quantity}</td>
-                  <td className="pq-num">
+                  <td className="pq-num pq-col-detail">{item.quantity}</td>
+                  <td className="pq-num pq-col-detail">
                     {formatCurrency(item.unit_price, currency)}
                   </td>
-                  <td className="pq-num muted">
+                  <td className="pq-num pq-col-detail muted">
                     {item.discount
                       ? `\u2212${formatCurrency(item.discount, currency)}`
                       : "\u2014"}
@@ -268,7 +274,12 @@ export function PlainQuoteView({
                   {busy ? (
                     "Approving…"
                   ) : data.deposit_required ? (
-                    <>&#10003;&nbsp; Approve &amp; Pay Deposit</>
+                    <>
+                      &#10003;&nbsp;{" "}
+                      {Number(data.deposit_percentage) >= 100
+                        ? "Approve & Pay Now"
+                        : "Approve & Pay Deposit"}
+                    </>
                   ) : (
                     <>&#10003;&nbsp; Approve Proposal</>
                   )}

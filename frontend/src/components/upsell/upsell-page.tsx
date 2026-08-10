@@ -3,14 +3,14 @@
 /**
  * On-site upsell — the technician's driveway sales flow.
  *
- * Two steps, one action each: pick the house, then build the receipt and send
- * it. Design read, thesis, and state plan live in `./DESIGN.md`.
+ * Two steps: pick the current job, then build the receipt and either present it
+ * in person or send it. Design read, thesis, and state plan live in `./DESIGN.md`.
  *
  * The screen is deliberately thin. Every price and every scoping rule is
- * resolved by the server (`/api/v1/workspaces/{id}/upsell/*`), so this component
- * sends catalog ids and quantities and never computes anything the customer will
- * be billed for. The running total here is a preview of the server's arithmetic,
- * and the created quote's own total is what is displayed once it exists.
+ * resolved by the server (`/api/v1/workspaces/{id}/upsell/*`). Catalog lines send
+ * only ids and quantities; custom lines are the bounded, server-capped exception.
+ * The running total here is a preview of the server's arithmetic, and the created
+ * quote's own total is what is displayed once it exists.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,10 +20,12 @@ import {
   Check,
   ChevronRight,
   MapPin,
+  MonitorSmartphone,
   PackageOpen,
   Search,
   Send,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -44,6 +46,12 @@ import {
 } from "@/components/ui/page-state";
 import { UpsellAddonRow } from "@/components/upsell/upsell-addon-row";
 import { UpsellCarePlanSection } from "@/components/upsell/upsell-care-plan";
+import {
+  customLineSubtotal,
+  toCustomLineRequest,
+  UpsellCustomLines,
+  type UpsellCustomLineDraft,
+} from "@/components/upsell/upsell-custom-lines";
 import { UpsellScoreboard } from "@/components/upsell/upsell-scoreboard";
 import { UpsellSummaryBar } from "@/components/upsell/upsell-summary-bar";
 import { useCapabilities } from "@/hooks/useCapabilities";
@@ -75,10 +83,12 @@ function formatWhen(value: string | null | undefined): string | null {
 export function UpsellPage() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { can } = useCapabilities();
 
   const [activeJob, setActiveJob] = useState<UpsellJob | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [customLines, setCustomLines] = useState<UpsellCustomLineDraft[]>([]);
   const [createdQuote, setCreatedQuote] = useState<UpsellQuote | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sent, setSent] = useState(false);
@@ -151,6 +161,10 @@ export function UpsellPage() {
         line_items: Object.entries(quantities)
           .filter(([, qty]) => qty > 0)
           .map(([catalog_item_id, quantity]) => ({ catalog_item_id, quantity })),
+        custom_line_items: customLines.flatMap((line) => {
+          const request = toCustomLineRequest(line);
+          return request ? [request] : [];
+        }),
         care_plan: carePlanKey
           ? { tier_key: carePlanKey, fixture_count: fixtureCount }
           : null,
@@ -163,6 +177,24 @@ export function UpsellPage() {
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error, "We couldn't build that proposal."));
+    },
+  });
+
+  const presentQuote = useMutation({
+    mutationFn: () => {
+      if (!workspaceId || !activeJob || !createdQuote) throw new Error("No quote");
+      return upsellApi.presentQuote(workspaceId, activeJob.id, createdQuote.id);
+    },
+    onSuccess: (quote) => {
+      if (!quote.public_token) {
+        toast.error("We couldn't open that proposal.");
+        return;
+      }
+      setConfirmOpen(false);
+      router.push(`/p/quotes/${quote.public_token}`);
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "We couldn't open that proposal."));
     },
   });
 
@@ -188,6 +220,13 @@ export function UpsellPage() {
       toast.error(getApiErrorMessage(error, "We couldn't send that proposal."));
     },
   });
+
+  const jobs = useMemo(() => {
+    const items = jobsQuery.data?.items ?? [];
+    return [...items].sort(
+      (a, b) => Number(b.status === "in_progress") - Number(a.status === "in_progress"),
+    );
+  }, [jobsQuery.data]);
 
   const catalogItems = useMemo(() => catalogQuery.data?.items ?? [], [catalogQuery.data]);
 
@@ -216,12 +255,19 @@ export function UpsellPage() {
         total += qty * item.unit_price;
       }
     }
-    return { selectedCount: count, previewTotal: total };
-  }, [catalogItems, quantities]);
+    const validCustomLines = customLines.filter(
+      (line) => toCustomLineRequest(line) !== null,
+    );
+    return {
+      selectedCount: count + validCustomLines.length,
+      previewTotal: total + customLineSubtotal(customLines),
+    };
+  }, [catalogItems, customLines, quantities]);
 
   const resetToJobs = () => {
     setActiveJob(null);
     setQuantities({});
+    setCustomLines([]);
     setCreatedQuote(null);
     setSent(false);
     setFixtureCount(0);
@@ -245,6 +291,9 @@ export function UpsellPage() {
   const recurringTotal = createdQuote
     ? (quotedCarePlanOption?.price ?? 0)
     : (selectedCarePlan?.price ?? 0);
+  const hasInvalidCustomLine = customLines.some(
+    (line) => toCustomLineRequest(line) === null,
+  );
   const nothingSelected = selectedCount === 0 && !carePlanKey;
 
   // What this crew lead may sell on their own. Null for an office tier, or when
@@ -275,7 +324,7 @@ export function UpsellPage() {
         <header className={`${RAIL} pt-6 pb-4`}>
           <h1 className="text-2xl font-semibold tracking-tight">Sell an add-on</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pick the house you are at.
+            Pick the job you are on.
           </p>
         </header>
 
@@ -287,7 +336,7 @@ export function UpsellPage() {
               message="We couldn't load your jobs."
               onRetry={() => void jobsQuery.refetch()}
             />
-          ) : jobsQuery.data.items.length === 0 ? (
+          ) : jobs.length === 0 ? (
             <PageEmptyState
               icon={<CalendarClock className="size-8" />}
               title="No jobs assigned to you"
@@ -295,7 +344,7 @@ export function UpsellPage() {
             />
           ) : (
             <ul className="flex flex-col gap-2">
-              {jobsQuery.data.items.map((job) => {
+              {jobs.map((job) => {
                 const when = formatWhen(job.scheduled_start);
                 return (
                   <li key={job.id}>
@@ -308,9 +357,15 @@ export function UpsellPage() {
                         <span className="block truncate font-medium">
                           {job.title}
                         </span>
-                        {when ? (
-                          <span className="mt-0.5 block text-sm text-muted-foreground">
-                            {when}
+                        {job.status === "in_progress" || when ? (
+                          <span className="mt-0.5 flex flex-wrap gap-x-1.5 text-sm text-muted-foreground">
+                            {job.status === "in_progress" ? (
+                              <span className="font-medium text-primary">In progress now</span>
+                            ) : null}
+                            {job.status === "in_progress" && when ? (
+                              <span aria-hidden="true">·</span>
+                            ) : null}
+                            {when ? <span>{when}</span> : null}
                           </span>
                         ) : null}
                       </span>
@@ -364,7 +419,7 @@ export function UpsellPage() {
           variant="ghost"
           size="sm"
           onClick={resetToJobs}
-          className="-ml-2 mb-2"
+          className="-ml-2 mb-2 min-h-11"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           All jobs
@@ -407,8 +462,8 @@ export function UpsellPage() {
             </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Send it to {customer?.full_name ?? "the customer"} at{" "}
-              {formatPhoneNumber(customer?.phone_number)}.
+              Present it to {customer?.full_name ?? "the customer"} here, or send
+              them the approval link.
             </p>
             <ul className="mt-3 flex flex-col gap-1 border-t pt-3 text-sm">
               {(createdQuote.line_items ?? []).map((line) => (
@@ -454,65 +509,88 @@ export function UpsellPage() {
             message="We couldn't load the add-on menu."
             onRetry={() => void catalogQuery.refetch()}
           />
-        ) : catalogItems.length === 0 ? (
-          <PageEmptyState
-            icon={<PackageOpen className="size-8" />}
-            title="No add-ons set up yet"
-            description="Ask your manager to mark price-book items as add-ons so they show up here."
-          />
         ) : (
           <>
-            <h2 className="sr-only">Add-ons</h2>
-            {/* A real lighting price book is ~22 items. Scrolling that one-handed
-                in a yard to find "path light" is the slow path; typing three
-                letters is the fast one. Shown only once the list is long enough
-                to be worth filtering. */}
-            {catalogItems.length > FILTER_THRESHOLD ? (
-              <div className="relative mb-2">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="search"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder={`Search ${catalogItems.length} add-ons…`}
-                  aria-label="Search add-ons"
-                  className="h-11 pl-9 text-base"
-                />
-              </div>
-            ) : null}
-            {visibleItems.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Nothing matches “{filter}”.
-              </p>
-            ) : null}
-            <ul className="flex flex-col gap-2">
-              {visibleItems.map((item) => {
-                const quantity = quantities[item.id] ?? 0;
-                return (
-                  <UpsellAddonRow
-                    key={item.id}
-                    item={item}
-                    quantity={quantity}
-                    disabled={createQuote.isPending}
-                    onToggle={() =>
-                      setQuantities((prev) => ({
-                        ...prev,
-                        [item.id]: quantity > 0 ? 0 : 1,
-                      }))
-                    }
-                    onQuantityChange={(next) =>
-                      setQuantities((prev) => ({
-                        ...prev,
-                        [item.id]: Math.max(0, Math.min(99, next)),
-                      }))
-                    }
+            {catalogItems.length === 0 ? (
+              <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-start gap-3">
+                  <PackageOpen
+                    className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
                   />
-                );
-              })}
-            </ul>
+                  <div>
+                    <h2 className="font-medium">No price-book add-ons yet</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Add custom work below, or ask a manager to mark common items as
+                      add-ons.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="sr-only">Add-ons</h2>
+                {/* A real lighting price book is ~22 items. Scrolling that one-handed
+                    in a yard to find "path light" is the slow path; typing three
+                    letters is the fast one. Shown only once the list is long enough
+                    to be worth filtering. */}
+                {catalogItems.length > FILTER_THRESHOLD ? (
+                  <div className="relative mb-2">
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <Input
+                      type="search"
+                      value={filter}
+                      onChange={(event) => setFilter(event.target.value)}
+                      placeholder={`Search ${catalogItems.length} add-ons…`}
+                      aria-label="Search add-ons"
+                      className="h-11 pl-9 text-base"
+                    />
+                  </div>
+                ) : null}
+                {visibleItems.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Nothing matches “{filter}”.
+                  </p>
+                ) : null}
+                <ul className="flex flex-col gap-2">
+                  {visibleItems.map((item) => {
+                    const quantity = quantities[item.id] ?? 0;
+                    return (
+                      <UpsellAddonRow
+                        key={item.id}
+                        item={item}
+                        quantity={quantity}
+                        disabled={createQuote.isPending}
+                        onToggle={() =>
+                          setQuantities((prev) => ({
+                            ...prev,
+                            [item.id]: quantity > 0 ? 0 : 1,
+                          }))
+                        }
+                        onQuantityChange={(next) =>
+                          setQuantities((prev) => ({
+                            ...prev,
+                            [item.id]: Math.max(0, Math.min(99, next)),
+                          }))
+                        }
+                      />
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
+            <div className="mt-6">
+              <UpsellCustomLines
+                lines={customLines}
+                onChange={setCustomLines}
+                disabled={createQuote.isPending}
+              />
+            </div>
+
             <UpsellCarePlanSection
               options={carePlanOptions}
               freeFixtures={carePlanQuery.data?.free_fixtures ?? 0}
@@ -532,14 +610,18 @@ export function UpsellPage() {
         }
         total={createdQuote ? createdQuote.total : previewTotal}
         recurringTotal={recurringTotal}
-        actionLabel={createdQuote ? "Send to customer" : "Build proposal"}
-        pendingLabel={createdQuote ? "Sending…" : "Building…"}
+        actionLabel={createdQuote ? "Share proposal" : "Build proposal"}
+        pendingLabel="Building…"
         pending={createQuote.isPending}
-        disabled={createdQuote ? false : nothingSelected || overLimit}
+        disabled={
+          createdQuote ? false : nothingSelected || hasInvalidCustomLine || overLimit
+        }
         notice={
-          !createdQuote && overLimit && proposalLimit !== null
-            ? `Over your ${formatCurrency(proposalLimit)} limit — ask the office to send it.`
-            : null
+          !createdQuote && hasInvalidCustomLine
+            ? "Finish or remove the incomplete custom line."
+            : !createdQuote && overLimit && proposalLimit !== null
+              ? `Over your ${formatCurrency(proposalLimit)} limit — ask the office to send it.`
+              : null
         }
         onAction={() => {
           if (createdQuote) {
@@ -553,13 +635,17 @@ export function UpsellPage() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Send this proposal?</DialogTitle>
+            <DialogTitle>Share this proposal</DialogTitle>
             <DialogDescription>
-              {customer?.full_name ?? "The customer"} gets a text at{" "}
-              {formatPhoneNumber(customer?.phone_number)} with a link to approve
+              Review it with {customer?.full_name ?? "the customer"} on this
+              device, or send them a text link
+              {customer?.phone_number
+                ? ` at ${formatPhoneNumber(customer.phone_number)}`
+                : " when a mobile number is available"}
+              . The proposal includes
               {createdQuote && createdQuote.total > 0
                 ? ` ${formatCurrency(createdQuote.total)} of work`
-                : ""}
+                : " no one-time work"}
               {createdQuote && createdQuote.total > 0 && quotedCarePlanOption
                 ? " plus"
                 : ""}
@@ -578,16 +664,35 @@ export function UpsellPage() {
             <Button
               variant="outline"
               onClick={() => setConfirmOpen(false)}
-              disabled={deliverQuote.isPending}
+              disabled={deliverQuote.isPending || presentQuote.isPending}
+              className="min-h-11"
             >
               Not yet
             </Button>
             <Button
+              variant="outline"
+              onClick={() => presentQuote.mutate()}
+              disabled={deliverQuote.isPending || presentQuote.isPending}
+              className="min-h-11"
+            >
+              <MonitorSmartphone className="size-4" aria-hidden="true" />
+              {presentQuote.isPending ? "Opening…" : "Present in person"}
+            </Button>
+            <Button
               onClick={() => deliverQuote.mutate("sms")}
-              disabled={deliverQuote.isPending}
+              disabled={
+                deliverQuote.isPending ||
+                presentQuote.isPending ||
+                !customer?.phone_number
+              }
+              className="min-h-11"
             >
               <Send className="size-4" aria-hidden="true" />
-              {deliverQuote.isPending ? "Sending…" : "Send text"}
+              {deliverQuote.isPending
+                ? "Sending…"
+                : customer?.phone_number
+                  ? "Send text"
+                  : "No mobile number"}
             </Button>
           </DialogFooter>
         </DialogContent>

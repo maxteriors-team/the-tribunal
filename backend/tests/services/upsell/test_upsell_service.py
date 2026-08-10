@@ -19,6 +19,7 @@ is about that path staying narrow:
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -28,16 +29,18 @@ from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.field_service import Crew, Job, JobAssignment, JobStatus, Technician
 from app.models.quote import Quote
-from app.models.workspace import Workspace
 from app.models.recurring_job import ServicePlanType
+from app.models.workspace import Workspace
 from app.schemas.upsell import (
     UpsellCarePlanSelection,
+    UpsellCustomQuoteLine,
     UpsellQuoteLine,
     UpsellQuoteRequest,
 )
 from app.services.field_service.exceptions import JobNotFoundError
 from app.services.quotes import proposal_pricing as pp
 from app.services.quotes.pricing_config import get_pricing_config
+from app.services.quotes.quote_service import QuoteService
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 from app.services.upsell import UpsellService
 from app.services.upsell.exceptions import (
@@ -415,9 +418,7 @@ async def test_quoted_price_matches_the_menu_price_the_technician_read_aloud() -
         quote = await service.create_quote(
             ws.id,
             job.id,
-            UpsellQuoteRequest(
-                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
-            ),
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]),
             user_id=1,
             role=LEAD,
         )
@@ -477,6 +478,11 @@ async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
         job = await _job(db, ws, contact)
         await _assign(db, job, tech)
         item = await _catalog_item(db, ws, name="Landscape lighting", price=2400.0)
+        item.sku = "LIGHT-KIT"
+        item.components = [
+            {"sku": "PATH-12V", "description": "Path-light fixture", "qty": 4},
+            {"sku": "BULB-LED", "description": "Warm LED bulb", "qty": 4},
+        ]
 
         quote = await UpsellService(db).create_quote(
             ws.id,
@@ -494,6 +500,66 @@ async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
         assert line.total == 5394.0
         # Attributed to the technician so attach-rate reporting can pay the spiff.
         assert quote.contact_id == contact.id
+        # Field orders collect the full one-time total on the customer's device.
+        assert quote.deposit_percentage == 100
+        assert quote.deposit_amount == 5394.0
+        assert quote.deposit_required is True
+        # BOM quantities scale by the quoted catalog quantity and stay internal.
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["fulfillment"] == [
+            {"sku": "PATH-12V", "description": "Path-light fixture", "qty": 8.0},
+            {"sku": "BULB-LED", "description": "Warm LED bulb", "qty": 8.0},
+        ]
+
+        with patch(
+            "app.services.quotes.quote_service.notify_workspace_event",
+            new_callable=AsyncMock,
+        ) as notify:
+            approved = await QuoteService(db).approve_quote(ws.id, quote.id)
+
+        assert approved.status == "approved"
+        notify.assert_awaited_once()
+        assert notify.await_args.kwargs["email_details"] == {
+            "PATH-12V": "Qty 8 — Path-light fixture",
+            "BULB-LED": "Qty 8 — Warm LED bulb",
+        }
+
+
+async def test_quote_accepts_a_capped_custom_line_item() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(
+                custom_line_items=[
+                    UpsellCustomQuoteLine(name="  Lift rental  ", quantity=3, unit_price=75.0)
+                ]
+            ),
+            user_id=1,
+            role=LEAD,
+        )
+
+        assert quote.total == 225.0
+        assert len(quote.line_items) == 1
+        assert quote.line_items[0].name == "Lift rental"
+        assert quote.line_items[0].quantity == 3
+        assert quote.line_items[0].unit_price == 75.0
+        assert quote.deposit_percentage == 100
+        assert quote.deposit_amount == 225.0
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["fulfillment"] == [
+            {
+                "sku": "Lift rental",
+                "description": "Custom line item — confirm sourcing requirements",
+                "qty": 3.0,
+            }
+        ]
 
 
 async def test_quote_rejects_a_non_attachable_item() -> None:
@@ -771,9 +837,7 @@ async def test_a_plain_technician_cannot_deliver_a_proposal() -> None:
         quote = await service.create_quote(
             ws.id,
             job.id,
-            UpsellQuoteRequest(
-                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
-            ),
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]),
             user_id=1,
             role=LEAD,
         )
@@ -785,6 +849,46 @@ async def test_a_plain_technician_cannot_deliver_a_proposal() -> None:
                 job.id,
                 quote.id,
                 channel="sms",
+                user_id=1,
+                role=FIELD,
+            )
+
+
+async def test_lead_can_present_the_job_quote_in_person_without_delivery() -> None:
+    """Publishing allocates an approval link but never needs a phone or email."""
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+        item = await _catalog_item(db, ws, name="LED bulb replacement", price=20.0)
+
+        service = UpsellService(db)
+        quote = await service.create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=3)]),
+            user_id=1,
+            role=LEAD,
+        )
+
+        presented = await service.present_quote(
+            ws.id,
+            job.id,
+            quote.id,
+            user_id=1,
+            role=LEAD,
+        )
+
+        assert presented.status == "sent"
+        assert presented.public_token
+
+        with pytest.raises(UpsellNotASellerError):
+            await service.present_quote(
+                ws.id,
+                job.id,
+                quote.id,
                 user_id=1,
                 role=FIELD,
             )
@@ -810,6 +914,7 @@ async def test_an_unknown_role_cannot_sell() -> None:
                 user_id=1,
                 role="wizard",
             )
+
 
 # --------------------------------------------------------------------------- #
 # The on-site proposal limit — the ceiling on what a crew lead commits alone
@@ -844,6 +949,32 @@ async def test_crew_lead_is_refused_past_the_workspace_limit() -> None:
         assert "lead tech" not in message
 
 
+async def test_custom_lines_count_toward_the_workspace_limit() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, settings=LIMIT_PRICING)
+        contact = await _contact(db, ws)
+        tech = await _technician(db, ws, user_id=1)
+        job = await _job(db, ws, contact)
+        await _assign(db, job, tech)
+
+        with pytest.raises(UpsellProposalLimitError):
+            await UpsellService(db).create_quote(
+                ws.id,
+                job.id,
+                UpsellQuoteRequest(
+                    custom_line_items=[
+                        UpsellCustomQuoteLine(
+                            name="Custom fixture labor",
+                            quantity=2,
+                            unit_price=275.0,
+                        )
+                    ]
+                ),
+                user_id=1,
+                role=LEAD,
+            )
+
+
 async def test_an_office_tier_sells_the_same_basket_freely() -> None:
     """The limit is a field control, not a company-wide one."""
     async with AsyncSessionLocal() as db:
@@ -857,9 +988,7 @@ async def test_an_office_tier_sells_the_same_basket_freely() -> None:
         quote = await UpsellService(db).create_quote(
             ws.id,
             job.id,
-            UpsellQuoteRequest(
-                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]
-            ),
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=4)]),
             user_id=1,
             role=ADMIN,
         )
@@ -900,9 +1029,7 @@ async def test_a_basket_exactly_on_the_limit_is_allowed() -> None:
         quote = await UpsellService(db).create_quote(
             ws.id,
             job.id,
-            UpsellQuoteRequest(
-                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]
-            ),
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=2)]),
             user_id=1,
             role=LEAD,
         )
@@ -956,9 +1083,7 @@ async def test_no_configured_limit_means_no_cap() -> None:
         quote = await UpsellService(db).create_quote(
             ws.id,
             job.id,
-            UpsellQuoteRequest(
-                line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
-            ),
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]),
             user_id=1,
             role=LEAD,
         )

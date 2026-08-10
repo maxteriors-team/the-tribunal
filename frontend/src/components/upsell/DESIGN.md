@@ -9,16 +9,18 @@ The technician-facing surface for the scoped upsell API
 - **Surface:** Application UI, phone-first. Leads as a task tool; borrows nothing
   from the dashboard archetype because there is no data to compare — there is one
   decision and one action.
-- **Audience:** A field technician on the `field` tier. Not a CRM user: they wash
-  houses and hang lights. They have never seen the pipeline, and by design never
-  will. Outdoors, bright sun, one hand, gloves on, possibly weak signal.
-- **Single job:** Turn _"this yard would look great with path lights"_ into a sent
-  proposal before the technician leaves the driveway — hardware, a recurring Care
-  Plan, or both.
-- **Task and risk:** A few times a week per tech, so nothing may rely on
-  memorised affordances. Building a draft is cheap and reversible. **Sending is
-  not** — a real customer receives it — so send is the one action behind a
-  confirm step, and the confirm step names the person and the number.
+- **Audience:** A lead technician on the `field` tier. Not a CRM user: they work
+  from assigned jobs and do not need the workspace-wide billing surface. Outdoors,
+  bright sun, one hand, gloves on, possibly weak signal.
+- **Single job:** Turn _"this yard would look great with path lights"_ into an
+  approvable proposal before the lead leaves the driveway: price-book fixtures,
+  bulb replacements, capped custom work, a recurring Care Plan, or any combination.
+- **Task and risk:** A few times a week per lead, so nothing may rely on memorised
+  affordances. Building a draft is cheap and reversible. **Sharing is not:** the
+  customer either receives a real link or is handed the approval screen, so a
+  share step names the person and amount before offering those two paths. On-site
+  acceptance continues directly to full Stripe payment; approval also emails the
+  internal fulfillment list, which never appears on the customer proposal.
 - **Content:** A short job list, one customer, a handful of add-ons, a running
   total. Longest plausible values: catalog names like "Landscape lighting install
   — transformer included" and 5-figure totals. Both must wrap without breaking
@@ -50,9 +52,10 @@ frame, spacing rhythm, and state components come from `today-page.tsx`.
 
 **A receipt being written at the customer's door.**
 
-The screen is a running tally: pick the house, tap add-ons, watch the total grow,
-send. The device is the **pinned summary bar** — total and primary action fixed
-in the thumb zone, always visible while the menu scrolls behind it. It belongs
+The screen is a running tally: pick the current job, tap add-ons or enter a capped
+custom line, watch the total grow, then present it in person or text it. The device
+is the **pinned summary in the thumb zone**, always visible while the menu scrolls
+behind it. It belongs
 because this is a point-of-sale interaction conducted standing up: the number is
 the thing under negotiation, and a technician quoting a price out loud must be
 able to read it without scrolling. It is not decoration; hiding it would make the
@@ -64,7 +67,7 @@ screen worse.
 
 **One-time money and recurring money never merge.** Hardware totals and a Care
 Plan's yearly price sit on separate lines in the summary bar, the draft, and the
-send confirmation. Summing them would state a number the customer never agreed
+share dialog. Summing them would state a number the customer never agreed
 to, and every Care Plan price carries an explicit `/yr`.
 
 Composition is a single 640px content rail, shared by the header, list, and the
@@ -97,9 +100,10 @@ worse than no section. Two things separate it from the list above it:
 
 ## States planned
 
-Loading, error + retry, three distinct empty states (no jobs assigned, no add-ons
-configured, none matching the job), selection empty, submitting, created,
-send-confirm, send failure with the draft preserved, and offline/failed mutation.
+Loading, error + retry, distinct empty states (no jobs assigned, no price-book
+add-ons, none matching the search), incomplete custom-line validation, selection
+empty, submitting, created, share choice, in-person presentation, full-payment
+redirect/return, send failure with the draft preserved, and offline/failed mutation.
 The catalog list is keyboard operable, every control has a visible focus ring,
 and the pinned bar is a real `<button>` inside a labelled region.
 
@@ -109,5 +113,5 @@ WCAG 2.2 AA is the floor. Specifics carried by this screen: the quantity stepper
 is a labelled group with per-item accessible names ("Add one Landscape lighting
 install"); selection state is conveyed by `aria-pressed`, not colour alone; the
 running total is an `aria-live="polite"` region so a screen-reader user hears it
-change; the send confirmation traps focus and names the recipient; touch targets
-are ≥44px; the pinned bar reserves safe-area inset for notched devices.
+change; the share dialog traps focus and names the recipient; touch targets are
+≥44px; the pinned bar reserves safe-area inset for notched devices.

@@ -74,6 +74,15 @@ export const upsellApi = {
       body,
     }),
 
+  /** Publish this job's proposal for approval on the technician's device. */
+  presentQuote: (workspaceId: string, jobId: string, quoteId: string): Promise<UpsellQuote> =>
+    apiClient.post(
+      "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/present",
+      {
+        path: { workspace_id: workspaceId, job_id: jobId, quote_id: quoteId },
+      },
+    ),
+
   /** Text or email the proposal to the customer on this job. */
   deliverQuote: (
     workspaceId: string,

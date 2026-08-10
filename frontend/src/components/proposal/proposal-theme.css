@@ -717,9 +717,29 @@
 .proposal-view .pq-table tbody td:first-child { text-align: left; padding-right: 20px; }
 .proposal-view .pq-item-name { font-family: var(--font-montserrat), sans-serif; font-size: 14px; font-weight: 500; color: var(--t1); }
 .proposal-view .pq-item-desc { font-size: 12px; color: var(--t4); margin-top: 4px; line-height: 1.5; white-space: pre-line; }
+.proposal-view .pq-item-meta { display: none; }
 .proposal-view .pq-num { font-family: var(--font-montserrat), sans-serif; font-size: 13px; color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .proposal-view .pq-num.muted { color: var(--t4); }
 .proposal-view .pq-amount { font-family: var(--font-cormorant), serif; font-size: 18px; font-weight: 400; color: var(--t1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A five-column price table is not legible at phone width. Collapse quantity,
+   unit price, and discount into a labelled meta line under the item so the two
+   decision-critical columns (item and amount) retain useful width. */
+@media (max-width: 560px) {
+  .proposal-view .pq-table thead th.pq-col-detail,
+  .proposal-view .pq-table tbody td.pq-col-detail { display: none; }
+
+  .proposal-view .pq-item-meta {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--font-montserrat), sans-serif;
+    font-size: 12px;
+    color: var(--t3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .proposal-view .pq-table tbody td:first-child { padding-right: 12px; }
+}
 
 .proposal-view .pq-totals { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .proposal-view .pq-totals-inner { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 10px; }

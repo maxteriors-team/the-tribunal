@@ -100,3 +100,18 @@ describe("plain quote financing", () => {
     expect(screen.queryByText(/\/month/)).not.toBeInTheDocument();
   });
 });
+
+describe("plain quote on-site payment", () => {
+  it("labels a 100% deposit as full payment", () => {
+    renderQuote({
+      deposit_percentage: 100,
+      deposit_amount: 9000,
+      deposit_required: true,
+    });
+
+    expect(screen.getByText("Payment Due Today")).toBeVisible();
+    expect(screen.getByText("Full one-time total")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pay Now" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Approve & Pay Now/ })).toBeVisible();
+  });
+});

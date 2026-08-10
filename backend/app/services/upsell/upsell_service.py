@@ -1,7 +1,7 @@
 """On-site upsell business logic.
 
-The narrow surface a field technician sells an add-on through while standing in
-the customer's driveway. It exists because the ``field`` tier deliberately has no
+The narrow surface a lead technician sells an add-on through while standing in
+the customer's driveway. It exists because field roles deliberately have no
 ``crm:read`` and no ``billing:read`` (see :mod:`app.core.permissions`): rather
 than widening those tiers — which would hand every technician the whole contact
 book and the whole price book — this service re-derives a *much* smaller view
@@ -181,6 +181,70 @@ class UpsellService:
         same fixture quoted from the office come out to the cent.
         """
         return float(pp.gross_up_price(net, config))
+
+    @staticmethod
+    def _fulfillment_parts(
+        payload: UpsellQuoteRequest,
+        catalog: dict[uuid.UUID, CatalogItem],
+    ) -> list[dict[str, Any]]:
+        """Build the internal order list emailed when the customer approves.
+
+        Configured component SKUs win. A catalog item without a component BOM
+        falls back to its own SKU, then its name, so an accepted field order
+        never disappears merely because the price book is not fully enriched.
+        Custom lines are included by name and explicitly marked for sourcing
+        review because the technician cannot attach a SKU to them.
+        """
+        parts: dict[str, dict[str, Any]] = {}
+
+        def add_part(key: str, description: str | None, quantity: float) -> None:
+            normalized = key.strip()
+            if not normalized or quantity <= 0:
+                return
+            existing = parts.get(normalized)
+            if existing is not None:
+                existing["qty"] = float(existing["qty"]) + quantity
+                return
+            parts[normalized] = {
+                "sku": normalized,
+                "description": description,
+                "qty": quantity,
+            }
+
+        for requested in payload.line_items:
+            item = catalog[requested.catalog_item_id]
+            component_added = False
+            for component in item.components or []:
+                if not isinstance(component, dict):
+                    continue
+                sku = str(component.get("sku") or "").strip()
+                if not sku:
+                    continue
+                try:
+                    component_quantity = float(component.get("qty", 1))
+                except (TypeError, ValueError):
+                    continue
+                add_part(
+                    sku,
+                    str(component.get("description") or "").strip() or None,
+                    component_quantity * requested.quantity,
+                )
+                component_added = True
+            if not component_added:
+                add_part(
+                    item.sku or item.name,
+                    item.description or item.name,
+                    requested.quantity,
+                )
+
+        for custom in payload.custom_line_items:
+            add_part(
+                custom.name,
+                "Custom line item — confirm sourcing requirements",
+                custom.quantity,
+            )
+
+        return list(parts.values())
 
     # ------------------------------------------------------------------ #
     # Job scoping — the security boundary every other method sits behind
@@ -513,11 +577,10 @@ class UpsellService:
     ) -> QuoteDetailResponse:
         """Build a draft add-on proposal for the customer on ``job_id``.
 
-        The technician never sends a price: they send catalog item ids and
-        quantities, and the server resolves the name and ``unit_price`` from the
-        price book. That is the whole point of the restriction — a client that
-        could post its own ``unit_price`` could discount the workspace's work to
-        zero from a phone in a driveway.
+        Catalog lines are always priced from the server-side price book. Custom
+        lines are the deliberate exception: the lead supplies their name and
+        customer price, but cannot submit zero/negative values, more than ten
+        lines, or a combined total above the workspace's on-site proposal limit.
 
         The quote is attributed to the caller (``created_by_id``) so attach-rate
         and attach-value reporting can pay the right person a spiff.
@@ -541,7 +604,7 @@ class UpsellService:
 
         # A Care Plan on its own is a complete sale: signing an existing system
         # onto maintenance adds no hardware, so "empty" means neither.
-        if not payload.line_items and payload.care_plan is None:
+        if not payload.line_items and not payload.custom_line_items and payload.care_plan is None:
             raise UpsellNoLineItemsError()
 
         requested_ids = [line.catalog_item_id for line in payload.line_items]
@@ -585,6 +648,14 @@ class UpsellService:
             )
             for line in payload.line_items
         ]
+        line_items.extend(
+            QuoteLineItemCreate(
+                name=line.name,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+            )
+            for line in payload.custom_line_items
+        )
 
         # Enforced BEFORE the quote is written, for the same reason as the tier
         # check below: ``create_quote`` commits on its own, so refusing after it
@@ -599,12 +670,20 @@ class UpsellService:
             if payload.care_plan is not None
             else None
         )
+        fulfillment = self._fulfillment_parts(payload, sellable)
+        proposal_document: dict[str, Any] = {}
+        if care_plan_document is not None:
+            proposal_document["care_plan"] = care_plan_document
+        if fulfillment:
+            proposal_document["fulfillment"] = fulfillment
 
+        one_time_total = sum(item.unit_price * item.quantity for item in line_items)
         quote_in = QuoteCreate(
             contact_id=job.contact_id,
             service_location_id=job.service_location_id,
             title=payload.title or self._default_title(job, payload, care_plan_document),
             line_items=line_items,
+            deposit_percentage=100 if one_time_total > 0 else None,
             notes=payload.notes,
         )
 
@@ -612,14 +691,13 @@ class UpsellService:
             workspace_id, quote_in, created_by_id=user_id
         )
 
-        if care_plan_document is not None:
+        if proposal_document:
             quote = await self.db.get(Quote, created.id)
             if quote is not None:
-                # Merge rather than assign: an upsell quote has no other snapshot
-                # today, but clobbering a document is how a future caller silently
-                # loses a customer's tier selection.
+                # Fulfillment is internal-only (the public serializer strips it),
+                # while Care Plan data provisions the recurring service on approval.
                 document = dict(quote.proposal_document or {})
-                document["care_plan"] = care_plan_document
+                document.update(proposal_document)
                 quote.proposal_document = document
                 await self.db.flush()
                 created.proposal_document = document
@@ -697,7 +775,11 @@ class UpsellService:
         A care-plan-only proposal titled "Add-on for Roof soft wash" reads as a
         mistake to the customer approving it.
         """
-        if care_plan_document is not None and not payload.line_items:
+        if (
+            care_plan_document is not None
+            and not payload.line_items
+            and not payload.custom_line_items
+        ):
             return f"Care plan for {job.title}"[:200]
         return f"Add-on for {job.title}"[:200]
 
@@ -743,6 +825,51 @@ class UpsellService:
             selected=chosen.key,
         ).model_dump(mode="json")
 
+    async def _quote_for_job(
+        self,
+        workspace_id: uuid.UUID,
+        job_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        *,
+        user_id: int,
+        role: str,
+    ) -> Quote:
+        """Load a quote only when both it and its customer belong to this job."""
+        self._require_seller(role)
+        job = await self._visible_job(workspace_id, job_id, user_id, role)
+        quote = (
+            await self.db.execute(
+                select(Quote).where(
+                    Quote.id == quote_id,
+                    Quote.workspace_id == workspace_id,
+                    Quote.contact_id == job.contact_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if quote is None:
+            raise UpsellQuoteNotForJobError()
+        return quote
+
+    async def present_quote(
+        self,
+        workspace_id: uuid.UUID,
+        job_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        *,
+        user_id: int,
+        role: str,
+    ) -> QuoteDetailResponse:
+        """Publish a job-scoped proposal for approval on the technician's device."""
+        await self._quote_for_job(workspace_id, job_id, quote_id, user_id=user_id, role=role)
+        self.log.info(
+            "upsell_quote_presented",
+            workspace_id=str(workspace_id),
+            job_id=str(job_id),
+            quote_id=str(quote_id),
+            user_id=user_id,
+        )
+        return await QuoteService(self.db).prepare_for_in_person_approval(workspace_id, quote_id)
+
     async def deliver_quote(
         self,
         workspace_id: uuid.UUID,
@@ -755,41 +882,11 @@ class UpsellService:
     ) -> QuoteDeliverResult:
         """Send a proposal to the customer on a job the caller is assigned to.
 
-        Two independent checks, and both are load-bearing:
-
-        1. The **job** must be the caller's (:meth:`_visible_job`).
-        2. The **quote** must be for that job's customer.
-
-        Skipping the second would leave a hole big enough to matter: a technician
-        legitimately assigned to one job could pass their own ``job_id`` with any
-        other quote id in the workspace and blast that proposal out. Binding the
-        quote to the job's ``contact_id`` means the only thing they can send is a
-        proposal belonging to the customer whose driveway they are standing in.
-
-        No destination override is accepted; :meth:`QuoteService.deliver_quote`
-        falls back to the contact's own phone/email.
-
-        Raises:
-            UpsellNotASellerError: the caller's role may not sell. [403]
-            JobNotFoundError: the job is not the caller's. [404]
-            UpsellQuoteNotForJobError: the quote is missing, in another
-                workspace, or belongs to a different customer. [404]
+        The quote must belong to the assigned job's customer. No destination
+        override is accepted; delivery falls back to the contact's own phone or
+        email.
         """
-        self._require_seller(role)
-        job = await self._visible_job(workspace_id, job_id, user_id, role)
-
-        quote = (
-            await self.db.execute(
-                select(Quote).where(
-                    Quote.id == quote_id,
-                    Quote.workspace_id == workspace_id,
-                    Quote.contact_id == job.contact_id,
-                )
-            )
-        ).scalar_one_or_none()
-        if quote is None:
-            raise UpsellQuoteNotForJobError()
-
+        await self._quote_for_job(workspace_id, job_id, quote_id, user_id=user_id, role=role)
         self.log.info(
             "upsell_quote_delivered",
             workspace_id=str(workspace_id),
