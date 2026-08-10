@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
 from app.models.workspace import Workspace
+from app.services.nudges.nudge_settings import get_nudge_settings
 from app.services.nudges.strategies import (
     AnniversaryNudgeStrategy,
     ApprovalsWaitingNudgeStrategy,
@@ -83,9 +84,7 @@ class NudgeGeneratorService:
 
     async def generate_for_workspace(self, db: AsyncSession, workspace: Workspace) -> int:
         """Generate nudges for all contacts in workspace. Returns count of new nudges."""
-        nudge_settings = workspace.settings.get("nudge_settings", {})
-        if not isinstance(nudge_settings, dict):
-            nudge_settings = {}
+        nudge_settings = get_nudge_settings(workspace.settings)
 
         if not nudge_settings.get("enabled", True):
             return 0

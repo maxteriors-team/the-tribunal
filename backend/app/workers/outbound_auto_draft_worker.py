@@ -62,11 +62,11 @@ class OutboundAutoDraftWorker(BaseWorker):
             result = await db.execute(
                 select(Workspace.id, Workspace.settings).where(Workspace.is_active.is_(True))
             )
-            candidates = [
-                (workspace_id, settings.get(AUTOPILOT_SETTINGS_KEY, {}))
-                for workspace_id, settings in result.all()
-            ]
-            for workspace_id, autopilot in candidates:
+            candidates = result.all()
+            for workspace_id, workspace_settings in candidates:
+                if not isinstance(workspace_settings, dict):
+                    continue
+                autopilot = workspace_settings.get(AUTOPILOT_SETTINGS_KEY, {})
                 if not isinstance(autopilot, dict) or not autopilot.get("enabled", False):
                     continue
                 try:

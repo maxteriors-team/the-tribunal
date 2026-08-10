@@ -12,6 +12,8 @@ import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.workers.nudge_worker import NudgeWorker
 
 
@@ -104,3 +106,21 @@ async def test_enabled_workspace_generates_and_delivers() -> None:
     worker.generator.generate_for_workspace.assert_awaited_once_with(db, workspace)
     worker.delivery.deliver_pending_nudges.assert_awaited_once_with(db, workspace_id)
     assert [call.args[0] for call in recorded.call_args_list] == [2, 1]
+
+
+@pytest.mark.parametrize("settings", [None, []])
+async def test_missing_or_malformed_workspace_settings_do_not_crash(settings: Any) -> None:
+    """Legacy nullable settings must not dead-letter an otherwise active workspace."""
+    worker = _worker()
+    workspace_id = uuid.uuid4()
+    workspace = MagicMock(id=workspace_id, settings=settings)
+
+    db = MagicMock()
+    db.get = AsyncMock(return_value=workspace)
+    worker.generator.generate_for_workspace = AsyncMock(return_value=0)
+    worker.delivery.deliver_pending_nudges = AsyncMock(return_value=0)
+
+    await worker._process_single_workspace(db, workspace_id)
+
+    worker.generator.generate_for_workspace.assert_awaited_once_with(db, workspace)
+    worker.delivery.deliver_pending_nudges.assert_awaited_once_with(db, workspace_id)
