@@ -622,6 +622,30 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                 "required": ["start_date"],
             },
         },
+        {
+            "type": "function",
+            "name": "cancel_appointment",
+            "description": (
+                "Cancel the caller's upcoming appointment. Call this whenever the caller "
+                "says to cancel, says they can no longer make it, or says they are no "
+                "longer interested. This is the ONLY way to cancel — if you do not call "
+                "it, the appointment stays booked and the caller keeps getting reminders. "
+                "Never tell a caller their appointment is cancelled before this returns."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": (
+                            "Short reason the caller gave, in their own words. "
+                            "Omit if they did not say — never guess."
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
     ]
 
 
@@ -1013,6 +1037,35 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         },
                     },
                     "required": ["start_date"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "cancel_appointment",
+                "description": (
+                    "Cancel the customer's upcoming appointment. Call this whenever the "
+                    "customer says they want to cancel, can no longer make it, are no "
+                    "longer interested, or asks you to take the meeting off the calendar. "
+                    "You have no other way to cancel anything: if you do not call this "
+                    "tool, the appointment stays on the calendar and the customer keeps "
+                    "receiving reminders. Never tell a customer their appointment is "
+                    "cancelled before this tool returns success."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reason": {
+                            "type": "string",
+                            "description": (
+                                "Short reason the customer gave, in their own words "
+                                "(e.g. 'cost too high', 'schedule conflict'). Omit if "
+                                "they did not say — never guess."
+                            ),
+                        },
+                    },
+                    "required": [],
                 },
             },
         },
