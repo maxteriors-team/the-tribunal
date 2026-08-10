@@ -140,7 +140,13 @@ class AppointmentService:
 
         log.info("appointment_created", appointment_id=appointment.id)
 
-        return appointment
+        # Re-read through the eager-loading path. ``AppointmentResponse``
+        # serializes a nested contact summary, and the bare instance above
+        # leaves ``contact`` to lazy-load *after* the request session has
+        # committed, which raises ``MissingGreenlet`` and turns a successful
+        # booking into a 500 (the row is written, so the operator sees a
+        # failure for an appointment that actually exists).
+        return await self.get_appointment(workspace_id, appointment.id)
 
     async def get_appointment(
         self,
