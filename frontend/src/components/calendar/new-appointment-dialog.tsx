@@ -48,6 +48,7 @@ import {
   appointmentFormSchema,
   buildCreateAppointmentRequest,
   DURATION_OPTIONS,
+  formatTimeSlot,
   generateTimeSlots,
 } from "@/lib/appointments/appointment-form";
 import { cn } from "@/lib/utils";
@@ -264,7 +265,7 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
                     <SelectContent>
                       {timeSlots.map((slot) => (
                         <SelectItem key={slot} value={slot}>
-                          {slot}
+                          {formatTimeSlot(slot)}
                         </SelectItem>
                       ))}
                     </SelectContent>
