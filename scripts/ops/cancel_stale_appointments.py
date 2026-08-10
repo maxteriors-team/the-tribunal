@@ -150,10 +150,12 @@ async def main() -> int:
             reason=args.reason,
             cancelled_by="operator (incident cleanup)",
         )
-        # Appointment ids and UTC instants only — nothing contact-derived.
-        print(f"\n✓ cancelled {outcome.count} appointment(s):")
-        for item in outcome.cancelled:
-            print(f"    id={item.appointment_id} at={item.scheduled_at.isoformat()}")
+        # Count only. The itemised list is printed by the dry run above before
+        # anything is written, and re-running without --apply shows the result,
+        # so echoing per-appointment detail here adds nothing — and everything
+        # on this path descends from the email the operator searched by, which
+        # is exactly the data that should not reach a log.
+        print(f"\n✓ cancelled {outcome.count} appointment(s). Re-run without --apply to confirm.")
 
     return 0
 
