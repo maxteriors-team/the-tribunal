@@ -24,6 +24,7 @@ from app.schemas.invitation import (
     InvitationResponse,
 )
 from app.services.email import send_invitation_email
+from app.services.field_service import ensure_member_on_roster
 from app.services.idempotency import derive_outbound_key
 
 router = APIRouter()
@@ -370,6 +371,16 @@ async def accept_invitation(
         is_default=not has_default,
     )
     db.add(membership)
+    await db.flush()
+
+    # Someone invited as a field worker is expected on the dispatch board the
+    # moment they join. Without a roster row they cannot be tagged to any job.
+    await ensure_member_on_roster(
+        db,
+        workspace_id=invitation.workspace_id,
+        user=current_user,
+        role=invitation.role,
+    )
 
     # Update invitation status
     invitation.status = "accepted"

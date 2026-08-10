@@ -315,6 +315,18 @@ class Technician(Base):
             unique=True,
             postgresql_where=text("external_id IS NOT NULL"),
         ),
+        # One login maps to at most one roster row per workspace, so the
+        # membership-driven provisioning in
+        # ``app.services.field_service.roster`` stays idempotent and a person
+        # can never appear twice in the "tag workers" list. Partial because
+        # most rows have no login at all (subcontractors, imported crews).
+        Index(
+            "uq_technicians_workspace_user",
+            "workspace_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

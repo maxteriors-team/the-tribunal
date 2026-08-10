@@ -32,6 +32,12 @@ from app.services.field_service.exceptions import (
     UserNotMemberError,
 )
 from app.services.field_service.locations import ServiceLocationService
+from app.services.field_service.roster import (
+    FIELD_ROLES,
+    ensure_member_on_roster,
+    is_field_role,
+    retire_member_from_roster,
+)
 from app.services.field_service.technicians import TechnicianService
 
 # NOTE: ``NeighborOutreachService`` is deliberately **not** re-exported here.
@@ -42,6 +48,10 @@ from app.services.field_service.technicians import TechnicianService
 # from ``app.services.field_service.neighbor_outreach`` directly.
 
 __all__ = [
+    "FIELD_ROLES",
+    "ensure_member_on_roster",
+    "is_field_role",
+    "retire_member_from_roster",
     "BusinessLocationService",
     "ServiceLocationService",
     "CrewService",
