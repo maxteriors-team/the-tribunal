@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { use, useEffect, useRef } from "react";
 
 import { PublicInvoiceView } from "@/components/invoice/public-invoice-view";
-import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { DeadPublicLink } from "@/components/shared/dead-public-link";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { publicInvoicesApi } from "@/lib/api/public-invoices";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -66,12 +67,7 @@ export default function PublicInvoicePage({ params }: PublicInvoicePageProps) {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
-        <PageErrorState
-          className="min-h-screen"
-          message="This invoice link is invalid or is no longer available."
-        />
-      </div>
+      <DeadPublicLink subject="invoice" />
     );
   }
 
