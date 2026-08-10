@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -55,6 +56,20 @@ class Appointment(Base):
             "ix_appointments_workspace_business_location",
             "workspace_id",
             "business_location_id",
+        ),
+        # One live booking per contact per slot. The application-level guard in
+        # ``finalize_booking`` is a read followed by a write, so two racing tool
+        # calls can both see "no duplicate" and both insert — which is how one
+        # customer ended up double-booked and receiving every reminder twice.
+        # Partial on ``scheduled``, because a cancelled row must not block the
+        # customer rebooking that same slot.
+        Index(
+            "uq_appointments_live_contact_slot",
+            "workspace_id",
+            "contact_id",
+            "scheduled_at",
+            unique=True,
+            postgresql_where=text("status = 'scheduled'"),
         ),
     )
 

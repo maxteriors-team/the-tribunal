@@ -27,6 +27,7 @@ from datetime import datetime
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
@@ -85,12 +86,18 @@ async def finalize_booking(
         msg = "scheduled_at must be timezone-aware; a naive value loses the customer's timezone"
         raise ValueError(msg)
 
-    existing = await _find_duplicate(db, workspace_id, contact.id, scheduled_at)
+    # Read the id once, up front. ``db.rollback()`` in the recovery path below
+    # expires every instance in the session, and re-reading ``contact.id`` after
+    # that triggers implicit IO, which asyncio SQLAlchemy refuses with
+    # ``MissingGreenlet`` — turning a recoverable race into a crash.
+    contact_id = contact.id
+
+    existing = await _find_duplicate(db, workspace_id, contact_id, scheduled_at)
     if existing is not None:
         logger.info(
             "appointment_already_booked",
             appointment_id=existing.id,
-            contact_id=contact.id,
+            contact_id=contact_id,
             scheduled_at=scheduled_at.isoformat(),
         )
         return existing
@@ -102,7 +109,7 @@ async def finalize_booking(
 
     appointment = Appointment(
         workspace_id=workspace_id,
-        contact_id=contact.id,
+        contact_id=contact_id,
         agent_id=agent.id if agent is not None else None,
         campaign_id=campaign_id,
         message_id=message_id,
@@ -119,14 +126,34 @@ async def finalize_booking(
         last_synced_at=datetime.now(scheduled_at.tzinfo),
     )
     db.add(appointment)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Lost the race: another booking for this contact+slot committed between
+        # the duplicate check above and this insert, and the partial unique index
+        # ``uq_appointments_live_contact_slot`` rejected the second row. That is
+        # the index doing its job — the customer does have a booking, so return
+        # the row that won instead of failing a booking they already confirmed.
+        await db.rollback()
+        winner = await _find_duplicate(db, workspace_id, contact_id, scheduled_at)
+        if winner is None:
+            # The violation was something else (a duplicate Cal.com uid, say).
+            # Surfacing it is correct: we have no booking to hand back.
+            raise
+        logger.info(
+            "appointment_duplicate_rejected_by_index",
+            appointment_id=winner.id,
+            contact_id=contact_id,
+            scheduled_at=scheduled_at.isoformat(),
+        )
+        return winner
     await db.refresh(appointment)
 
     logger.info(
         "appointment_finalized",
         appointment_id=appointment.id,
         workspace_id=str(workspace_id),
-        contact_id=contact.id,
+        contact_id=contact_id,
         assigned_staff_id=str(staff_id) if staff_id is not None else None,
         scheduled_at=appointment.scheduled_at.isoformat(),
     )
