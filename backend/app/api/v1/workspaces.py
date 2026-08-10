@@ -13,6 +13,7 @@ from app.api.deps import (
     WorkspaceAdminAccess,
 )
 from app.core.permissions import Capability, role_can
+from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.bulk_members import (
     BulkMemberCreateRequest,
@@ -27,6 +28,7 @@ from app.schemas.workspace import (
     WorkspaceWithMembership,
 )
 from app.services.agents import ensure_default_agent
+from app.services.field_service import ensure_member_on_roster, retire_member_from_roster
 from app.services.opportunities import ensure_default_pipeline
 from app.services.workspaces import bulk_create_members, set_default_membership
 
@@ -230,6 +232,20 @@ async def update_member_role(
 
     # Update role
     target_membership.role = role_update.role
+
+    # Promoting someone into a field role puts them on the dispatch board so
+    # jobs can be tagged to them. Demoting never removes a roster row: field
+    # work and CRM permissions are separate axes (see
+    # app.services.field_service.roster).
+    target_user = await db.get(User, user_id)
+    if target_user is not None:
+        await ensure_member_on_roster(
+            db,
+            workspace_id=workspace_id,
+            user=target_user,
+            role=role_update.role,
+        )
+
     await db.commit()
 
     return MemberResponse(
@@ -283,6 +299,11 @@ async def remove_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admins cannot remove other admins",
         )
+
+    # Someone who lost workspace access must stop showing up as assignable.
+    # Retiring (unlink + deactivate) rather than deleting keeps the assignment
+    # history on jobs they already worked.
+    await retire_member_from_roster(db, workspace_id=workspace_id, user_id=user_id)
 
     # Remove membership
     await db.delete(target_membership)

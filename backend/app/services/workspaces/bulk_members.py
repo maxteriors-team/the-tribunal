@@ -14,6 +14,10 @@ resolves to exactly one outcome:
 - ``skipped`` — the row was not applied: a duplicate email within the request, a
   permission guard (only the owner may mint admins), or a DB conflict.
 
+Rows provisioned with a field role (``technician``/``lead_technician``) also get
+a dispatch-roster entry via :mod:`app.services.field_service.roster`, so a crew
+hired here can be tagged to jobs without a second manual step.
+
 The whole batch runs inside the caller's transaction. Each row executes inside a
 SAVEPOINT so a single conflicting row rolls back on its own without poisoning the
 rest of the batch; the caller owns the final commit.
@@ -38,6 +42,7 @@ from app.schemas.bulk_members import (
     BulkMemberItem,
     BulkMemberResultItem,
 )
+from app.services.field_service import ensure_member_on_roster
 
 logger = structlog.get_logger()
 
@@ -49,6 +54,37 @@ _TEMP_PASSWORD_BYTES = 12
 def generate_temp_password() -> str:
     """Return a strong, URL-safe temporary password."""
     return secrets.token_urlsafe(_TEMP_PASSWORD_BYTES)
+
+
+async def _attach_existing_member(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    user: User,
+    role: str,
+    email_norm: str,
+) -> BulkMemberResultItem:
+    """Attach an account that already exists to this workspace. Flushes.
+
+    Runs inside the caller's per-row SAVEPOINT, so a conflict here rolls back
+    this member only.
+    """
+    db.add(
+        WorkspaceMembership(
+            user_id=user.id,
+            workspace_id=workspace_id,
+            role=role,
+            is_default=False,
+        )
+    )
+    await db.flush()
+    await ensure_member_on_roster(db, workspace_id=workspace_id, user=user, role=role)
+    return BulkMemberResultItem(
+        email=email_norm,
+        status="added_existing",
+        user_id=user.id,
+        role=role,
+    )
 
 
 async def bulk_create_members(
@@ -134,24 +170,16 @@ async def bulk_create_members(
                             )
                         )
                         continue
-                    db.add(
-                        WorkspaceMembership(
-                            user_id=existing.id,
-                            workspace_id=workspace_id,
-                            role=item.role,
-                            is_default=False,
-                        )
-                    )
-                    await db.flush()
-                    member_user_ids.add(existing.id)
                     results.append(
-                        BulkMemberResultItem(
-                            email=email_norm,
-                            status="added_existing",
-                            user_id=existing.id,
+                        await _attach_existing_member(
+                            db,
+                            workspace_id=workspace_id,
+                            user=existing,
                             role=item.role,
+                            email_norm=email_norm,
                         )
                     )
+                    member_user_ids.add(existing.id)
                     continue
 
                 temp_password = item.password or generate_temp_password()
@@ -178,6 +206,16 @@ async def bulk_create_members(
                     )
                 )
                 await db.flush()
+                # A crew provisioned in bulk is hired to work jobs, so a
+                # field-role row lands on the dispatch board immediately —
+                # inside this row's SAVEPOINT, so a conflict skips just this
+                # member instead of poisoning the batch.
+                await ensure_member_on_roster(
+                    db,
+                    workspace_id=workspace_id,
+                    user=user,
+                    role=item.role,
+                )
                 existing_users[email_hash] = user
                 member_user_ids.add(user.id)
                 results.append(
