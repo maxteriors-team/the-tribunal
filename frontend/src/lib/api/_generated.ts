@@ -7626,6 +7626,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign Quote
+         * @description Reassign or clear a quote's sales owner in any lifecycle state.
+         */
+        put: operations["assign_quote_api_v1_workspaces__workspace_id__quotes__quote_id__assignment_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/convert": {
         parameters: {
             query?: never;
@@ -9118,6 +9138,30 @@ export interface paths {
          *     accepted — delivery goes to the contact's own phone/email.
          */
         post: operations["deliver_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/present": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Present Upsell Quote
+         * @description Open this job's proposal for approval on the technician's device.
+         *
+         *     This allocates the public proposal link and marks it presented without
+         *     sending email or SMS. The same job + customer binding as delivery prevents a
+         *     lead technician from opening a proposal for an unrelated customer.
+         */
+        post: operations["present_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__present_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11164,6 +11208,18 @@ export interface components {
              */
             lead_source_id: string;
             source_type?: components["schemas"]["LeadSourceType"] | null;
+        };
+        /**
+         * AssigneeSummary
+         * @description Stable user display fields embedded on assigned records.
+         */
+        AssigneeSummary: {
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name?: string | null;
+            /** Id */
+            id: number;
         };
         /**
          * AssistantChatRequest
@@ -20647,6 +20703,8 @@ export interface components {
         OpportunityCreate: {
             /** Amount */
             amount?: number | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /**
@@ -20700,6 +20758,7 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /** Closed By Id */
@@ -20865,6 +20924,7 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /** Closed By Id */
@@ -24212,6 +24272,14 @@ export interface components {
             title: string;
         };
         /**
+         * QuoteAssignmentRequest
+         * @description Reassign or clear a quote's sales owner independently of quote content.
+         */
+        QuoteAssignmentRequest: {
+            /** Assigned User Id */
+            assigned_user_id: number | null;
+        };
+        /**
          * QuoteConvertRequest
          * @description Choose what an approved quote converts into. Defaults to both.
          *
@@ -24233,6 +24301,8 @@ export interface components {
             scheduled_end?: string | null;
             /** Scheduled Start */
             scheduled_start?: string | null;
+            /** Technician Ids */
+            technician_ids?: string[];
         };
         /**
          * QuoteConvertResponse
@@ -24335,6 +24405,9 @@ export interface components {
         QuoteDetailResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /**
              * Attach Count
              * @default 0
@@ -24614,6 +24687,9 @@ export interface components {
         QuoteResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /**
              * Attach Count
              * @default 0
@@ -28107,6 +28183,25 @@ export interface components {
             ranks?: components["schemas"]["UpsellRankConfig"][];
         };
         /**
+         * UpsellCustomQuoteLine
+         * @description A one-off item priced by the lead technician on site.
+         *
+         *     Custom pricing is the explicit exception to catalog-only pricing. Tight field
+         *     bounds plus the workspace proposal ceiling keep this from becoming an
+         *     uncapped substitute for the price book.
+         */
+        UpsellCustomQuoteLine: {
+            /** Name */
+            name: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /** Unit Price */
+            unit_price: number;
+        };
+        /**
          * UpsellCustomer
          * @description The customer on a job — greeting and address detail only.
          *
@@ -28232,12 +28327,15 @@ export interface components {
          * UpsellQuoteRequest
          * @description Build an add-on proposal for the customer on a job.
          *
-         *     A proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on
-         *     its own is a complete sale — signing an existing system onto maintenance adds
-         *     no hardware — so ``line_items`` may be empty when ``care_plan`` is set.
+         *     A proposal may carry catalog add-ons, one-off custom lines, a Care Plan, or
+         *     any combination. A Care Plan on its own is a complete sale — signing an
+         *     existing system onto maintenance adds no hardware — so both line-item lists
+         *     may be empty when ``care_plan`` is set.
          */
         UpsellQuoteRequest: {
             care_plan?: components["schemas"]["UpsellCarePlanSelection"] | null;
+            /** Custom Line Items */
+            custom_line_items?: components["schemas"]["UpsellCustomQuoteLine"][];
             /** Line Items */
             line_items?: components["schemas"]["UpsellQuoteLine"][];
             /** Notes */
@@ -42445,7 +42543,7 @@ export interface operations {
             query?: {
                 pipeline_id?: string | null;
                 stage_id?: string | null;
-                owner_id?: string | null;
+                owner_id?: number | null;
                 status?: string | null;
                 source?: string | null;
                 value_min?: number | string | null;
@@ -44473,6 +44571,7 @@ export interface operations {
             query?: {
                 status?: string | null;
                 contact_id?: number | null;
+                assigned_user_id?: number | null;
                 page?: number;
                 page_size?: number;
             };
@@ -44894,6 +44993,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_quote_api_v1_workspaces__workspace_id__quotes__quote_id__assignment_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteAssignmentRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -48156,6 +48291,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDeliverResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    present_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__present_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                job_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
                 };
             };
             /** @description Validation Error */
