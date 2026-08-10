@@ -105,7 +105,7 @@ export function StandardIncluded() {
   );
 }
 
-/** Choose, install, enjoy. */
+/** Choose, install, maintain. */
 export function StandardSteps() {
   return (
     <div className="steps-section">
@@ -127,9 +127,10 @@ export function StandardSteps() {
         </div>
         <div className="step-card">
           <div className="step-num">III</div>
-          <div className="step-title">You Enjoy</div>
+          <div className="step-title">We Maintain</div>
           <div className="step-desc">
-            Step outside to a home that looks like nothing else on the street.
+            Our Care Plan keeps your display looking its best, so you can enjoy
+            it every night.
           </div>
         </div>
       </div>
