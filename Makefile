@@ -30,6 +30,14 @@ CI_OPENAPI_SECRET_KEY     ?= ci-openapi-export-secret-key-not-used-for-signing-0
 CI_OPENAPI_ENCRYPTION_KEY ?= ci-openapi-export-encryption-key-not-used-for-crypto-01
 CI_PYTEST_SECRET_KEY      ?= ci-pytest-secret-key-not-used-for-signing-0123456789
 CI_PYTEST_ENCRYPTION_KEY  ?= ci-pytest-encryption-key-not-used-for-crypto-012
+# Migrations run against a *real* database, so unlike pytest they must not be
+# handed a throwaway ENCRYPTION_KEY: any migration that reads an encrypted
+# column would fail to decrypt (or write rows nothing else can read). When
+# backend/.env exists (a developer machine) let it supply the keys that actually
+# encrypted that database; CI has no .env, so it falls back to the throwaway
+# values — harmless there because the CI database starts empty.
+MIGRATION_KEY_ENV := $(if $(wildcard $(BACKEND_DIR)/.env),,SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)")
+
 CI_PYTEST_OPENAI_API_KEY  ?= sk-ci-pytest-placeholder-not-a-real-key
 
 # ─── Help ──────────────────────────────────────────────────────────────────────
@@ -171,13 +179,12 @@ ci.codegen: codegen/check ## Alias for codegen/check.
 .PHONY: ci.migrations
 ci.migrations: ci.backend.deps ## Run migration CI parity against the configured backend database.
 	# alembic/env.py imports app.core.config, and migrations that touch encrypted
-	# columns import app.core.encryption -- both fail closed without these. Locally
-	# backend/.env supplies them; CI has no .env, so set the same throwaway values
-	# the pytest target uses. Neither key protects real data here.
-	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic upgrade head
-	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic check
-	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic downgrade -1
-	cd $(BACKEND_DIR) && SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" uv run alembic upgrade head
+	# columns import app.core.encryption -- both fail closed without these. See
+	# MIGRATION_KEY_ENV: real keys from backend/.env locally, throwaway ones in CI.
+	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic upgrade head
+	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic check
+	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic downgrade -1
+	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic upgrade head
 
 .PHONY: ci.all
 ci.all: codegen/check ci.backend ci.frontend ci.migrations ## Run all CI parity targets.
