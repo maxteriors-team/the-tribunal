@@ -61,6 +61,18 @@ test.describe("Contacts CRUD", () => {
     // Detail view must show the contact name.
     await expect(page.getByText(firstName).first()).toBeVisible();
 
+    // The conversation quick action must open the real scheduler, not report
+    // success without creating anything.
+    const quickActions = page.getByTestId("contact-quick-actions");
+    await quickActions.getByRole("button", { name: /^schedule$/i }).click();
+    const appointmentDialog = page.getByRole("dialog", {
+      name: /book appointment/i,
+    });
+    await expect(appointmentDialog).toBeVisible();
+    await expect(appointmentDialog).toContainText(firstName);
+    await appointmentDialog.getByRole("button", { name: /cancel/i }).click();
+    await expect(appointmentDialog).toBeHidden();
+
     await page.getByRole("button", { name: /^edit$/i }).first().click();
     const editDialog = page.getByRole("dialog", { name: /edit contact/i });
     await expect(editDialog).toBeVisible();

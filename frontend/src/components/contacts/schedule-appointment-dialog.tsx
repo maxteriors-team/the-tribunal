@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar-lazy";
@@ -25,11 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -46,6 +42,7 @@ import {
   appointmentFormSchema,
   buildCreateAppointmentRequest,
   DURATION_OPTIONS,
+  formatTimeSlot,
   generateTimeSlots,
   type AppointmentFormValues,
 } from "@/lib/appointments/appointment-form";
@@ -69,10 +66,10 @@ export function ScheduleAppointmentDialog({
   const workspaceId = useWorkspaceId();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: agentsData, isPending: agentsLoading } = useAgents(
-    workspaceId ?? "",
-    { active_only: true, page_size: 100 }
-  );
+  const { data: agentsData, isPending: agentsLoading } = useAgents(workspaceId ?? "", {
+    active_only: true,
+    page_size: 100,
+  });
   const agents = agentsData?.items ?? [];
 
   const displayName = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
@@ -81,6 +78,9 @@ export function ScheduleAppointmentDialog({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: { ...APPOINTMENT_FORM_DEFAULTS },
   });
+
+  const selectedAgentId = useWatch({ control: form.control, name: "agent_id" });
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
 
   const createAppointmentMutation = useCreateAppointment({
     workspaceId,
@@ -101,91 +101,97 @@ export function ScheduleAppointmentDialog({
     });
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isSubmitting) return;
+    if (!nextOpen) form.reset();
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[450px]">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>Schedule Appointment</DialogTitle>
+          <DialogTitle>Book appointment</DialogTitle>
           <DialogDescription>
-            Schedule an appointment with {displayName || "this contact"}.
+            Choose a time and visit details for {displayName || "this contact"}.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date *</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            formatDate(field.value, { pattern: "PPP" })
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date(new Date().setHours(0, 0, 0, 0))
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date *</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start px-3 text-left font-normal",
+                              !field.value && "text-muted-foreground",
+                            )}
+                          >
+                            <CalendarIcon className="size-4 opacity-60" />
+                            {field.value ? (
+                              formatDate(field.value, { pattern: "PPP" })
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="time"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Time *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select time" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {timeSlots.map((slot) => (
-                        <SelectItem key={slot} value={slot}>
-                          {slot}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="time"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start time *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select time" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {timeSlots.map((slot) => (
+                          <SelectItem key={slot} value={slot}>
+                            {formatTimeSlot(slot)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
               name="duration_minutes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Duration (minutes)</FormLabel>
+                  <FormLabel>Duration</FormLabel>
                   <Select
                     onValueChange={(val) => field.onChange(parseInt(val, 10))}
                     value={field.value.toString()}
@@ -242,7 +248,9 @@ export function ScheduleAppointmentDialog({
                           <SelectItem key={agent.id} value={agent.id}>
                             {agent.name}
                             {agent.reminder_enabled && (
-                              <span className="ml-2 text-xs text-muted-foreground">· SMS reminders</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                · SMS reminders
+                              </span>
                             )}
                           </SelectItem>
                         ))
@@ -250,7 +258,11 @@ export function ScheduleAppointmentDialog({
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Selecting an agent enables automated SMS reminders for this appointment.
+                    {!selectedAgent
+                      ? "No automated SMS reminder will be sent."
+                      : selectedAgent.reminder_enabled
+                        ? `${selectedAgent.name} will send automated SMS reminders.`
+                        : `${selectedAgent.name} has SMS reminders turned off.`}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -264,7 +276,7 @@ export function ScheduleAppointmentDialog({
                 <FormItem>
                   <FormLabel>Service Type</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Consultation, Follow-up" {...field} />
+                    <Input placeholder="Estimate, consultation, installation..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -293,13 +305,14 @@ export function ScheduleAppointmentDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleOpenChange(false)}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting ? "Scheduling..." : "Schedule"}
+                {isSubmitting ? "Booking..." : "Book appointment"}
               </Button>
             </DialogFooter>
           </form>

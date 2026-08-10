@@ -47,11 +47,7 @@ export const DURATION_OPTIONS: readonly DurationOption[] = [
  *   `endHour` is omitted so the final slot lands exactly on `endHour:00`
  * @param stepMinutes increment between slots (must divide 60)
  */
-export function generateTimeSlots(
-  startHour = 8,
-  endHour = 18,
-  stepMinutes = 30,
-): string[] {
+export function generateTimeSlots(startHour = 8, endHour = 18, stepMinutes = 30): string[] {
   if (stepMinutes <= 0 || 60 % stepMinutes !== 0) {
     throw new Error("stepMinutes must be a positive divisor of 60");
   }
@@ -70,6 +66,24 @@ export function generateTimeSlots(
     }
   }
   return slots;
+}
+
+/** Format a stored 24-hour slot for operator-facing controls. */
+export function formatTimeSlot(time: string): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) {
+    throw new Error(`Invalid time string: "${time}"`);
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    throw new Error(`Invalid time string: "${time}"`);
+  }
+
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${match[2]} ${period}`;
 }
 
 /**

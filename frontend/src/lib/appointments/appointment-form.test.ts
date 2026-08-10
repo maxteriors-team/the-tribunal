@@ -5,6 +5,7 @@ import {
   buildCreateAppointmentRequest,
   buildScheduledAtISO,
   DURATION_OPTIONS,
+  formatTimeSlot,
   generateTimeSlots,
   type AppointmentFormValues,
 } from "./appointment-form";
@@ -32,13 +33,7 @@ describe("generateTimeSlots", () => {
     const slots = generateTimeSlots(9, 9, 15);
     expect(slots).toEqual(["09:00"]);
     const slots2 = generateTimeSlots(9, 10, 15);
-    expect(slots2).toEqual([
-      "09:00",
-      "09:15",
-      "09:30",
-      "09:45",
-      "10:00",
-    ]);
+    expect(slots2).toEqual(["09:00", "09:15", "09:30", "09:45", "10:00"]);
   });
 
   it("zero-pads hours and minutes", () => {
@@ -53,6 +48,20 @@ describe("generateTimeSlots", () => {
 
   it("rejects start after end", () => {
     expect(() => generateTimeSlots(18, 8)).toThrow();
+  });
+});
+
+describe("formatTimeSlot", () => {
+  it("shows operator-facing times in 12-hour format", () => {
+    expect(formatTimeSlot("00:00")).toBe("12:00 AM");
+    expect(formatTimeSlot("08:30")).toBe("8:30 AM");
+    expect(formatTimeSlot("12:00")).toBe("12:00 PM");
+    expect(formatTimeSlot("18:00")).toBe("6:00 PM");
+  });
+
+  it("rejects malformed times", () => {
+    expect(() => formatTimeSlot("1800")).toThrow();
+    expect(() => formatTimeSlot("25:00")).toThrow();
   });
 });
 
