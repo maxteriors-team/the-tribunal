@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.attach_rules import AttachDismissalRequest, AttachWarning
 from app.schemas.pricing import (
@@ -180,6 +180,62 @@ class ProposalMockup(BaseModel):
     caption: str | None = Field(default=None, max_length=160)
 
 
+# One composited photo may not exceed this many characters of base64. Same cap
+# as a rep-uploaded mockup: both are inline data URLs in the same snapshot row.
+MAX_NIGHT_PREVIEW_IMAGE_CHARS = 3_000_000
+# How many designed photos one night preview may carry. Mirrors ``MAX_SHOTS`` in
+# the frontend designer; the client downloads every one of these on the public
+# proposal link, so the ceiling is theirs as much as the database's.
+MAX_NIGHT_PREVIEW_IMAGES = 6
+
+
+def _validate_night_preview(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Bound the images inside the otherwise-opaque night-preview blob.
+
+    The blob stays opaque on purpose (the drawing's shape is the frontend's
+    business), but its images are not: a design can span several photos, each a
+    full-size inline data URL, and they are served to the homeowner over the
+    public link. Unbounded, one save could write a snapshot row big enough to
+    make that page unloadable.
+
+    Rejects rather than truncates. Silently dropping a photo the rep drew would
+    ship a proposal the client sees as incomplete, with nothing to indicate why.
+    """
+    if value is None:
+        return None
+
+    images = value.get("images")
+    if images is not None:
+        if not isinstance(images, list):
+            raise ValueError("night_preview.images must be a list of data URLs")
+        if len(images) > MAX_NIGHT_PREVIEW_IMAGES:
+            raise ValueError(
+                f"night_preview.images holds at most {MAX_NIGHT_PREVIEW_IMAGES} "
+                f"photos, got {len(images)}"
+            )
+        for index, image in enumerate(images):
+            if not isinstance(image, str) or not image:
+                raise ValueError(f"night_preview.images[{index}] must be a data URL")
+            if len(image) > MAX_NIGHT_PREVIEW_IMAGE_CHARS:
+                raise ValueError(
+                    f"night_preview.images[{index}] exceeds "
+                    f"{MAX_NIGHT_PREVIEW_IMAGE_CHARS} characters"
+                )
+
+    # The hero shot, carried on its own key for snapshots and readers that
+    # predate multi-photo designs.
+    hero = value.get("image")
+    if hero is not None:
+        if not isinstance(hero, str) or not hero:
+            raise ValueError("night_preview.image must be a data URL")
+        if len(hero) > MAX_NIGHT_PREVIEW_IMAGE_CHARS:
+            raise ValueError(
+                f"night_preview.image exceeds {MAX_NIGHT_PREVIEW_IMAGE_CHARS} characters"
+            )
+
+    return value
+
+
 class ProposalWizardPayload(BaseModel):
     """Everything the wizard submits on save/preview (selection only, no money)."""
 
@@ -199,7 +255,9 @@ class ProposalWizardPayload(BaseModel):
     categories: list[str] = Field(default_factory=list)
     permanent: WizardPermanentSelection | None = None
     christmas: WizardChristmasSelection | None = None
-    # Opaque night-preview snapshot (image ref, light markers, dusk level).
+    # Opaque night-preview snapshot: the composited photos the rep designed
+    # (``image`` is the hero shot, ``images`` the full set), plus light markers
+    # and dusk level. Opaque except for the images, which are bounded below.
     night_preview: dict[str, Any] | None = None
     # Rep-uploaded design mockups rendered in the proposal's visual gallery.
     mockups: list[ProposalMockup] = Field(default_factory=list, max_length=8)
@@ -212,6 +270,8 @@ class ProposalWizardPayload(BaseModel):
     # the reason crosses the wire; the skipped categories are resolved on the
     # server from the rule that fired. Required to save past a ``blocking`` rule.
     attach_dismissal: AttachDismissalRequest | None = None
+
+    _check_night_preview = field_validator("night_preview")(_validate_night_preview)
 
 
 # --------------------------------------------------------------------------- #
