@@ -33,6 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { useSetMemberOnRoster, useWorkspaceRoster } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { workspacesApi } from "@/lib/api/workspaces";
 import { queryKeys } from "@/lib/query-keys";
@@ -74,6 +76,8 @@ export function EditMemberDialog({
 
   // Can only edit if current user is owner/admin and target is not owner
   const canEditRole = member.role !== "owner" && currentUserRole !== "member";
+  // Technician writes are gated on WorkspaceManager (owner/admin/manager).
+  const canManageRoster = ["owner", "admin", "manager"].includes(currentUserRole);
   const canRemove =
     member.role !== "owner" &&
     (currentUserRole === "owner" ||
@@ -103,6 +107,35 @@ export function EditMemberDialog({
       toast.error(error.message || "Failed to remove member");
     },
   });
+
+  // Dispatch tags jobs to a roster entry, not to a membership, so this is what
+  // decides whether the member can be assigned work at all.
+  const { data: roster, isLoading: rosterLoading } = useWorkspaceRoster(
+    workspaceId ?? "",
+    canManageRoster,
+  );
+  const rosterEntry = roster?.items.find((tech) => tech.user_id === member.id);
+  const setOnRoster = useSetMemberOnRoster(workspaceId ?? "");
+
+  const handleRosterChange = (onRoster: boolean) => {
+    setOnRoster.mutate(
+      {
+        technicianId: rosterEntry?.id,
+        userId: member.id,
+        name: member.full_name || member.email.split("@")[0],
+        email: member.email,
+        onRoster,
+      },
+      {
+        onSuccess: () =>
+          toast.success(
+            onRoster ? "Added to the job roster" : "Removed from the job roster",
+          ),
+        onError: (error: Error) =>
+          toast.error(error.message || "Failed to update the job roster"),
+      },
+    );
+  };
 
   const handleSave = () => {
     if (selectedRole !== member.role) {
@@ -158,6 +191,25 @@ export function EditMemberDialog({
               </Select>
             )}
           </div>
+
+          {canManageRoster && (
+            <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+              <div className="space-y-1">
+                <Label htmlFor="job-roster">Job roster</Label>
+                <p className="text-xs text-muted-foreground">
+                  Lets dispatch tag {member.full_name || "them"} to jobs. Technicians
+                  are added automatically; turn this on for anyone else who works in
+                  the field.
+                </p>
+              </div>
+              <Switch
+                id="job-roster"
+                checked={rosterEntry?.is_active ?? false}
+                onCheckedChange={handleRosterChange}
+                disabled={rosterLoading || setOnRoster.isPending}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex justify-between sm:justify-between">
