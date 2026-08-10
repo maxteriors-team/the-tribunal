@@ -19,12 +19,16 @@ import uuid
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.proposal_wizard import (
     CLIENT_SAFE_DOCUMENT_FIELDS,
+    MAX_NIGHT_PREVIEW_IMAGE_CHARS,
+    MAX_NIGHT_PREVIEW_IMAGES,
     ProposalDocument,
+    ProposalWizardPayload,
     client_safe_document,
 )
 from app.services.quotes import QuoteService
@@ -96,6 +100,73 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
 
 def test_sanitizer_passes_through_none() -> None:
     assert client_safe_document(None) is None
+
+
+def test_every_designed_photo_reaches_the_client() -> None:
+    """A design spanning several photos arrives whole on the client's link.
+
+    The rep photographs the front, the back and the walkway, draws each, and
+    saves once. The homeowner opens the link and must see all three: the
+    sanitizer copies fields by name, so a blob whose shape grew is exactly the
+    kind of thing that silently arrives with only its hero shot.
+    """
+    document = _document()
+    document["night_preview"] = {
+        "image": "data:image/jpeg;base64,FRONT",
+        "images": [
+            "data:image/jpeg;base64,FRONT",
+            "data:image/jpeg;base64,BACK",
+            "data:image/jpeg;base64,WALKWAY",
+        ],
+        "services": ["landscape"],
+    }
+
+    safe = client_safe_document(document)
+
+    assert safe is not None
+    assert safe["night_preview"]["images"] == [
+        "data:image/jpeg;base64,FRONT",
+        "data:image/jpeg;base64,BACK",
+        "data:image/jpeg;base64,WALKWAY",
+    ]
+    # The hero key survives too, for a client on a cached bundle that predates
+    # multi-photo designs and still reads ``image``.
+    assert safe["night_preview"]["image"] == "data:image/jpeg;base64,FRONT"
+
+
+def test_night_preview_images_are_bounded() -> None:
+    """The images inside the opaque blob are capped; the blob itself is not.
+
+    Every one of these is an inline data URL the homeowner downloads over the
+    public link, so an unbounded set is their problem before it is the
+    database's. Rejected loudly — truncating would ship a proposal missing a
+    photo the rep drew, with nothing to say so.
+    """
+    ok = ProposalWizardPayload(
+        night_preview={"images": ["data:image/jpeg;base64,A"] * MAX_NIGHT_PREVIEW_IMAGES}
+    )
+    assert ok.night_preview is not None
+
+    with pytest.raises(ValidationError):
+        ProposalWizardPayload(
+            night_preview={"images": ["data:image/jpeg;base64,A"] * (MAX_NIGHT_PREVIEW_IMAGES + 1)}
+        )
+
+    with pytest.raises(ValidationError):
+        ProposalWizardPayload(night_preview={"images": ["x" * (MAX_NIGHT_PREVIEW_IMAGE_CHARS + 1)]})
+
+    with pytest.raises(ValidationError):
+        ProposalWizardPayload(night_preview={"image": "x" * (MAX_NIGHT_PREVIEW_IMAGE_CHARS + 1)})
+
+    # A design with no photos, and the shapes that predate the images list, are
+    # all still valid payloads.
+    assert ProposalWizardPayload(night_preview=None).night_preview is None
+    assert (
+        ProposalWizardPayload(
+            night_preview={"image": "data:image/jpeg;base64,LEGACY", "dusk": 0.5}
+        ).night_preview
+        is not None
+    )
 
 
 def test_sanitizer_strips_unknown_future_fields() -> None:
