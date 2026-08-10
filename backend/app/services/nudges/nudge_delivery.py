@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.nudges.nudge_settings import get_nudge_settings
 from app.services.outbound.delivery import (
     OutboundDeliveryChannel,
     OutboundDeliveryRequest,
@@ -39,8 +40,8 @@ class NudgeDeliveryService:
             logger.warning("Workspace %s not found for nudge %s", nudge.workspace_id, nudge.id)
             return False
 
-        nudge_settings: dict[str, object] = workspace.settings.get("nudge_settings", {})
-        delivery_channels: list[str] = nudge_settings.get("delivery_channels", ["sms", "push"])  # type: ignore[assignment]
+        nudge_settings = get_nudge_settings(workspace.settings)
+        delivery_channels: list[str] = nudge_settings.get("delivery_channels", ["sms", "push"])
 
         # Resolve target users
         users = await self._resolve_target_users(db, nudge)
@@ -176,8 +177,8 @@ class NudgeDeliveryService:
 
     def _is_quiet_hours(self, workspace: Workspace) -> bool:
         """Check if current time is within quiet hours."""
-        nudge_settings: dict[str, object] = workspace.settings.get("nudge_settings", {})
-        quiet_hours: dict[str, str] = nudge_settings.get("quiet_hours", {})  # type: ignore[assignment]
+        nudge_settings = get_nudge_settings(workspace.settings)
+        quiet_hours: dict[str, str] = nudge_settings.get("quiet_hours", {})
         start_str = quiet_hours.get("start", DEFAULT_QUIET_START)
         end_str = quiet_hours.get("end", DEFAULT_QUIET_END)
 

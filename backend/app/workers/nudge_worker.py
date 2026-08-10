@@ -17,6 +17,7 @@ from app.models.human_nudge import HumanNudge
 from app.models.workspace import Workspace
 from app.services.nudges.nudge_delivery import NudgeDeliveryService
 from app.services.nudges.nudge_generator import NudgeGeneratorService
+from app.services.nudges.nudge_settings import get_nudge_settings
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -94,8 +95,8 @@ class NudgeWorker(RetryableWorker, BaseWorker):
         if workspace is None:
             return
 
-        nudge_settings = workspace.settings.get("nudge_settings", {})
-        if isinstance(nudge_settings, dict) and not nudge_settings.get("enabled", True):
+        nudge_settings = get_nudge_settings(workspace.settings)
+        if not nudge_settings.get("enabled", True):
             return
 
         # Phase 1: Generate nudges
