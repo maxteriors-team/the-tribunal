@@ -1329,7 +1329,7 @@ class QuoteService:
         """
         from app.core.config import settings
         from app.services.email import send_quote_email
-        from app.services.idempotency import derive_outbound_key
+        from app.services.idempotency import derive_document_send_key
 
         client = (quote.proposal_document or {}).get("client") or {}
         contact_email = (
@@ -1362,7 +1362,12 @@ class QuoteService:
                 expiry_date=expiry,
                 notes=quote.notes,
                 proposal_url=proposal_url,
-                idempotency_key=derive_outbound_key("quote_send", quote.id, contact_email),
+                # Keyed on the quote's revision as well as its id, so editing a
+                # sent quote and sending it again actually delivers the new
+                # version instead of colliding with the original send.
+                idempotency_key=derive_document_send_key(
+                    "quote_send", quote.id, quote.updated_at, contact_email
+                ),
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))

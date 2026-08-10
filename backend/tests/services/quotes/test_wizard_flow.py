@@ -20,6 +20,7 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.workspace import Workspace
 from app.schemas.pricing import MAINTENANCE_THROUGH_TOKEN
+from app.schemas.quote import QuoteUpdate
 from app.schemas.proposal_wizard import (
     ProposalMockup,
     ProposalWizardPayload,
@@ -394,6 +395,45 @@ async def test_deliver_quote_reports_a_failed_email_instead_of_ok(monkeypatch) -
         refreshed = await svc.get_quote(ws.id, uuid.UUID(str(saved.id)))
         assert refreshed.status == "sent"
         assert refreshed.public_token
+
+
+async def test_editing_a_sent_quote_lets_it_be_emailed_again(monkeypatch) -> None:
+    """Edit, then send again — the second email must not reuse the first's key.
+
+    Resend refuses a replayed idempotency key whose body changed, so keying the
+    send on the quote id alone made the corrected quote undeliverable: the
+    operator edited it, hit send, and the customer kept the stale version. The
+    key has to move when the document does.
+    """
+    keys: list[str] = []
+
+    async def capture(**kwargs):  # noqa: ANN003
+        keys.append(str(kwargs["idempotency_key"]))
+        return True
+
+    from app.services import email as email_module
+
+    monkeypatch.setattr(email_module, "send_quote_email", capture)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.client.email = "sarah@example.com"
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        qid = uuid.UUID(str(saved.id))
+
+        await svc.deliver_quote(ws.id, qid, channel="email", to=None)
+
+        # Re-sending an untouched quote is the double-click case and must stay
+        # collapsed onto the same key.
+        await svc.deliver_quote(ws.id, qid, channel="email", to=None)
+        assert keys[0] == keys[1]
+
+        await svc.update_quote(ws.id, qid, QuoteUpdate(notes="Gate code changed to 4821"))
+        await svc.deliver_quote(ws.id, qid, channel="email", to=None)
+
+        assert keys[2] != keys[0], "an edited quote must send under a fresh key"
 
 
 async def test_mark_sent_survives_a_failed_courtesy_email(monkeypatch) -> None:

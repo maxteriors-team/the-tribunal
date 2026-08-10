@@ -569,7 +569,7 @@ class InvoiceService:
         happened instead of assuming success.
         """
         from app.services.email import send_invoice_email
-        from app.services.idempotency import derive_outbound_key
+        from app.services.idempotency import derive_document_send_key
 
         contact_email = override_email or (invoice.contact.email if invoice.contact else None)
         if not contact_email:
@@ -596,7 +596,11 @@ class InvoiceService:
                 due_date=due_date,
                 pay_url=pay_url,
                 notes=invoice.notes,
-                idempotency_key=derive_outbound_key("invoice_send", invoice.id),
+                # Revision-keyed: correcting an invoice and sending it again has
+                # to reach the customer, not collide with the original send.
+                idempotency_key=derive_document_send_key(
+                    "invoice_send", invoice.id, invoice.updated_at, contact_email
+                ),
             )
         except Exception as exc:  # pragma: no cover - best-effort email
             self.log.warning("invoice_email_failed", invoice_id=str(invoice.id), error=str(exc))

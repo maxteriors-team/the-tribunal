@@ -14,6 +14,7 @@ from app.services.idempotency import (
     DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS,
     OUTBOUND_IDEMPOTENCY_NAMESPACE,
     claim_redis_idempotency_key,
+    derive_document_send_key,
     derive_outbound_key,
     derive_webhook_delivery_key,
     derive_worker_retry_key,
@@ -34,6 +35,31 @@ def test_outbound_key_uses_legacy_namespace_and_is_stable() -> None:
 
 def test_distinct_outbound_scopes_do_not_collide() -> None:
     assert derive_outbound_key("reminder", 1) != derive_outbound_key("nudge_sms", 1)
+
+
+def test_document_send_key_changes_with_the_revision() -> None:
+    """An edited document must not reuse the key its original send burned.
+
+    Resend rejects a replayed key whose body changed (409
+    ``invalid_idempotent_request``) rather than de-duplicating it, so a key that
+    ignores the revision makes "edit, then send again" undeliverable for the
+    whole idempotency window.
+    """
+    first = derive_document_send_key("quote_send", 7, "2026-08-10T13:34:21", "a@example.com")
+    edited = derive_document_send_key("quote_send", 7, "2026-08-10T13:35:09", "a@example.com")
+
+    assert first != edited
+
+
+def test_document_send_key_is_stable_for_an_unchanged_document() -> None:
+    """Double-clicking Send must still collapse into one email."""
+    args = ("quote_send", 7, "2026-08-10T13:34:21", "a@example.com")
+
+    assert derive_document_send_key(*args) == derive_document_send_key(*args)
+    # Distinct recipients of the same revision are distinct sends.
+    assert derive_document_send_key(*args) != derive_document_send_key(
+        "quote_send", 7, "2026-08-10T13:34:21", "b@example.com"
+    )
 
 
 def test_provider_application_helpers() -> None:
