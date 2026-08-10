@@ -553,6 +553,8 @@ export const queryKeys = {
     profile: () => ["settings", "profile"] as const,
     notifications: () => ["settings", "notifications"] as const,
     team: (workspaceId: string) => ["settings", "team", workspaceId] as const,
+    activeTeam: (workspaceId: string) =>
+      ["settings", "team", workspaceId, "active"] as const,
     integrations: (workspaceId: string) =>
       ["settings", "integrations", workspaceId] as const,
     autoPipeline: (workspaceId: string) =>

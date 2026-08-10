@@ -93,12 +93,14 @@ async def _technician(
     *,
     user_id: int | None = None,
     crew_id: uuid.UUID | None = None,
+    is_active: bool = True,
 ) -> Technician:
     tech = Technician(
         workspace_id=workspace_id,
         name=f"Tech {uuid.uuid4().hex[:6]}",
         user_id=user_id,
         crew_id=crew_id,
+        is_active=is_active,
     )
     db.add(tech)
     await db.flush()
@@ -180,6 +182,23 @@ async def test_create_cross_workspace_technician_404() -> None:
                     "contact_id": contact.id,
                     "title": "X",
                     "technician_ids": [foreign_tech.id],
+                },
+            )
+        assert exc.value.status_code == 404
+
+
+async def test_create_inactive_technician_404() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        retired = await _technician(db, ws.id, is_active=False)
+        with pytest.raises(HTTPException) as exc:
+            await JobService(db).create(
+                ws.id,
+                {
+                    "contact_id": contact.id,
+                    "title": "Retired crew is invalid",
+                    "technician_ids": [retired.id],
                 },
             )
         assert exc.value.status_code == 404

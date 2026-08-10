@@ -37,6 +37,7 @@ from app.services.exceptions import NotFoundError
 from app.services.opportunities.default_pipeline import DEFAULT_PIPELINE_STAGES
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
 from app.services.opportunities.pipeline_removal import remove_from_pipeline
+from app.services.workspaces.membership import assert_active_workspace_member
 
 logger = structlog.get_logger()
 
@@ -216,7 +217,7 @@ class OpportunityService:
         page_size: int = 50,
         search: str | None = None,
         *,
-        owner_id: uuid.UUID | None = None,
+        owner_id: int | None = None,
         opportunity_status: str | None = None,
         source: str | None = None,
         value_min: Decimal | float | None = None,
@@ -253,13 +254,12 @@ class OpportunityService:
             query = query.where(Opportunity.assigned_user_id == restrict_to_user_id)
         query = query.order_by(Opportunity.created_at.desc())
 
-        # Eager-load line_items and primary_contact: OpportunityResponse
-        # serializes both, and a lazy load during async serialization raises
-        # MissingGreenlet. selectinload keeps this two extra queries for the
-        # whole page rather than one per row.
+        # Eager-load response relationships for the whole page, avoiding one
+        # contact/owner/line-item query per opportunity.
         query = query.options(
             selectinload(Opportunity.line_items),
             selectinload(Opportunity.primary_contact),
+            selectinload(Opportunity.assigned_user),
         )
 
         result = await paginate(self.db, query, page=page, page_size=page_size, unique=True)
@@ -274,11 +274,10 @@ class OpportunityService:
         opportunity_in: OpportunityCreate,
         assigned_user_id: int | None = None,
     ) -> OpportunityResponse:
-        """Create an opportunity after validating pipeline and stage.
+        """Create an opportunity after validating pipeline, stage, and owner.
 
-        ``assigned_user_id`` sets the deal owner. ``OpportunityCreate`` carries no
-        owner field, so this is the only way to assign on create; the sales tier
-        passes its own user id (forced self-assignment).
+        ``assigned_user_id`` is a role-enforced override for sales callers;
+        managers may select the owner through ``OpportunityCreate``.
         """
         pipeline_query = select(Pipeline).where(
             (Pipeline.id == opportunity_in.pipeline_id) & (Pipeline.workspace_id == workspace_id)
@@ -294,13 +293,21 @@ class OpportunityService:
             if not stage:
                 raise NotFoundError("Stage not found")
 
+        requested_owner_id = (
+            assigned_user_id if assigned_user_id is not None else opportunity_in.assigned_user_id
+        )
+        assignee = None
+        if requested_owner_id is not None:
+            assignee = await assert_active_workspace_member(
+                self.db, workspace_id, requested_owner_id
+            )
         opportunity = Opportunity(
             workspace_id=workspace_id,
             probability=stage.probability if stage else 0,
-            **opportunity_in.model_dump(),
+            assigned_user_id=requested_owner_id,
+            assigned_user=assignee,
+            **opportunity_in.model_dump(exclude={"assigned_user_id"}),
         )
-        if assigned_user_id is not None:
-            opportunity.assigned_user_id = assigned_user_id
         self.db.add(opportunity)
         await self.db.flush()
         await emit_automation_event(
@@ -317,9 +324,8 @@ class OpportunityService:
             },
         )
         await self.db.commit()
-        # Refresh line_items and primary_contact so the response can serialize
-        # them without triggering a lazy load outside the async greenlet.
-        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
+        # Refresh response relationships so async serialization never lazy-loads.
+        await self.db.refresh(opportunity, ["line_items", "primary_contact", "assigned_user"])
 
         return OpportunityResponse.model_validate(opportunity)
 
@@ -339,6 +345,7 @@ class OpportunityService:
                 selectinload(Opportunity.line_items),
                 selectinload(Opportunity.activities),
                 selectinload(Opportunity.primary_contact),
+                selectinload(Opportunity.assigned_user),
             ],
         )
         self._enforce_owner(opportunity, restrict_to_user_id)
@@ -439,11 +446,22 @@ class OpportunityService:
             self.db, Opportunity, opportunity_id, workspace_id=workspace_id
         )
         self._enforce_owner(opportunity, restrict_to_user_id)
-        if restrict_to_user_id is not None:
-            # A sales caller may not reassign a deal away from (or to) themselves.
-            opportunity_in = opportunity_in.model_copy(
-                update={"assigned_user_id": restrict_to_user_id}
-            )
+        owner_was_requested = (
+            restrict_to_user_id is not None or "assigned_user_id" in opportunity_in.model_fields_set
+        )
+        requested_owner_id = (
+            restrict_to_user_id
+            if restrict_to_user_id is not None
+            else opportunity_in.assigned_user_id
+        )
+        if owner_was_requested:
+            assignee = None
+            if requested_owner_id is not None:
+                assignee = await assert_active_workspace_member(
+                    self.db, workspace_id, requested_owner_id
+                )
+            opportunity.assigned_user_id = requested_owner_id
+            opportunity.assigned_user = assignee
 
         # Stage change — delegate to move_stage so the activity log, probability
         # update, stage_changed_at, and deal_stage_changed event stay in one
@@ -465,7 +483,6 @@ class OpportunityService:
             "amount",
             "currency",
             "expected_close_date",
-            "assigned_user_id",
             "source",
             "lead_source_id",
             "lead_source_campaign_id",
@@ -497,7 +514,7 @@ class OpportunityService:
             opportunity.closed_by_id = user_id if is_closed else None
 
         await self.db.commit()
-        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
+        await self.db.refresh(opportunity, ["line_items", "primary_contact", "assigned_user"])
 
         return OpportunityResponse.model_validate(opportunity)
 
@@ -522,7 +539,7 @@ class OpportunityService:
 
         await remove_from_pipeline(self.db, opportunity, user_id=user_id)
         await self.db.commit()
-        await self.db.refresh(opportunity, ["line_items", "primary_contact"])
+        await self.db.refresh(opportunity, ["line_items", "primary_contact", "assigned_user"])
 
         return OpportunityResponse.model_validate(opportunity)
 

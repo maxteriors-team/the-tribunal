@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { TechnicianSelect } from "@/components/jobs/technician-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useWorkspaceTechnicians } from "@/hooks/useJobs";
 import { quotesApi } from "@/lib/api/quotes";
 import { jobWindowError, localToIso } from "@/lib/jobs/job-derivations";
 import { queryKeys } from "@/lib/query-keys";
@@ -45,12 +47,15 @@ export function ConvertQuoteDialog({
   const [createInvoice, setCreateInvoice] = useState(true);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-
+  const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
+  const techniciansQuery = useWorkspaceTechnicians(workspaceId, open && createJob);
+  const technicians = techniciansQuery.data?.items ?? [];
   const reset = () => {
     setCreateJob(true);
     setCreateInvoice(true);
     setStart("");
     setEnd("");
+    setSelectedTechnicianIds([]);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -66,9 +71,10 @@ export function ConvertQuoteDialog({
       return quotesApi.convert(workspaceId, quote.id, {
         create_job: createJob,
         create_invoice: createInvoice,
-        // Only send a window when both bounds are set and a job is created.
+        // Only send a window and crew when a job is created.
         scheduled_start: createJob ? localToIso(start) : null,
         scheduled_end: createJob ? localToIso(end) : null,
+        technician_ids: createJob ? selectedTechnicianIds : [],
       });
     },
     onSuccess: (result) => {
@@ -96,8 +102,8 @@ export function ConvertQuoteDialog({
         <DialogHeader>
           <DialogTitle>Convert quote{quote ? ` ${quote.number}` : ""}</DialogTitle>
           <DialogDescription>
-            Turn this accepted quote into scheduled work and/or an invoice. Pick a
-            date to schedule the job now, or leave it blank to schedule later.
+            Turn this accepted quote into scheduled work and/or an invoice. Choose
+            the field crew now, or leave it unassigned in the dispatch queue.
           </DialogDescription>
         </DialogHeader>
 
@@ -113,24 +119,61 @@ export function ConvertQuoteDialog({
           </label>
 
           {createJob ? (
-            <div className="grid grid-cols-2 gap-3 pl-6">
-              <div className="space-y-1.5">
-                <Label htmlFor="convert-start">Scheduled start</Label>
-                <Input
-                  id="convert-start"
-                  type="datetime-local"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
+            <div className="space-y-4 pl-6">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="convert-start">Scheduled start</Label>
+                  <Input
+                    id="convert-start"
+                    type="datetime-local"
+                    value={start}
+                    onChange={(e) => setStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="convert-end">Scheduled end</Label>
+                  <Input
+                    id="convert-end"
+                    type="datetime-local"
+                    value={end}
+                    onChange={(e) => setEnd(e.target.value)}
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="convert-end">Scheduled end</Label>
-                <Input
-                  id="convert-end"
-                  type="datetime-local"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
+                <Label>Assign field crew</Label>
+                {techniciansQuery.isPending ? (
+                  <p className="text-sm text-muted-foreground">Loading technicians…</p>
+                ) : techniciansQuery.isError ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-destructive">
+                      Technicians could not be loaded.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void techniciansQuery.refetch()}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                ) : (
+                  <TechnicianSelect
+                    technicians={technicians}
+                    selectedIds={selectedTechnicianIds}
+                    onToggle={(technicianId) =>
+                      setSelectedTechnicianIds((current) =>
+                        current.includes(technicianId)
+                          ? current.filter((id) => id !== technicianId)
+                          : [...current, technicianId],
+                      )
+                    }
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Leave the crew empty to create an unassigned dispatch-queue job.
+                </p>
               </div>
             </div>
           ) : null}

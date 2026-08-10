@@ -22,6 +22,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -32,6 +33,7 @@ interface OpportunityDetailSheetProps {
   workspaceId: string;
   opportunityId: string | null;
   stages: PipelineStage[];
+  canAssignOwners: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -40,6 +42,7 @@ export function OpportunityDetailSheet({
   workspaceId,
   opportunityId,
   stages,
+  canAssignOwners,
   open,
   onOpenChange,
 }: OpportunityDetailSheetProps) {
@@ -69,6 +72,25 @@ export function OpportunityDetailSheet({
     },
     onError: (err: unknown) =>
       toast.error(getApiErrorMessage(err, "Failed to move opportunity")),
+  });
+
+  const ownerMutation = useMutation({
+    mutationFn: (assignedUserId: number | null) =>
+      opportunitiesApi.update(workspaceId, opportunityId!, {
+        assigned_user_id: assignedUserId,
+      }),
+    onSuccess: (updated) => {
+      toast.success(
+        updated.assignee
+          ? `Assigned to ${updated.assignee.full_name || updated.assignee.email}`
+          : "Opportunity is unassigned",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.opportunities.all(workspaceId),
+      });
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to update opportunity owner")),
   });
 
   return (
@@ -125,6 +147,36 @@ export function OpportunityDetailSheet({
                   </SelectContent>
                 </Select>
               </div>
+
+              {canAssignOwners ? (
+                <div className="space-y-1.5">
+                  <TeamMemberPicker
+                    workspaceId={workspaceId}
+                    value={opportunity.assigned_user_id ?? null}
+                    onValueChange={(userId) => ownerMutation.mutate(userId)}
+                    label="Owner"
+                    triggerId="opportunity-detail-owner"
+                    disabled={ownerMutation.isPending}
+                  />
+                  {opportunity.assignee ? (
+                    <p className="text-xs text-muted-foreground">
+                      Current: {opportunity.assignee.full_name || opportunity.assignee.email}
+                      {opportunity.assignee.full_name
+                        ? ` · ${opportunity.assignee.email}`
+                        : ""}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Owner</p>
+                  <p className="text-sm text-muted-foreground">
+                    {opportunity.assignee
+                      ? opportunity.assignee.full_name || opportunity.assignee.email
+                      : "Unassigned"}
+                  </p>
+                </div>
+              )}
 
               {opportunity.amount != null ? (
                 <div className="space-y-1">

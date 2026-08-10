@@ -22,10 +22,13 @@ from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
-from app.models.field_service import Job, ServiceLocation
+from app.models.field_service import Job, JobAssignment, ServiceLocation, Technician
 from app.models.invoice import Invoice
+from app.models.opportunity import Opportunity
+from app.models.pipeline import Pipeline
 from app.models.quote import Quote
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.attach_rules import (
     AttachDismissalRequest,
     AttachRule,
@@ -44,7 +47,7 @@ from app.schemas.quote import (
     QuoteLineItemUpdate,
     QuoteUpdate,
 )
-from app.services.exceptions import ConflictError, ValidationError
+from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
@@ -64,6 +67,28 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
     db.add(ws)
     await db.flush()
     return ws
+
+
+async def _make_member(
+    db: AsyncSession, workspace_id: uuid.UUID, *, name: str = "Sales Owner"
+) -> User:
+    email = f"{uuid.uuid4().hex[:8]}@example.com"
+    user = User(
+        email=email,
+        email_hash=hash_value(email),
+        hashed_password="x",
+        full_name=name,
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+    db.add(
+        WorkspaceMembership(
+            workspace_id=workspace_id, user_id=user.id, role="sales_rep"
+        )
+    )
+    await db.flush()
+    return user
 
 
 async def _make_contact(
@@ -141,6 +166,62 @@ async def test_create_computes_totals_and_allocates_number() -> None:
 
         second = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
         assert second.number == "QUO-000002"
+
+
+async def test_quote_defaults_to_creator_and_can_reassign_after_decision() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other_ws = await _make_workspace(db)
+        creator = await _make_member(db, ws.id, name="Creator")
+        foreign = await _make_member(db, other_ws.id, name="Foreign owner")
+        service = QuoteService(db)
+
+        created = await service.create_quote(
+            ws.id, QuoteCreate(line_items=[]), created_by_id=creator.id
+        )
+        assert created.assigned_user_id == creator.id
+        assert created.assignee is not None
+        assert created.assignee.full_name == "Creator"
+
+        stored = await db.get(Quote, created.id)
+        assert stored is not None
+        stored.status = "approved"
+        await db.flush()
+
+        cleared = await service.assign_quote(ws.id, created.id, None)
+        assert cleared.assigned_user_id is None
+        assert cleared.assignee is None
+
+        with pytest.raises(NotFoundError):
+            await service.assign_quote(ws.id, created.id, foreign.id)
+
+
+async def test_quote_inherits_active_opportunity_owner() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        creator = await _make_member(db, ws.id, name="Creator")
+        owner = await _make_member(db, ws.id, name="Deal owner")
+        pipeline = Pipeline(workspace_id=ws.id, name="Sales")
+        db.add(pipeline)
+        await db.flush()
+        opportunity = Opportunity(
+            workspace_id=ws.id,
+            pipeline_id=pipeline.id,
+            name="Roof replacement",
+            assigned_user_id=owner.id,
+        )
+        db.add(opportunity)
+        await db.flush()
+
+        created = await QuoteService(db).create_quote(
+            ws.id,
+            QuoteCreate(opportunity_id=opportunity.id, line_items=[]),
+            created_by_id=creator.id,
+        )
+
+        assert created.assigned_user_id == owner.id
+        assert created.assignee is not None
+        assert created.assignee.full_name == "Deal owner"
 
 
 async def test_number_sequence_is_per_workspace() -> None:
@@ -674,6 +755,9 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
         location = await _make_location(db, ws.id, contact.id)
+        technician = Technician(workspace_id=ws.id, name="Alex Field")
+        db.add(technician)
+        await db.flush()
         svc = QuoteService(db)
 
         quote = await svc.create_quote(
@@ -691,7 +775,9 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         )
         await svc.approve_quote(ws.id, quote.id)
 
-        result = await svc.convert_quote(ws.id, quote.id)
+        result = await svc.convert_quote(
+            ws.id, quote.id, technician_ids=[technician.id]
+        )
         assert result.job_id is not None
         assert result.invoice_id is not None
         assert result.quote.converted_job_id == result.job_id
@@ -703,10 +789,16 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         assert job.title == "Install lighting"
         assert job.contact_id == contact.id
         assert job.service_location_id == location.id
+        assignments = (
+            await db.execute(
+                select(JobAssignment).where(JobAssignment.job_id == job.id)
+            )
+        ).scalars().all()
+        assert {assignment.technician_id for assignment in assignments} == {
+            technician.id
+        }
 
         # The invoice copied the quote's line items and totals.
-        from sqlalchemy import select  # local import keeps the header lean
-
         from app.models.invoice import InvoiceLineItem
 
         invoice = await db.get(Invoice, result.invoice_id)

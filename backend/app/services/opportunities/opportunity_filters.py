@@ -52,7 +52,7 @@ def apply_opportunity_filters(  # noqa: PLR0912
     *,
     pipeline_id: uuid.UUID | None = None,
     stage_id: uuid.UUID | None = None,
-    owner_id: uuid.UUID | None = None,
+    owner_id: int | None = None,
     status: str | None = None,
     is_active: bool | None = None,
     source: str | None = None,

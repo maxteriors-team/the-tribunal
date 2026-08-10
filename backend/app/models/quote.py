@@ -102,6 +102,13 @@ class Quote(Base):
         nullable=True,
         index=True,
     )
+    # Sales owner. Dispatch crew assignment remains on the converted job.
+    assigned_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Human-facing quote number, unique per workspace (e.g. "QUO-000123").
     number: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -252,6 +259,7 @@ class Quote(Base):
     workspace: Mapped["Workspace"] = relationship("Workspace")
     contact: Mapped["Contact | None"] = relationship("Contact")
     service_location: Mapped["ServiceLocation | None"] = relationship("ServiceLocation")
+    assignee: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
     line_items: Mapped[list["QuoteLineItem"]] = relationship(
         "QuoteLineItem",

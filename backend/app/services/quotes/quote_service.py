@@ -35,7 +35,8 @@ from app.models.human_nudge import HumanNudge
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
 from app.schemas.estimate import (
     ChristmasEstimate,
@@ -129,6 +130,7 @@ from app.services.quotes.proposal_pricing import (
 from app.services.quotes.proposal_template import get_proposal_template
 from app.services.quotes.quote_expiry import EXPIRED_STATUS, overdue_sent_predicate
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
+from app.services.workspaces.membership import assert_active_workspace_member
 
 logger = structlog.get_logger()
 
@@ -474,6 +476,8 @@ class QuoteService:
         return get_pricing_config(workspace)
 
     async def _detail_response(self, quote: Quote) -> QuoteDetailResponse:
+        if "assignee" not in quote.__dict__:
+            await self.db.refresh(quote, ["assignee"])
         response = QuoteDetailResponse.model_validate(quote)
         config = await self._pricing_config_for_quote(quote)
         response.financing = self._financing_for_quote(quote, config)
@@ -810,6 +814,46 @@ class QuoteService:
                 continue
         return f"QUO-{max_seq + 1:06d}"
 
+    async def _default_assignee_id(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        opportunity_id: uuid.UUID | None,
+        created_by_id: int | None,
+    ) -> int | None:
+        """Prefer an active linked-deal owner, then the active quote creator."""
+        if opportunity_id is not None:
+            owner_result = await self.db.execute(
+                select(Opportunity.assigned_user_id)
+                .join(User, User.id == Opportunity.assigned_user_id)
+                .join(
+                    WorkspaceMembership,
+                    (WorkspaceMembership.user_id == User.id)
+                    & (WorkspaceMembership.workspace_id == Opportunity.workspace_id),
+                )
+                .where(
+                    Opportunity.id == opportunity_id,
+                    Opportunity.workspace_id == workspace_id,
+                    User.is_active.is_(True),
+                )
+            )
+            owner_id = owner_result.scalar_one_or_none()
+            if owner_id is not None:
+                return owner_id
+
+        if created_by_id is None:
+            return None
+        creator_result = await self.db.execute(
+            select(User.id)
+            .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+            .where(
+                User.id == created_by_id,
+                User.is_active.is_(True),
+                WorkspaceMembership.workspace_id == workspace_id,
+            )
+        )
+        return creator_result.scalar_one_or_none()
+
     async def _expire_overdue(self, workspace_id: uuid.UUID) -> None:
         """Flip still-``sent`` quotes past their ``expiry_date`` to ``expired``.
 
@@ -828,7 +872,6 @@ class QuoteService:
     # ------------------------------------------------------------------
     # CRUD
     # ------------------------------------------------------------------
-
     async def list_quotes(
         self,
         workspace_id: uuid.UUID,
@@ -837,15 +880,22 @@ class QuoteService:
         page_size: int = 50,
         status: str | None = None,
         contact_id: int | None = None,
+        assigned_user_id: int | None = None,
     ) -> PaginatedQuotes:
         """List a workspace's quotes, newest first, with optional filters."""
         await self._expire_overdue(workspace_id)
 
-        query = select(Quote).where(Quote.workspace_id == workspace_id)
+        query = (
+            select(Quote)
+            .where(Quote.workspace_id == workspace_id)
+            .options(selectinload(Quote.assignee))
+        )
         if status:
             query = query.where(Quote.status == status)
         if contact_id is not None:
             query = query.where(Quote.contact_id == contact_id)
+        if assigned_user_id is not None:
+            query = query.where(Quote.assigned_user_id == assigned_user_id)
         query = query.order_by(Quote.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
@@ -868,11 +918,17 @@ class QuoteService:
             service_location_id=quote_in.service_location_id,
             opportunity_id=quote_in.opportunity_id,
         )
+        assigned_user_id = await self._default_assignee_id(
+            workspace_id,
+            opportunity_id=quote_in.opportunity_id,
+            created_by_id=created_by_id,
+        )
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=quote_in.contact_id,
             service_location_id=quote_in.service_location_id,
             opportunity_id=quote_in.opportunity_id,
+            assigned_user_id=assigned_user_id,
             number=await self._next_quote_number(workspace_id),
             title=quote_in.title,
             currency=quote_in.currency,
@@ -926,7 +982,7 @@ class QuoteService:
             Quote,
             quote_id,
             workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items)],
+            options=[selectinload(Quote.line_items), selectinload(Quote.assignee)],
         )
         return await self._detail_response(quote)
 
@@ -942,7 +998,7 @@ class QuoteService:
             Quote,
             quote_id,
             workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items)],
+            options=[selectinload(Quote.line_items), selectinload(Quote.assignee)],
         )
         if quote.status in _LOCKED_STATUSES:
             raise ConflictError(f"Cannot edit a {quote.status} quote")
@@ -983,6 +1039,28 @@ class QuoteService:
         self._recompute_totals(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
+        return await self._detail_response(quote)
+
+    async def assign_quote(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        assigned_user_id: int | None,
+    ) -> QuoteDetailResponse:
+        """Reassign or clear sales ownership, including on locked quotes."""
+        quote = await get_or_404(
+            self.db,
+            Quote,
+            quote_id,
+            workspace_id=workspace_id,
+            options=[selectinload(Quote.line_items), selectinload(Quote.assignee)],
+        )
+        assignee = None
+        if assigned_user_id is not None:
+            assignee = await assert_active_workspace_member(self.db, workspace_id, assigned_user_id)
+        quote.assigned_user_id = assigned_user_id
+        quote.assignee = assignee
+        await self.db.commit()
         return await self._detail_response(quote)
 
     async def delete_quote(
@@ -1990,12 +2068,18 @@ class QuoteService:
         contact_id = payload.contact_id
         if contact_id is None:
             contact_id = await self._resolve_wizard_contact(workspace_id, payload)
+        assigned_user_id = await self._default_assignee_id(
+            workspace_id,
+            opportunity_id=payload.opportunity_id,
+            created_by_id=created_by_id,
+        )
 
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=contact_id,
             service_location_id=payload.service_location_id,
             opportunity_id=payload.opportunity_id,
+            assigned_user_id=assigned_user_id,
             number=await self._next_quote_number(workspace_id),
             title=payload.title or self._wizard_title(document),
             currency="USD",
@@ -2780,6 +2864,7 @@ class QuoteService:
         create_invoice: bool = True,
         scheduled_start: datetime | None = None,
         scheduled_end: datetime | None = None,
+        technician_ids: Sequence[uuid.UUID] = (),
     ) -> QuoteConvertResponse:
         """Convert an approved quote into a job and/or an invoice (idempotent).
 
@@ -2859,7 +2944,7 @@ class QuoteService:
                 # Link the job to the just-created invoice (or a previously
                 # converted one) so its P&L has a revenue side.
                 "invoice_id": invoice_id,
-                "technician_ids": [],
+                "technician_ids": list(technician_ids),
             }
             # An optional schedule window lands the job ``scheduled`` in one step
             # (JobService derives the status from the presence of the window).

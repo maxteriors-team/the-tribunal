@@ -1,7 +1,10 @@
 // Pipeline & Opportunity types
 
+import type { components } from "@/lib/api/_generated";
+
 export type PipelineStageType = "active" | "won" | "lost";
 export type OpportunityStatus = "open" | "won" | "lost" | "abandoned";
+export type OpportunityAssignee = components["schemas"]["AssigneeSummary"];
 
 export interface PipelineStage {
   id: string;
@@ -70,7 +73,8 @@ export interface Opportunity {
   pipeline_id: string;
   stage_id?: string;
   primary_contact_id?: number;
-  assigned_user_id?: string;
+  assigned_user_id?: number | null;
+  assignee?: OpportunityAssignee | null;
   name: string;
   description?: string;
   amount?: number;

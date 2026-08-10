@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.models.message_template import MessageTemplate
+from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
 from app.schemas.attach_rules import (
     AttachRulesSettings,
@@ -276,8 +277,12 @@ async def get_team_members(
     """Get workspace team members."""
     result = await db.execute(
         select(WorkspaceMembership)
+        .join(User, User.id == WorkspaceMembership.user_id)
         .options(selectinload(WorkspaceMembership.user))
-        .where(WorkspaceMembership.workspace_id == workspace.id)
+        .where(
+            WorkspaceMembership.workspace_id == workspace.id,
+            User.is_active.is_(True),
+        )
     )
     memberships = result.scalars().all()
 

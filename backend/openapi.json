@@ -47119,36 +47119,6 @@
         "title": "UpsellConfig",
         "type": "object"
       },
-      "UpsellCustomQuoteLine": {
-        "description": "A one-off item priced by the lead technician on site.\n\nCustom pricing is the explicit exception to catalog-only pricing. Tight field\nbounds plus the workspace proposal ceiling keep this from becoming an\nuncapped substitute for the price book.",
-        "properties": {
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "quantity": {
-            "default": 1.0,
-            "exclusiveMinimum": 0.0,
-            "maximum": 1000.0,
-            "title": "Quantity",
-            "type": "number"
-          },
-          "unit_price": {
-            "exclusiveMinimum": 0.0,
-            "maximum": 100000.0,
-            "title": "Unit Price",
-            "type": "number"
-          }
-        },
-        "required": [
-          "name",
-          "unit_price"
-        ],
-        "title": "UpsellCustomQuoteLine",
-        "type": "object"
-      },
       "UpsellCustomer": {
         "description": "The customer on a job — greeting and address detail only.\n\nNo pipeline, notes, tags, lifecycle, or message history: a technician needs\nto know who answers the door and where to put the work, nothing more.",
         "properties": {
@@ -47389,7 +47359,7 @@
         "type": "object"
       },
       "UpsellQuoteRequest": {
-        "description": "Build an add-on proposal for the customer on a job.\n\nA proposal may carry catalog add-ons, one-off custom lines, a Care Plan, or\nany combination. A Care Plan on its own is a complete sale — signing an\nexisting system onto maintenance adds no hardware — so both line-item lists\nmay be empty when ``care_plan`` is set.",
+        "description": "Build an add-on proposal for the customer on a job.\n\nA proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on\nits own is a complete sale — signing an existing system onto maintenance adds\nno hardware — so ``line_items`` may be empty when ``care_plan`` is set.",
         "properties": {
           "care_plan": {
             "anyOf": [
@@ -47400,14 +47370,6 @@
                 "type": "null"
               }
             ]
-          },
-          "custom_line_items": {
-            "items": {
-              "$ref": "#/components/schemas/UpsellCustomQuoteLine"
-            },
-            "maxItems": 10,
-            "title": "Custom Line Items",
-            "type": "array"
           },
           "line_items": {
             "items": {
@@ -86270,75 +86232,6 @@
           }
         ],
         "summary": "Deliver Upsell Quote",
-        "tags": [
-          "Upsell"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/present": {
-      "post": {
-        "description": "Open this job's proposal for approval on the technician's device.\n\nThis allocates the public proposal link and marks it presented without\nsending email or SMS. The same job + customer binding as delivery prevents a\nlead technician from opening a proposal for an unrelated customer.",
-        "operationId": "present_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__present_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Job Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "quote_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Quote Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoteDetailResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Present Upsell Quote",
         "tags": [
           "Upsell"
         ]

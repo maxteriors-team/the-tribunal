@@ -26,7 +26,9 @@ import uuid
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.models.workspace import WorkspaceMembership
+from app.services.exceptions import NotFoundError
 
 
 async def resolve_active_membership(
@@ -73,6 +75,27 @@ async def resolve_active_membership(
         .limit(1)
     )
     return fallback.scalar_one_or_none()
+
+
+async def assert_active_workspace_member(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    user_id: int,
+) -> User:
+    """Return an active user who belongs to ``workspace_id`` or tenant-safe 404."""
+    result = await db.execute(
+        select(User)
+        .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+        .where(
+            WorkspaceMembership.workspace_id == workspace_id,
+            User.id == user_id,
+            User.is_active.is_(True),
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise NotFoundError("Active workspace member not found")
+    return user
 
 
 async def set_default_membership(

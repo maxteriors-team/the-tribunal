@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.lead_source import OpportunityLeadAttributionFields
+from app.schemas.user import AssigneeSummary
 
 OpportunityStatus = Literal["open", "won", "lost", "abandoned"]
 
@@ -180,6 +181,7 @@ class OpportunityCreate(OpportunityBase):
     pipeline_id: uuid.UUID
     stage_id: uuid.UUID | None = None
     primary_contact_id: int | None = None
+    assigned_user_id: int | None = None
 
 
 class OpportunityUpdate(OpportunityLeadAttributionFields):
@@ -207,6 +209,7 @@ class OpportunityResponse(OpportunityBase):
     stage_id: uuid.UUID | None = None
     primary_contact_id: int | None = None
     assigned_user_id: int | None = None
+    assignee: AssigneeSummary | None = Field(default=None, validation_alias="assigned_user")
     probability: int
     status: OpportunityStatus
     lost_reason: str | None = None

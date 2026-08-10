@@ -13,6 +13,7 @@ export interface OpportunitiesListParams {
   search?: string;
   pipeline_id?: string;
   stage_id?: string;
+  owner_id?: number;
 }
 
 export interface OpportunitiesListResponse {
@@ -33,6 +34,7 @@ export interface CreateOpportunityRequest {
   pipeline_id: string;
   stage_id?: string;
   primary_contact_id?: number;
+  assigned_user_id?: number | null;
 }
 
 export interface UpdateOpportunityRequest {
@@ -42,7 +44,7 @@ export interface UpdateOpportunityRequest {
   currency?: string;
   stage_id?: string;
   expected_close_date?: string;
-  assigned_user_id?: string;
+  assigned_user_id?: number | null;
   source?: string;
   status?: "open" | "won" | "lost" | "abandoned";
   lost_reason?: string;

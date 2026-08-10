@@ -152,7 +152,7 @@ async def list_opportunities(
     membership: CanReadCRM,
     pipeline_id: Annotated[uuid.UUID | None, Query()] = None,
     stage_id: Annotated[uuid.UUID | None, Query()] = None,
-    owner_id: Annotated[uuid.UUID | None, Query()] = None,
+    owner_id: Annotated[int | None, Query()] = None,
     opportunity_status: Annotated[str | None, Query(alias="status")] = None,
     source: Annotated[str | None, Query()] = None,
     value_min: Annotated[Decimal | None, Query(ge=0)] = None,

@@ -187,6 +187,15 @@ export function OpportunityCardSummary({
         </p>
       )}
 
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <User className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">
+          Owner: {opportunity.assignee
+            ? opportunity.assignee.full_name || opportunity.assignee.email
+            : "Unassigned"}
+        </span>
+      </p>
+
       <div className="flex items-baseline justify-between gap-2">
         {opportunity.amount != null ? (
           <span className="text-sm font-semibold">

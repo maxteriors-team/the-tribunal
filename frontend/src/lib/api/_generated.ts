@@ -9144,30 +9144,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/upsell/jobs/{job_id}/quote/{quote_id}/present": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Present Upsell Quote
-         * @description Open this job's proposal for approval on the technician's device.
-         *
-         *     This allocates the public proposal link and marks it presented without
-         *     sending email or SMS. The same job + customer binding as delivery prevents a
-         *     lead technician from opening a proposal for an unrelated customer.
-         */
-        post: operations["present_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__present_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/upsell/my-stats": {
         parameters: {
             query?: never;
@@ -28183,25 +28159,6 @@ export interface components {
             ranks?: components["schemas"]["UpsellRankConfig"][];
         };
         /**
-         * UpsellCustomQuoteLine
-         * @description A one-off item priced by the lead technician on site.
-         *
-         *     Custom pricing is the explicit exception to catalog-only pricing. Tight field
-         *     bounds plus the workspace proposal ceiling keep this from becoming an
-         *     uncapped substitute for the price book.
-         */
-        UpsellCustomQuoteLine: {
-            /** Name */
-            name: string;
-            /**
-             * Quantity
-             * @default 1
-             */
-            quantity: number;
-            /** Unit Price */
-            unit_price: number;
-        };
-        /**
          * UpsellCustomer
          * @description The customer on a job — greeting and address detail only.
          *
@@ -28327,15 +28284,12 @@ export interface components {
          * UpsellQuoteRequest
          * @description Build an add-on proposal for the customer on a job.
          *
-         *     A proposal may carry catalog add-ons, one-off custom lines, a Care Plan, or
-         *     any combination. A Care Plan on its own is a complete sale — signing an
-         *     existing system onto maintenance adds no hardware — so both line-item lists
-         *     may be empty when ``care_plan`` is set.
+         *     A proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on
+         *     its own is a complete sale — signing an existing system onto maintenance adds
+         *     no hardware — so ``line_items`` may be empty when ``care_plan`` is set.
          */
         UpsellQuoteRequest: {
             care_plan?: components["schemas"]["UpsellCarePlanSelection"] | null;
-            /** Custom Line Items */
-            custom_line_items?: components["schemas"]["UpsellCustomQuoteLine"][];
             /** Line Items */
             line_items?: components["schemas"]["UpsellQuoteLine"][];
             /** Notes */
@@ -48291,39 +48245,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDeliverResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    present_upsell_quote_api_v1_workspaces__workspace_id__upsell_jobs__job_id__quote__quote_id__present_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                job_id: string;
-                quote_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuoteDetailResponse"];
                 };
             };
             /** @description Validation Error */

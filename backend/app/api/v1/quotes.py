@@ -39,6 +39,7 @@ from app.schemas.proposal import (
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
     PaginatedQuotes,
+    QuoteAssignmentRequest,
     QuoteConvertRequest,
     QuoteConvertResponse,
     QuoteCreate,
@@ -71,6 +72,7 @@ async def list_quotes(
     membership: CanReadBilling,
     quote_status: Annotated[str | None, Query(alias="status")] = None,
     contact_id: Annotated[int | None, Query()] = None,
+    assigned_user_id: Annotated[int | None, Query()] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> PaginatedQuotes:
@@ -82,6 +84,7 @@ async def list_quotes(
         page_size=page_size,
         status=quote_status,
         contact_id=contact_id,
+        assigned_user_id=assigned_user_id,
     )
 
 
@@ -123,6 +126,20 @@ async def update_quote(
     """Update a quote's header fields (totals are re-derived)."""
     service = QuoteService(db)
     return await service.update_quote(workspace_id, quote_id, quote_in)
+
+
+@router.put("/{quote_id}/assignment", response_model=QuoteDetailResponse)
+async def assign_quote(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: QuoteAssignmentRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Reassign or clear a quote's sales owner in any lifecycle state."""
+    service = QuoteService(db)
+    return await service.assign_quote(workspace_id, quote_id, payload.assigned_user_id)
 
 
 @router.delete("/{quote_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -218,6 +235,7 @@ async def convert_quote(
         create_invoice=payload.create_invoice,
         scheduled_start=payload.scheduled_start,
         scheduled_end=payload.scheduled_end,
+        technician_ids=payload.technician_ids,
     )
 
 
