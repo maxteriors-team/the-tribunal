@@ -17,6 +17,7 @@ const {
   sendMock,
   getMock,
   deleteMock,
+  assignMock,
   pushMock,
   useWorkspaceIdMock,
   toastMock,
@@ -26,6 +27,7 @@ const {
   sendMock: vi.fn(),
   getMock: vi.fn(),
   deleteMock: vi.fn(),
+  assignMock: vi.fn(),
   pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
@@ -37,6 +39,7 @@ vi.mock("@/lib/api/quotes", () => ({
     get: getMock,
     update: vi.fn(),
     delete: deleteMock,
+    assign: assignMock,
     send: sendMock,
     deliver: deliverMock,
     approve: vi.fn(),
@@ -45,6 +48,32 @@ vi.mock("@/lib/api/quotes", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: toastMock }));
+
+vi.mock("@/components/workspaces/team-member-picker", () => ({
+  TeamMemberPicker: ({
+    value,
+    onValueChange,
+    label,
+  }: {
+    value: number | null;
+    onValueChange: (value: number | null) => void;
+    label?: string;
+  }) => (
+    <label>
+      {label}
+      <select
+        aria-label={label}
+        value={value ?? ""}
+        onChange={(event) =>
+          onValueChange(event.target.value ? Number(event.target.value) : null)
+        }
+      >
+        <option value="">Unassigned</option>
+        <option value="7">Morgan Manager</option>
+      </select>
+    </label>
+  ),
+}));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
@@ -124,6 +153,49 @@ describe("QuotesList client-view signal", () => {
 
     expect(await screen.findByText("QUO-000123")).toBeInTheDocument();
     expect(screen.queryByText(/^Viewed /)).not.toBeInTheDocument();
+  });
+});
+
+describe("QuotesList ownership", () => {
+  const listOne = (overrides: Partial<Quote> = {}) =>
+    listMock.mockResolvedValue({
+      items: [quote(overrides)],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    });
+
+  it("shows the assigned sales owner", async () => {
+    listOne({
+      assigned_user_id: 4,
+      assignee: { id: 4, full_name: "Avery Owner", email: "avery@example.com" },
+    });
+
+    renderList();
+
+    expect(await screen.findByText("Avery Owner")).toBeInTheDocument();
+    expect(screen.getByText("avery@example.com")).toBeInTheDocument();
+  });
+
+  it("reassigns an approved quote and keeps the action available", async () => {
+    listOne({ status: "approved", assigned_user_id: null, assignee: null });
+    assignMock.mockResolvedValue(
+      quote({
+        status: "approved",
+        assigned_user_id: 7,
+        assignee: { id: 7, full_name: "Morgan Manager", email: "morgan@example.com" },
+      }),
+    );
+
+    renderList();
+    await screen.findByText("QUO-000123");
+    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+    await userEvent.click(await screen.findByText("Assign owner"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sales owner" }), "7");
+    await userEvent.click(screen.getByRole("button", { name: "Save owner" }));
+
+    await waitFor(() => expect(assignMock).toHaveBeenCalledWith("ws-1", "quote-1", 7));
   });
 });
 

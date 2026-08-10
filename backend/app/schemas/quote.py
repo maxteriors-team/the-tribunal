@@ -21,6 +21,7 @@ from pydantic import (
 
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
 from app.schemas.pricing import FinancingEstimate
+from app.schemas.user import AssigneeSummary
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
 
@@ -197,6 +198,12 @@ class QuoteServiceResponse(BaseModel):
     amount: float
 
 
+class QuoteAssignmentRequest(BaseModel):
+    """Reassign or clear a quote's sales owner independently of quote content."""
+
+    assigned_user_id: int | None
+
+
 class QuoteDeclineRequest(BaseModel):
     """Operator decline with an optional reason."""
 
@@ -233,6 +240,7 @@ class QuoteConvertRequest(BaseModel):
     create_invoice: bool = True
     scheduled_start: datetime | None = None
     scheduled_end: datetime | None = None
+    technician_ids: list[uuid.UUID] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_window(self) -> "QuoteConvertRequest":
@@ -252,6 +260,8 @@ class QuoteResponse(BaseModel):
     contact_id: int | None = None
     service_location_id: uuid.UUID | None = None
     opportunity_id: uuid.UUID | None = None
+    assigned_user_id: int | None = None
+    assignee: AssigneeSummary | None = None
     number: str
     title: str | None = None
     status: QuoteStatus

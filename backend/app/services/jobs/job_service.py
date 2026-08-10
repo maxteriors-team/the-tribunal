@@ -120,14 +120,22 @@ class JobService:
     async def _assert_technicians(
         self, technician_ids: Sequence[uuid.UUID], workspace_id: uuid.UUID
     ) -> None:
-        """Validate every technician id belongs to the workspace (tenant-safe 404)."""
+        """Require active roster entries in this workspace for new assignments."""
         unique_ids = set(technician_ids)
-        for technician_id in unique_ids:
-            await assert_workspace_owned(
-                self.db,
-                Technician,
-                technician_id,
-                workspace_id,
+        if not unique_ids:
+            return
+        result = await self.db.execute(
+            select(Technician.id).where(
+                Technician.id.in_(unique_ids),
+                Technician.workspace_id == workspace_id,
+                Technician.is_active.is_(True),
+            )
+        )
+        found_ids = set(result.scalars().all())
+        if found_ids != unique_ids:
+            # Tenant-safe: inactive, missing, and cross-workspace ids look identical.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="Technician not found",
             )
 

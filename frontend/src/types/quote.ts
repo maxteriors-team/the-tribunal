@@ -24,12 +24,16 @@ export interface QuoteLineItem {
   updated_at: string;
 }
 
+export type AssigneeSummary = components["schemas"]["AssigneeSummary"];
+
 export interface Quote {
   id: string;
   workspace_id: string;
   contact_id?: number | null;
   service_location_id?: string | null;
   opportunity_id?: string | null;
+  assigned_user_id?: number | null;
+  assignee?: AssigneeSummary | null;
   number: string;
   title?: string | null;
   status: QuoteStatus;

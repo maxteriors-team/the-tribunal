@@ -17,6 +17,7 @@ export interface QuotesListParams {
   page_size?: number;
   status?: string;
   contact_id?: number;
+  assigned_user_id?: number;
 }
 
 // Base CRUD from the factory (list/get/create/update/delete).
@@ -37,6 +38,16 @@ export const quotesApi = {
   create: baseQuotesApi.create!,
   update: baseQuotesApi.update!,
   delete: baseQuotesApi.delete!,
+
+  assign: async (
+    workspaceId: string,
+    quoteId: string,
+    assignedUserId: number | null,
+  ): Promise<Quote> => {
+    return apiPut<Quote>(`${quotePath(workspaceId, quoteId)}/assignment`, {
+      assigned_user_id: assignedUserId,
+    });
+  },
 
   // Lifecycle transitions
   send: async (workspaceId: string, quoteId: string): Promise<Quote> => {
@@ -90,6 +101,7 @@ export const quotesApi = {
       // ISO datetimes; supply both to schedule the created job on the calendar.
       scheduled_start?: string | null;
       scheduled_end?: string | null;
+      technician_ids?: string[];
     }
   ): Promise<QuoteConvertResult> => {
     return apiPost<QuoteConvertResult>(
@@ -99,6 +111,7 @@ export const quotesApi = {
         create_invoice: options?.create_invoice ?? true,
         scheduled_start: options?.scheduled_start ?? null,
         scheduled_end: options?.scheduled_end ?? null,
+        technician_ids: options?.technician_ids ?? [],
       }
     );
   },

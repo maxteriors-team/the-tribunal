@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  UserRound,
   Wrench,
   X,
 } from "lucide-react";
@@ -34,6 +35,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -53,6 +62,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { quotesApi } from "@/lib/api/quotes";
 import { queryKeys } from "@/lib/query-keys";
@@ -84,6 +94,8 @@ export function QuotesList() {
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [servicesQuote, setServicesQuote] = useState<Quote | null>(null);
+  const [assignmentQuote, setAssignmentQuote] = useState<Quote | null>(null);
+  const [assignmentUserId, setAssignmentUserId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Quote | null>(null);
 
   const query = useQuery({
@@ -167,6 +179,27 @@ export function QuotesList() {
       toast.error(getApiErrorMessage(err, "Failed to delete quote")),
   });
 
+  const assignmentMutation = useMutation({
+    mutationFn: ({ quoteId, userId }: { quoteId: string; userId: number | null }) =>
+      quotesApi.assign(workspaceId ?? "", quoteId, userId),
+    onSuccess: (quote) => {
+      toast.success(
+        quote.assignee
+          ? `Quote ${quote.number} assigned to ${quote.assignee.full_name || quote.assignee.email}`
+          : `Quote ${quote.number} is unassigned`,
+      );
+      setAssignmentQuote(null);
+      invalidate();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to update quote owner")),
+  });
+
+  const openAssignment = (quote: Quote) => {
+    setAssignmentQuote(quote);
+    setAssignmentUserId(quote.assigned_user_id ?? null);
+  };
+
   const busy =
     sendMutation.isPending ||
     deliverMutation.isPending ||
@@ -234,6 +267,7 @@ export function QuotesList() {
               <TableHead>Number</TableHead>
               <TableHead>For</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Owner</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Valid until</TableHead>
               <TableHead className="w-10" />
@@ -266,6 +300,22 @@ export function QuotesList() {
                     </div>
                   )}
                 </TableCell>
+                <TableCell className="max-w-[14rem]">
+                  {quote.assignee ? (
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {quote.assignee.full_name || quote.assignee.email}
+                      </div>
+                      {quote.assignee.full_name ? (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {quote.assignee.email}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Unassigned</span>
+                  )}
+                </TableCell>
                 <TableCell className="min-w-[18rem] text-right">
                   <div>{formatCurrency(quote.total, quote.currency)}</div>
                   <FinancingEstimate
@@ -281,6 +331,7 @@ export function QuotesList() {
                   <RowActions
                     quote={quote}
                     busy={busy}
+                    onAssign={() => openAssignment(quote)}
                     onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
                     onDeliver={(channel) =>
@@ -332,6 +383,60 @@ export function QuotesList() {
         }}
       />
 
+      <Dialog
+        open={assignmentQuote !== null}
+        onOpenChange={(open) => {
+          if (!open && !assignmentMutation.isPending) setAssignmentQuote(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign quote owner</DialogTitle>
+            <DialogDescription>
+              Choose who owns the sales follow-up for quote {assignmentQuote?.number}.
+              Job crews are assigned separately when the quote converts.
+            </DialogDescription>
+          </DialogHeader>
+          {assignmentQuote?.assignee ? (
+            <p className="text-sm text-muted-foreground">
+              Current owner: {assignmentQuote.assignee.full_name || assignmentQuote.assignee.email}
+            </p>
+          ) : null}
+          <TeamMemberPicker
+            workspaceId={workspaceId ?? ""}
+            value={assignmentUserId}
+            onValueChange={setAssignmentUserId}
+            label="Sales owner"
+            triggerId="quote-owner"
+            disabled={assignmentMutation.isPending}
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAssignmentQuote(null)}
+              disabled={assignmentMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!assignmentQuote || assignmentMutation.isPending}
+              onClick={() => {
+                if (assignmentQuote) {
+                  assignmentMutation.mutate({
+                    quoteId: assignmentQuote.id,
+                    userId: assignmentUserId,
+                  });
+                }
+              }}
+            >
+              {assignmentMutation.isPending ? "Saving…" : "Save owner"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* A quote can be deleted right up until it is decided, including after
           it went out — so the confirmation has to say which one, and warn when
           a customer is holding a link that is about to stop resolving. */}
@@ -376,6 +481,7 @@ export function QuotesList() {
 interface RowActionsProps {
   quote: Quote;
   busy: boolean;
+  onAssign: () => void;
   onEdit: () => void;
   onSend: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
@@ -397,6 +503,7 @@ interface RowActionsProps {
 function RowActions({
   quote,
   busy,
+  onAssign,
   onEdit,
   onSend,
   onDeliver,
@@ -417,8 +524,6 @@ function RowActions({
   // The client proposal link only exists once a quote has been sent.
   const hasClientLink = Boolean(quote.public_token);
 
-  if (!isOpen && !canConvert && !hasClientLink) return null;
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -427,6 +532,11 @@ function RowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onAssign}>
+          <UserRound className="mr-2 h-4 w-4" />
+          Assign owner
+        </DropdownMenuItem>
+        {(isOpen || canConvert || hasClientLink) && <DropdownMenuSeparator />}
         {isOpen && (
           <>
             {/* Changing the quote leads, because a sent quote is the one an

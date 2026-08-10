@@ -34,6 +34,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -42,6 +43,7 @@ import type { Opportunity, PipelineStage } from "@/types";
 const createOpportunitySchema = z.object({
   name: z.string().trim().min(1, { error: "Name is required" }),
   stage_id: z.string().min(1, { error: "Please select a stage" }),
+  assigned_user_id: z.number().nullable(),
   amount: z
     .string()
     .trim()
@@ -59,6 +61,7 @@ interface OpportunityCreateSheetProps {
   stages: PipelineStage[];
   /** Stage to pre-select (e.g. the column the user added from). */
   defaultStageId?: string;
+  canAssignOwners: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -68,6 +71,7 @@ export function OpportunityCreateSheet({
   pipelineId,
   stages,
   defaultStageId,
+  canAssignOwners,
   open,
   onOpenChange,
 }: OpportunityCreateSheetProps) {
@@ -79,6 +83,7 @@ export function OpportunityCreateSheet({
     defaultValues: {
       name: "",
       stage_id: initialStageId,
+      assigned_user_id: null,
       amount: "",
       description: "",
     },
@@ -90,6 +95,7 @@ export function OpportunityCreateSheet({
       form.reset({
         name: "",
         stage_id: initialStageId,
+        assigned_user_id: null,
         amount: "",
         description: "",
       });
@@ -106,6 +112,7 @@ export function OpportunityCreateSheet({
         stage_id: values.stage_id,
         description: values.description.trim() || undefined,
         amount: amount === "" ? undefined : Number(amount),
+        assigned_user_id: canAssignOwners ? values.assigned_user_id : undefined,
       });
     },
     onSuccess: () => {
@@ -184,6 +191,23 @@ export function OpportunityCreateSheet({
                 </FormItem>
               )}
             />
+
+            {canAssignOwners ? (
+              <FormField
+                control={form.control}
+                name="assigned_user_id"
+                render={({ field }) => (
+                  <TeamMemberPicker
+                    workspaceId={workspaceId}
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    label="Owner"
+                    triggerId="opportunity-owner"
+                    disabled={createMutation.isPending}
+                  />
+                )}
+              />
+            ) : null}
 
             <FormField
               control={form.control}

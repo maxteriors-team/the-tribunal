@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserCreate(BaseModel):
@@ -11,6 +11,16 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: str | None = None
+
+
+class AssigneeSummary(BaseModel):
+    """Stable user display fields embedded on assigned records."""
+
+    id: int
+    email: str
+    full_name: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserResponse(BaseModel):

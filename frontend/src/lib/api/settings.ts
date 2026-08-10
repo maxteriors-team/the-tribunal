@@ -237,10 +237,17 @@ export const settingsApi = {
     );
   },
 
-  // Team members
+  // Active workspace users eligible for sales-record ownership.
+  getActiveTeamMembers: async (workspaceId: string): Promise<TeamMember[]> => {
+    return apiGet<TeamMember[]>(
+      `/api/v1/settings/workspaces/${workspaceId}/team`,
+    );
+  },
+
+  // Backwards-compatible name used by the team-management settings page.
   getTeamMembers: async (workspaceId: string): Promise<TeamMember[]> => {
     return apiGet<TeamMember[]>(
-      `/api/v1/settings/workspaces/${workspaceId}/team`
+      `/api/v1/settings/workspaces/${workspaceId}/team`,
     );
   },
 

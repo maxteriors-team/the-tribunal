@@ -7626,6 +7626,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/assignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign Quote
+         * @description Reassign or clear a quote's sales owner in any lifecycle state.
+         */
+        put: operations["assign_quote_api_v1_workspaces__workspace_id__quotes__quote_id__assignment_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/convert": {
         parameters: {
             query?: never;
@@ -11164,6 +11184,18 @@ export interface components {
              */
             lead_source_id: string;
             source_type?: components["schemas"]["LeadSourceType"] | null;
+        };
+        /**
+         * AssigneeSummary
+         * @description Stable user display fields embedded on assigned records.
+         */
+        AssigneeSummary: {
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name?: string | null;
+            /** Id */
+            id: number;
         };
         /**
          * AssistantChatRequest
@@ -20647,6 +20679,8 @@ export interface components {
         OpportunityCreate: {
             /** Amount */
             amount?: number | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /**
@@ -20700,6 +20734,7 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /** Closed By Id */
@@ -20865,6 +20900,7 @@ export interface components {
             amount?: number | null;
             /** Assigned User Id */
             assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /** Attribution Confidence */
             attribution_confidence?: number | null;
             /** Closed By Id */
@@ -24212,6 +24248,14 @@ export interface components {
             title: string;
         };
         /**
+         * QuoteAssignmentRequest
+         * @description Reassign or clear a quote's sales owner independently of quote content.
+         */
+        QuoteAssignmentRequest: {
+            /** Assigned User Id */
+            assigned_user_id: number | null;
+        };
+        /**
          * QuoteConvertRequest
          * @description Choose what an approved quote converts into. Defaults to both.
          *
@@ -24233,6 +24277,8 @@ export interface components {
             scheduled_end?: string | null;
             /** Scheduled Start */
             scheduled_start?: string | null;
+            /** Technician Ids */
+            technician_ids?: string[];
         };
         /**
          * QuoteConvertResponse
@@ -24335,6 +24381,9 @@ export interface components {
         QuoteDetailResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /**
              * Attach Count
              * @default 0
@@ -24614,6 +24663,9 @@ export interface components {
         QuoteResponse: {
             /** Approved At */
             approved_at?: string | null;
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
             /**
              * Attach Count
              * @default 0
@@ -42445,7 +42497,7 @@ export interface operations {
             query?: {
                 pipeline_id?: string | null;
                 stage_id?: string | null;
-                owner_id?: string | null;
+                owner_id?: number | null;
                 status?: string | null;
                 source?: string | null;
                 value_min?: number | string | null;
@@ -44473,6 +44525,7 @@ export interface operations {
             query?: {
                 status?: string | null;
                 contact_id?: number | null;
+                assigned_user_id?: number | null;
                 page?: number;
                 page_size?: number;
             };
@@ -44894,6 +44947,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_quote_api_v1_workspaces__workspace_id__quotes__quote_id__assignment_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteAssignmentRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -41,6 +41,7 @@ import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { useWorkspace } from "@/providers/workspace-provider";
 import type { Opportunity, Pipeline, PipelineStage } from "@/types";
 
 import { ManageStagesDialog } from "./manage-stages-dialog";
@@ -120,6 +121,8 @@ function PipelineBoard({
   pipeline: Pipeline;
 }) {
   const queryClient = useQueryClient();
+  const { currentWorkspace } = useWorkspace();
+  const canAssignOwners = currentWorkspace?.role !== "sales_rep";
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -357,6 +360,7 @@ function PipelineBoard({
         workspaceId={workspaceId}
         opportunityId={selectedId}
         stages={stages}
+        canAssignOwners={canAssignOwners}
         open={detailOpen}
         onOpenChange={setDetailOpen}
       />
@@ -366,6 +370,7 @@ function PipelineBoard({
         pipelineId={pipeline.id}
         stages={stages}
         defaultStageId={createStageId}
+        canAssignOwners={canAssignOwners}
         open={createOpen}
         onOpenChange={setCreateOpen}
       />
