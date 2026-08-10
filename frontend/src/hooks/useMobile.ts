@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useSyncExternalStore } from "react"
 
 const MOBILE_BREAKPOINT = 768
 /**
@@ -9,41 +9,26 @@ const MOBILE_BREAKPOINT = 768
 const CONSOLE_BREAKPOINT = 1280
 
 /**
- * Subscribe to a media query. Resolves synchronously on the client (so a
- * desktop never flashes the narrow layout) and reports `false` during SSR,
- * matching the `useIsMobile` convention above.
+ * Subscribe to a media query without rendering different server and hydration
+ * trees. React uses the server snapshot for the hydration pass, then reads the
+ * real viewport before the browser paints the settled client layout.
  */
 export function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState<boolean | undefined>(() =>
-    typeof window === "undefined" ? undefined : window.matchMedia(query).matches
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const mediaQuery = window.matchMedia(query)
+      mediaQuery.addEventListener("change", onStoreChange)
+      return () => mediaQuery.removeEventListener("change", onStoreChange)
+    },
+    [query]
   )
+  const getSnapshot = useCallback(() => window.matchMedia(query).matches, [query])
 
-  useEffect(() => {
-    const mql = window.matchMedia(query)
-    const onChange = () => setMatches(mql.matches)
-    onChange()
-    mql.addEventListener("change", onChange)
-    return () => mql.removeEventListener("change", onChange)
-  }, [query])
-
-  return !!matches
+  return useSyncExternalStore(subscribe, getSnapshot, () => false)
 }
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState<boolean | undefined>(() =>
-    typeof window === "undefined" ? undefined : window.innerWidth < MOBILE_BREAKPOINT
-  )
-
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return !!isMobile
+  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
 }
 
 /**

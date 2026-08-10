@@ -1,6 +1,6 @@
 """On-site upsell endpoints: sell an add-on from the customer's driveway.
 
-Every route is gated on ``upsell:sell``, which the ``field`` tier holds. That
+Every route is gated on ``upsell:sell``, which the lead-technician tier holds. That
 capability is *not* an access grant on its own — it only opens this router, and
 this router hands each call to :class:`app.services.upsell.UpsellService`, which
 re-scopes it to the jobs the caller is actually assigned to and to catalog items
@@ -151,6 +151,31 @@ async def create_upsell_quote(
         workspace_id,
         job_id,
         payload,
+        user_id=current_user.id,
+        role=membership.role,
+    )
+
+
+@router.post("/jobs/{job_id}/quote/{quote_id}/present", response_model=QuoteDetailResponse)
+async def present_upsell_quote(
+    workspace_id: uuid.UUID,
+    job_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+    membership: CanUpsell,
+) -> QuoteDetailResponse:
+    """Open this job's proposal for approval on the technician's device.
+
+    This allocates the public proposal link and marks it presented without
+    sending email or SMS. The same job + customer binding as delivery prevents a
+    lead technician from opening a proposal for an unrelated customer.
+    """
+    service = UpsellService(db)
+    return await service.present_quote(
+        workspace_id,
+        job_id,
+        quote_id,
         user_id=current_user.id,
         role=membership.role,
     )

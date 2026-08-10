@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.pricing import CarePlanPricing
 
@@ -177,15 +177,37 @@ class UpsellQuoteLine(BaseModel):
     quantity: float = Field(default=1.0, gt=0)
 
 
+class UpsellCustomQuoteLine(BaseModel):
+    """A one-off item priced by the lead technician on site.
+
+    Custom pricing is the explicit exception to catalog-only pricing. Tight field
+    bounds plus the workspace proposal ceiling keep this from becoming an
+    uncapped substitute for the price book.
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    quantity: float = Field(default=1.0, gt=0, le=1000)
+    unit_price: float = Field(gt=0, le=100_000)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        if not (name := value.strip()):
+            raise ValueError("Name is required")
+        return name
+
+
 class UpsellQuoteRequest(BaseModel):
     """Build an add-on proposal for the customer on a job.
 
-    A proposal may carry hardware add-ons, a Care Plan, or both. A Care Plan on
-    its own is a complete sale — signing an existing system onto maintenance adds
-    no hardware — so ``line_items`` may be empty when ``care_plan`` is set.
+    A proposal may carry catalog add-ons, one-off custom lines, a Care Plan, or
+    any combination. A Care Plan on its own is a complete sale — signing an
+    existing system onto maintenance adds no hardware — so both line-item lists
+    may be empty when ``care_plan`` is set.
     """
 
     line_items: list[UpsellQuoteLine] = Field(default_factory=list)
+    custom_line_items: list[UpsellCustomQuoteLine] = Field(default_factory=list, max_length=10)
     care_plan: UpsellCarePlanSelection | None = None
     title: str | None = Field(default=None, max_length=200)
     notes: str | None = None

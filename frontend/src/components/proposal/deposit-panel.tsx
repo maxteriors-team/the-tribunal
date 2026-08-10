@@ -59,8 +59,10 @@ export function DepositPanel({
   if (!due || due <= 0) return null;
 
   const amountLabel = formatCurrency(due, data.currency);
-  const pctLabel =
-    data.deposit_percentage != null
+  const fullPayment = Number(data.deposit_percentage) >= 100;
+  const pctLabel = fullPayment
+    ? "Full one-time total"
+    : data.deposit_percentage != null
       ? `${Number(data.deposit_percentage)}% of your package total`
       : null;
 
@@ -68,7 +70,7 @@ export function DepositPanel({
     return (
       <div className="dep-panel paid">
         <div className="dep-info">
-          <div className="dep-label">Deposit Paid</div>
+          <div className="dep-label">{fullPayment ? "Paid" : "Deposit Paid"}</div>
           <div className="dep-amount">{amountLabel}</div>
         </div>
         <div className="dep-paid-badge">&#10003;&nbsp; Received — thank you!</div>
@@ -83,7 +85,9 @@ export function DepositPanel({
   return (
     <div className="dep-panel">
       <div className="dep-info">
-        <div className="dep-label">Deposit Due Today</div>
+        <div className="dep-label">
+          {fullPayment ? "Payment Due Today" : "Deposit Due Today"}
+        </div>
         <div className="dep-amount">{amountLabel}</div>
         {pctLabel ? <div className="dep-sub">{pctLabel}</div> : null}
       </div>
@@ -102,7 +106,7 @@ export function DepositPanel({
       >
         {checkout.isPending || busy
           ? "Redirecting…"
-          : (payLabel ?? "Pay Deposit")}
+          : (payLabel ?? (fullPayment ? "Pay Now" : "Pay Deposit"))}
       </button>
       {error ? <div className="dep-error">{error}</div> : null}
     </div>

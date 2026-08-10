@@ -1096,6 +1096,22 @@ class QuoteService:
         await self._email_quote(quote)
         return await self._detail_response(quote)
 
+    async def prepare_for_in_person_approval(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+    ) -> QuoteDetailResponse:
+        """Publish a proposal for review on the operator's device without sending it.
+
+        This performs the same lifecycle transition and token allocation as delivery,
+        but deliberately sends no email or SMS. It is the narrow path used when the
+        customer is physically present and will review the public proposal on the
+        technician's phone or tablet.
+        """
+        quote = await self._load_for_send(workspace_id, quote_id)
+        await self._ensure_sent_state(quote)
+        return await self._detail_response(quote)
+
     async def _load_for_send(self, workspace_id: uuid.UUID, quote_id: uuid.UUID) -> Quote:
         return await get_or_404(
             self.db,
