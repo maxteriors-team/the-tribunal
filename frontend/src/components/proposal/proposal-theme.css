@@ -573,7 +573,10 @@
   .night-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--gold); cursor: pointer; border: 2px solid #0a0a0a; }
   .night-hint { font-size: 11px; color: var(--t4); font-style: italic; font-family: var(--font-cormorant), serif; }
 
-  .pnight-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.16s both; }
+  /* One frame per designed photo (front, back, walkway), stacked full-width:
+     these are wide elevation shots, and columns would shrink the very thing the
+     rep drew the lights on. */
+  .pnight-section { margin-bottom: 56px; display: grid; gap: 14px; animation: sw-up 0.8s var(--ease) 0.16s both; }
   .pnight-frame { border: 1px solid var(--bdr-g); position: relative; line-height: 0; background: #05060c; }
   .pnight-frame img { width: 100%; height: auto; display: block; }
   .pnight-cap { line-height: 1.4; padding: 12px 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.20em; text-transform: uppercase; color: var(--gold-d); background: var(--s1); border-top: 1px solid var(--bdr); }

@@ -555,7 +555,10 @@
      `estimator.css` owns the block's own styling; this only spaces it into the
      presentation rhythm and lets the gold theme through. */
   .pvalue-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.2s both; }
-  .pnight-section { margin-bottom: 56px; animation: sw-up 0.8s var(--ease) 0.16s both; }
+  /* One frame per designed photo (front, back, walkway), stacked full-width:
+     these are wide elevation shots, and columns would shrink the very thing the
+     rep drew the lights on. */
+  .pnight-section { margin-bottom: 56px; display: grid; gap: 14px; animation: sw-up 0.8s var(--ease) 0.16s both; }
   .pnight-frame { border: 1px solid var(--bdr-g); position: relative; line-height: 0; background: #05060c; }
   .pnight-frame img { width: 100%; height: auto; display: block; }
   .pnight-cap { line-height: 1.4; padding: 12px 16px; font-size: 10px; font-weight: 700; letter-spacing: 0.20em; text-transform: uppercase; color: var(--gold-d); background: var(--s1); border-top: 1px solid var(--bdr); }

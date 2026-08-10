@@ -10,10 +10,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { DesignerShot } from "@/components/estimator/proposal-host";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
-import { DEFAULT_DUSK } from "@/lib/estimator/render";
 import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
-import type { Design, PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorDetails } from "@/lib/utils/errors";
 import { formatPhoneNumber } from "@/lib/utils/phone";
@@ -209,20 +208,25 @@ export type DepositMode = "percentage" | "fixed";
  * The Light Designer's output as the proposal carries it.
  *
  * The rep designs in the shared designer (one photo tool for every product
- * line); the wizard keeps the composited image plus the drawing itself, so
- * re-opening the designer resumes exactly where they left off. `photo` stays in
- * memory only — the saved snapshot carries the flattened composite, never the
- * multi-megabyte original.
+ * line) and can work several photos of the same job at once; the wizard keeps
+ * every composited image plus the drawings themselves, so re-opening the
+ * designer resumes exactly where they left off. Source photos stay in memory
+ * only — the saved snapshot carries the flattened composites, never the
+ * multi-megabyte originals.
  */
 export interface NightPreviewState {
-  /** Composited "lit at night" JPEG data-URL saved into the proposal. */
-  image: string | null;
-  /** The drawing, so re-opening the designer restores it. */
-  design: Design | null;
-  /** Dusk level the composite was rendered at. */
-  dusk: number;
-  /** Source photo, held in memory for the current session only. */
-  photo: PhotoInfo | null;
+  /**
+   * Composited "lit at night" JPEGs saved into the proposal, in the order the
+   * rep built them. One job is usually several photos — front, back, walkway —
+   * and the client sees every one. The first is the hero image.
+   */
+  images: string[];
+  /**
+   * Every photo the rep has open in the designer with its drawing, held in
+   * memory for this session only, so leaving the designer and coming back
+   * resumes the whole set rather than just the last saved shot.
+   */
+  shots: DesignerShot[];
   /**
    * Services the design covers. Drives the client-facing value propositions on
    * the presentation and the shared page, so a landscape + Christmas design
@@ -421,10 +425,8 @@ export function useSalesWizard(
     () => EMPTY_CHRISTMAS,
   );
   const [night, setNightState] = useState<NightPreviewState>({
-    image: null,
-    design: null,
-    dusk: DEFAULT_DUSK,
-    photo: null,
+    images: [],
+    shots: [],
     services: [],
   });
   // Upfront deposit the rep requests on the quote. Value is a raw string so
@@ -688,14 +690,13 @@ export function useSalesWizard(
             selected_package: christmas.selected_package || null,
           }
         : null,
-      night_preview: night.image
+      night_preview: night.images.length
         ? {
-            image: night.image,
-            // Opaque to the server (JSONB): the drawing rides along so a later
-            // edit re-opens the designer with the same runs, items and scale,
-            // and the services drive the client's value propositions.
-            design: night.design,
-            dusk: night.dusk,
+            // Opaque to the server (JSONB). `image` stays the hero shot on its
+            // own key because proposals saved before multi-photo designs only
+            // ever had one, and every reader still falls back to it.
+            image: night.images[0],
+            images: night.images,
             services: night.services,
           }
         : null,
@@ -734,10 +735,13 @@ export function useSalesWizard(
     const generation = ++generationRef.current;
     const timer = setTimeout(() => {
       setIsPreviewing(true);
-      // Mockups never affect pricing; stripping them keeps the debounced live
-      // preview light. They ride along only on save, into the saved snapshot.
+      // Neither the mockups nor the lit-photo composites affect pricing, and
+      // both are multi-megabyte base64 — a design can span several photos.
+      // Stripping them keeps the debounced live preview light; they ride along
+      // only on save, into the saved snapshot. The rep's presentation reads the
+      // composites from `night` state, so nothing on screen depends on the echo.
       salesWizardApi
-        .preview(workspaceId, { ...payload, mockups: [] })
+        .preview(workspaceId, { ...payload, mockups: [], night_preview: null })
         .then((doc) => {
           if (generationRef.current === generation)
             setDocument(normalizeDocument(doc));

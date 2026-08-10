@@ -239,6 +239,26 @@ export function proposalValueProps(doc: ProposalDoc): ProposalValueProp[] {
   return doc.category_sections.flatMap((section) => section.value_props);
 }
 
+/**
+ * Every lit-photo design on the proposal, in the order the rep built them.
+ *
+ * `night_preview` is opaque JSONB and its shape grew: a design can now span
+ * several photos of the same job (front, back, walkway), but snapshots saved
+ * before that carry a single `image`. Reading both keeps those proposals
+ * rendering their one photo instead of silently going blank.
+ */
+export function nightImages(
+  nightPreview: Record<string, unknown> | null | undefined,
+): string[] {
+  const many = nightPreview?.images;
+  if (Array.isArray(many)) {
+    const images = many.filter((img): img is string => typeof img === "string");
+    if (images.length) return images;
+  }
+  const one = nightPreview?.image;
+  return typeof one === "string" ? [one] : [];
+}
+
 /** `$1,234` — whole-dollar proposal figures. */
 export function fmt(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";

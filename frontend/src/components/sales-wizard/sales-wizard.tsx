@@ -75,22 +75,18 @@ export function SalesWizard({
   const proposalHost = useMemo<DesignerProposalHost>(
     () => ({
       initial: {
-        design: night.design,
-        dusk: night.dusk,
-        photo: night.photo,
+        shots: night.shots,
         services: initialServices,
       },
       tierKey: activeTier,
-      onPhotoChange: (photo) => setNight({ photo }),
+      onShotsChange: (shots) => setNight({ shots }),
       onClose: () => {
         setScreen("calc");
         window.scrollTo(0, 0);
       },
       onSave: (snapshot) => {
         setNight({
-          image: snapshot.image,
-          design: snapshot.design,
-          dusk: snapshot.dusk,
+          images: snapshot.shots.map((shot) => shot.image),
           services: snapshot.services,
         });
 
@@ -115,9 +111,7 @@ export function SalesWizard({
       },
     }),
     [
-      night.design,
-      night.dusk,
-      night.photo,
+      night.shots,
       initialServices,
       activeTier,
       pricing,

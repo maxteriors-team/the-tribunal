@@ -9,6 +9,13 @@
  * bushes and trees, and wreaths. Dusk is a slider, so the customer watches their
  * own house light up.
  *
+ * A job is rarely one photo. The rep adds as many shots as the house needs
+ * (front elevation, back patio, the walkway) and each keeps its own drawing,
+ * scale, and dusk; the thumbnail strip switches between them. Measurements are
+ * totalled across every shot — the quote covers the whole job, not the photo
+ * that happened to be on screen — and every drawn shot becomes a mockup on the
+ * proposal.
+ *
  * What the canvas produces is geometry — feet and counts, never money:
  *
  * - Holiday work is priced **server-side** into a live permanent-vs-seasonal
@@ -41,6 +48,7 @@ import {
   designScale,
   designToEstimateInputs,
   hasDesign,
+  sumEstimateInputs,
 } from "@/lib/estimator/design";
 import { exportDesignJpeg } from "@/lib/estimator/export";
 import {
@@ -61,7 +69,7 @@ import {
   clientThemeClass,
   type ServiceKey,
 } from "@/lib/estimator/services";
-import type { Design, PhotoInfo } from "@/lib/estimator/types";
+import type { PhotoInfo } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type {
@@ -71,15 +79,27 @@ import type {
 
 import { AIRenderModal } from "./ai-render";
 import { ComparisonCard, type ComparisonView } from "./comparison-card";
-import { editorReducer, initialEditorState } from "./editor-store";
+import {
+  EMPTY_DESIGN,
+  editorReducer,
+  initialEditorState,
+  nextId,
+} from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
 import { LightCanvas } from "./light-canvas";
-import type { DesignerProposalHost } from "./proposal-host";
+import type { DesignerProposalHost, DesignerShot } from "./proposal-host";
 import { ServiceValueProps } from "./service-value-props";
 import { ToolPalette } from "./tool-palette";
 import "./estimator.css";
 
 type ViewMode = "rep" | "client";
+
+/**
+ * How many photos one design session can carry. Every shot rides into the saved
+ * proposal as its own full-size composite, so this is the cap that keeps a
+ * snapshot row sane rather than a limit on how the rep works.
+ */
+export const MAX_SHOTS = 6;
 
 /** How the client's estimate link reaches them. */
 type SendChannel = "email" | "sms";
@@ -112,18 +132,40 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const hosted = Boolean(proposal);
 
-  const [photo, setPhoto] = useState<PhotoInfo | null>(
-    proposal?.initial?.photo ?? null,
+  // Every photo the rep has open, in the order they added them. The *active*
+  // shot's drawing lives in the editor reducer (that's what the canvas, palette
+  // and undo stack act on); the others hold theirs here until they're switched
+  // back to. `liveShots` below is the one place both halves are read together.
+  const [shots, setShots] = useState<DesignerShot[]>(
+    () => proposal?.initial?.shots ?? [],
+  );
+  const [activeShotId, setActiveShotId] = useState<string | null>(
+    () => proposal?.initial?.shots?.[0]?.id ?? null,
   );
   const [state, dispatch] = useReducer(editorReducer, undefined, () => {
     const base = initialEditorState();
+    const first = proposal?.initial?.shots?.[0];
     return {
       ...base,
-      design: proposal?.initial?.design ?? base.design,
-      dusk: proposal?.initial?.dusk ?? base.dusk,
+      design: first?.design ?? base.design,
+      dusk: first?.dusk ?? base.dusk,
     };
   });
   const { design, dusk } = state;
+
+  const activeShot =
+    shots.find((shot) => shot.id === activeShotId) ?? shots[0] ?? null;
+  const photo: PhotoInfo | null = activeShot?.photo ?? null;
+  // Shots as they stand right now: the stored list with the active shot's
+  // drawing swapped in from the reducer. Everything that has to see the whole
+  // job — totals, the save, the strip's "drawn" dots — reads this, never `shots`.
+  const liveShots = useMemo(
+    () =>
+      shots.map((shot) =>
+        shot.id === activeShot?.id ? { ...shot, design, dusk } : shot,
+      ),
+    [shots, activeShot?.id, design, dusk],
+  );
 
   const [viewMode, setViewMode] = useState<ViewMode>("rep");
   // Which services this design covers. Multi-select: one photo of a house can
@@ -182,13 +224,12 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   );
   const [aiOpen, setAiOpen] = useState(false);
   const [savingProposal, setSavingProposal] = useState(false);
-  // What was last written onto the proposal, kept with the exact drawing it was
+  // What was last written onto the proposal, kept with the exact drawings it was
   // rendered from: the confirmation then falls away on the next stroke instead
-  // of vouching for a stale image.
+  // of vouching for stale images.
   const [saved, setSaved] = useState<{
     at: string;
-    design: Design;
-    dusk: number;
+    shots: DesignerShot[];
   } | null>(null);
   const [saveError, setSaveError] = useState(false);
 
@@ -250,15 +291,23 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   const productById = useMemo(() => indexProducts(products), [products]);
 
   // ---- Design → server estimate inputs ----------------------------------
+  // Totalled across every photo: front elevation plus back patio is one job and
+  // one price. Each shot measures on its own calibration before it's summed, so
+  // photos taken from different distances still add up correctly.
   const inputs = useMemo(
     () =>
-      photo
-        ? designToEstimateInputs(design, productById, photo.width)
-        : { feet: 0, christmas_items: {}, fixtures: {}, bistro_feet: 0 },
-    [design, productById, photo],
+      sumEstimateInputs(
+        liveShots.map((shot) =>
+          designToEstimateInputs(shot.design, productById, shot.photo.width),
+        ),
+      ),
+    [liveShots, productById],
   );
   const feet = inputs.feet;
-  const designHas = hasDesign(design);
+  /** Anything drawn on the photo that's on screen (gates the AI render). */
+  const activeDesignHas = hasDesign(design);
+  /** Anything drawn anywhere (gates the save — every drawn shot goes across). */
+  const designHas = liveShots.some((shot) => hasDesign(shot.design));
   const { calibrated } = designScale(design, photo?.width ?? 0);
 
   // Placed fixtures, resolved through the current package into the product the
@@ -388,23 +437,88 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
     resetShare();
   }, [estimateParams, resetShare]);
 
+  // ---- Shots (photos in this design) -------------------------------------
+  /**
+   * Park the active shot's drawing back in the list. Called before anything that
+   * moves the reducer off it — switching, removing, adding — so a drawing is
+   * never left behind in a reducer that's about to be reset.
+   */
+  const commitActive = useCallback(
+    (list: DesignerShot[]) =>
+      list.map((shot) =>
+        shot.id === activeShot?.id ? { ...shot, design, dusk } : shot,
+      ),
+    [activeShot?.id, design, dusk],
+  );
+
+  /** Load a shot into the editor. History is per-shot, so it starts clean. */
+  const openShot = (target: DesignerShot) => {
+    dispatch({ type: "RESET", design: target.design });
+    dispatch({ type: "SET_DUSK", dusk: target.dusk });
+    setActiveShotId(target.id);
+    setViewMode("rep");
+  };
+
+  const selectShot = (id: string) => {
+    if (id === activeShot?.id) return;
+    const target = shots.find((shot) => shot.id === id);
+    if (!target) return;
+    const next = commitActive(shots);
+    setShots(next);
+    proposal?.onShotsChange(next);
+    openShot(next.find((shot) => shot.id === id) ?? target);
+  };
+
+  const removeShot = (id: string) => {
+    const index = shots.findIndex((shot) => shot.id === id);
+    if (index < 0) return;
+    // Committing first keeps the *other* shots' edits: if the rep deletes a
+    // photo they aren't on, the one they were drawing must not lose its work.
+    const next = commitActive(shots).filter((shot) => shot.id !== id);
+    setShots(next);
+    proposal?.onShotsChange(next);
+    if (id !== activeShot?.id) return;
+    const fallback = next[index] ?? next[index - 1] ?? null;
+    if (fallback) {
+      openShot(fallback);
+      return;
+    }
+    // Last photo gone: back to the welcome screen with a clean editor.
+    setActiveShotId(null);
+    dispatch({ type: "RESET" });
+  };
+
+  const atShotCap = shots.length >= MAX_SHOTS;
+
   // ---- Photo upload ------------------------------------------------------
+  // Always *adds* a photo. The rep designs the front, adds the back, and both
+  // stay — nothing they drew is traded away for the next angle.
   const onFile = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     const file = ev.target.files?.[0];
     ev.target.value = "";
-    if (!file) return;
+    if (!file || atShotCap) return;
     try {
       const info = await fileToPhoto(file);
-      dispatch({ type: "RESET" });
-      setPhoto(info);
-      proposal?.onPhotoChange(info);
-      setViewMode("rep");
-      setTakedown(false);
-      setStorage(false);
-      setPerFtOverride(null);
-      setChristmasPerFtOverride(null);
-      setSelectedPackage(null);
-      setCustomLines([]);
+      const shot: DesignerShot = {
+        id: nextId("shot"),
+        photo: info,
+        design: EMPTY_DESIGN,
+        dusk,
+      };
+      const next = [...commitActive(shots), shot];
+      setShots(next);
+      proposal?.onShotsChange(next);
+      openShot(shot);
+      // Only the first photo starts the estimate over. Later photos are more of
+      // the same job, so the rep's takedown/rate/line-item work stays put.
+      if (!shots.length) {
+        setTakedown(false);
+        setStorage(false);
+        setPerFtOverride(null);
+        setChristmasPerFtOverride(null);
+        setSelectedPackage(null);
+        setCustomLines([]);
+      }
       resetShare();
     } catch {
       window.alert("Could not read that image file.");
@@ -412,16 +526,31 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
   };
 
   // ---- Save onto the proposal (Quote Builder host) -----------------------
+  // Every drawn shot is composited and sent together, so the proposal shows the
+  // whole job. Blank shots (a photo the rep added but never drew on) are left
+  // out rather than shipped to the customer as an unlit snapshot.
   const saveToProposal = async () => {
-    if (!photo || !proposal || savingProposal) return;
+    if (!proposal || savingProposal) return;
+    const drawn = liveShots.filter((shot) => hasDesign(shot.design));
+    if (!drawn.length) return;
     setSavingProposal(true);
     setSaveError(false);
+    // Park the active shot's drawing in the list (and in the host) before the
+    // await: what's saved to the proposal is what re-opens in the designer.
+    setShots(liveShots);
+    proposal.onShotsChange(liveShots);
     try {
-      const image = await exportDesignJpeg(photo, design, productById, { dusk });
+      const rendered = await Promise.all(
+        drawn.map(async (shot) => ({
+          image: await exportDesignJpeg(shot.photo, shot.design, productById, {
+            dusk: shot.dusk,
+          }),
+          design: shot.design,
+          dusk: shot.dusk,
+        })),
+      );
       proposal.onSave({
-        image,
-        design,
-        dusk,
+        shots: rendered,
         services,
         fixtures: inputs.fixtures as Partial<Record<FixtureType, number>>,
         rooflineFeet: feet,
@@ -432,8 +561,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
           hour: "numeric",
           minute: "2-digit",
         }),
-        design,
-        dusk,
+        shots: drawn,
       });
     } catch {
       setSaveError(true);
@@ -596,10 +724,21 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
     if (shareUrl) void navigator.clipboard?.writeText(shareUrl);
   };
 
-  // Derived, not stored: the drawing is replaced immutably on every edit, so a
-  // reference match means the saved composite still shows what is on screen.
+  // Derived, not stored: drawings are replaced immutably on every edit, so a
+  // reference match across the drawn shots means the saved composites still show
+  // what's on the photos. Adding or removing a shot invalidates it too.
+  const drawnShots = liveShots.filter((shot) => hasDesign(shot.design));
   const savedAt =
-    saved && saved.design === design && saved.dusk === dusk ? saved.at : null;
+    saved &&
+    saved.shots.length === drawnShots.length &&
+    saved.shots.every(
+      (shot, i) =>
+        shot.id === drawnShots[i]?.id &&
+        shot.design === drawnShots[i]?.design &&
+        shot.dusk === drawnShots[i]?.dusk,
+    )
+      ? saved.at
+      : null;
 
   return (
     <div className="cmp-view est-app">
@@ -609,9 +748,15 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
           <button
             className="est-btn"
             type="button"
+            disabled={atShotCap}
+            title={
+              atShotCap
+                ? `Up to ${MAX_SHOTS} photos in one design`
+                : "Add another photo of this job \u2014 the ones you\u2019ve drawn stay"
+            }
             onClick={() => fileRef.current?.click()}
           >
-            {photo ? "Change photo" : "Upload house photo"}
+            {photo ? "\uFF0B Add photo" : "Upload house photo"}
           </button>
           <input
             ref={fileRef}
@@ -664,11 +809,11 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
             <button
               className="est-btn"
               type="button"
-              disabled={!designHas}
+              disabled={!activeDesignHas}
               title={
-                designHas
+                activeDesignHas
                   ? undefined
-                  : "Draw the lights first, then render a photorealistic version"
+                  : "Draw the lights on this photo first, then render a photorealistic version"
               }
               onClick={() => setAiOpen(true)}
             >
@@ -680,20 +825,30 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
               <button
                 className="est-btn primary"
                 type="button"
-                disabled={!photo || !designHas || savingProposal}
+                disabled={!designHas || savingProposal}
                 title={
-                  photo && designHas
-                    ? undefined
+                  designHas
+                    ? `Save ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} onto the proposal`
                     : "Add a photo and draw the design first"
                 }
                 onClick={() => void saveToProposal()}
               >
-                {savingProposal ? "Saving…" : "Save to proposal"}
+                {savingProposal
+                  ? "Saving…"
+                  : drawnShots.length > 1
+                    ? `Save ${drawnShots.length} designs to proposal`
+                    : "Save to proposal"}
               </button>
               <button
                 className="est-btn"
                 type="button"
-                onClick={proposal.onClose}
+                // Hand the drawings over on the way out so stepping back to the
+                // quote and returning resumes every photo mid-design, saved or
+                // not — the editor unmounts, and the host is where they live.
+                onClick={() => {
+                  proposal.onShotsChange(liveShots);
+                  proposal.onClose();
+                }}
               >
                 Back to quote
               </button>
@@ -702,6 +857,58 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
         </div>
       </div>
 
+      {shots.length ? (
+        <div className="est-shotbar" aria-label="Photos in this design">
+          {liveShots.map((shot, i) => {
+            const drawn = hasDesign(shot.design);
+            const isActive = shot.id === activeShot?.id;
+            return (
+              <div
+                className={`est-shot${isActive ? " active" : ""}`}
+                key={shot.id}
+              >
+                <button
+                  type="button"
+                  // Not a tablist: the canvas it switches isn't a tabpanel, and
+                  // claiming the relationship would lie to a screen reader.
+                  // `aria-current` is the honest read — which of the set is open.
+                  aria-current={isActive}
+                  className="est-shot-pick"
+                  aria-label={`Photo ${i + 1}${drawn ? ", designed" : ", nothing drawn yet"}`}
+                  onClick={() => selectShot(shot.id)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- in-memory data URL */}
+                  <img src={shot.photo.dataUrl} alt="" />
+                  <span className="est-shot-no">{i + 1}</span>
+                  {drawn ? <span className="est-shot-dot" aria-hidden /> : null}
+                </button>
+                <button
+                  type="button"
+                  className="est-shot-del"
+                  aria-label={`Remove photo ${i + 1}`}
+                  onClick={() => removeShot(shot.id)}
+                >
+                  &times;
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className="est-shot-add"
+            disabled={atShotCap}
+            onClick={() => fileRef.current?.click()}
+          >
+            <span aria-hidden>&#65291;</span>
+            {atShotCap ? `Max ${MAX_SHOTS} photos` : "Add photo"}
+          </button>
+          <span className="est-shot-hint">
+            Each photo keeps its own design. Measurements add up across all of
+            them.
+          </span>
+        </div>
+      ) : null}
+
       {hosted && (savedAt || saveError) ? (
         <div
           className={`est-hosted-status${saveError ? " error" : ""}`}
@@ -709,7 +916,7 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
         >
           {saveError
             ? "Couldn’t save the design — try again."
-            : `Saved to the proposal at ${savedAt}. It shows on the presentation and the client’s page.`}
+            : `Saved ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} to the proposal at ${savedAt}. ${drawnShots.length === 1 ? "It shows" : "They show"} on the presentation and the client’s page.`}
         </div>
       ) : null}
 
@@ -718,6 +925,9 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
           <div className="est-main">
             <ToolPalette products={products} state={state} dispatch={dispatch} />
             <LightCanvas
+              // Remount per shot: zoom, pan and any half-drawn run belong to the
+              // photo they were made on and must not follow the rep to the next.
+              key={activeShot?.id}
               photo={photo}
               products={products}
               state={state}
@@ -1081,6 +1291,10 @@ export function LightDesigner({ workspaceId, proposal }: LightDesignerProps) {
               Upload a straight-on photo of the home, set the scale, then place
               landscape fixtures and draw glowing roofline, mini-lights, and
               wreaths. Drag the dusk slider to show it lit.
+            </p>
+            <p>
+              Add a photo for every angle you’re selling — front, back, walkway.
+              Each keeps its own design, and the quote covers all of them.
             </p>
             <button
               className="est-btn primary"

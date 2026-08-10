@@ -503,6 +503,145 @@
   justify-content: flex-end;
 }
 
+/* ---- Shot strip: every photo in this design ----
+   A job is several angles (front elevation, back patio, walkway) and each one
+   keeps its own drawing. The strip is the only place that shows the whole set,
+   so it says which shots already have lights on them (the dot) rather than
+   leaving the rep to click through and find out. */
+.est-shotbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--bdr);
+  background: var(--s2);
+  overflow-x: auto;
+}
+
+.est-shot {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.est-shot-pick {
+  appearance: none;
+  display: block;
+  padding: 0;
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--s3);
+  cursor: pointer;
+  line-height: 0;
+  position: relative;
+}
+
+.est-shot-pick img {
+  width: 84px;
+  height: 54px;
+  object-fit: cover;
+  display: block;
+  opacity: 0.7;
+}
+
+.est-shot.active .est-shot-pick {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+}
+
+.est-shot.active .est-shot-pick img {
+  opacity: 1;
+}
+
+.est-shot-no {
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--t1);
+  background: rgba(0, 0, 0, 0.65);
+}
+
+/* Green dot = lights are drawn on this photo, so it goes to the proposal. */
+.est-shot-dot {
+  position: absolute;
+  right: 4px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4caf7d;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+}
+
+.est-shot-del {
+  /* Inside the thumbnail, matching the mockup gallery's remove button. The
+     strip scrolls horizontally, and a control hung outside the tile would be
+     clipped by that scroll container. */
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.est-shot-del:hover {
+  background: #e0726a;
+}
+
+.est-shot-add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 56px;
+  padding: 0 14px;
+  border: 1px dashed var(--bdr-g);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.est-shot-add:hover:not(:disabled) {
+  background: rgba(198, 160, 78, 0.12);
+}
+
+.est-shot-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.est-shot-hint {
+  font-size: 11px;
+  color: var(--t4);
+  font-style: italic;
+}
+
+@media (max-width: 760px) {
+  .est-shot-hint {
+    display: none;
+  }
+}
+
 /* Confirmation strip shown when the Quote Builder hosts the designer. */
 .est-hosted-status {
   flex: 0 0 auto;
