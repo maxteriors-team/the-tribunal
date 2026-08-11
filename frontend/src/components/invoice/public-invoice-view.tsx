@@ -35,9 +35,17 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
   const brandName = branding.business_name;
   const currency = data.currency;
   const [error, setError] = useState<string | null>(null);
+  const [selectedOptionalIds, setSelectedOptionalIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        data.line_items
+          .filter((item) => item.is_optional && item.is_selected)
+          .map((item) => item.id),
+      ),
+  );
 
   const checkout = useMutation({
-    mutationFn: () => publicInvoicesApi.pay(data.token),
+    mutationFn: (selectedIds: string[]) => publicInvoicesApi.pay(data.token, selectedIds),
     onSuccess: (result) => {
       // Hand off to Stripe's hosted payment page.
       window.location.href = result.url;
@@ -58,21 +66,33 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
     .filter(Boolean)
     .join(" \u00b7 ");
 
+  // Keep this arithmetic equivalent to InvoiceService._recompute_totals. Stripe
+  // still receives only the server-computed balance; this is immediate preview.
+  const selectedSubtotal =
+    Math.round(
+      data.line_items.reduce(
+        (sum, item) =>
+          sum + (!item.is_optional || selectedOptionalIds.has(item.id) ? item.total : 0),
+        0,
+      ) * 100,
+    ) / 100;
+  const selectedTotal =
+    Math.round((selectedSubtotal + data.tax_amount - data.discount_amount) * 100) / 100;
+  const selectedBalance = Math.max(0, Math.round((selectedTotal - data.amount_paid) * 100) / 100);
+  const optionalItems = data.line_items.filter((item) => item.is_optional);
+  const selectedOptionalItemCount = optionalItems.filter((item) =>
+    selectedOptionalIds.has(item.id),
+  ).length;
+
   // A partly-paid invoice needs the credit spelled out; a fresh one doesn't.
   const hasCredit = data.amount_paid > 0;
 
   return (
     <div className={`proposal-view invoice-view ${proposalFontVars}`}>
       <div className="present-nav no-print">
-        <div className="present-nav-brand">
-          {`${brandName} \u00b7 Invoice ${data.number}`}
-        </div>
+        <div className="present-nav-brand">{`${brandName} \u00b7 Invoice ${data.number}`}</div>
         <div className="present-nav-actions">
-          <button
-            type="button"
-            className="send-email-nav-btn"
-            onClick={() => window.print()}
-          >
+          <button type="button" className="send-email-nav-btn" onClick={() => window.print()}>
             Save as PDF
           </button>
         </div>
@@ -82,8 +102,7 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
         {/* Status. role=status so the state is announced, not just coloured. */}
         {data.is_void ? (
           <div className="pp-banner no" role="status">
-            This invoice has been cancelled. Please contact us with any
-            questions.
+            This invoice has been cancelled. Please contact us with any questions.
           </div>
         ) : data.is_paid ? (
           <div className="pp-banner ok" role="status">
@@ -118,24 +137,13 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
           {/* The one number this page exists to communicate. */}
           <div className="inv-due">
             <div className="inv-due-label">
-              {data.is_void
-                ? "Cancelled"
-                : data.is_paid
-                  ? "Amount Paid"
-                  : "Balance Due"}
+              {data.is_void ? "Cancelled" : data.is_paid ? "Amount Paid" : "Balance Due"}
             </div>
-            <div
-              className={`inv-due-amount${data.is_paid && !data.is_void ? " settled" : ""}`}
-            >
-              {formatCurrency(
-                data.is_paid ? data.amount_paid : data.balance_due,
-                currency
-              )}
+            <div className={`inv-due-amount${data.is_paid && !data.is_void ? " settled" : ""}`}>
+              {formatCurrency(data.is_paid ? data.amount_paid : selectedBalance, currency)}
             </div>
             {dateLine ? (
-              <div
-                className={`inv-due-sub${data.is_overdue && !data.is_paid ? " overdue" : ""}`}
-              >
+              <div className={`inv-due-sub${data.is_overdue && !data.is_paid ? " overdue" : ""}`}>
                 {dateLine}
               </div>
             ) : null}
@@ -144,10 +152,13 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
 
         <div className="pq-table-wrap" style={{ marginTop: 48 }}>
           <h2 className="section-heading">Summary</h2>
+          {optionalItems.length > 0 ? (
+            <p className="inv-option-help">
+              Optional items are included by default. Clear any item you do not want before paying.
+            </p>
+          ) : null}
           <table className="pq-table">
-            <caption className="sr-only">
-              Line items for invoice {data.number}
-            </caption>
+            <caption className="sr-only">Line items for invoice {data.number}</caption>
             <thead>
               <tr>
                 <th scope="col">Item</th>
@@ -164,45 +175,80 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
               </tr>
             </thead>
             <tbody>
-              {data.line_items.map((item, idx) => (
-                <tr key={`${item.name}-${idx}`}>
-                  <td>
-                    <div className="pq-item-name">{item.name}</div>
-                    {item.description ? (
-                      <div className="pq-item-desc">{item.description}</div>
-                    ) : null}
-                    {/* Carries the per-unit detail when the columns collapse
-                        on a phone, so nothing is lost at narrow widths. */}
-                    <div className="inv-item-meta">
-                      {`${item.quantity} \u00d7 ${formatCurrency(item.unit_price, currency)}`}
-                      {item.discount
-                        ? ` \u00b7 less ${formatCurrency(item.discount, currency)}`
-                        : ""}
-                    </div>
-                  </td>
-                  <td className="pq-num inv-col-detail">{item.quantity}</td>
-                  <td className="pq-num inv-col-detail">
-                    {formatCurrency(item.unit_price, currency)}
-                  </td>
-                  <td className="pq-num muted inv-col-detail">
-                    {item.discount
-                      ? `\u2212${formatCurrency(item.discount, currency)}`
-                      : "\u2014"}
-                  </td>
-                  <td className="pq-amount">
-                    {formatCurrency(item.total, currency)}
-                  </td>
-                </tr>
-              ))}
+              {data.line_items.map((item) => {
+                const isIncluded = !item.is_optional || selectedOptionalIds.has(item.id);
+                return (
+                  <tr key={item.id} className={isIncluded ? undefined : "is-excluded"}>
+                    <td className="inv-item-cell">
+                      <div className="inv-item-layout">
+                        <span className="inv-item-control">
+                          {item.is_optional ? (
+                            <input
+                              type="checkbox"
+                              className="inv-option-checkbox"
+                              checked={isIncluded}
+                              disabled={data.is_paid || data.is_void || checkout.isPending}
+                              aria-label={`Include ${item.name}`}
+                              onChange={(event) => {
+                                setError(null);
+                                setSelectedOptionalIds((current) => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) next.add(item.id);
+                                  else next.delete(item.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          ) : (
+                            <span className="inv-required-slot" aria-hidden="true" />
+                          )}
+                        </span>
+                        <div>
+                          <div className="pq-item-name">
+                            {item.name}
+                            <span className="inv-item-kind">
+                              {item.is_optional ? "Optional" : "Required"}
+                            </span>
+                          </div>
+                          {item.description ? (
+                            <div className="pq-item-desc">{item.description}</div>
+                          ) : null}
+                          <div className="inv-item-meta">
+                            {`${item.quantity} × ${formatCurrency(item.unit_price, currency)}`}
+                            {item.discount
+                              ? ` · less ${formatCurrency(item.discount, currency)}`
+                              : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="pq-num inv-col-detail">{item.quantity}</td>
+                    <td className="pq-num inv-col-detail">
+                      {formatCurrency(item.unit_price, currency)}
+                    </td>
+                    <td className="pq-num muted inv-col-detail">
+                      {item.discount ? `−${formatCurrency(item.discount, currency)}` : "−"}
+                    </td>
+                    <td className="pq-amount">{formatCurrency(item.total, currency)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {optionalItems.length > 0 ? (
+            <p className="inv-selection-status" role="status" aria-live="polite">
+              {selectedOptionalItemCount} of {optionalItems.length} optional
+              {optionalItems.length === 1 ? " item" : " items"} included. Current total:{" "}
+              {formatCurrency(selectedTotal, currency)}.
+            </p>
+          ) : null}
         </div>
 
         <div className="pq-totals">
           <div className="pq-totals-inner">
             <div className="pq-total-row">
               <span>Subtotal</span>
-              <strong>{formatCurrency(data.subtotal, currency)}</strong>
+              <strong>{formatCurrency(selectedSubtotal, currency)}</strong>
             </div>
             {data.discount_amount ? (
               <div className="pq-total-row">
@@ -221,7 +267,7 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
             ) : null}
             <div className="pq-total-row grand">
               <span>Total</span>
-              <strong>{formatCurrency(data.total, currency)}</strong>
+              <strong>{formatCurrency(selectedTotal, currency)}</strong>
             </div>
             {/* Why the balance differs from the total. Without this line a
                 credited deposit reads as a pricing mistake. */}
@@ -236,7 +282,7 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
                 </div>
                 <div className="pq-total-row grand">
                   <span>Balance due</span>
-                  <strong>{formatCurrency(data.balance_due, currency)}</strong>
+                  <strong>{formatCurrency(selectedBalance, currency)}</strong>
                 </div>
               </>
             ) : null}
@@ -248,24 +294,19 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
           <div className="dep-panel paid">
             <div className="dep-info">
               <div className="dep-label">Paid in Full</div>
-              <div className="dep-amount">
-                {formatCurrency(data.amount_paid, currency)}
-              </div>
+              <div className="dep-amount">{formatCurrency(data.amount_paid, currency)}</div>
             </div>
             <div className="dep-paid-badge">Received &mdash; thank you!</div>
           </div>
-        ) : data.is_payable ? (
+        ) : data.is_payable && selectedBalance > 0 ? (
           <>
             <div className="dep-panel">
               <div className="dep-info">
                 <div className="dep-label">Balance Due</div>
-                <div className="dep-amount">
-                  {formatCurrency(data.balance_due, currency)}
-                </div>
+                <div className="dep-amount">{formatCurrency(selectedBalance, currency)}</div>
                 {hasCredit ? (
                   <div className="dep-sub">
-                    {formatCurrency(data.amount_paid, currency)} already
-                    received
+                    {formatCurrency(data.amount_paid, currency)} already received
                   </div>
                 ) : null}
               </div>
@@ -275,7 +316,11 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
                 disabled={checkout.isPending}
                 onClick={() => {
                   setError(null);
-                  checkout.mutate();
+                  checkout.mutate(
+                    optionalItems
+                      .filter((item) => selectedOptionalIds.has(item.id))
+                      .map((item) => item.id),
+                  );
                 }}
               >
                 {checkout.isPending ? "Redirecting\u2026" : "Pay Now"}
@@ -290,12 +335,16 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
               You&rsquo;ll be taken to our secure payment page to finish.
             </p>
           </>
-        ) : !data.is_void && data.balance_due > 0 ? (
+        ) : !data.is_void && selectedBalance <= 0 ? (
+          <p className="inv-pay-note" role="status">
+            No payment is due for the items selected.
+          </p>
+        ) : !data.is_void && selectedBalance > 0 ? (
           // Something is owed but online payment isn't available here. Say how
           // to pay instead of showing a button that cannot work.
           <p className="inv-pay-note">
             {contactLine
-              ? `To settle this invoice, get in touch \u2014 ${contactLine}`
+              ? `To settle this invoice, get in touch: ${contactLine}`
               : "Please contact us to settle this invoice."}
           </p>
         ) : null}
@@ -324,9 +373,7 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
             ) : null}
           </div>
           {branding.footer ? (
-            <div className="pp-footer-note">
-              {renderTextWithLinks(branding.footer)}
-            </div>
+            <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
           ) : null}
         </footer>
       </main>

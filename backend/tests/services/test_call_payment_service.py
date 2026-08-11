@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -61,6 +62,24 @@ def test_to_minor_units_handles_zero_decimal_currencies() -> None:
     assert call_payment_service.to_minor_units(50.5, "usd") == 5050
     # JPY is zero-decimal: no *100 scaling.
     assert call_payment_service.to_minor_units(500, "jpy") == 500
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "expected"), [("open", True), ("complete", False)])
+async def test_expire_checkout_session_only_expires_open_sessions(
+    status: str, expected: bool
+) -> None:
+    client = MagicMock()
+    client.checkout.sessions.retrieve.return_value = SimpleNamespace(status=status)
+
+    with patch.object(call_payment_service, "_stripe_client", return_value=client):
+        result = await call_payment_service.expire_checkout_session_if_open("cs_test_old")
+
+    assert result is expected
+    if expected:
+        client.checkout.sessions.expire.assert_called_once_with("cs_test_old")
+    else:
+        client.checkout.sessions.expire.assert_not_called()
 
 
 @pytest.mark.asyncio

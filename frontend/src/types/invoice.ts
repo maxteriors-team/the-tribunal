@@ -17,6 +17,8 @@ export interface InvoiceLineItem {
   unit_price: number;
   discount: number;
   total: number;
+  is_optional: boolean;
+  is_selected: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +56,7 @@ export interface InvoiceLineItemInput {
   quantity?: number;
   unit_price: number;
   discount?: number;
+  is_optional?: boolean;
 }
 
 export interface CreateInvoiceRequest {

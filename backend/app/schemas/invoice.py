@@ -28,6 +28,7 @@ class InvoiceLineItemBase(BaseModel):
     quantity: float = Field(default=1.0, ge=0)
     unit_price: float = Field(ge=0)
     discount: float = Field(default=0.0, ge=0)
+    is_optional: bool = False
 
 
 class InvoiceLineItemCreate(InvoiceLineItemBase):
@@ -42,6 +43,7 @@ class InvoiceLineItemUpdate(BaseModel):
     quantity: float | None = Field(default=None, ge=0)
     unit_price: float | None = Field(default=None, ge=0)
     discount: float | None = Field(default=None, ge=0)
+    is_optional: bool | None = None
 
 
 class InvoiceLineItemResponse(InvoiceLineItemBase):
@@ -50,6 +52,7 @@ class InvoiceLineItemResponse(InvoiceLineItemBase):
     id: uuid.UUID
     invoice_id: uuid.UUID
     total: float  # server-computed: quantity * unit_price - discount
+    is_selected: bool
     created_at: datetime
     updated_at: datetime
 
@@ -209,12 +212,15 @@ class InvoicePaymentLinkResponse(BaseModel):
 class PublicInvoiceLineItem(BaseModel):
     """One billable line as the customer sees it."""
 
+    id: uuid.UUID
     name: str
     description: str | None = None
     quantity: float
     unit_price: float
     discount: float
     total: float
+    is_optional: bool
+    is_selected: bool
 
 
 class PublicInvoice(BaseModel):
@@ -258,6 +264,12 @@ class PublicInvoice(BaseModel):
     terms: str | None = None
 
     branding: PublicProposalBranding
+
+
+class PublicInvoicePaymentRequest(BaseModel):
+    """Recipient-selected optional rows; required rows are always included."""
+
+    selected_optional_line_item_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class PublicInvoicePaymentCheckout(BaseModel):

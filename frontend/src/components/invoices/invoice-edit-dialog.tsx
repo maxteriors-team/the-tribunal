@@ -10,6 +10,7 @@ import * as z from "zod";
 
 import { CatalogPicker } from "@/components/catalog/catalog-picker";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +57,7 @@ const lineItemSchema = z.object({
     .refine((v) => !Number.isNaN(Number(v)) && Number(v) >= 0, {
       error: "Enter a price",
     }),
+  is_optional: z.boolean(),
 });
 
 const editInvoiceSchema = z.object({
@@ -70,7 +72,12 @@ const editInvoiceSchema = z.object({
 
 type EditInvoiceFormValues = z.infer<typeof editInvoiceSchema>;
 
-const EMPTY_LINE = { name: "", quantity: "1", unit_price: "" } as const;
+const EMPTY_LINE = {
+  name: "",
+  quantity: "1",
+  unit_price: "",
+  is_optional: false,
+} as const;
 
 interface InvoiceEditDialogProps {
   invoice: Invoice | null;
@@ -143,6 +150,7 @@ export function InvoiceEditDialog({
             name: li.name,
             quantity: String(li.quantity),
             unit_price: String(li.unit_price),
+            is_optional: li.is_optional,
           }))
         : [{ ...EMPTY_LINE }],
     });
@@ -169,6 +177,7 @@ export function InvoiceEditDialog({
                 name: li.name,
                 quantity: Number(li.quantity),
                 unit_price: Number(li.unit_price),
+                is_optional: li.is_optional,
               })),
             }),
       });
@@ -245,6 +254,7 @@ export function InvoiceEditDialog({
                             name: item.name,
                             quantity: "1",
                             unit_price: String(item.unit_price),
+                            is_optional: false,
                           })
                         }
                       />
@@ -262,18 +272,19 @@ export function InvoiceEditDialog({
                   )}
                 </div>
 
-                {fields.map((field, index) => (
+                {fields.map((lineField, index) => (
                   <div
-                    key={field.id}
-                    className="grid grid-cols-[1fr_5rem_7rem_auto] items-start gap-2"
+                    key={lineField.id}
+                    className="grid grid-cols-12 items-start gap-2 rounded-md border p-3"
                   >
                     <FormField
                       control={form.control}
                       name={`line_items.${index}.name`}
                       render={({ field: f }) => (
-                        <FormItem>
+                        <FormItem className="col-span-12 sm:col-span-6">
                           <FormControl>
                             <Input
+                              aria-label={`Line item ${index + 1} description`}
                               placeholder="Description"
                               disabled={lineItemsLocked}
                               {...f}
@@ -287,13 +298,14 @@ export function InvoiceEditDialog({
                       control={form.control}
                       name={`line_items.${index}.quantity`}
                       render={({ field: f }) => (
-                        <FormItem>
+                        <FormItem className="col-span-4 sm:col-span-2">
                           <FormControl>
                             <Input
                               type="number"
                               min="0"
                               step="1"
                               inputMode="decimal"
+                              aria-label={`Line item ${index + 1} quantity`}
                               placeholder="Qty"
                               disabled={lineItemsLocked}
                               {...f}
@@ -307,13 +319,14 @@ export function InvoiceEditDialog({
                       control={form.control}
                       name={`line_items.${index}.unit_price`}
                       render={({ field: f }) => (
-                        <FormItem>
+                        <FormItem className="col-span-6 sm:col-span-3">
                           <FormControl>
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
                               inputMode="decimal"
+                              aria-label={`Line item ${index + 1} price`}
                               placeholder="Price"
                               disabled={lineItemsLocked}
                               {...f}
@@ -327,7 +340,7 @@ export function InvoiceEditDialog({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="mt-0.5"
+                      className="col-span-2 justify-self-end sm:col-span-1"
                       onClick={() =>
                         fields.length > 1 ? remove(index) : undefined
                       }
@@ -336,10 +349,32 @@ export function InvoiceEditDialog({
                         fields.length <= 1 ||
                         saveMutation.isPending
                       }
-                      aria-label="Remove line item"
+                      aria-label={`Remove line item ${index + 1}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    <FormField
+                      control={form.control}
+                      name={`line_items.${index}.is_optional`}
+                      render={({ field: f }) => {
+                        const checkboxId = `edit-line-${lineField.id}-optional`;
+                        return (
+                          <FormItem className="col-span-12 flex items-center gap-2 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                id={checkboxId}
+                                checked={f.value}
+                                onCheckedChange={(checked) => f.onChange(checked === true)}
+                                disabled={lineItemsLocked || saveMutation.isPending}
+                              />
+                            </FormControl>
+                            <FormLabel htmlFor={checkboxId} className="font-normal">
+                              Optional item
+                            </FormLabel>
+                          </FormItem>
+                        );
+                      }}
+                    />
                   </div>
                 ))}
               </div>
