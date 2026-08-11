@@ -77,6 +77,9 @@ dependencies = [
     # HTTP Client
     # feature floor: httpx 0.28 made the `proxies=` → `proxy=` rename and is the floor openai 2.x assumes.
     "httpx>=0.28.0",
+    # Private MMS object storage (Railway Buckets expose an S3-compatible API).
+    # baseline: current boto3 release when the storage integration was introduced.
+    "boto3>=1.43.68",
     # OpenAI
     # feature floor: openai 2.36 is the first SDK with the Realtime API shape we use in app/services/ai/.
     # breaking change floor: 2.x dropped the legacy openai.ChatCompletion module our codebase no longer uses.
@@ -233,6 +236,8 @@ exclude_lines = [
 dev = [
     "factory-boy>=3.3.3",
     "mypy>=2.1.0",
+    # Typed S3 client surface used by the private MMS storage wrapper.
+    "boto3-stubs[s3]>=1.43.68",
     # security hardening: pip-audit 2.7 added the `--strict` exit semantics and the
     # `--vulnerability-service osv` default we rely on in the weekly audit workflow
     # (.github/workflows/audit.yml). Bump freely.
