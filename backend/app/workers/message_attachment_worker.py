@@ -224,4 +224,4 @@ def _object_key(attachment: MessageAttachment, content_type: str) -> str:
     )
 
 
-_registry = WorkerRegistry(MessageAttachmentWorker)
+registry = WorkerRegistry(MessageAttachmentWorker)

@@ -32,7 +32,7 @@ from app.workers.email_campaign_worker import _registry as email_campaign_regist
 from app.workers.enrichment_worker import _registry as enrichment_registry
 from app.workers.experiment_evaluation_worker import _registry as experiment_evaluation_registry
 from app.workers.followup_worker import _registry as followup_registry
-from app.workers.message_attachment_worker import _registry as message_attachment_registry
+from app.workers.message_attachment_worker import registry as message_attachment_registry
 from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
