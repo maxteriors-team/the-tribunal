@@ -270,6 +270,17 @@ class ContactAgentAssignResponse(BaseModel):
     conversation_id: uuid.UUID
 
 
+class TimelineAttachment(BaseModel):
+    """Safe metadata for private media attached to a timeline message."""
+
+    id: uuid.UUID
+    filename: str
+    content_type: str
+    size_bytes: int | None = None
+    status: Literal["pending", "processing", "ready", "failed"]
+    content_url: str
+
+
 class TimelineItem(BaseModel):
     """A unified timeline item."""
 
@@ -285,6 +296,7 @@ class TimelineItem(BaseModel):
     status: str | None = None
     booking_outcome: str | None = None
     signals: dict[str, Any] | None = None
+    attachments: list[TimelineAttachment] = Field(default_factory=list)
     original_id: uuid.UUID
     original_type: str  # "sms_message", "call_record", "appointment", "note"
 

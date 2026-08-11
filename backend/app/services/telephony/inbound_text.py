@@ -99,7 +99,7 @@ InboundMessageIngestor = Callable[[AsyncSession, "InboundTextEvent"], Awaitable[
 
 @dataclass(slots=True, frozen=True)
 class InboundTextEvent:
-    """Normalized inbound text event."""
+    """Normalized inbound text event, optionally carrying provider media."""
 
     provider_message_id: str
     from_number: str
@@ -108,6 +108,8 @@ class InboundTextEvent:
     workspace_id: uuid.UUID
     channel: MessageChannel
     response_channel: str = "sms"
+    media_count: int = 0
+    media_preview: str | None = None
 
 
 _conversation_syncer = CampaignConversationSyncer()
@@ -132,31 +134,34 @@ async def process_inbound_text_event(
     """
     operator_checker = check_operator_fn or check_operator_by_phone
 
-    is_command = await command_processor.try_process_command(
-        db=db,
-        from_number=event.from_number,
-        to_number=event.to_number,
-        body=event.body,
-    )
-    if is_command:
-        log.info("processed_approval_command", from_number=event.from_number)
-        return None
-
-    operator_user = await operator_checker(db, event.from_number, event.workspace_id)
-    if operator_user:
-        log.info("detected_operator_sms", user_id=operator_user.id)
-        from app.services.ai.crm_assistant import process_assistant_message
-
-        await process_assistant_message(
+    # Media-only events have no text to interpret as a command or operator
+    # assistant prompt, but still need normal contact-message ingestion.
+    if event.body.strip():
+        is_command = await command_processor.try_process_command(
             db=db,
-            workspace_id=event.workspace_id,
-            user_id=operator_user.id,
-            message=event.body,
-            response_channel=event.response_channel,
-            sms_from_number=event.to_number,
-            sms_to_number=event.from_number,
+            from_number=event.from_number,
+            to_number=event.to_number,
+            body=event.body,
         )
-        return None
+        if is_command:
+            log.info("processed_approval_command", from_number=event.from_number)
+            return None
+
+        operator_user = await operator_checker(db, event.from_number, event.workspace_id)
+        if operator_user:
+            log.info("detected_operator_sms", user_id=operator_user.id)
+            from app.services.ai.crm_assistant import process_assistant_message
+
+            await process_assistant_message(
+                db=db,
+                workspace_id=event.workspace_id,
+                user_id=operator_user.id,
+                message=event.body,
+                response_channel=event.response_channel,
+                sms_from_number=event.to_number,
+                sms_to_number=event.from_number,
+            )
+            return None
 
     message = await ingest_message(db, event)
     await run_inbound_text_side_effects(
@@ -204,7 +209,7 @@ async def run_inbound_text_side_effects(
     await _send_push_notification(
         db=db,
         message=message,
-        body=event.body,
+        body=event.body or event.media_preview or "Media attachment received",
         workspace_id=event.workspace_id,
         push_service=push_service,
         log=log,
@@ -511,7 +516,7 @@ async def _schedule_ai_if_enabled(
     schedule_ai_response_fn: ScheduleAIResponse,
 ) -> None:
     await conversation_syncer.sync_conversation(db, conversation, log)
-    if not conversation.ai_enabled or conversation.ai_paused:
+    if not event.body.strip() or not conversation.ai_enabled or conversation.ai_paused:
         return
 
     # Keep this delay short: it is only the debounce window for batching rapid

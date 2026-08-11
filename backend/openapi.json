@@ -46411,9 +46411,68 @@
         "title": "TimeEntryResponse",
         "type": "object"
       },
+      "TimelineAttachment": {
+        "description": "Safe metadata for private media attached to a timeline message.",
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "content_url": {
+            "title": "Content Url",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "content_type",
+          "status",
+          "content_url"
+        ],
+        "title": "TimelineAttachment",
+        "type": "object"
+      },
       "TimelineItem": {
         "description": "A unified timeline item.",
         "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineAttachment"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
           "booking_outcome": {
             "anyOf": [
               {
@@ -64568,6 +64627,79 @@
           }
         ],
         "summary": "Get Contact Timeline",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/timeline/attachments/{attachment_id}/content": {
+      "get": {
+        "description": "Authorize one contact attachment and redirect to a private object URL.",
+        "operationId": "get_timeline_attachment_content_api_v1_workspaces__workspace_id__contacts__contact_id__timeline_attachments__attachment_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Redirect to a short-lived private media URL"
+          },
+          "404": {
+            "description": "Attachment not found"
+          },
+          "409": {
+            "description": "Attachment is still processing"
+          },
+          "410": {
+            "description": "Attachment could not be processed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Private media storage is unavailable"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Timeline Attachment Content",
         "tags": [
           "Contacts"
         ]

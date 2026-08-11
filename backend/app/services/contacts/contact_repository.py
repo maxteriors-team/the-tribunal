@@ -13,6 +13,7 @@ from app.db.pagination import paginate_rows
 from app.db.scope import get_workspace_owned
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
+from app.models.message_attachment import MessageAttachment
 from app.models.tag import ContactTag
 from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
 from app.services.tags import TagService
@@ -472,6 +473,22 @@ async def get_contact_timeline(
             .limit(limit)
         )
         recent_messages = msg_result.scalars().all()
+        message_ids = [message.id for message in recent_messages]
+        attachments_by_message: dict[uuid.UUID, list[MessageAttachment]] = {}
+        if message_ids:
+            attachment_result = await db.execute(
+                select(MessageAttachment)
+                .where(
+                    MessageAttachment.workspace_id == workspace_id,
+                    MessageAttachment.message_id.in_(message_ids),
+                )
+                .order_by(
+                    MessageAttachment.message_id,
+                    MessageAttachment.provider_position,
+                )
+            )
+            for attachment in attachment_result.scalars().all():
+                attachments_by_message.setdefault(attachment.message_id, []).append(attachment)
 
         for msg in recent_messages:
             # Determine type based on channel
@@ -500,6 +517,26 @@ async def get_contact_timeline(
                     "status": msg.status,
                     "booking_outcome": msg.booking_outcome,
                     "signals": signals,
+                    "attachments": [
+                        {
+                            "id": attachment.id,
+                            "filename": attachment.filename,
+                            "content_type": (
+                                attachment.content_type or attachment.provider_content_type
+                            ),
+                            "size_bytes": (
+                                attachment.size_bytes
+                                if attachment.size_bytes is not None
+                                else attachment.provider_size_bytes
+                            ),
+                            "status": attachment.status,
+                            "content_url": (
+                                f"/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/"
+                                f"timeline/attachments/{attachment.id}/content"
+                            ),
+                        }
+                        for attachment in attachments_by_message.get(msg.id, [])
+                    ],
                     "original_id": msg.id,
                     "original_type": f"{msg.channel}_message",
                 }
