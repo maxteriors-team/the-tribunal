@@ -1,8 +1,10 @@
 """Application configuration."""
 
 from functools import lru_cache
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +88,26 @@ class Settings(BaseSettings):
     # Telnyx Voice
     telnyx_connection_id: str = ""  # Required for outbound calls
 
+    # Private object storage for inbound MMS media. Railway Bucket credentials
+    # are exposed as BUCKET / ENDPOINT / ACCESS_KEY_ID / SECRET_ACCESS_KEY /
+    # REGION; map them to these MMS-prefixed names with Railway variable
+    # references so they cannot collide with another S3 integration.
+    mms_storage_bucket: str = ""
+    mms_storage_endpoint_url: str = ""
+    mms_storage_access_key_id: str = ""
+    mms_storage_secret_access_key: SecretStr = SecretStr("")
+    mms_storage_region: str = "auto"
+    # New Railway buckets use virtual-hosted URLs. Older buckets can override
+    # this with MMS_STORAGE_ADDRESSING_STYLE=path as shown in their Credentials tab.
+    mms_storage_addressing_style: Literal["virtual", "path"] = "virtual"
+    mms_storage_presign_ttl_seconds: int = Field(default=300, ge=60, le=3600)
+    # Telnyx/carriers normally deliver much smaller files; this is a defensive
+    # application ceiling for a signed provider URL, not a promised MMS limit.
+    mms_storage_max_download_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1024,
+        le=25 * 1024 * 1024,
+    )
     # Text messaging provider selection
     text_message_provider: str = "telnyx"  # telnyx | mac_relay
 
@@ -261,6 +283,55 @@ class Settings(BaseSettings):
     api_base_url: str = ""  # Base URL for webhooks (e.g., https://api.example.com)
     frontend_url: str = "http://localhost:3000"  # Frontend URL for links in emails
     public_base_url: str = "http://localhost:8000"  # Public base URL for short link redirects
+
+    @model_validator(mode="after")
+    def validate_mms_storage(self) -> Self:
+        """Reject partial or unsafe MMS object-storage configuration."""
+        required_values = {
+            "MMS_STORAGE_BUCKET": self.mms_storage_bucket,
+            "MMS_STORAGE_ENDPOINT_URL": self.mms_storage_endpoint_url,
+            "MMS_STORAGE_ACCESS_KEY_ID": self.mms_storage_access_key_id,
+            "MMS_STORAGE_SECRET_ACCESS_KEY": (
+                self.mms_storage_secret_access_key.get_secret_value()
+            ),
+        }
+        provided = {name for name, value in required_values.items() if value.strip()}
+        if provided and len(provided) != len(required_values):
+            missing = sorted(required_values.keys() - provided)
+            raise ValueError(
+                "MMS storage configuration is incomplete; missing " + ", ".join(missing)
+            )
+
+        if provided:
+            endpoint = urlsplit(self.mms_storage_endpoint_url)
+            if (
+                endpoint.scheme not in {"http", "https"}
+                or not endpoint.hostname
+                or endpoint.username
+                or endpoint.password
+                or endpoint.query
+                or endpoint.fragment
+            ):
+                raise ValueError(
+                    "MMS_STORAGE_ENDPOINT_URL must be an HTTP(S) base URL without "
+                    "credentials, query parameters, or a fragment"
+                )
+
+            local_environments = {"development", "local", "test", "testing"}
+            if self.environment.lower() not in local_environments and endpoint.scheme != "https":
+                raise ValueError(
+                    "MMS_STORAGE_ENDPOINT_URL must use HTTPS outside local/test environments"
+                )
+
+            if not self.mms_storage_region.strip():
+                raise ValueError("MMS_STORAGE_REGION cannot be blank when storage is enabled")
+
+        return self
+
+    @property
+    def mms_storage_enabled(self) -> bool:
+        """Return whether a complete private MMS storage backend is configured."""
+        return bool(self.mms_storage_bucket.strip())
 
     @property
     def secure_auth_cookies(self) -> bool:
