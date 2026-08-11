@@ -534,6 +534,148 @@ async def test_public_pay_action_opens_a_checkout_for_the_balance(
         assert stored.stripe_checkout_session_id == "cs_fake_123"
 
 
+async def test_public_optional_selection_reprices_and_charges_selected_balance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Required rows stay selected while optional choices drive server pricing."""
+    from app.services.payments.call_payment_service import CheckoutSessionResult
+
+    charged: list[float] = []
+
+    async def _fake_session(**kwargs: object) -> CheckoutSessionResult:
+        charged.append(float(kwargs["amount"]))  # type: ignore[arg-type]
+        return CheckoutSessionResult(
+            session_id="cs_selected",
+            url="https://pay.example/cs_selected",
+            payment_intent_id=None,
+        )
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+    monkeypatch.setattr(call_payment_service, "create_payment_checkout_session", _fake_session)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        invoice = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                tax_amount=10.0,
+                discount_amount=5.0,
+                line_items=[
+                    InvoiceLineItemCreate(name="Required", unit_price=100.0),
+                    InvoiceLineItemCreate(name="Option A", unit_price=40.0, is_optional=True),
+                    InvoiceLineItemCreate(name="Option B", unit_price=60.0, is_optional=True),
+                ],
+            ),
+            amount_paid=20.0,
+        )
+        await svc.mark_sent(ws.id, invoice.id)
+        stored = await db.get(Invoice, invoice.id)
+        assert stored is not None
+        assert stored.public_token is not None
+        await db.refresh(stored, ["line_items"])
+        required = next(item for item in stored.line_items if item.name == "Required")
+        option_a = next(item for item in stored.line_items if item.name == "Option A")
+        option_b = next(item for item in stored.line_items if item.name == "Option B")
+
+        checkout = await svc.create_public_payment_checkout(stored.public_token, [option_b.id])
+
+        # 100 required + 60 selected + 10 tax - 5 invoice discount - 20 paid.
+        assert charged == [145.0]
+        assert checkout.amount == 145.0
+        assert float(stored.subtotal) == 160.0
+        assert float(stored.total) == 165.0
+        assert stored.status == "partial"
+        assert required.is_selected is True
+        assert option_a.is_selected is False
+        assert option_b.is_selected is True
+
+
+async def test_public_optional_selection_rejects_required_and_foreign_ids() -> None:
+    """The public UUID list cannot remove required rows or cross invoice scope."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        invoice = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[
+                    InvoiceLineItemCreate(name="Required", unit_price=100.0),
+                    InvoiceLineItemCreate(name="Optional", unit_price=25.0, is_optional=True),
+                ]
+            ),
+        )
+        foreign = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[
+                    InvoiceLineItemCreate(name="Foreign option", unit_price=50.0, is_optional=True)
+                ]
+            ),
+        )
+        await svc.mark_sent(ws.id, invoice.id)
+        stored = await db.get(Invoice, invoice.id)
+        foreign_stored = await db.get(Invoice, foreign.id)
+        assert stored is not None
+        assert stored.public_token is not None
+        assert foreign_stored is not None
+        await db.refresh(stored, ["line_items"])
+        await db.refresh(foreign_stored, ["line_items"])
+        required = next(item for item in stored.line_items if not item.is_optional)
+        foreign_option = foreign_stored.line_items[0]
+
+        with pytest.raises(ValidationError, match="must be optional items on this invoice"):
+            await svc.create_public_payment_checkout(stored.public_token, [required.id])
+        with pytest.raises(ValidationError, match="must be optional items on this invoice"):
+            await svc.create_public_payment_checkout(stored.public_token, [foreign_option.id])
+
+        assert required.is_selected is True
+        assert float(stored.total) == 125.0
+
+
+async def test_replacing_public_checkout_expires_the_previous_open_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.payments.call_payment_service import CheckoutSessionResult
+
+    events: list[str] = []
+
+    async def _fake_expire(session_id: str) -> bool:
+        events.append(f"expire:{session_id}")
+        return True
+
+    async def _fake_session(**kwargs: object) -> CheckoutSessionResult:
+        events.append(f"create:{float(kwargs['amount'])}")  # type: ignore[arg-type]
+        return CheckoutSessionResult(
+            session_id="cs_new", url="https://pay.example/cs_new", payment_intent_id=None
+        )
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+    monkeypatch.setattr(call_payment_service, "expire_checkout_session_if_open", _fake_expire)
+    monkeypatch.setattr(call_payment_service, "create_payment_checkout_session", _fake_session)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        invoice = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=80.0)]
+            ),
+        )
+        await svc.mark_sent(ws.id, invoice.id)
+        stored = await db.get(Invoice, invoice.id)
+        assert stored is not None
+        assert stored.public_token is not None
+        stored.stripe_checkout_session_id = "cs_old"
+        await db.commit()
+
+        await svc.create_public_payment_checkout(stored.public_token, [])
+
+        assert events == ["expire:cs_old", "create:80.0"]
+        assert stored.stripe_checkout_session_id == "cs_new"
+
+
 async def test_mark_sent_without_contact_email_skips_send(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

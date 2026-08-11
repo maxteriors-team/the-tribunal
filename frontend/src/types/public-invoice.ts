@@ -6,12 +6,15 @@ import type { PublicProposalBranding } from "./proposal";
  * workspace, contact, Stripe, or provenance fields cross this boundary.
  */
 export interface PublicInvoiceLineItem {
+  id: string;
   name: string;
   description?: string | null;
   quantity: number;
   unit_price: number;
   discount: number;
   total: number;
+  is_optional: boolean;
+  is_selected: boolean;
 }
 
 export interface PublicInvoice {

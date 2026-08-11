@@ -19291,6 +19291,11 @@
             "title": "Discount",
             "type": "number"
           },
+          "is_optional": {
+            "default": false,
+            "title": "Is Optional",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -19349,6 +19354,15 @@
             "title": "Invoice Id",
             "type": "string"
           },
+          "is_optional": {
+            "default": false,
+            "title": "Is Optional",
+            "type": "boolean"
+          },
+          "is_selected": {
+            "title": "Is Selected",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -19380,6 +19394,7 @@
           "id",
           "invoice_id",
           "total",
+          "is_selected",
           "created_at",
           "updated_at"
         ],
@@ -19411,6 +19426,17 @@
               }
             ],
             "title": "Discount"
+          },
+          "is_optional": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Optional"
           },
           "name": {
             "anyOf": [
@@ -36121,6 +36147,19 @@
             "title": "Discount",
             "type": "number"
           },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_optional": {
+            "title": "Is Optional",
+            "type": "boolean"
+          },
+          "is_selected": {
+            "title": "Is Selected",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -36139,11 +36178,14 @@
           }
         },
         "required": [
+          "id",
           "name",
           "quantity",
           "unit_price",
           "discount",
-          "total"
+          "total",
+          "is_optional",
+          "is_selected"
         ],
         "title": "PublicInvoiceLineItem",
         "type": "object"
@@ -36170,6 +36212,21 @@
           "currency"
         ],
         "title": "PublicInvoicePaymentCheckout",
+        "type": "object"
+      },
+      "PublicInvoicePaymentRequest": {
+        "description": "Recipient-selected optional rows; required rows are always included.",
+        "properties": {
+          "selected_optional_line_item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Selected Optional Line Item Ids",
+            "type": "array"
+          }
+        },
+        "title": "PublicInvoicePaymentRequest",
         "type": "object"
       },
       "PublicInvoicePaymentStatus": {
@@ -51574,7 +51631,7 @@
     },
     "/api/v1/p/invoices/{token}/pay": {
       "post": {
-        "description": "Start a Stripe Checkout Session so the customer can pay their balance.\n\nReturns the hosted payment URL for the frontend to redirect to. The charged\namount is re-derived from the invoice server-side, never taken from the\nrequest. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces\nthrough the service's own error mapping.",
+        "description": "Start a server-priced Stripe Checkout Session for the selected rows.\n\nThe body contains optional row UUIDs only. Required rows are always charged.\nAn omitted body preserves the current selection for rollout compatibility.",
         "operationId": "create_public_invoice_payment_api_v1_p_invoices__token__pay_post",
         "parameters": [
           {
@@ -51587,6 +51644,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublicInvoicePaymentRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

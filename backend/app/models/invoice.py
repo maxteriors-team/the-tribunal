@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DATE,
+    Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -176,6 +178,12 @@ class InvoiceLineItem(Base):
     """A single billable line on an invoice."""
 
     __tablename__ = "invoice_line_items"
+    __table_args__ = (
+        CheckConstraint(
+            "is_optional OR is_selected",
+            name="ck_invoice_line_items_required_selected",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     invoice_id: Mapped[uuid.UUID] = mapped_column(
@@ -194,6 +202,15 @@ class InvoiceLineItem(Base):
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     discount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+
+    # Required rows are permanently selected. Optional rows begin selected so
+    # the recipient initially sees the exact total previewed by the sender.
+    is_optional: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    is_selected: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False

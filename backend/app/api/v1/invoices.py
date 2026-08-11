@@ -29,6 +29,7 @@ from app.schemas.invoice import (
     PaginatedInvoices,
     PublicInvoice,
     PublicInvoicePaymentCheckout,
+    PublicInvoicePaymentRequest,
     PublicInvoicePaymentStatus,
 )
 from app.services.invoices import InvoiceService
@@ -242,15 +243,18 @@ async def get_public_invoice(token: str, db: DB) -> PublicInvoice:
 
 
 @public_router.post("/{token}/pay", response_model=PublicInvoicePaymentCheckout)
-async def create_public_invoice_payment(token: str, db: DB) -> PublicInvoicePaymentCheckout:
-    """Start a Stripe Checkout Session so the customer can pay their balance.
+async def create_public_invoice_payment(
+    token: str,
+    db: DB,
+    payload: PublicInvoicePaymentRequest | None = None,
+) -> PublicInvoicePaymentCheckout:
+    """Start a server-priced Stripe Checkout Session for the selected rows.
 
-    Returns the hosted payment URL for the frontend to redirect to. The charged
-    amount is re-derived from the invoice server-side, never taken from the
-    request. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces
-    through the service's own error mapping.
+    The body contains optional row UUIDs only. Required rows are always charged.
+    An omitted body preserves the current selection for rollout compatibility.
     """
-    return await InvoiceService(db).create_public_payment_checkout(token)
+    selected_ids = None if payload is None else payload.selected_optional_line_item_ids
+    return await InvoiceService(db).create_public_payment_checkout(token, selected_ids)
 
 
 @public_router.post("/{token}/payment-status", response_model=PublicInvoicePaymentStatus)

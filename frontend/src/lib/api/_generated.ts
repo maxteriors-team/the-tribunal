@@ -641,12 +641,10 @@ export interface paths {
         put?: never;
         /**
          * Create Public Invoice Payment
-         * @description Start a Stripe Checkout Session so the customer can pay their balance.
+         * @description Start a server-priced Stripe Checkout Session for the selected rows.
          *
-         *     Returns the hosted payment URL for the frontend to redirect to. The charged
-         *     amount is re-derived from the invoice server-side, never taken from the
-         *     request. A bad state (nothing owed, voided, or Stripe unconfigured) surfaces
-         *     through the service's own error mapping.
+         *     The body contains optional row UUIDs only. Required rows are always charged.
+         *     An omitted body preserves the current selection for rollout compatibility.
          */
         post: operations["create_public_invoice_payment_api_v1_p_invoices__token__pay_post"];
         delete?: never;
@@ -17491,6 +17489,11 @@ export interface components {
              * @default 0
              */
             discount: number;
+            /**
+             * Is Optional
+             * @default false
+             */
+            is_optional: boolean;
             /** Name */
             name: string;
             /**
@@ -17528,6 +17531,13 @@ export interface components {
              * Format: uuid
              */
             invoice_id: string;
+            /**
+             * Is Optional
+             * @default false
+             */
+            is_optional: boolean;
+            /** Is Selected */
+            is_selected: boolean;
             /** Name */
             name: string;
             /**
@@ -17554,6 +17564,8 @@ export interface components {
             description?: string | null;
             /** Discount */
             discount?: number | null;
+            /** Is Optional */
+            is_optional?: boolean | null;
             /** Name */
             name?: string | null;
             /** Quantity */
@@ -23722,6 +23734,15 @@ export interface components {
             description?: string | null;
             /** Discount */
             discount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Optional */
+            is_optional: boolean;
+            /** Is Selected */
+            is_selected: boolean;
             /** Name */
             name: string;
             /** Quantity */
@@ -23742,6 +23763,14 @@ export interface components {
             currency: string;
             /** Url */
             url: string;
+        };
+        /**
+         * PublicInvoicePaymentRequest
+         * @description Recipient-selected optional rows; required rows are always included.
+         */
+        PublicInvoicePaymentRequest: {
+            /** Selected Optional Line Item Ids */
+            selected_optional_line_item_ids?: string[];
         };
         /**
          * PublicInvoicePaymentStatus
@@ -30316,7 +30345,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublicInvoicePaymentRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

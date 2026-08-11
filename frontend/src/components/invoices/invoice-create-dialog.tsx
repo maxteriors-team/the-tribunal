@@ -10,6 +10,7 @@ import * as z from "zod";
 
 import { CatalogPicker } from "@/components/catalog/catalog-picker";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +61,7 @@ const lineItemSchema = z.object({
       error: "Qty > 0",
     }),
   unit_price: moneyString.refine((v) => v !== "", { error: "Required" }),
+  is_optional: z.boolean(),
 });
 
 const createInvoiceSchema = z.object({
@@ -75,7 +77,12 @@ const createInvoiceSchema = z.object({
 
 type CreateInvoiceFormValues = z.infer<typeof createInvoiceSchema>;
 
-const EMPTY_LINE = { name: "", quantity: "1", unit_price: "" } as const;
+const EMPTY_LINE = {
+  name: "",
+  quantity: "1",
+  unit_price: "",
+  is_optional: false,
+} as const;
 
 /** "Sarah Henderson — sarah@example.com", degrading to whatever exists. */
 function contactLabel(contact: Contact): string {
@@ -187,6 +194,7 @@ export function InvoiceCreateDialog({
           name: li.name.trim(),
           quantity: Number(li.quantity),
           unit_price: Number(li.unit_price),
+          is_optional: li.is_optional,
         })),
       });
       if (send) {
@@ -327,6 +335,7 @@ export function InvoiceCreateDialog({
                         name: item.name,
                         quantity: "1",
                         unit_price: String(item.unit_price),
+                        is_optional: false,
                       };
                       const current = form.getValues("line_items");
                       if (current.length === 1 && isBlankLine(current[0])) {
@@ -351,18 +360,22 @@ export function InvoiceCreateDialog({
                 </div>
               </div>
 
-              {fields.map((field, index) => (
+              {fields.map((lineField, index) => (
                 <div
-                  key={field.id}
-                  className="grid grid-cols-[1fr_5rem_7rem_auto] items-start gap-2"
+                  key={lineField.id}
+                  className="grid grid-cols-12 items-start gap-2 rounded-md border p-3"
                 >
                   <FormField
                     control={form.control}
                     name={`line_items.${index}.name`}
                     render={({ field: f }) => (
-                      <FormItem>
+                      <FormItem className="col-span-12 sm:col-span-6">
                         <FormControl>
-                          <Input placeholder="Description" {...f} />
+                          <Input
+                            aria-label={`Line item ${index + 1} description`}
+                            placeholder="Description"
+                            {...f}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -372,13 +385,14 @@ export function InvoiceCreateDialog({
                     control={form.control}
                     name={`line_items.${index}.quantity`}
                     render={({ field: f }) => (
-                      <FormItem>
+                      <FormItem className="col-span-4 sm:col-span-2">
                         <FormControl>
                           <Input
                             type="number"
                             min="0"
                             step="1"
                             inputMode="decimal"
+                            aria-label={`Line item ${index + 1} quantity`}
                             placeholder="Qty"
                             {...f}
                           />
@@ -391,13 +405,14 @@ export function InvoiceCreateDialog({
                     control={form.control}
                     name={`line_items.${index}.unit_price`}
                     render={({ field: f }) => (
-                      <FormItem>
+                      <FormItem className="col-span-6 sm:col-span-3">
                         <FormControl>
                           <Input
                             type="number"
                             min="0"
                             step="0.01"
                             inputMode="decimal"
+                            aria-label={`Line item ${index + 1} price`}
                             placeholder="Price"
                             {...f}
                           />
@@ -410,13 +425,35 @@ export function InvoiceCreateDialog({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="mt-0.5"
+                    className="col-span-2 justify-self-end sm:col-span-1"
                     onClick={() => (fields.length > 1 ? remove(index) : undefined)}
                     disabled={fields.length <= 1}
-                    aria-label="Remove line item"
+                    aria-label={`Remove line item ${index + 1}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
+                  <FormField
+                    control={form.control}
+                    name={`line_items.${index}.is_optional`}
+                    render={({ field: f }) => {
+                      const checkboxId = `create-line-${lineField.id}-optional`;
+                      return (
+                        <FormItem className="col-span-12 flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              id={checkboxId}
+                              checked={f.value}
+                              onCheckedChange={(checked) => f.onChange(checked === true)}
+                              disabled={createMutation.isPending}
+                            />
+                          </FormControl>
+                          <FormLabel htmlFor={checkboxId} className="font-normal">
+                            Optional item
+                          </FormLabel>
+                        </FormItem>
+                      );
+                    }}
+                  />
                 </div>
               ))}
             </div>

@@ -161,11 +161,20 @@ class InvoiceService:
         return "sent" if is_sent else "draft"
 
     def _recompute_totals(self, invoice: Invoice) -> None:
-        """Recompute subtotal/total from line items and re-derive status in place.
+        """Recompute totals from selected rows and re-derive status in place.
 
-        Requires ``invoice.line_items`` to be loaded.
+        Required rows are always selected. Optional rows contribute only when the
+        recipient selected them. Requires ``invoice.line_items`` to be loaded.
         """
-        subtotal = round(sum(float(li.total) for li in invoice.line_items), 2)
+        for line_item in invoice.line_items:
+            if not line_item.is_optional:
+                line_item.is_selected = True
+        subtotal = round(
+            sum(
+                float(line_item.total) for line_item in invoice.line_items if line_item.is_selected
+            ),
+            2,
+        )
         invoice.subtotal = subtotal
         invoice.total = round(
             subtotal + float(invoice.tax_amount or 0) - float(invoice.discount_amount or 0), 2
@@ -281,6 +290,8 @@ class InvoiceService:
                     unit_price=item.unit_price,
                     discount=item.discount,
                     total=self._line_total(item.quantity, item.unit_price, item.discount),
+                    is_optional=item.is_optional,
+                    is_selected=True,
                 )
             )
 
@@ -377,6 +388,8 @@ class InvoiceService:
                         unit_price=item.unit_price,
                         discount=item.discount,
                         total=self._line_total(item.quantity, item.unit_price, item.discount),
+                        is_optional=item.is_optional,
+                        is_selected=True,
                     )
                 )
 
@@ -743,6 +756,8 @@ class InvoiceService:
                 unit_price=item_in.unit_price,
                 discount=item_in.discount,
                 total=self._line_total(item_in.quantity, item_in.unit_price, item_in.discount),
+                is_optional=item_in.is_optional,
+                is_selected=True,
             )
         )
         self._recompute_totals(invoice)
@@ -778,6 +793,10 @@ class InvoiceService:
             line_item.unit_price = item_in.unit_price
         if item_in.discount is not None:
             line_item.discount = item_in.discount
+        if item_in.is_optional is not None:
+            line_item.is_optional = item_in.is_optional
+            if not item_in.is_optional:
+                line_item.is_selected = True
         line_item.total = self._line_total(
             float(line_item.quantity), float(line_item.unit_price), float(line_item.discount)
         )
@@ -883,6 +902,10 @@ class InvoiceService:
         if balance <= 0:
             raise ConflictError("Invoice has no outstanding balance")
 
+        previous_session_id = invoice.stripe_checkout_session_id
+        if previous_session_id:
+            await call_payment_service.expire_checkout_session_if_open(previous_session_id)
+
         customer_email = invoice.contact.email if invoice.contact else None
         result = await call_payment_service.create_payment_checkout_session(
             amount=balance,
@@ -911,15 +934,17 @@ class InvoiceService:
     # ----------------------------------------------------------------- #
     # Public customer invoice (no auth, token-keyed)
     # ----------------------------------------------------------------- #
-    async def _load_by_public_token(self, token: str) -> Invoice:
+    async def _load_by_public_token(self, token: str, *, for_update: bool = False) -> Invoice:
         """Load a sent invoice by its public token, or raise ``NotFoundError``.
 
         Drafts have no token and never resolve, so an invoice the operator is
         still editing cannot be viewed even if a link were guessed. Status is
         re-derived on read so an invoice that lapsed since it was sent reports
-        ``overdue`` truthfully without waiting for a worker.
+        ``overdue`` truthfully without waiting for a worker. Payment selection
+        uses a row lock so concurrent requests cannot leave two differently
+        priced Checkout Sessions open.
         """
-        result = await self.db.execute(
+        statement = (
             select(Invoice)
             .where(Invoice.public_token == token)
             .options(
@@ -928,6 +953,9 @@ class InvoiceService:
                 selectinload(Invoice.workspace),
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.db.execute(statement)
         invoice = result.scalar_one_or_none()
         if invoice is None or invoice.status == "draft":
             raise NotFoundError("Invoice not found")
@@ -935,8 +963,11 @@ class InvoiceService:
         derived = self.derive_status(invoice)
         if derived != invoice.status:
             invoice.status = derived
-            await self.db.commit()
-            await self.db.refresh(invoice, ["line_items"])
+            if for_update:
+                await self.db.flush()
+            else:
+                await self.db.commit()
+                await self.db.refresh(invoice, ["line_items"])
         return invoice
 
     def _to_public(self, invoice: Invoice) -> PublicInvoice:
@@ -964,12 +995,15 @@ class InvoiceService:
             currency=invoice.currency,
             line_items=[
                 PublicInvoiceLineItem(
+                    id=li.id,
                     name=li.name,
                     description=li.description,
                     quantity=float(li.quantity),
                     unit_price=float(li.unit_price),
                     discount=float(li.discount),
                     total=float(li.total),
+                    is_optional=li.is_optional,
+                    is_selected=li.is_selected,
                 )
                 for li in invoice.line_items
             ],
@@ -1008,13 +1042,33 @@ class InvoiceService:
         """Return the read-only, safe-fields-only invoice for a public token."""
         return self._to_public(await self._load_by_public_token(token))
 
-    async def create_public_payment_checkout(self, token: str) -> PublicInvoicePaymentCheckout:
-        """Start a Stripe Checkout Session so the customer can pay their balance.
+    def _apply_recipient_selection(
+        self,
+        invoice: Invoice,
+        selected_optional_line_item_ids: list[uuid.UUID],
+    ) -> None:
+        """Validate and apply optional-row choices before server-side pricing."""
+        optional_ids = {line_item.id for line_item in invoice.line_items if line_item.is_optional}
+        selected_ids = set(selected_optional_line_item_ids)
+        if not selected_ids.issubset(optional_ids):
+            raise ValidationError("Selected line items must be optional items on this invoice")
 
-        The amount is re-derived from the invoice server-side, so a customer
-        cannot influence what they are charged by editing the request.
-        """
-        invoice = await self._load_by_public_token(token)
+        for line_item in invoice.line_items:
+            line_item.is_selected = not line_item.is_optional or line_item.id in selected_ids
+        self._recompute_totals(invoice)
+
+    async def create_public_payment_checkout(
+        self,
+        token: str,
+        selected_optional_line_item_ids: list[uuid.UUID] | None = None,
+    ) -> PublicInvoicePaymentCheckout:
+        """Validate recipient choices and charge the resulting server-priced balance."""
+        invoice = await self._load_by_public_token(token, for_update=True)
+        if selected_optional_line_item_ids is not None:
+            self._apply_recipient_selection(invoice, selected_optional_line_item_ids)
+        else:
+            self._recompute_totals(invoice)
+
         return_url = f"{settings.frontend_url}/p/invoices/{token}"
         _, url = await self._start_checkout(invoice, return_url=return_url)
         if not url:

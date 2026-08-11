@@ -163,6 +163,20 @@ async def retrieve_session_status(session_id: str) -> SessionStatus:
     )
 
 
+async def expire_checkout_session_if_open(session_id: str) -> bool:
+    """Expire a still-open Checkout Session before replacing its price.
+
+    Stripe only permits expiration while a session is open. Completed or already
+    expired sessions are left untouched. Returns whether expiration occurred.
+    """
+    client = _stripe_client()
+    session = client.checkout.sessions.retrieve(session_id)
+    if str(getattr(session, "status", "")) != "open":
+        return False
+    client.checkout.sessions.expire(session_id)
+    return True
+
+
 async def mark_call_payment_paid(
     db: AsyncSession,
     payment: CallPayment,
