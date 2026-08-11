@@ -1,5 +1,8 @@
 """Tests for private S3-compatible MMS object storage."""
 
+import os
+import subprocess
+import sys
 from hashlib import sha256
 from unittest.mock import Mock, patch
 
@@ -52,6 +55,28 @@ def _client_error(operation: str) -> ClientError:
         error_response={"Error": {"Code": "InternalError", "Message": "failed"}},
         operation_name=operation,
     )
+
+
+def test_runtime_import_does_not_require_dev_type_stubs() -> None:
+    script = """
+import builtins
+real_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name.startswith("mypy_boto3_s3"):
+        raise ModuleNotFoundError(name)
+    return real_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+import app.services.messaging.media_storage
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "SECRET_KEY": _SECRET_KEY},
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_from_settings_requires_complete_configuration() -> None:

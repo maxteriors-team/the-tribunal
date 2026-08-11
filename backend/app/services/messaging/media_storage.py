@@ -1,14 +1,19 @@
 """Private S3-compatible object storage for inbound MMS media."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from hashlib import sha256
+from typing import TYPE_CHECKING
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-from mypy_boto3_s3 import S3Client
 
 from app.core.config import Settings, settings
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
 
 
 class MMSStorageError(RuntimeError):
@@ -49,7 +54,7 @@ class MMSMediaStorage:
         self._presign_ttl_seconds = presign_ttl_seconds
 
     @classmethod
-    def from_settings(cls, config: Settings = settings) -> "MMSMediaStorage":
+    def from_settings(cls, config: Settings = settings) -> MMSMediaStorage:
         """Build storage from validated application settings without ambient AWS auth."""
         if not config.mms_storage_enabled:
             raise MMSStorageNotConfiguredError("Private MMS storage is not configured")
