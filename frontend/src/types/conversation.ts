@@ -103,6 +103,15 @@ export interface CallSignals {
 // Unified timeline item for the conversation feed
 export type TimelineItemType = "sms" | "call" | "email" | "voicemail" | "appointment" | "note";
 
+export interface TimelineAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes?: number | null;
+  status: "pending" | "processing" | "ready" | "failed";
+  content_url: string;
+}
+
 export interface TimelineItem {
   id: string;
   type: TimelineItemType;
@@ -118,6 +127,7 @@ export interface TimelineItem {
   status?: string;
   booking_outcome?: string;
   signals?: CallSignals | null;
+  attachments?: TimelineAttachment[];
   // Reference to original record
   original_id: string;
   original_type: "sms_message" | "call_record" | "appointment" | "note";

@@ -1,6 +1,7 @@
 """Telnyx SMS/MMS webhook handlers."""
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 
@@ -17,9 +18,81 @@ from app.services.approval.command_processor_service import command_processor_se
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.push_notifications import push_notification_service
 from app.services.telephony.inbound_text import InboundTextEvent, process_inbound_text_event
-from app.services.telephony.telnyx import TelnyxSMSService
+from app.services.telephony.telnyx import InboundMedia, TelnyxSMSService
 
 _conversation_syncer = CampaignConversationSyncer()
+_MAX_INBOUND_MEDIA_ITEMS = 10
+
+
+def _extract_inbound_media(payload: dict[str, Any]) -> tuple[InboundMedia, ...]:
+    """Normalize safe metadata from a signed Telnyx ``media`` array."""
+    raw_media = payload.get("media")
+    if not isinstance(raw_media, list):
+        return ()
+
+    normalized: list[InboundMedia] = []
+    for item in raw_media[:_MAX_INBOUND_MEDIA_ITEMS]:
+        if not isinstance(item, dict):
+            continue
+
+        source_url = item.get("url")
+        if not isinstance(source_url, str) or not source_url:
+            continue
+        parsed_url = urlsplit(source_url)
+        if (
+            parsed_url.scheme != "https"
+            or not parsed_url.hostname
+            or parsed_url.username
+            or parsed_url.password
+            or parsed_url.fragment
+        ):
+            continue
+
+        raw_content_type = item.get("content_type")
+        content_type = (
+            raw_content_type.split(";", maxsplit=1)[0].strip().lower()
+            if isinstance(raw_content_type, str)
+            else ""
+        )
+        if not content_type or len(content_type) > 127:
+            content_type = "application/octet-stream"
+
+        raw_size = item.get("size")
+        size_bytes = (
+            raw_size
+            if isinstance(raw_size, int) and not isinstance(raw_size, bool) and raw_size >= 0
+            else None
+        )
+
+        raw_sha256 = item.get("sha256")
+        normalized_sha256 = raw_sha256.strip().lower() if isinstance(raw_sha256, str) else ""
+        provider_sha256 = (
+            normalized_sha256
+            if len(normalized_sha256) == 64
+            and all(character in "0123456789abcdef" for character in normalized_sha256)
+            else None
+        )
+
+        normalized.append(
+            InboundMedia(
+                source_url=source_url,
+                content_type=content_type,
+                size_bytes=size_bytes,
+                sha256=provider_sha256,
+            )
+        )
+
+    return tuple(normalized)
+
+
+def _media_notification_preview(media: tuple[InboundMedia, ...]) -> str | None:
+    if len(media) != 1:
+        return f"{len(media)} media attachments received" if media else None
+    if media[0].content_type.startswith("image/"):
+        return "Photo received"
+    if media[0].content_type.startswith("video/"):
+        return "Video received"
+    return "Media attachment received"
 
 
 async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # noqa: PLR0912, PLR0915
@@ -30,17 +103,24 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
     from_number = payload.get("from", {}).get("phone_number", "")
     to_list = payload.get("to", [])
     to_number = to_list[0].get("phone_number", "") if to_list else ""
-    body = payload.get("text", "")
+    raw_body = payload.get("text", "")
+    body = raw_body if isinstance(raw_body, str) else ""
     message_id = payload.get("id", "")
+    media = _extract_inbound_media(payload)
 
     # Normalize phone numbers to E.164 format for consistent lookups
     from_number = normalize_phone_safe(from_number) or from_number
     to_number = normalize_phone_safe(to_number) or to_number
 
-    log = log.bind(from_number=from_number, to_number=to_number, message_id=message_id)
+    log = log.bind(
+        from_number=from_number,
+        to_number=to_number,
+        message_id=message_id,
+        media_count=len(media),
+    )
     log.info("processing_inbound_sms")
 
-    if not all([from_number, to_number, body]):
+    if not from_number or not to_number or (not body and not media):
         log.warning("missing_required_fields")
         return
 
@@ -69,6 +149,8 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
                 body=body,
                 workspace_id=workspace_id,
                 channel=MessageChannel.SMS,
+                media_count=len(media),
+                media_preview=_media_notification_preview(media),
             )
 
             async def ingest_message(db: Any, inbound_event: InboundTextEvent) -> Message:
@@ -79,6 +161,7 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
                     to_number=inbound_event.to_number,
                     body=inbound_event.body,
                     workspace_id=inbound_event.workspace_id,
+                    media=media,
                 )
 
             message = await process_inbound_text_event(

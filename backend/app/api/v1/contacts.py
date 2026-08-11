@@ -9,12 +9,14 @@ also resolves workspace membership, replacing the old ``get_workspace`` check;
 ``workspace_id`` (the path param) is the workspace identifier used throughout.
 """
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from fastapi.responses import RedirectResponse
+from sqlalchemy import or_, select
 
 from app.api.deps import (
     DB,
@@ -25,8 +27,16 @@ from app.api.deps import (
     WorkspaceAccess,
 )
 from app.api.service_errors import ServiceErrorRoute
+from app.core.config import settings
+from app.core.encryption import hash_phone
 from app.models.contact import Contact
+from app.models.conversation import Conversation, Message
 from app.models.lead_source import LeadSource
+from app.models.message_attachment import (
+    MESSAGE_ATTACHMENT_FAILED,
+    MESSAGE_ATTACHMENT_READY,
+    MessageAttachment,
+)
 from app.models.referral_partner import ReferralPartner
 from app.schemas.contact import (
     AIToggleRequest,
@@ -75,6 +85,7 @@ from app.services.lead_sources.attribution_service import (
     AttributionCleanupService,
 )
 from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
+from app.services.messaging.media_storage import MMSMediaStorage, MMSStorageError
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -538,6 +549,86 @@ async def get_contact_timeline(
 
     # Convert dicts to TimelineItem models
     return [TimelineItem(**item) for item in timeline_items_data]
+
+
+@router.get(
+    "/{contact_id}/timeline/attachments/{attachment_id}/content",
+    response_class=RedirectResponse,
+    responses={
+        307: {"description": "Redirect to a short-lived private media URL"},
+        404: {"description": "Attachment not found"},
+        409: {"description": "Attachment is still processing"},
+        410: {"description": "Attachment could not be processed"},
+        503: {"description": "Private media storage is unavailable"},
+    },
+)
+async def get_timeline_attachment_content(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    attachment_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> RedirectResponse:
+    """Authorize one contact attachment and redirect to a private object URL."""
+    contact_result = await db.execute(
+        select(Contact).where(
+            Contact.id == contact_id,
+            Contact.workspace_id == workspace_id,
+        )
+    )
+    contact = contact_result.scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    conversation_matches = [Conversation.contact_id == contact_id]
+    if contact.phone_number:
+        conversation_matches.append(
+            Conversation.contact_phone_hash == hash_phone(contact.phone_number)
+        )
+
+    attachment_result = await db.execute(
+        select(MessageAttachment)
+        .join(Message, MessageAttachment.message_id == Message.id)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            MessageAttachment.id == attachment_id,
+            MessageAttachment.workspace_id == workspace_id,
+            Conversation.workspace_id == workspace_id,
+            or_(*conversation_matches),
+        )
+    )
+    attachment = attachment_result.scalar_one_or_none()
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    if attachment.status == MESSAGE_ATTACHMENT_FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Attachment is unavailable",
+        )
+    if attachment.status != MESSAGE_ATTACHMENT_READY or not attachment.storage_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Attachment is still processing",
+        )
+
+    try:
+        storage = MMSMediaStorage.from_settings(settings)
+        media_url = await asyncio.to_thread(
+            storage.create_download_url,
+            object_key=attachment.storage_key,
+        )
+    except MMSStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Attachment storage is unavailable",
+        ) from exc
+
+    return RedirectResponse(
+        url=media_url,
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get(

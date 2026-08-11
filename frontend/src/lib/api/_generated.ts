@@ -3894,6 +3894,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/timeline/attachments/{attachment_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Timeline Attachment Content
+         * @description Authorize one contact attachment and redirect to a private object URL.
+         */
+        get: operations["get_timeline_attachment_content_api_v1_workspaces__workspace_id__contacts__contact_id__timeline_attachments__attachment_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/conversations": {
         parameters: {
             query?: never;
@@ -27852,10 +27872,36 @@ export interface components {
             updated_at: string;
         };
         /**
+         * TimelineAttachment
+         * @description Safe metadata for private media attached to a timeline message.
+         */
+        TimelineAttachment: {
+            /** Content Type */
+            content_type: string;
+            /** Content Url */
+            content_url: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "processing" | "ready" | "failed";
+        };
+        /**
          * TimelineItem
          * @description A unified timeline item.
          */
         TimelineItem: {
+            /** Attachments */
+            attachments?: components["schemas"]["TimelineAttachment"][];
             /** Booking Outcome */
             booking_outcome?: string | null;
             /** Content */
@@ -37196,6 +37242,65 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_timeline_attachment_content_api_v1_workspaces__workspace_id__contacts__contact_id__timeline_attachments__attachment_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to a short-lived private media URL */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Attachment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Attachment is still processing */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Attachment could not be processed */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Private media storage is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

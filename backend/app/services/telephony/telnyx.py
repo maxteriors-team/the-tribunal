@@ -26,6 +26,7 @@ from app.models.conversation import (
     MessageStatus,
     advances_message_status,
 )
+from app.models.message_attachment import MessageAttachment
 from app.models.phone_number import PhoneNumber
 from app.services.agents import ensure_default_agent
 from app.services.idempotency import (
@@ -62,6 +63,45 @@ _TELNYX_STATUS_MAP: dict[str, MessageStatus] = {
     "delivery_failed": MessageStatus.FAILED,
     "sending_failed": MessageStatus.FAILED,
 }
+
+_MEDIA_EXTENSIONS = {
+    "image/gif": ".gif",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "video/3gpp": ".3gp",
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+}
+
+
+def _media_filename(position: int, content_type: str) -> str:
+    extension = _MEDIA_EXTENSIONS.get(content_type, ".bin")
+    return f"mms-{position + 1}{extension}"
+
+
+def _media_preview(media: tuple["InboundMedia", ...]) -> str:
+    if len(media) == 1:
+        content_type = media[0].content_type
+        if content_type.startswith("image/"):
+            return "[Photo]"
+        if content_type.startswith("video/"):
+            return "[Video]"
+        return "[Media attachment]"
+    return f"[{len(media)} media attachments]"
+
+
+@dataclass(frozen=True, slots=True)
+class InboundMedia:
+    """Normalized metadata for one signed Telnyx inbound media item."""
+
+    source_url: str
+    content_type: str
+    size_bytes: int | None = None
+    sha256: str | None = None
 
 
 @dataclass
@@ -341,6 +381,7 @@ class TelnyxSMSService:
         to_number: str,
         body: str,
         workspace_id: uuid.UUID,
+        media: tuple[InboundMedia, ...] = (),
     ) -> Message:
         """Process an inbound SMS message.
 
@@ -391,7 +432,7 @@ class TelnyxSMSService:
             workspace_id=workspace_id,
         )
 
-        # Create message record
+        # Create the message and durable attachment queue rows in one transaction.
         message = Message(
             conversation_id=conversation.id,
             provider_message_id=provider_message_id,
@@ -401,10 +442,25 @@ class TelnyxSMSService:
             status="received",
         )
         db.add(message)
+        if media:
+            await db.flush()
+            for position, media_item in enumerate(media):
+                db.add(
+                    MessageAttachment(
+                        workspace_id=workspace_id,
+                        message_id=message.id,
+                        provider_position=position,
+                        source_url=media_item.source_url,
+                        provider_content_type=media_item.content_type,
+                        provider_size_bytes=media_item.size_bytes,
+                        provider_sha256=media_item.sha256,
+                        filename=_media_filename(position, media_item.content_type),
+                    )
+                )
         observe_sms_sent(workspace_id, direction="inbound")
 
         # Update conversation
-        conversation.last_message_preview = body[:255]
+        conversation.last_message_preview = (body.strip() or _media_preview(media))[:255]
         conversation.last_message_at = datetime.now(UTC)
         conversation.last_message_direction = "inbound"
         conversation.unread_count += 1

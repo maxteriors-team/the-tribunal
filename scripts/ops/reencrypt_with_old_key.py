@@ -142,6 +142,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.human_profile import HumanProfile
     from app.models.lead_magnet_lead import LeadMagnetLead
     from app.models.link_click import LinkClick
+    from app.models.message_attachment import MessageAttachment
     from app.models.user import User
 
     return (
@@ -174,6 +175,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             {"email": "email_hash", "phone_number": "phone_hash"},
         ),
         RotationTarget(LinkClick, ("ip_address",)),
+        RotationTarget(MessageAttachment, ("source_url",)),
     )
 
 

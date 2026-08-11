@@ -142,6 +142,81 @@ async def test_inbound_message_returns_when_required_fields_missing() -> None:
     log.warning.assert_any_call("missing_required_fields")
 
 
+def test_extract_inbound_media_normalizes_provider_metadata() -> None:
+    media = handlers._extract_inbound_media(
+        {
+            "media": [
+                {
+                    "url": "https://media.telnyx.com/inbound/photo?token=opaque",
+                    "content_type": "Image/JPEG; charset=binary",
+                    "size": 1234,
+                    "sha256": "A" * 64,
+                },
+                {"url": "http://localhost/private", "content_type": "image/png"},
+                {"url": "https://media.telnyx.com/file", "size": True},
+                "invalid",
+            ]
+        }
+    )
+
+    assert len(media) == 2
+    assert media[0].source_url.endswith("?token=opaque")
+    assert media[0].content_type == "image/jpeg"
+    assert media[0].size_bytes == 1234
+    assert media[0].sha256 == "a" * 64
+    assert media[1].content_type == "application/octet-stream"
+    assert media[1].size_bytes is None
+
+
+async def test_inbound_media_only_message_is_ingested(
+    monkeypatch: pytest.MonkeyPatch,
+    _stub_modules: dict[str, MagicMock],
+) -> None:
+    workspace_id = uuid.uuid4()
+    phone_record = MagicMock(workspace_id=workspace_id)
+    db = _make_db(execute_returns=[_Result(scalar=phone_record)])
+    _patch_session_local(monkeypatch, db)
+
+    ingested_message = MagicMock(id=uuid.uuid4())
+    sms_service = MagicMock()
+    sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
+    sms_service.close = AsyncMock(return_value=None)
+    monkeypatch.setattr(handlers, "TelnyxSMSService", lambda *args, **kwargs: sms_service)
+
+    captured_event = None
+
+    async def fake_pipeline(**kwargs: Any) -> MagicMock:
+        nonlocal captured_event
+        captured_event = kwargs["event"]
+        return await kwargs["ingest_message"](kwargs["db"], captured_event)
+
+    monkeypatch.setattr(handlers, "process_inbound_text_event", fake_pipeline)
+    payload = {
+        "id": "message-media-only",
+        "from": {"phone_number": "+14155552671"},
+        "to": [{"phone_number": "+12125550101"}],
+        "text": "",
+        "media": [
+            {
+                "url": "https://media.telnyx.com/inbound/photo.jpg",
+                "content_type": "image/jpeg",
+                "size": 321,
+            }
+        ],
+    }
+
+    await handlers.handle_inbound_message(payload, _make_log())
+
+    assert captured_event is not None
+    assert captured_event.body == ""
+    assert captured_event.media_count == 1
+    assert captured_event.media_preview == "Photo received"
+    call = sms_service.process_inbound_message.await_args.kwargs
+    assert len(call["media"]) == 1
+    assert call["media"][0].content_type == "image/jpeg"
+    _stub_modules["command_processor_service"].try_process_command.assert_not_awaited()
+
+
 async def test_inbound_message_returns_when_phone_number_unknown(
     monkeypatch: pytest.MonkeyPatch,
     sms_inbound: dict[str, Any],
@@ -153,7 +228,8 @@ async def test_inbound_message_returns_when_phone_number_unknown(
     await handlers.handle_inbound_message(sms_inbound, log)
 
     log.warning.assert_any_call(
-        "phone_number_not_found", to_number="+12125550101",
+        "phone_number_not_found",
+        to_number="+12125550101",
     )
 
 
@@ -265,7 +341,9 @@ async def test_inbound_message_processes_and_schedules_ai_response(
     sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: sms_service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: sms_service,
     )
 
     # Silence drip-pause + campaign-reply side effects (already a try/except).
@@ -273,7 +351,9 @@ async def test_inbound_message_processes_and_schedules_ai_response(
     from app.services.reactivation import drip_runner
 
     monkeypatch.setattr(
-        drip_runner, "handle_inbound_reply", AsyncMock(return_value=None),
+        drip_runner,
+        "handle_inbound_reply",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         campaign_sms_stats,
@@ -312,7 +392,7 @@ async def test_inbound_message_skips_ai_when_paused(
     db = _make_db(
         execute_returns=[
             _Result(scalar=phone_record),
-            _Result(scalar=None),       # operator miss
+            _Result(scalar=None),  # operator miss
             _Result(scalar=conversation),
             _Result(scalar=conversation),
         ]
@@ -323,14 +403,18 @@ async def test_inbound_message_skips_ai_when_paused(
     sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: sms_service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: sms_service,
     )
 
     from app.services.campaigns import campaign_sms_stats
     from app.services.reactivation import drip_runner
 
     monkeypatch.setattr(
-        drip_runner, "handle_inbound_reply", AsyncMock(return_value=None),
+        drip_runner,
+        "handle_inbound_reply",
+        AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         campaign_sms_stats,
@@ -377,7 +461,9 @@ def _stub_telnyx_sms_service(
     )
     service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        handlers, "TelnyxSMSService", lambda *a, **kw: service,
+        handlers,
+        "TelnyxSMSService",
+        lambda *a, **kw: service,
     )
     return service
 
@@ -393,7 +479,9 @@ def _stub_reputation_tracker(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     from app.services.rate_limiting import reputation_tracker as tracker_mod
 
     monkeypatch.setattr(
-        tracker_mod, "ReputationTracker", lambda *a, **kw: tracker,
+        tracker_mod,
+        "ReputationTracker",
+        lambda *a, **kw: tracker,
     )
     return tracker
 
@@ -413,7 +501,9 @@ async def test_delivery_status_delivered_increments_reputation(
     db = _make_db(execute_returns=[])
     _patch_session_local(monkeypatch, db)
     _stub_telnyx_sms_service(
-        monkeypatch, message=message, previous_status="sent",
+        monkeypatch,
+        message=message,
+        previous_status="sent",
     )
     tracker = _stub_reputation_tracker(monkeypatch)
 
@@ -421,7 +511,9 @@ async def test_delivery_status_delivered_increments_reputation(
 
     update_delivery = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        campaign_sms_stats, "update_campaign_sms_delivery", update_delivery,
+        campaign_sms_stats,
+        "update_campaign_sms_delivery",
+        update_delivery,
     )
 
     await handlers.handle_delivery_status(sms_delivered, _make_log())
@@ -475,7 +567,8 @@ async def test_delivery_status_hard_bounce_classifies_and_tracks(
     tracker.increment_hard_bounce.assert_awaited_once_with(phone_number_id, db)
     tracker.increment_soft_bounce.assert_not_awaited()
     _stub_modules["observe_sms_bounce"].assert_called_once_with(
-        workspace_id, bounce_type="hard",
+        workspace_id,
+        bounce_type="hard",
     )
 
 
@@ -569,7 +662,9 @@ async def test_delivery_status_skips_campaign_stats_for_non_final(
 
     update_delivery = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        campaign_sms_stats, "update_campaign_sms_delivery", update_delivery,
+        campaign_sms_stats,
+        "update_campaign_sms_delivery",
+        update_delivery,
     )
 
     await handlers.handle_delivery_status(payload, _make_log())

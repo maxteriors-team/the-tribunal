@@ -32,6 +32,7 @@ from app.workers.email_campaign_worker import _registry as email_campaign_regist
 from app.workers.enrichment_worker import _registry as enrichment_registry
 from app.workers.experiment_evaluation_worker import _registry as experiment_evaluation_registry
 from app.workers.followup_worker import _registry as followup_registry
+from app.workers.message_attachment_worker import _registry as message_attachment_registry
 from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
@@ -91,6 +92,11 @@ class WorkerRegistryProtocol(Protocol):
 def _always_enabled(_settings: Settings) -> bool:
     """Default per-worker enablement predicate."""
     return True
+
+
+def _mms_storage_enabled(runtime_settings: Settings) -> bool:
+    """Start media ingestion only when private object storage is complete."""
+    return runtime_settings.mms_storage_enabled
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +326,13 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="prebooking_worker",
         registry=prebooking_registry,
         dependencies=("postgres",),
+    ),
+    WorkerSpec(
+        name="message_attachment",
+        registry=message_attachment_registry,
+        dependencies=("postgres", "telnyx_media", "private_object_storage"),
+        enabled=_mms_storage_enabled,
+        enabled_setting="mms_storage_enabled",
     ),
 )
 
