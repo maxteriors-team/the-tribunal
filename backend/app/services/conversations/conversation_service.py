@@ -238,8 +238,10 @@ class ConversationService:
         )
         await self.db.commit()
         # ``execute`` is typed as returning ``Result``; a bulk UPDATE always
-        # yields a ``CursorResult``, which is where ``rowcount`` lives.
-        rowcount = cast("CursorResult[Any]", result).rowcount
+        # yields a ``CursorResult``, which is where ``rowcount`` lives. The cast
+        # target is written as an expression rather than a string so static
+        # analysis can see both names being used.
+        rowcount = cast(CursorResult[Any], result).rowcount
         return MarkAllReadResponse(conversations_marked=rowcount or 0)
 
     async def send_message(
