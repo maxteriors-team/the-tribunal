@@ -289,6 +289,7 @@ class TimelineItem(BaseModel):
     timestamp: datetime
     direction: str | None = None
     is_ai: bool = False
+    agent_id: uuid.UUID | None = None
     content: str
     duration_seconds: int | None = None
     recording_url: str | None = None

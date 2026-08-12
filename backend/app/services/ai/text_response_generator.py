@@ -37,7 +37,13 @@ from app.services.ai.text_prompt_builder import (
     to_gsm7_safe,
 )
 from app.services.ai.text_tool_executor import TextToolExecutor
+from app.services.ai.training_examples import get_training_examples_prompt
 from app.services.ai.voice_tools import get_text_booking_tools, get_text_search_knowledge_tool
+from app.services.ai.website_lead_qualification import (
+    build_qualification_instructions,
+    gate_website_lead_booking_tools,
+    get_website_lead_qualification_policy,
+)
 from app.services.knowledge.knowledge_context_service import knowledge_context_service
 
 logger = structlog.get_logger()
@@ -246,18 +252,36 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
     # blind to what the capture form collected and re-asks the lead for their
     # address and project type moments after they typed both into a quote tool.
     lead_context = None
+    lead_contact = None
     if conversation.contact_id:
-        contact_row = await db.execute(select(Contact).where(Contact.id == conversation.contact_id))
+        contact_row = await db.execute(
+            select(Contact).where(
+                Contact.id == conversation.contact_id,
+                Contact.workspace_id == conversation.workspace_id,
+            )
+        )
         lead_contact = contact_row.scalar_one_or_none()
         if lead_contact and lead_contact.notes:
             lead_context = lead_contact.notes
 
-    # Build system instructions - include booking tools info if configured
-    has_booking_tools = bool(
+    qualification_policy = get_website_lead_qualification_policy(agent, lead_contact)
+    qualification_pending = bool(
+        qualification_policy and lead_contact and not lead_contact.is_qualified
+    )
+    qualification_instructions = ""
+    if qualification_policy and lead_contact:
+        qualification_instructions = "\n" + build_qualification_instructions(
+            qualification_policy,
+            contact=lead_contact,
+        )
+
+    # Booking tools are server-gated while website-lead qualification is pending.
+    booking_configured = bool(
         agent.calcom_event_type_id
         and settings.calcom_api_key
         and "book_appointment" in (agent.enabled_tools or [])
     )
+    has_booking_tools = booking_configured and not qualification_pending
 
     booking_instructions = ""
     extracted_email = None
@@ -279,7 +303,11 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
     # Bulk knowledge is reached on demand via the search_knowledge tool instead
     # of statically prompt-stuffing the whole base into every request.
     knowledge_context = await knowledge_context_service.get_preamble_for_agent(db, agent.id)
-
+    training_examples = await get_training_examples_prompt(
+        db,
+        workspace_id=conversation.workspace_id,
+        agent_id=agent.id,
+    )
     # Expose the on-demand knowledge tool when the operator enabled it or the
     # agent has an ingested knowledge base to search.
     knowledge_tool_enabled = "search_knowledge" in (agent.enabled_tools or []) or (
@@ -287,7 +315,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
     )
 
     system_prompt = build_text_instructions(
-        system_prompt=agent.system_prompt + booking_instructions,
+        system_prompt=agent.system_prompt + booking_instructions + qualification_instructions,
         language=agent.language,
         timezone=timezone,
         contact_phone=conversation.contact_phone,
@@ -295,6 +323,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         booking_url=None,  # Don't include URL when using function calling
         knowledge_context=knowledge_context,
         lead_context=lead_context,
+        training_examples=training_examples,
     )
 
     # Create OpenAI client. Prefer the resolved credential so OAuth-backed
@@ -323,8 +352,14 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         # Assemble the tool list: booking tools (if configured) plus the
         # on-demand knowledge retrieval tool (if enabled). Both can coexist.
         active_tools: list[dict[str, Any]] = []
-        if has_booking_tools:
-            active_tools.extend(get_text_booking_tools(timezone))
+        if booking_configured:
+            active_tools.extend(
+                gate_website_lead_booking_tools(
+                    get_text_booking_tools(timezone),
+                    policy=qualification_policy,
+                    contact=lead_contact,
+                )
+            )
         if knowledge_tool_enabled:
             active_tools.append(get_text_search_knowledge_tool())
         if active_tools:
@@ -402,6 +437,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
                 conversation=conversation,
                 db=db,
                 timezone=timezone,
+                qualification_policy=qualification_policy,
             )
             tool_results = await tool_executor.handle_tool_calls(
                 tool_calls=assistant_message.tool_calls,
@@ -427,25 +463,71 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             )
             api_messages.extend(tool_results)
 
-            # Make follow-up call to get final response
+            # A successful local qualification immediately unlocks normal booking tools.
+            qualification_just_persisted = bool(
+                qualification_pending and lead_contact and lead_contact.is_qualified
+            )
+            transition_tools = (
+                get_text_booking_tools(timezone)
+                if qualification_just_persisted and booking_configured
+                else None
+            )
+            follow_up_params: dict[str, Any] = {
+                "model": "gpt-5.4-nano",
+                "messages": api_messages,
+                "temperature": agent.temperature,
+                "max_completion_tokens": 500,
+            }
+            if transition_tools:
+                follow_up_params["tools"] = transition_tools
+                follow_up_params["tool_choice"] = "required"
             follow_up_response = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model="gpt-5.4-nano",
-                    messages=api_messages,  # type: ignore[arg-type]
-                    temperature=agent.temperature,
-                    max_completion_tokens=500,
-                ),
+                client.chat.completions.create(**follow_up_params),
                 timeout=30.0,
             )
 
             final_message = follow_up_response.choices[0].message
             final_text: str | None = final_message.content
 
+            if qualification_just_persisted and booking_configured and final_message.tool_calls:
+                api_messages.append(
+                    {
+                        "role": "assistant",
+                        "content": final_message.content,
+                        "tool_calls": [
+                            {
+                                "id": tool_call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call.function.name,
+                                    "arguments": tool_call.function.arguments,
+                                },
+                            }
+                            for tool_call in final_message.tool_calls
+                        ],
+                    }
+                )
+                second_tool_results = await tool_executor.handle_tool_calls(
+                    tool_calls=final_message.tool_calls,
+                )
+                api_messages.extend(second_tool_results)
+                transition_response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model="gpt-5.4-nano",
+                        messages=api_messages,  # type: ignore[arg-type]
+                        temperature=agent.temperature,
+                        max_completion_tokens=500,
+                    ),
+                    timeout=30.0,
+                )
+                final_text = transition_response.choices[0].message.content
+
             if final_text:
                 final_text = to_gsm7_safe(final_text)
                 log.info(
                     "response_generated_with_tools",
                     length=len(final_text),
+                    qualification_just_persisted=qualification_just_persisted,
                 )
                 return final_text
         else:

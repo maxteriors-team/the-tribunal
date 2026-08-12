@@ -21,8 +21,11 @@ from app.schemas.conversation import (
     MessageCreate,
     MessageResponse,
     PaginatedConversations,
+    TeachAIRequest,
+    TeachAIResponse,
     UnreadSummary,
 )
+from app.services.ai.teach_ai import save_training_example
 from app.services.conversations import ConversationService
 
 router = APIRouter()
@@ -113,6 +116,41 @@ async def mark_conversation_read(
     return await svc.mark_read(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
+    )
+
+
+@router.post("/{conversation_id}/teach-ai", response_model=TeachAIResponse)
+async def teach_ai(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    request: TeachAIRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> TeachAIResponse:
+    """Save or update a human-approved correction for one AI SMS reply."""
+    saved = await save_training_example(
+        db,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        source_message_id=request.source_message_id,
+        ideal_response=request.ideal_response.strip(),
+        note=request.note.strip() if request.note else None,
+        user_id=current_user.id,
+    )
+    example = saved.example
+    return TeachAIResponse(
+        id=example.id,
+        workspace_id=example.workspace_id,
+        agent_id=example.agent_id,
+        conversation_id=example.conversation_id,
+        source_message_id=example.source_message_id,
+        ideal_response=example.ideal_response,
+        note=example.operator_note,
+        is_active=example.is_active,
+        agent_name=saved.agent_name,
+        created_at=example.created_at,
+        updated_at=example.updated_at,
     )
 
 

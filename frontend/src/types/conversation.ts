@@ -119,6 +119,7 @@ export interface TimelineItem {
   timestamp: string;
   direction?: MessageDirection;
   is_ai: boolean;
+  agent_id?: string | null;
   // Content varies by type
   content: string;
   // Optional metadata

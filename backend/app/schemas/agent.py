@@ -44,24 +44,21 @@ def _normalize_assignment_strategy(value: object) -> object:
 
 
 _VALID_REMINDER_CHANNELS = ("sms", "email")
+_MAX_QUALIFICATION_QUESTIONS = 10
+_MAX_QUALIFICATION_QUESTION_CHARS = 200
+_MAX_QUALIFICATION_BOOKING_LABEL_CHARS = 100
 
 
 def _validate_reminder_channels(value: object) -> object:
-    """Reject unknown reminder channels.
-
-    Unlike the other enum-ish fields this raises instead of coercing: silently
-    dropping a channel the operator selected would look like a saved setting
-    that never sends.
-    """
+    """Reject unknown reminder channels without silently dropping operator choices."""
     if value is None or not isinstance(value, list):
         return value
-    unknown = [c for c in value if c not in _VALID_REMINDER_CHANNELS]
+    unknown = [channel for channel in value if channel not in _VALID_REMINDER_CHANNELS]
     if unknown:
         raise ValueError(
             f"Unsupported reminder channel(s): {', '.join(map(str, unknown))}. "
             f"Supported: {', '.join(_VALID_REMINDER_CHANNELS)}."
         )
-    # Preserve order while removing duplicates so a channel cannot fire twice.
     return list(dict.fromkeys(value))
 
 
@@ -71,6 +68,58 @@ def _normalize_transfer_mode(value: object) -> object:
         return value
     normalized = value.strip().lower()
     return normalized if normalized in _VALID_TRANSFER_MODES else "warm"
+
+
+def _validate_tool_settings(value: object) -> object:
+    """Validate reserved website-lead qualification policy keys."""
+    if value is None or not isinstance(value, dict):
+        return value
+    qualification_keys = {
+        "website_lead_qualification_enabled",
+        "qualification_questions",
+        "qualification_min_score",
+        "qualification_booking_label",
+    }
+    if qualification_keys.isdisjoint(value):
+        return value
+
+    enabled = value.get("website_lead_qualification_enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("website_lead_qualification_enabled must be a boolean")
+
+    questions = value.get("qualification_questions", [])
+    if not isinstance(questions, list) or any(not isinstance(item, str) for item in questions):
+        raise ValueError("qualification_questions must be a list of strings")
+    cleaned_questions = [item.strip() for item in questions if item.strip()]
+    if len(cleaned_questions) > _MAX_QUALIFICATION_QUESTIONS:
+        raise ValueError(
+            f"qualification_questions supports at most {_MAX_QUALIFICATION_QUESTIONS} items"
+        )
+    if any(len(item) > _MAX_QUALIFICATION_QUESTION_CHARS for item in cleaned_questions):
+        raise ValueError(
+            "qualification questions must be at most "
+            f"{_MAX_QUALIFICATION_QUESTION_CHARS} characters"
+        )
+
+    min_score = value.get("qualification_min_score", 60)
+    if isinstance(min_score, bool) or not isinstance(min_score, int) or not 0 <= min_score <= 100:
+        raise ValueError("qualification_min_score must be an integer from 0 to 100")
+
+    label = value.get("qualification_booking_label", "Zoom consultation")
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("qualification_booking_label must contain visible text")
+    if len(label.strip()) > _MAX_QUALIFICATION_BOOKING_LABEL_CHARS:
+        raise ValueError(
+            "qualification_booking_label must be at most "
+            f"{_MAX_QUALIFICATION_BOOKING_LABEL_CHARS} characters"
+        )
+
+    normalized = dict(value)
+    normalized["website_lead_qualification_enabled"] = enabled
+    normalized["qualification_questions"] = cleaned_questions
+    normalized["qualification_min_score"] = min_score
+    normalized["qualification_booking_label"] = label.strip()
+    return normalized
 
 
 class AgentCreate(BaseModel):
@@ -93,7 +142,7 @@ class AgentCreate(BaseModel):
     calcom_event_type_id: int | None = None
     assignment_strategy: str = "single"
     enabled_tools: list[str] = []
-    tool_settings: dict[str, list[str]] = {}
+    tool_settings: dict[str, Any] = {}
     # IVR navigation settings
     enable_ivr_navigation: bool = False
     ivr_navigation_goal: str | None = None
@@ -137,6 +186,12 @@ class AgentCreate(BaseModel):
     noshow_reengagement_enabled: bool = True
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
+
+    @field_validator("tool_settings", mode="before")
+    @classmethod
+    def validate_tool_settings(cls, value: object) -> object:
+        """Validate live qualification policy while preserving integration settings."""
+        return _validate_tool_settings(value)
 
     @field_validator("text_response_delay_ms", mode="before")
     @classmethod
@@ -184,7 +239,7 @@ class AgentUpdate(BaseModel):
     assignment_strategy: str | None = None
     is_active: bool | None = None
     enabled_tools: list[str] | None = None
-    tool_settings: dict[str, list[str]] | None = None
+    tool_settings: dict[str, Any] | None = None
     # IVR navigation settings
     enable_ivr_navigation: bool | None = None
     ivr_navigation_goal: str | None = None
@@ -228,6 +283,12 @@ class AgentUpdate(BaseModel):
     noshow_reengagement_enabled: bool | None = None
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
+
+    @field_validator("tool_settings", mode="before")
+    @classmethod
+    def validate_tool_settings(cls, value: object) -> object:
+        """Validate live qualification policy while preserving integration settings."""
+        return _validate_tool_settings(value)
 
     @field_validator("text_response_delay_ms", mode="before")
     @classmethod
@@ -276,7 +337,7 @@ class AgentResponse(BaseModel):
     calcom_event_type_id: int | None
     assignment_strategy: str = "single"
     enabled_tools: list[str]
-    tool_settings: dict[str, list[str]]
+    tool_settings: dict[str, Any]
     is_active: bool
     # IVR navigation settings
     enable_ivr_navigation: bool

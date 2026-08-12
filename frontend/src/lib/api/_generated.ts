@@ -4218,6 +4218,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Teach Ai
+         * @description Save or update a human-approved correction for one AI SMS reply.
+         */
+        post: operations["teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/crews": {
         parameters: {
             query?: never;
@@ -10841,7 +10861,7 @@ export interface components {
              * @default {}
              */
             tool_settings: {
-                [key: string]: string[];
+                [key: string]: unknown;
             };
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -10992,7 +11012,7 @@ export interface components {
             text_response_delay_ms: number;
             /** Tool Settings */
             tool_settings: {
-                [key: string]: string[];
+                [key: string]: unknown;
             };
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -11127,7 +11147,7 @@ export interface components {
             text_response_delay_ms?: number | null;
             /** Tool Settings */
             tool_settings?: {
-                [key: string]: string[];
+                [key: string]: unknown;
             } | null;
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -28272,6 +28292,64 @@ export interface components {
             rate: number;
         };
         /**
+         * TeachAIRequest
+         * @description Human-approved correction to one AI-generated SMS reply.
+         */
+        TeachAIRequest: {
+            /** Ideal Response */
+            ideal_response: string;
+            /** Note */
+            note?: string | null;
+            /**
+             * Source Message Id
+             * Format: uuid
+             */
+            source_message_id: string;
+        };
+        /**
+         * TeachAIResponse
+         * @description Saved correction and its agent target; never returned across tenants.
+         */
+        TeachAIResponse: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Agent Name */
+            agent_name: string;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ideal Response */
+            ideal_response: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Note */
+            note: string | null;
+            /** Source Message Id */
+            source_message_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * TeamMemberResponse
          * @description Schema for team member response.
          */
@@ -28722,6 +28800,8 @@ export interface components {
          * @description A unified timeline item.
          */
         TimelineItem: {
+            /** Agent Id */
+            agent_id?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["TimelineAttachment"][];
             /** Booking Outcome */
@@ -38675,6 +38755,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeachAIRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeachAIResponse"];
                 };
             };
             /** @description Validation Error */
