@@ -17,7 +17,7 @@ export interface Agent {
   calcom_event_type_id: number | null;
   assignment_strategy: string;
   enabled_tools: string[];
-  tool_settings: Record<string, string[]>;
+  tool_settings: Record<string, unknown>;
   is_active: boolean;
   // IVR navigation settings
   enable_ivr_navigation: boolean;

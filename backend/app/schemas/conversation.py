@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MessageCreate(BaseModel):
@@ -144,3 +144,44 @@ class FollowupSendResponse(BaseModel):
     success: bool
     message_id: str | None
     message_body: str
+
+
+class TeachAIRequest(BaseModel):
+    """Human-approved correction to one AI-generated SMS reply."""
+
+    source_message_id: uuid.UUID
+    ideal_response: str = Field(min_length=1, max_length=1000)
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("ideal_response")
+    @classmethod
+    def validate_ideal_response(cls, value: str) -> str:
+        """Reject whitespace-only corrections before they reach persistence."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("ideal_response must contain visible text")
+        return stripped
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str | None) -> str | None:
+        """Store an omitted note rather than encrypted empty whitespace."""
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class TeachAIResponse(BaseModel):
+    """Saved correction and its agent target; never returned across tenants."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    agent_id: uuid.UUID
+    conversation_id: uuid.UUID | None
+    source_message_id: uuid.UUID | None
+    ideal_response: str
+    note: str | None
+    is_active: bool
+    agent_name: str
+    created_at: datetime
+    updated_at: datetime

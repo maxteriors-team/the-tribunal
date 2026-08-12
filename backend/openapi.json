@@ -2319,12 +2319,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "default": {},
             "title": "Tool Settings",
             "type": "object"
@@ -2646,12 +2641,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "title": "Tool Settings",
             "type": "object"
           },
@@ -3216,12 +3206,7 @@
           "tool_settings": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -47463,6 +47448,132 @@
         "title": "TaxConfig",
         "type": "object"
       },
+      "TeachAIRequest": {
+        "description": "Human-approved correction to one AI-generated SMS reply.",
+        "properties": {
+          "ideal_response": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "format": "uuid",
+            "title": "Source Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_message_id",
+          "ideal_response"
+        ],
+        "title": "TeachAIRequest",
+        "type": "object"
+      },
+      "TeachAIResponse": {
+        "description": "Saved correction and its agent target; never returned across tenants.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ideal_response": {
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "agent_id",
+          "conversation_id",
+          "source_message_id",
+          "ideal_response",
+          "note",
+          "is_active",
+          "agent_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TeachAIResponse",
+        "type": "object"
+      },
       "TeamMemberResponse": {
         "description": "Schema for team member response.",
         "properties": {
@@ -48579,6 +48690,18 @@
       "TimelineItem": {
         "description": "A unified timeline item.",
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/TimelineAttachment"
@@ -67902,6 +68025,75 @@
           }
         ],
         "summary": "Mark Conversation Read",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
+      "post": {
+        "description": "Save or update a human-approved correction for one AI SMS reply.",
+        "operationId": "teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachAIRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeachAIResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Teach Ai",
         "tags": [
           "Conversations"
         ]

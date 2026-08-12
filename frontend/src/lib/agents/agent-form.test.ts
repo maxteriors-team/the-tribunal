@@ -206,6 +206,43 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     expect(req.calcom_event_type_id).toBe(agent.calcom_event_type_id);
   });
 
+  it("round-trips typed website-lead qualification settings", () => {
+    const agent = makeAgent({
+      tool_settings: {
+        calendar: ["book"],
+        website_lead_qualification_enabled: true,
+        qualification_questions: ["What service do you need?", "What is your timeline?"],
+        qualification_min_score: 75,
+        qualification_booking_label: "Zoom estimate",
+      },
+    });
+
+    const values = agentToEditFormValues(agent);
+    expect(values.websiteLeadQualificationEnabled).toBe(true);
+    expect(values.qualificationQuestions).toBe("What service do you need?\nWhat is your timeline?");
+    expect(values.enabledToolIds).toEqual({ calendar: ["book"] });
+
+    const req = buildUpdateAgentRequest(values);
+    expect(req.tool_settings).toMatchObject({
+      calendar: ["book"],
+      website_lead_qualification_enabled: true,
+      qualification_questions: ["What service do you need?", "What is your timeline?"],
+      qualification_min_score: 75,
+      qualification_booking_label: "Zoom estimate",
+    });
+  });
+
+  it("rejects an oversized qualification checklist", () => {
+    const values = {
+      ...agentToEditFormValues(makeAgent()),
+      websiteLeadQualificationEnabled: true,
+      qualificationQuestions: Array.from({ length: 11 }, (_, index) => `Question ${index}`).join(
+        "\n",
+      ),
+    };
+    expect(editAgentFormSchema.safeParse(values).success).toBe(false);
+  });
+
   it("round-trips live transfer settings", () => {
     const agent = makeAgent({
       transfer_destination_number: "+15551234567",

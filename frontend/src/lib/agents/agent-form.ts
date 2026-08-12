@@ -55,6 +55,25 @@ export const toolsFields = {
   enabledToolIds: z.record(z.string(), z.array(z.string())),
 } as const;
 
+/** Website-form lead qualification gate (edit screen). */
+export const qualificationFields = {
+  websiteLeadQualificationEnabled: z.boolean(),
+  qualificationQuestions: z.string().superRefine((value, context) => {
+    const questions = value
+      .split("\n")
+      .map((question) => question.trim())
+      .filter(Boolean);
+    if (questions.length > 10 || questions.some((question) => question.length > 200)) {
+      context.addIssue({
+        code: "custom",
+        message: "Use at most 10 questions of 200 characters each",
+      });
+    }
+  }),
+  qualificationMinScore: z.number().int().min(0).max(100),
+  qualificationBookingLabel: z.string().trim().min(1).max(100),
+} as const;
+
 /** IVR navigation settings (Grok only). */
 export const ivrFields = {
   enableIvrNavigation: z.boolean(),
@@ -120,6 +139,13 @@ export const REMINDER_EXTENDED_DEFAULTS = {
 export const TOOLS_DEFAULTS = {
   enabledTools: [] as string[],
   enabledToolIds: {} as Record<string, string[]>,
+} as const;
+
+export const QUALIFICATION_DEFAULTS = {
+  websiteLeadQualificationEnabled: false,
+  qualificationQuestions: "",
+  qualificationMinScore: 60,
+  qualificationBookingLabel: "Zoom consultation",
 } as const;
 
 export const AUTO_EVALUATION_DEFAULT = {
@@ -194,6 +220,7 @@ export const editAgentFormSchema = z.object({
   assignmentStrategy: z.enum(["single", "round_robin", "skill_based"]),
   isActive: z.boolean(),
   ...toolsFields,
+  ...qualificationFields,
   ...ivrFields,
   ...reminderCoreFields,
   ...reminderExtendedFields,
@@ -237,6 +264,7 @@ export const EDIT_AGENT_FORM_DEFAULTS: EditAgentFormValues = {
   assignmentStrategy: "single",
   isActive: true,
   ...TOOLS_DEFAULTS,
+  ...QUALIFICATION_DEFAULTS,
   ...IVR_DEFAULTS,
   ...REMINDER_CORE_DEFAULTS,
   ...REMINDER_EXTENDED_DEFAULTS,
@@ -262,7 +290,14 @@ export const EDIT_AGENT_FORM_DEFAULTS: EditAgentFormValues = {
 export const TAB_FIELDS: Record<string, (keyof EditAgentFormValues)[]> = {
   basic: ["name", "description", "language", "channelMode", "isActive"],
   voice: ["voiceProvider", "voiceId"],
-  prompt: ["systemPrompt", "temperature"],
+  prompt: [
+    "systemPrompt",
+    "temperature",
+    "websiteLeadQualificationEnabled",
+    "qualificationQuestions",
+    "qualificationMinScore",
+    "qualificationBookingLabel",
+  ],
   tools: ["enabledTools", "enabledToolIds"],
   advanced: [
     "textResponseDelayMs",
@@ -326,6 +361,46 @@ export function buildCreateAgentRequest(data: CreateAgentFormValues): CreateAgen
   };
 }
 
+function qualificationQuestionsFromText(value: string): string[] {
+  return value
+    .split("\n")
+    .map((question) => question.trim())
+    .filter(Boolean);
+}
+
+function buildToolSettings(data: EditAgentFormValues): Record<string, unknown> {
+  return {
+    ...data.enabledToolIds,
+    website_lead_qualification_enabled: data.websiteLeadQualificationEnabled,
+    qualification_questions: qualificationQuestionsFromText(data.qualificationQuestions),
+    qualification_min_score: data.qualificationMinScore,
+    qualification_booking_label: data.qualificationBookingLabel.trim(),
+  };
+}
+
+const QUALIFICATION_SETTING_KEYS = new Set([
+  "website_lead_qualification_enabled",
+  "qualification_questions",
+  "qualification_min_score",
+  "qualification_booking_label",
+]);
+
+function toolIdSettingsFromAgent(agent: Agent): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(agent.tool_settings ?? {}).filter(
+      (entry): entry is [string, string[]] =>
+        !QUALIFICATION_SETTING_KEYS.has(entry[0]) &&
+        Array.isArray(entry[1]) &&
+        entry[1].every((value) => typeof value === "string"),
+    ),
+  );
+}
+
+function qualificationSetting<T>(agent: Agent, key: string, fallback: T): T {
+  const value = agent.tool_settings?.[key];
+  return (typeof value === typeof fallback ? value : fallback) as T;
+}
+
 /** Map edit-screen form values to the API update request. */
 export function buildUpdateAgentRequest(data: EditAgentFormValues): UpdateAgentRequest {
   return {
@@ -343,7 +418,7 @@ export function buildUpdateAgentRequest(data: EditAgentFormValues): UpdateAgentR
     assignment_strategy: data.assignmentStrategy,
     is_active: data.isActive,
     enabled_tools: data.enabledTools,
-    tool_settings: data.enabledToolIds,
+    tool_settings: buildToolSettings(data),
     enable_ivr_navigation: data.enableIvrNavigation,
     ivr_navigation_goal: data.ivrNavigationGoal || undefined,
     ivr_loop_threshold: data.ivrLoopThreshold,
@@ -408,7 +483,27 @@ export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
     assignmentStrategy: normalizeAssignmentStrategy(agent.assignment_strategy),
     isActive: agent.is_active,
     enabledTools: agent.enabled_tools ?? [],
-    enabledToolIds: agent.tool_settings ?? {},
+    enabledToolIds: toolIdSettingsFromAgent(agent),
+    websiteLeadQualificationEnabled: qualificationSetting(
+      agent,
+      "website_lead_qualification_enabled",
+      QUALIFICATION_DEFAULTS.websiteLeadQualificationEnabled,
+    ),
+    qualificationQuestions: Array.isArray(agent.tool_settings?.qualification_questions)
+      ? agent.tool_settings.qualification_questions
+          .filter((value): value is string => typeof value === "string")
+          .join("\n")
+      : QUALIFICATION_DEFAULTS.qualificationQuestions,
+    qualificationMinScore: qualificationSetting(
+      agent,
+      "qualification_min_score",
+      QUALIFICATION_DEFAULTS.qualificationMinScore,
+    ),
+    qualificationBookingLabel: qualificationSetting(
+      agent,
+      "qualification_booking_label",
+      QUALIFICATION_DEFAULTS.qualificationBookingLabel,
+    ),
     enableIvrNavigation: agent.enable_ivr_navigation ?? IVR_DEFAULTS.enableIvrNavigation,
     ivrNavigationGoal: agent.ivr_navigation_goal ?? IVR_DEFAULTS.ivrNavigationGoal,
     ivrLoopThreshold: agent.ivr_loop_threshold ?? IVR_DEFAULTS.ivrLoopThreshold,

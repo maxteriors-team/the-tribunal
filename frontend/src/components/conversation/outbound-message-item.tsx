@@ -1,20 +1,21 @@
 "use client";
 
-import { Calendar } from "lucide-react";
+import { Calendar, GraduationCap } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import type { TimelineItem } from "@/types";
 
 import { CallMessageItem } from "./call-message-item";
 import { MessageItemShell } from "./message-item-shell";
 import { SmsMessageItem } from "./sms-message-item";
 
-
 interface OutboundMessageItemProps {
   item: TimelineItem;
   contactName?: string;
+  onTeachAI?: (item: TimelineItem) => void;
 }
 
-export function OutboundMessageItem({ item, contactName }: OutboundMessageItemProps) {
+export function OutboundMessageItem({ item, contactName, onTeachAI }: OutboundMessageItemProps) {
   return (
     <MessageItemShell item={item} isOutbound={true} contactName={contactName}>
       {item.type === "call" ? (
@@ -31,6 +32,23 @@ export function OutboundMessageItem({ item, contactName }: OutboundMessageItemPr
         </div>
       ) : (
         <SmsMessageItem item={item} />
+      )}
+      {item.type === "sms" && item.is_ai && (
+        <div className="mt-1 flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => onTeachAI?.(item)}
+            disabled={!onTeachAI}
+            title={onTeachAI ? undefined : "Assign an agent before teaching this reply"}
+            aria-label="Teach AI from this reply"
+          >
+            <GraduationCap className="size-3.5" />
+            Teach AI
+          </Button>
+        </div>
       )}
     </MessageItemShell>
   );

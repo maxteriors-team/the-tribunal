@@ -3,6 +3,7 @@
 from app.models.ad_advertiser import AdAdvertiser, AdPlatform
 from app.models.ad_creative import AdCreative, AdMediaType
 from app.models.agent import Agent
+from app.models.agent_training_example import AgentTrainingExample
 from app.models.api_key import APIKey
 from app.models.appointment import Appointment
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
@@ -183,6 +184,7 @@ __all__ = [
     "Message",
     "DemoRequest",
     "Agent",
+    "AgentTrainingExample",
     "Campaign",
     "CampaignContact",
     "CampaignNumberPool",

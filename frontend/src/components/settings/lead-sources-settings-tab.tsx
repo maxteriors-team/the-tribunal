@@ -1,22 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Plus,
-  Copy,
-  Trash2,
-  Pencil,
-  Loader2,
-  Check,
-  Globe,
-  X,
-} from "lucide-react";
+import { Plus, Copy, Trash2, Pencil, Loader2, Check, Globe, X } from "lucide-react";
 import { useState } from "react";
 
-import {
-  SourceTypePicker,
-  sourceTypeLabel,
-} from "@/components/lead-sources/source-pickers";
+import { SourceTypePicker, sourceTypeLabel } from "@/components/lead-sources/source-pickers";
 import { OutboundAutopilotCard } from "@/components/settings/outbound-autopilot-card";
 import {
   AlertDialog,
@@ -30,13 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -93,11 +75,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       aria-label={copied ? "Copied" : "Copy to clipboard"}
     >
-      {copied ? (
-        <Check className="size-3.5 text-green-500" />
-      ) : (
-        <Copy className="size-3.5" />
-      )}
+      {copied ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
     </Button>
   );
 }
@@ -142,7 +120,7 @@ function LeadSourceDialog({
           action: "collect",
           action_config: {},
           enabled: true,
-        }
+        },
   );
   const [domainInput, setDomainInput] = useState("");
 
@@ -161,10 +139,18 @@ function LeadSourceDialog({
 
   const agents: Agent[] = agentsData?.items ?? [];
   const campaigns: Campaign[] = campaignsData?.items ?? [];
+  const selectedAgent = agents.find((agent) => agent.id === form.action_config.agent_id);
+  const qualificationEnabled =
+    selectedAgent?.tool_settings?.website_lead_qualification_enabled === true;
+  const zoomFunnelReady = Boolean(
+    selectedAgent &&
+    selectedAgent.enabled_tools?.includes("book_appointment") &&
+    selectedAgent.calcom_event_type_id &&
+    qualificationEnabled,
+  );
 
   const createMutation = useMutation({
-    mutationFn: (data: LeadSourceCreateRequest) =>
-      leadSourcesApi.create(workspaceId, data),
+    mutationFn: (data: LeadSourceCreateRequest) => leadSourcesApi.create(workspaceId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       onOpenChange(false);
@@ -225,9 +211,7 @@ function LeadSourceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit Lead Source" : "Create Lead Source"}
-          </DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Lead Source" : "Create Lead Source"}</DialogTitle>
           <DialogDescription>
             Configure where leads come from and what happens after capture.
           </DialogDescription>
@@ -273,12 +257,7 @@ function LeadSourceDialog({
                   }
                 }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddDomain}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={handleAddDomain}>
                 Add
               </Button>
             </div>
@@ -299,8 +278,7 @@ function LeadSourceDialog({
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              Domains that are allowed to submit leads. Supports wildcards
-              (*.example.com).
+              Domains that are allowed to submit leads. Supports wildcards (*.example.com).
             </p>
           </div>
 
@@ -324,9 +302,7 @@ function LeadSourceDialog({
                 <SelectItem value="collect">Collect Only</SelectItem>
                 <SelectItem value="auto_text">Auto Text</SelectItem>
                 <SelectItem value="auto_call">Auto Call</SelectItem>
-                <SelectItem value="enroll_campaign">
-                  Enroll in Campaign
-                </SelectItem>
+                <SelectItem value="enroll_campaign">Enroll in Campaign</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -378,7 +354,7 @@ function LeadSourceDialog({
 
           {/* Action Config - Message Template (auto_text only) */}
           {form.action === "auto_text" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>Message Template (optional)</Label>
               <Input
                 placeholder="Hi {name}! Thanks for your interest..."
@@ -393,9 +369,27 @@ function LeadSourceDialog({
                   }))
                 }
               />
-              <p className="text-xs text-muted-foreground">
-                Leave blank for default message.
-              </p>
+              <p className="text-xs text-muted-foreground">Leave blank for default message.</p>
+              <div
+                role="status"
+                className={
+                  zoomFunnelReady
+                    ? "rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-700 dark:text-green-300"
+                    : "rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground"
+                }
+              >
+                {zoomFunnelReady ? (
+                  <>
+                    <strong>Qualification-to-Zoom ready.</strong> This agent gates booking until the
+                    website lead qualifies.
+                  </>
+                ) : (
+                  <>
+                    <strong>For gated Zoom booking:</strong> select an agent with booking enabled, a
+                    Cal.com event type, and website-lead qualification enabled under AI Prompt.
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -432,9 +426,7 @@ function LeadSourceDialog({
               <Label>Enabled</Label>
               <Switch
                 checked={form.enabled}
-                onCheckedChange={(checked) =>
-                  setForm((f) => ({ ...f, enabled: checked }))
-                }
+                onCheckedChange={(checked) => setForm((f) => ({ ...f, enabled: checked }))}
               />
             </div>
           )}
@@ -444,10 +436,7 @@ function LeadSourceDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!form.name.trim() || isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!form.name.trim() || isPending}>
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             {isEditing ? "Save Changes" : "Create"}
           </Button>
@@ -482,10 +471,7 @@ export function LeadSourcesSettingsTab() {
         require_lead_source_on_manual_create: required,
       }),
     onSuccess: (settings) => {
-      queryClient.setQueryData(
-        queryKeys.leadSources.captureSettings(workspaceId ?? ""),
-        settings,
-      );
+      queryClient.setQueryData(queryKeys.leadSources.captureSettings(workspaceId ?? ""), settings);
     },
   });
 
@@ -523,9 +509,9 @@ export function LeadSourcesSettingsTab() {
         <CardHeader>
           <CardTitle className="text-base">Manual contact attribution</CardTitle>
           <CardDescription>
-            Control whether operators must answer “How did you hear about us?” when
-            adding a contact. Imports, webhooks, public forms, and API ingestion are
-            never blocked by this setting.
+            Control whether operators must answer “How did you hear about us?” when adding a
+            contact. Imports, webhooks, public forms, and API ingestion are never blocked by this
+            setting.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -540,15 +526,9 @@ export function LeadSourcesSettingsTab() {
             </div>
             <Switch
               id="require-manual-lead-source"
-              checked={
-                captureSettings?.require_lead_source_on_manual_create ?? false
-              }
-              disabled={
-                isCaptureSettingsPending || captureSettingsMutation.isPending
-              }
-              onCheckedChange={(checked) =>
-                captureSettingsMutation.mutate(checked)
-              }
+              checked={captureSettings?.require_lead_source_on_manual_create ?? false}
+              disabled={isCaptureSettingsPending || captureSettingsMutation.isPending}
+              onCheckedChange={(checked) => captureSettingsMutation.mutate(checked)}
             />
           </div>
         </CardContent>
@@ -560,9 +540,8 @@ export function LeadSourcesSettingsTab() {
             <div>
               <CardTitle>Lead Sources</CardTitle>
               <CardDescription>
-                Configure public endpoints to capture leads from external
-                websites. Each source has its own allowed domains and
-                post-capture action.
+                Configure public endpoints to capture leads from external websites. Each source has
+                its own allowed domains and post-capture action.
               </CardDescription>
             </div>
             <Button onClick={handleCreate}>
@@ -581,8 +560,7 @@ export function LeadSourcesSettingsTab() {
               <Globe className="mx-auto size-10 mb-3 opacity-50" />
               <p className="font-medium">No lead sources yet</p>
               <p className="text-sm mt-1">
-                Create a lead source to start capturing leads from your
-                websites.
+                Create a lead source to start capturing leads from your websites.
               </p>
             </div>
           ) : (
@@ -595,10 +573,7 @@ export function LeadSourcesSettingsTab() {
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <h4 className="font-medium">{source.name}</h4>
-                      <Badge
-                        variant={source.enabled ? "default" : "secondary"}
-                        className="text-xs"
-                      >
+                      <Badge variant={source.enabled ? "default" : "secondary"} className="text-xs">
                         {source.enabled ? "Active" : "Disabled"}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
@@ -621,11 +596,7 @@ export function LeadSourcesSettingsTab() {
                     {source.allowed_domains.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {source.allowed_domains.map((domain) => (
-                          <Badge
-                            key={domain}
-                            variant="secondary"
-                            className="text-xs"
-                          >
+                          <Badge key={domain} variant="secondary" className="text-xs">
                             {domain}
                           </Badge>
                         ))}
@@ -701,9 +672,8 @@ export function LeadSourcesSettingsTab() {
           <CardHeader>
             <CardTitle className="text-base">Speed-to-Lead Proof Badge</CardTitle>
             <CardDescription>
-              Drop this on your lead form to show your answered-within-target
-              stat. It stays hidden until you enable the badge under Speed to
-              Lead and have enough measured leads.
+              Drop this on your lead form to show your answered-within-target stat. It stays hidden
+              until you enable the badge under Speed to Lead and have enough measured leads.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -739,25 +709,20 @@ export function LeadSourcesSettingsTab() {
       )}
 
       {/* Delete Confirmation */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-      >
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Lead Source</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;?
-              The public endpoint will stop accepting submissions immediately.
+              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? The public endpoint
+              will stop accepting submissions immediately.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() =>
-                deleteTarget && deleteMutation.mutate(deleteTarget.id)
-              }
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
               Delete
             </AlertDialogAction>

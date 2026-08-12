@@ -12,7 +12,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/utils/number";
@@ -32,9 +34,7 @@ export function PromptTab({ form }: PromptTabProps) {
         <div className="flex items-center justify-between rounded-lg border border-dashed bg-muted/50 p-3">
           <div>
             <p className="text-sm font-medium">Need help writing a prompt?</p>
-            <p className="text-xs text-muted-foreground">
-              Start with our best practices template
-            </p>
+            <p className="text-xs text-muted-foreground">Start with our best practices template</p>
           </div>
           <Button
             type="button"
@@ -65,7 +65,7 @@ export function PromptTab({ form }: PromptTabProps) {
                       "text-xs",
                       isOptimal && "text-green-600",
                       isTooShort && "text-yellow-600",
-                      isTooLong && "text-destructive"
+                      isTooLong && "text-destructive",
                     )}
                   >
                     {formatNumber(charCount)} characters
@@ -89,6 +89,94 @@ export function PromptTab({ form }: PromptTabProps) {
           }}
         />
 
+        <div className="space-y-4 rounded-lg border p-4">
+          <FormField
+            control={form.control}
+            name="websiteLeadQualificationEnabled"
+            render={({ field }) => (
+              <FormItem className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <FormLabel>Qualify website leads before booking</FormLabel>
+                  <FormDescription>
+                    Ask the checklist one question at a time. Booking stays unavailable until the
+                    lead qualifies.
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    aria-label="Qualify website leads before booking"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {form.watch("websiteLeadQualificationEnabled") && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="qualificationQuestions"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Qualification checklist</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        aria-label="Qualification checklist"
+                        placeholder={"What service do you need?\nWhat is your project timeline?"}
+                        className="min-h-28"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      One question per line, up to 10. Form answers are reused instead of re-asked.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="qualificationMinScore"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Minimum qualification score</FormLabel>
+                    <FormControl>
+                      <Input
+                        aria-label="Minimum qualification score"
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                      />
+                    </FormControl>
+                    <FormDescription>0-100; 60 is the recommended default.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="qualificationBookingLabel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Booking transition label</FormLabel>
+                    <FormControl>
+                      <Input aria-label="Booking transition label" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Shown to the AI, for example Zoom consultation.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+        </div>
+
         <FormField
           control={form.control}
           name="temperature"
@@ -104,8 +192,7 @@ export function PromptTab({ form }: PromptTabProps) {
                 <div className="flex items-center justify-between">
                   <FormLabel>Temperature</FormLabel>
                   <span className="text-sm font-medium">
-                    {field.value?.toFixed(1) ?? "0.7"} (
-                    {getTemperatureLabel(field.value ?? 0.7)})
+                    {field.value?.toFixed(1) ?? "0.7"} ({getTemperatureLabel(field.value ?? 0.7)})
                   </span>
                 </div>
                 <FormControl>
