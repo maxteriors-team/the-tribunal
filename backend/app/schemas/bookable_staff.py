@@ -32,6 +32,13 @@ class BookableStaffCreate(BaseModel):
     skills: list[str] = []
     is_active: bool = True
     priority: int = 0
+    user_id: int | None = Field(
+        default=None,
+        description=(
+            "Workspace member this staff row belongs to. Setting it puts the "
+            "bookings on that person's calendar, so it requires members:manage."
+        ),
+    )
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -48,6 +55,14 @@ class BookableStaffUpdate(BaseModel):
     skills: list[str] | None = None
     is_active: bool | None = None
     priority: int | None = None
+    user_id: int | None = Field(
+        default=None,
+        description=(
+            "Workspace member this staff row belongs to; send null to unlink. "
+            "Requires members:manage — the link decides whose calendar the "
+            "bookings appear on."
+        ),
+    )
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -65,6 +80,7 @@ class BookableStaffResponse(BaseModel):
     agent_id: uuid.UUID | None
     name: str
     email: str | None
+    user_id: int | None
     calcom_event_type_id: int | None
     skills: list[str]
     is_active: bool

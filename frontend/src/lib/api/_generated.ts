@@ -12349,6 +12349,11 @@ export interface components {
              * @default []
              */
             skills: string[];
+            /**
+             * User Id
+             * @description Workspace member this staff row belongs to. Setting it puts the bookings on that person's calendar, so it requires members:manage.
+             */
+            user_id?: number | null;
         };
         /**
          * BookableStaffList
@@ -12398,6 +12403,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** User Id */
+            user_id: number | null;
             /**
              * Workspace Id
              * Format: uuid
@@ -12421,6 +12428,11 @@ export interface components {
             priority?: number | null;
             /** Skills */
             skills?: string[] | null;
+            /**
+             * User Id
+             * @description Workspace member this staff row belongs to; send null to unlink. Requires members:manage — the link decides whose calendar the bookings appear on.
+             */
+            user_id?: number | null;
         };
         /**
          * BulkDeleteRequest
