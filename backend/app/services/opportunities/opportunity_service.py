@@ -218,6 +218,7 @@ class OpportunityService:
         search: str | None = None,
         *,
         owner_id: int | None = None,
+        contact_id: int | None = None,
         opportunity_status: str | None = None,
         source: str | None = None,
         value_min: Decimal | float | None = None,
@@ -233,6 +234,10 @@ class OpportunityService:
         ``restrict_to_user_id`` scopes results to a single deal owner
         (``assigned_user_id``); the sales tier passes its own user id so reps
         see only their own pipeline.
+
+        ``contact_id`` narrows to the deals a single contact is the primary
+        contact on — what the contact sidebar renders so an operator can see a
+        lead is already on the board instead of adding a duplicate card.
         """
         query = apply_opportunity_filters(
             select(Opportunity),
@@ -240,6 +245,7 @@ class OpportunityService:
             pipeline_id=pipeline_id,
             stage_id=stage_id,
             owner_id=owner_id,
+            contact_id=contact_id,
             status=opportunity_status,
             source=source,
             search=search,

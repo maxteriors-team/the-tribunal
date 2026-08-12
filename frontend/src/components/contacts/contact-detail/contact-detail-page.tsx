@@ -20,6 +20,7 @@ import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact-files-media";
 import { ContactInfoSection } from "@/components/contacts/contact-sidebar/contact-info-section";
 import { ContactNotesMeta } from "@/components/contacts/contact-sidebar/contact-notes-meta";
+import { ContactOpportunities } from "@/components/contacts/contact-sidebar/contact-opportunities";
 import { EngagementSummary } from "@/components/contacts/contact-sidebar/engagement-summary";
 import { ImportantDatesSection } from "@/components/contacts/contact-sidebar/important-dates";
 import { useContactSidebarData } from "@/components/contacts/contact-sidebar/use-contact-sidebar-data";
@@ -236,6 +237,12 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
           {workspaceId && (
             <ContactLeadSourceCorrection workspaceId={workspaceId} contact={contact} />
           )}
+
+          <Card>
+            <CardContent>
+              <ContactOpportunities workspaceId={workspaceId} contact={contact} />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardContent className="space-y-6">
