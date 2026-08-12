@@ -81,14 +81,24 @@ async def _seed_form(
     return public_key
 
 
-async def _submit_lead(public_key: str, domain: str, *, first_name: str, phone: str):
+async def _submit_lead(
+    public_key: str,
+    domain: str,
+    *,
+    first_name: str,
+    phone: str,
+    source_detail: str | None = None,
+):
     """POST a lead to the public form endpoint through the real ASGI app."""
+    body: dict[str, str] = {"first_name": first_name, "phone_number": phone}
+    if source_detail is not None:
+        body["source_detail"] = source_detail
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         return await client.post(
             f"/api/v1/p/leads/{public_key}",
             headers={"Origin": f"https://{domain}"},
-            json={"first_name": first_name, "phone_number": phone},
+            json=body,
         )
 
 
@@ -140,16 +150,12 @@ async def test_lead_form_submission_auto_tags_by_source() -> None:
 
     try:
         # A lead comes in from the perm-lighting form.
-        perm_resp = await _submit_lead(
-            perm_key, perm_domain, first_name="Pam", phone=perm_phone
-        )
+        perm_resp = await _submit_lead(perm_key, perm_domain, first_name="Pam", phone=perm_phone)
         assert perm_resp.status_code == 200, perm_resp.text
         assert perm_resp.json()["success"] is True
 
         # And a separate lead comes in from the landscape-lighting form.
-        land_resp = await _submit_lead(
-            land_key, land_domain, first_name="Larry", phone=land_phone
-        )
+        land_resp = await _submit_lead(land_key, land_domain, first_name="Larry", phone=land_phone)
         assert land_resp.status_code == 200, land_resp.text
         assert land_resp.json()["success"] is True
 
@@ -168,6 +174,81 @@ async def test_lead_form_submission_auto_tags_by_source() -> None:
     finally:
         # Best-effort cleanup: workspace FKs cascade to lead sources,
         # automations, contacts, and tags, so this leaves no test residue.
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+            await db.commit()
+
+
+async def test_source_detail_fallback_tags_lead_from_an_unlisted_form() -> None:
+    """The permholidaylights funnel rule, matched by ``source_detail`` alone.
+
+    The instant-quote page can post through a form whose public key the
+    automation was never told about (a rebuilt embed, a second landing page).
+    The ``source_detail`` selector is the safety net that still classifies those
+    leads — tagged for the operator, Facebook recorded as the channel — and it
+    has to survive the operator's own casing/whitespace.
+    """
+    domain = "permholidaylights.example.com"
+    phone = "+15550100004"
+    source_detail = "permholidaylights instant quote"
+
+    async with AsyncSessionLocal() as db:
+        workspace = Workspace(
+            id=uuid.uuid4(),
+            name="Perm Holiday Lights",
+            slug=f"perm-{uuid.uuid4().hex[:8]}",
+        )
+        db.add(workspace)
+        await db.flush()
+        public_key = f"ls_{uuid.uuid4().hex[:8]}"
+        db.add(
+            LeadSource(
+                workspace_id=workspace.id,
+                name="Instant Quote",
+                public_key=public_key,
+                allowed_domains=[domain],
+                enabled=True,
+            )
+        )
+        db.add(
+            Automation(
+                workspace_id=workspace.id,
+                name="Perm Light Lead — auto text",
+                trigger_type=EVENT_LEAD_CREATED,
+                # Deliberately a *different* form key: only source_detail can match.
+                trigger_config={
+                    "lead_source_public_key": f"ls_{uuid.uuid4().hex[:8]}",
+                    "source_detail": source_detail,
+                },
+                actions=[
+                    {"type": "add_tag", "config": {"tag": "Perm Light Lead"}},
+                    {"type": "add_tag", "config": {"tag": "Facebook"}},
+                ],
+                is_active=True,
+            )
+        )
+        await db.commit()
+        workspace_id = workspace.id
+
+    try:
+        resp = await _submit_lead(
+            public_key,
+            domain,
+            first_name="Pat",
+            phone=phone,
+            source_detail="  PermHolidayLights Instant Quote  ",
+        )
+        assert resp.status_code == 200, resp.text
+
+        async with AsyncSessionLocal() as db:
+            await _drain(db)
+            await db.commit()
+
+        async with AsyncSessionLocal() as db:
+            tags = await _tags_for_phone(db, workspace_id, phone)
+
+        assert tags == {"Perm Light Lead", "Facebook"}, tags
+    finally:
         async with AsyncSessionLocal() as db:
             await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
             await db.commit()
