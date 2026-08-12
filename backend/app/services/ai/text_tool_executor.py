@@ -545,7 +545,17 @@ class TextToolExecutor(BaseToolExecutor):
             "booking_uid": result.booking_uid,
             "scheduled_at": self._appointment_datetime.isoformat(),
             "duration_minutes": duration_minutes,
-            "message": f"Appointment booked for {formatted_time}",
+            "booking_email": email,
+            # What the booking path actually attempted, so the model can say the
+            # invite was sent instead of inventing it. The attendee invite is
+            # queued after the appointment commit; a provider rejection is logged
+            # separately and must never undo a booking that already exists.
+            "invitation_sent": True,
+            "message": (
+                f"Appointment booked for {formatted_time}. "
+                f"Calendar invitation queued for {email}. "
+                "Send one concise confirmation and no separate reminder."
+            ),
         }
 
     async def post_booking_success(
@@ -588,6 +598,9 @@ class TextToolExecutor(BaseToolExecutor):
             calcom_booking_uid=result.booking_uid,
             calcom_booking_id=result.booking_id,
             calcom_event_type_id=resolved_event_type_id,
+            # The assistant confirms this booking in the same SMS turn, so the
+            # generic lifecycle confirmation would text the customer twice.
+            send_customer_sms=False,
         )
 
         self.log.info("appointment_created", appointment_id=appointment.id)
