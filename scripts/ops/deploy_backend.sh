@@ -26,7 +26,8 @@
 #
 # The stamp is deliberately NOT gitignored — ``railway up`` skips gitignored
 # paths when building the upload tarball, so an ignored stamp would never reach
-# the builder.
+# the builder. The same rule applies to the *directory being deployed from*,
+# which is what the gitignored-checkout guard below exists to catch.
 #
 # Where the upload runs from
 # --------------------------
@@ -52,6 +53,8 @@
 #   make deploy.backend                       # deploys the service below
 #   RAILWAY_SERVICE=other-svc make deploy.backend
 #   scripts/ops/deploy_backend.sh --ci         # extra args pass through to `railway up`
+#   DEPLOY_ALLOW_BEHIND=1 make deploy.backend  # deliberate rollback to older code
+#   DEPLOY_ALLOW_IGNORED=1 make deploy.backend # deploy from a gitignored checkout
 #
 # This uploads and builds. It does not touch the database beyond the
 # ``preDeployCommand`` (``alembic upgrade head``) configured in railway.toml.
@@ -89,6 +92,74 @@ trap cleanup EXIT INT TERM
 if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     red "✗ not a git repository: ${REPO_ROOT}"
     exit 1
+fi
+
+# ── Refuse to upload from a gitignored checkout ───────────────────────────
+# `railway up` filters the upload through gitignore rules. Deploy from a
+# directory an enclosing repository ignores and the tarball arrives stripped:
+# Railway builds it (cached layers make that succeed), reports SUCCESS, and
+# production keeps serving the previous image. `/version` reports "unknown"
+# because the build stamp written further down never reached the builder.
+# Nothing in the deploy output hints at any of it — it reads exactly like a
+# deploy that worked.
+#
+# Not hypothetical: `.gitignore` here lists `.worktrees/`, so a deploy from a
+# worktree checkout is a silent no-op. One reported success and left production
+# on the previous release until /readyz was inspected by hand.
+#
+# The subtlety that makes this worth a guard rather than a habit: asked from
+# *inside* such a checkout, git says "not ignored". A linked worktree is the
+# root of its own working tree and never consults the main repo's .gitignore,
+# and a clone carries its own. Only the main worktree (via --git-common-dir) or
+# an enclosing repository can answer, so those are what this asks.
+IGNORED_BY=""
+
+# `--git-common-dir` resolves to the main repo's .git for a linked worktree and
+# to this checkout's own .git otherwise. Older gits answer relatively, hence
+# normalising by hand rather than using `--path-format=absolute`.
+COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || true)"
+case "$COMMON_DIR" in
+    "") ;;
+    /*) ;;
+    *) COMMON_DIR="${REPO_ROOT}/${COMMON_DIR}" ;;
+esac
+if [ -n "$COMMON_DIR" ] && [ -d "$COMMON_DIR" ]; then
+    MAIN_WORKTREE="$(cd "$(dirname "$COMMON_DIR")" && pwd)"
+    if [ "$MAIN_WORKTREE" != "$REPO_ROOT" ] &&
+        git -C "$MAIN_WORKTREE" check-ignore -q "$REPO_ROOT" 2>/dev/null; then
+        IGNORED_BY="$MAIN_WORKTREE"
+    fi
+fi
+
+# A separate clone can also sit inside another repo's ignored directory, which
+# --git-common-dir cannot see because that clone owns its own .git.
+if [ -z "$IGNORED_BY" ]; then
+    ENCLOSING="$(git -C "$(dirname "$REPO_ROOT")" rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$ENCLOSING" ] && [ "$ENCLOSING" != "$REPO_ROOT" ] &&
+        git -C "$ENCLOSING" check-ignore -q "$REPO_ROOT" 2>/dev/null; then
+        IGNORED_BY="$ENCLOSING"
+    fi
+fi
+
+if [ -n "$IGNORED_BY" ]; then
+    if [ "${DEPLOY_ALLOW_IGNORED:-0}" = "1" ]; then
+        yellow "⚠  DEPLOY_ALLOW_IGNORED=1 — deploying from a checkout ignored by ${IGNORED_BY}."
+        yellow "   If /version reports \"unknown\" after this, the upload was filtered and prod did not change."
+    else
+        red "✗ refusing to deploy: this checkout is gitignored by ${IGNORED_BY}"
+        red "  ${REPO_ROOT}"
+        red ""
+        red "  \`railway up\` skips gitignored paths, so the upload would arrive stripped."
+        red "  Railway reports SUCCESS, production keeps serving the old image, and"
+        red "  /version reports \"unknown\" — a silent no-op rather than a visible failure."
+        red ""
+        red "  Fix: deploy from a checkout outside the ignored path, e.g."
+        red "    git clone <repo> ~/the-tribunal-deploy"
+        red "    cd ~/the-tribunal-deploy && git checkout origin/main && make deploy.backend"
+        red ""
+        red "  Certain the upload is intact? DEPLOY_ALLOW_IGNORED=1 make deploy.backend"
+        exit 1
+    fi
 fi
 
 SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
