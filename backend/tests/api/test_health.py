@@ -18,6 +18,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
+from app.services.knowledge.product_help import ProductHelpError
 from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core import build_info
@@ -164,6 +165,70 @@ class TestReadyz:
         body = response.json()
         assert body["checks"]["postgres"]["error"] == "timeout"
         assert body["checks"]["redis"]["error"] == "timeout"
+
+    async def test_readyz_reports_the_real_bundled_help_corpus(
+        self, client: AsyncClient
+    ) -> None:
+        """Unmocked: the corpus must resolve from the packaged path, not a fixture.
+
+        This is the packaging regression guard. ``search_help`` reads markdown
+        off disk, so an ignore rule or a build stage that drops ``docs/`` ships
+        an image that boots and serves normally while the assistant answers
+        nothing. Asserting a non-zero article count here fails that build.
+        """
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+        ):
+            response = await client.get("/readyz")
+
+        assert response.status_code == 200
+        product_help = response.json()["checks"]["product_help"]
+        assert product_help["ok"] is True
+        assert product_help["error"] is None
+        assert product_help["articles"] > 0
+
+    async def test_readyz_returns_503_when_help_corpus_missing(
+        self, client: AsyncClient
+    ) -> None:
+        """A mis-packaged build must fail readiness instead of degrading quietly.
+
+        Readiness is what an orchestrator promotes on, so a 503 here keeps the
+        previous release serving rather than replacing it with one whose only
+        symptom is an assistant that stopped answering product questions.
+        """
+        with (
+            patch(
+                "app.api.v1.health._check_postgres",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health._check_redis",
+                new=AsyncMock(return_value=(True, None)),
+            ),
+            patch(
+                "app.api.v1.health.load_product_help_articles",
+                side_effect=ProductHelpError("Help corpus directory not found: /app/docs/help"),
+            ),
+        ):
+            response = await client.get("/readyz")
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["status"] == "unavailable"
+        assert body["checks"]["product_help"]["ok"] is False
+        assert body["checks"]["product_help"]["articles"] == 0
+        # The error names the path that was searched, so the fix is obvious.
+        assert "/app/docs/help" in body["checks"]["product_help"]["error"]
+        # Postgres and Redis were healthy: the corpus alone failed readiness.
+        assert body["checks"]["postgres"]["ok"] is True
+        assert body["checks"]["redis"]["ok"] is True
 
     async def test_readyz_stays_200_when_worker_heartbeat_missing(
         self, client: AsyncClient

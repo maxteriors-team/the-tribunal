@@ -5,8 +5,9 @@ Three orthogonal endpoints follow the Kubernetes/Railway convention:
 * ``/livez``  — liveness: the process is up and the event loop responsive. No
   external dependencies are checked. A 200 here only proves "I exist".
 * ``/readyz`` — readiness: external dependencies (Postgres + Redis) reachable
-  within a 2-second budget. Returns 503 if either probe fails or times out so
-  load balancers can drain the instance.
+  within a 2-second budget, plus the bundled product-help corpus present in
+  this image. Returns 503 if a probe fails or times out, so load balancers
+  drain the instance and an orchestrator refuses to promote the deploy.
 * ``/version`` — the commit SHA of the running build, resolved by
   :func:`app.core.build_info.resolve_build_info` (falls back to ``"unknown"``).
 """
@@ -23,6 +24,7 @@ from sqlalchemy import text
 from app.core.build_info import resolve_build_info
 from app.db.redis import get_redis
 from app.db.session import AsyncSessionLocal
+from app.services.knowledge.product_help import ProductHelpError, load_product_help_articles
 from app.workers import WORKER_SPECS
 from app.workers.base import heartbeat_key
 
@@ -70,6 +72,27 @@ async def _check_redis() -> tuple[bool, str | None]:
         return False, "timeout"
     except Exception as exc:  # noqa: BLE001 — surface any driver/connection error
         return False, type(exc).__name__
+
+
+def _check_product_help() -> tuple[bool, int, str | None]:
+    """Verify the bundled product-help corpus shipped inside this image.
+
+    The corpus is markdown read from disk, so a packaging mistake -- an ignore
+    rule that drops ``docs/``, a build stage that forgets to copy it -- yields
+    an image that builds, boots, and serves every endpoint normally while the
+    in-app assistant answers "no matching help" to every product question.
+    Nothing raises and nothing logs, so the only signal is a user eventually
+    reporting that the assistant got worse.
+
+    Results come from :func:`load_product_help_articles`' process-wide cache,
+    so a passing check costs a cache hit rather than a directory walk per probe.
+    """
+    try:
+        return True, len(load_product_help_articles()), None
+    except ProductHelpError as exc:
+        return False, 0, str(exc)
+    except Exception as exc:  # noqa: BLE001 — surface any unexpected read error
+        return False, 0, type(exc).__name__
 
 
 def _expected_worker_labels() -> list[str]:
@@ -138,13 +161,27 @@ async def livez() -> dict[str, str]:
 
 @router.get("/readyz", tags=["Health"])
 async def readyz(request: Request, response: Response) -> dict[str, Any]:
-    """Readiness probe — startup complete + Postgres + Redis reachable.
+    """Readiness probe — startup complete + Postgres + Redis + help corpus.
 
     Returns HTTP 503 when:
 
     * ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished
       validating config and starting workers yet (or shutdown is in progress).
     * Either Postgres or Redis fails / times out (2s budget each).
+    * The bundled product-help corpus is missing from this image.
+
+    The corpus gates readiness even though wedged workers (below) deliberately
+    do not, because the two failures are not the same kind of thing. A worker
+    heartbeat is dynamic and transient: it can recover on its own, and a
+    restart actively makes it worse. The corpus is a static build artifact --
+    it is either baked into the image or it is not, the answer never changes
+    for the life of the process, and no restart can conjure the files. Failing
+    readiness on it therefore cannot produce the restart loop documented below;
+    what it does instead is stop an orchestrator from promoting a
+    mis-packaged deploy, so the previous release keeps serving. That is the
+    safe direction: a blocked deploy is visible in seconds, whereas the
+    silent alternative is an assistant that has quietly stopped answering
+    product questions in production and no failing check anywhere.
 
     Worker heartbeats are **reported but not gating**. This endpoint answers one
     question for the orchestrator: "can this container serve HTTP traffic?" A
@@ -183,11 +220,17 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
     postgres_ok, postgres_err = postgres_result
     redis_ok, redis_err = redis_result
     workers_ok, worker_states, worker_err = worker_result
+    help_ok, help_articles, help_err = _check_product_help()
 
     checks = {
         "startup": {"ok": True, "error": None},
         "postgres": {"ok": postgres_ok, "error": postgres_err},
         "redis": {"ok": redis_ok, "error": redis_err},
+        "product_help": {
+            "ok": help_ok,
+            "error": help_err,
+            "articles": help_articles,
+        },
         "workers": {
             "ok": workers_ok,
             "error": worker_err,
@@ -204,7 +247,7 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
             missing_heartbeats=missing_heartbeats,
         )
 
-    if not (postgres_ok and redis_ok):
+    if not (postgres_ok and redis_ok and help_ok):
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         logger.warning(
             "readyz_failed",
@@ -212,6 +255,8 @@ async def readyz(request: Request, response: Response) -> dict[str, Any]:
             postgres_err=postgres_err,
             redis_ok=redis_ok,
             redis_err=redis_err,
+            product_help_ok=help_ok,
+            product_help_err=help_err,
             workers_ok=workers_ok,
             worker_err=worker_err,
             missing_heartbeats=missing_heartbeats,
