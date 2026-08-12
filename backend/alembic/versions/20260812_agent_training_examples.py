@@ -1,7 +1,7 @@
 """add encrypted agent training examples
 
 Revision ID: 20260812_training_examples
-Revises: 20260811_lighting_handoff
+Revises: 20260811_reminder_channels
 Create Date: 2026-08-12 12:00:00.000000
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "20260812_training_examples"
-down_revision: str | Sequence[str] | None = "20260811_lighting_handoff"
+down_revision: str | Sequence[str] | None = "20260811_reminder_channels"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
