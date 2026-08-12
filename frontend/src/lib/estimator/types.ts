@@ -21,13 +21,11 @@ export type ProductKind = "linear" | "each";
 export type Mode = "seasonal" | "permanent" | "landscape";
 
 /**
- * How a product's lights are rendered on the canvas.
+ * How a product is rendered on the canvas.
  *
  * The first block is holiday strand/decor work; the second is landscape
- * lighting, where a fixture throws a beam or a pool of light rather than
- * hanging bulbs. The four landscape styles are exactly the four fixture types
- * the palette offers (see `fixtures.ts`), so what a rep draws reads on the photo
- * the way that fixture actually throws light.
+ * lighting. The four fixture styles throw visible light, while `transformer` is
+ * plan equipment: it gets a drafting symbol but intentionally emits no glow.
  */
 export type RenderStyle =
   | "c9"
@@ -41,6 +39,8 @@ export type RenderStyle =
   | "ingrade"
   | "pathlight"
   | "downlight"
+  | "transformer"
+  | "wire"
   | "bistro";
 
 /** Landscape fixture styles — placed, and rendered as a beam or a light pool. */
@@ -51,9 +51,20 @@ export const LANDSCAPE_STYLES = [
   "downlight",
 ] as const satisfies readonly RenderStyle[];
 
-/** Whether a style is a landscape fixture (vs a strand or a decor item). */
+/** Drafting symbols that stay visible over the editable plan. */
+export const LANDSCAPE_PLAN_STYLES = [
+  ...LANDSCAPE_STYLES,
+  "transformer",
+] as const satisfies readonly RenderStyle[];
+
+/** Whether a style is a light-emitting landscape fixture. */
 export function isLandscapeStyle(style: RenderStyle): boolean {
   return (LANDSCAPE_STYLES as readonly RenderStyle[]).includes(style);
+}
+
+/** Whether a style has a persistent symbol on the editable drawing sheet. */
+export function isLandscapePlanStyle(style: RenderStyle): boolean {
+  return (LANDSCAPE_PLAN_STYLES as readonly RenderStyle[]).includes(style);
 }
 
 /**
@@ -100,10 +111,7 @@ export function clampBeamAngle(deg: number): number {
  * has tuned it, else the type's default lamp. `null` for anything that doesn't
  * throw a cone, so callers can't accidentally give a path light a beam.
  */
-export function beamAngleFor(
-  style: RenderStyle,
-  override?: number | null,
-): number | null {
+export function beamAngleFor(style: RenderStyle, override?: number | null): number | null {
   if (!hasBeamAngle(style)) return null;
   return clampBeamAngle(override ?? DEFAULT_BEAM_ANGLE_DEG[style]);
 }
@@ -142,22 +150,19 @@ export function beamRotationFor(override?: number | null): number {
  * request. The canvas only produces feet/counts; every dollar is still computed
  * server-side, so a product just declares its destination:
  *
- * - `roofline` → the request's top-level `feet` (drives BOTH the permanent and
- *   seasonal roofline sides of the comparison).
- * - `christmas` → `christmas_items[category][option]` (linear feet for `per_ft`
- *   categories like mini-lights/garland, a count for `each` categories like
- *   trees/bushes/wreaths).
- * - `landscape` → a count of one fixture *type* (uplight / in-grade / path /
- *   downlight). The customer's chosen package resolves the type to a real
- *   price-book product, so the quote gets the right SKU and the crew gets its
- *   parts list — and switching package re-resolves without redrawing.
- * - `bistro` → linear feet of string lighting for the wizard's bistro add-on.
+ * - `roofline` → the request's top-level `feet`.
+ * - `christmas` → `christmas_items[category][option]`.
+ * - `landscape` → a count of one light fixture type.
+ * - `bistro` → linear feet of string lighting.
+ * - `annotation` → plan-only equipment such as a transformer. It is persisted
+ *   with the drawing but deliberately excluded from quote quantities.
  */
 export type DrawTarget =
   | { field: "roofline" }
   | { field: "christmas"; category: string; option: string }
   | { field: "landscape"; fixtureType: string }
-  | { field: "bistro" };
+  | { field: "bistro" }
+  | { field: "annotation"; annotationType: "transformer" | "wire" };
 
 export interface Product {
   id: string;
@@ -196,6 +201,9 @@ export interface Product {
    * label, so the rep can see what the package actually installs.
    */
   productName?: string | null;
+  /** Lamp specification and included accessories from the CRM price-book item. */
+  lampLabel?: string | null;
+  accessoryLabels?: string[];
   target: DrawTarget;
 }
 
@@ -208,6 +216,13 @@ export interface Run {
   colors?: string[];
   /** Per-run bulb-size multiplier (visual only); falls back to the product's. */
   bulbScale?: number;
+  /** Plan-only electrical metadata for a landscape wire circuit. */
+  circuitLabel?: string;
+  transformerId?: string;
+  /** New circuits use 10/2 or 12/2; legacy 8 and 14 values remain readable. */
+  wireGauge?: 8 | 10 | 12 | 14;
+  sourceVoltage?: number;
+  transformerZoneId?: string;
 }
 
 export interface PlacedItem {
@@ -234,6 +249,16 @@ export interface PlacedItem {
    * pure rendering — the fixture is still one fixture on the quote.
    */
   beamRotationDeg?: number;
+  /** ID of the plan-only wire circuit that supplies this fixture. */
+  circuitId?: string;
+  /** Per-fixture construction-plan marker color; never changes light output or price. */
+  markerColor?: string;
+  /** Stable CRM catalog references; live catalog data remains authoritative. */
+  catalogItemId?: string;
+  catalogSku?: string;
+  lampCatalogItemId?: string;
+  accessoryCatalogItemIds?: string[];
+  transformerZoneId?: string;
 }
 
 export interface Calibration {
@@ -242,10 +267,150 @@ export interface Calibration {
   feet: number;
 }
 
+/** A movable image inset placed over the editable construction plan. */
+export interface PlanImage {
+  id: string;
+  dataUrl: string;
+  name: string;
+  /** Image center in property-photo coordinates. */
+  at: Point;
+  widthPx: number;
+  heightPx: number;
+}
+
+export type LandscapePaperSize = "tabloid" | "super-b" | "letter" | "arch-c" | "arch-d" | "ansi-d";
+export type LandscapeWorkflowTab =
+  | "drawing"
+  | "schedule"
+  | "bom"
+  | "electrical"
+  | "proposal"
+  | "precon";
+export type LandscapePlanFit = "contain" | "cover";
+
+export interface LandscapeRevisionRow {
+  id: string;
+  number: string;
+  description: string;
+  date: string;
+  author: string;
+}
+
+export interface LandscapeAnnotation {
+  id: string;
+  type: "note" | "line" | "tree" | "photo" | "revision";
+  at: Point;
+  end?: Point;
+  text?: string;
+  sizePx?: number;
+  rotationDeg?: number;
+  imageDataUrl?: string;
+}
+
+export interface LandscapeMeasurementLine {
+  id: string;
+  a: Point;
+  b: Point;
+  label?: string;
+  visible?: boolean;
+}
+
+export interface LandscapeHighlightStroke {
+  id: string;
+  points: Point[];
+  color: string;
+  widthPx: number;
+}
+
+export interface LandscapeArrow {
+  id: string;
+  a: Point;
+  b: Point;
+  label?: string;
+}
+
+export interface LandscapeSheetMetadata {
+  label?: string;
+  drawingTitle?: string;
+  drawingNumber?: string;
+  proposalZoneId?: string;
+  revisions?: LandscapeRevisionRow[];
+}
+
+export interface LandscapeLegendSettings {
+  visible: boolean;
+  position: Point;
+  scale: number;
+}
+
+export interface LandscapeProcurementState {
+  catalogItemId?: string;
+  catalogSku?: string;
+  orderedQuantity: number;
+  receivedQuantity: number;
+  supplierNote: string;
+}
+
+export interface LandscapeProposalZone {
+  id: string;
+  name: string;
+  description: string;
+  shotIds: string[];
+}
+
+export interface LandscapePaymentMilestone {
+  id: string;
+  label: string;
+  percent: number;
+}
+
+export interface LandscapeProposalEnhancement {
+  id: string;
+  catalogItemId: string;
+  catalogSku?: string;
+  quantity: number;
+  note: string;
+}
+
+export interface LandscapeProposalSettings {
+  selectedTierKey: string | null;
+  selectedCarePlanKey: string | null;
+  designIntent: string;
+  showCombinedTotal: boolean;
+  showFixtureDetails: boolean;
+  zones: LandscapeProposalZone[];
+  paymentMilestones: LandscapePaymentMilestone[];
+  electricalResponsibility: string;
+  enhancements: LandscapeProposalEnhancement[];
+  commitments: string[];
+  signatureName: string;
+  signatureDate: string | null;
+}
+
+export type LandscapePreconResponseValue = "yes" | "no" | "na" | null;
+
+export interface LandscapePreconResponse {
+  itemId: string;
+  value: LandscapePreconResponseValue;
+  comment: string;
+}
+
+export interface LandscapePreconState {
+  responses: LandscapePreconResponse[];
+  leadInstaller: string;
+  notes: string;
+}
+
 export interface Design {
   calibration: Calibration | null;
   runs: Run[];
   items: PlacedItem[];
+  /** Optional so drawings saved before image insets continue to load unchanged. */
+  planImages?: PlanImage[];
+  annotations?: LandscapeAnnotation[];
+  measurements?: LandscapeMeasurementLine[];
+  highlights?: LandscapeHighlightStroke[];
+  arrows?: LandscapeArrow[];
 }
 
 export type Tool =
@@ -254,7 +419,7 @@ export type Tool =
   | { type: "draw"; productId: string }
   | { type: "place"; productId: string };
 
-export type Selection = { kind: "run" | "item"; id: string } | null;
+export type Selection = { kind: "run" | "item" | "planImage"; id: string } | null;
 
 /** A loaded house photo: its data URL plus intrinsic pixel dimensions. */
 export interface PhotoInfo {

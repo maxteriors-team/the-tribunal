@@ -37,6 +37,11 @@ class NotificationDispatchResult:
 
     push_sent: bool
     emails_sent: int
+    recipient_count: int = 0
+    delivered_recipient_count: int = 0
+    failed_recipient_count: int = 0
+    delivered_recipient_ids: tuple[int, ...] = ()
+    failed_recipient_ids: tuple[int, ...] = ()
 
 
 async def notify_workspace_event(
@@ -53,6 +58,7 @@ async def notify_workspace_event(
     email_intro: str | None = None,
     email_details: Mapping[str, str] | None = None,
     dedupe_key: str | uuid.UUID | None = None,
+    recipient_user_ids: Sequence[int] | None = None,
 ) -> NotificationDispatchResult:
     """Send an actionable-event notification to every workspace member.
 
@@ -63,8 +69,9 @@ async def notify_workspace_event(
     (event, user) via ``dedupe_key`` so retries never double-send.
     """
     workspace_id_str = str(workspace_id)
+    recipients = tuple(dict.fromkeys(recipient_user_ids or ()))
 
-    push_sent = await _send_push(
+    push_recipient_ids = await _send_push(
         db,
         workspace_id=workspace_id_str,
         notification_type=notification_type,
@@ -72,11 +79,14 @@ async def notify_workspace_event(
         body=body,
         data=data,
         channel_id=channel_id,
+        dedupe_key=dedupe_key,
+        recipient_user_ids=recipients or None,
     )
 
-    emails_sent = 0
+    email_recipient_ids: tuple[int, ...] = ()
+    eligible_email_recipient_ids: tuple[int, ...] = ()
     if email_subject is not None:
-        emails_sent = await _send_emails(
+        email_recipient_ids, eligible_email_recipient_ids = await _send_emails(
             db,
             workspace_id=workspace_id_str,
             notification_type=notification_type,
@@ -85,9 +95,21 @@ async def notify_workspace_event(
             intro=email_intro or body,
             details=email_details,
             dedupe_key=dedupe_key,
+            recipient_user_ids=recipients or None,
         )
 
-    return NotificationDispatchResult(push_sent=push_sent, emails_sent=emails_sent)
+    recipient_set = set(recipients or eligible_email_recipient_ids or push_recipient_ids)
+    delivered_ids = tuple(sorted(set(push_recipient_ids) | set(email_recipient_ids)))
+    failed_ids = tuple(sorted(recipient_set - set(delivered_ids)))
+    return NotificationDispatchResult(
+        push_sent=bool(push_recipient_ids),
+        emails_sent=len(email_recipient_ids),
+        recipient_count=len(recipient_set),
+        delivered_recipient_count=len(delivered_ids),
+        failed_recipient_count=len(failed_ids),
+        delivered_recipient_ids=delivered_ids,
+        failed_recipient_ids=failed_ids,
+    )
 
 
 async def _send_push(
@@ -99,9 +121,27 @@ async def _send_push(
     body: str,
     data: dict[str, Any] | None,
     channel_id: str | None,
-) -> bool:
+    dedupe_key: str | uuid.UUID | None,
+    recipient_user_ids: Sequence[int] | None,
+) -> tuple[int, ...]:
     try:
-        return await push_notification_service.send_to_workspace_members(
+        if recipient_user_ids is not None:
+            sent_ids: list[int] = []
+            for user_id in recipient_user_ids:
+                sent = await push_notification_service.send_to_user(
+                    db,
+                    user_id,
+                    title,
+                    body,
+                    data,
+                    notification_type,
+                    channel_id,
+                    idempotency_key=str(dedupe_key) if dedupe_key is not None else None,
+                )
+                if sent:
+                    sent_ids.append(user_id)
+            return tuple(sent_ids)
+        sent = await push_notification_service.send_to_workspace_members(
             db=db,
             workspace_id=workspace_id,
             title=title,
@@ -110,13 +150,15 @@ async def _send_push(
             notification_type=notification_type,
             channel_id=channel_id,
         )
+        # Legacy workspace-wide callers consume only the aggregate boolean.
+        return (-1,) if sent else ()
     except Exception:
         logger.exception(
             "actionable_event_push_failed type=%s workspace=%s",
             notification_type,
             workspace_id,
         )
-        return False
+        return ()
 
 
 async def _send_emails(
@@ -129,26 +171,32 @@ async def _send_emails(
     intro: str,
     details: Mapping[str, str] | None,
     dedupe_key: str | uuid.UUID | None,
-) -> int:
+    recipient_user_ids: Sequence[int] | None,
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """Email each opted-in workspace member about the event."""
     pref_attr = NOTIFICATION_TYPE_PREFS.get(notification_type)
     workspace = await db.get(Workspace, uuid.UUID(workspace_id))
     if workspace is None:
-        return 0
+        return (), ()
 
-    members = await db.execute(
+    member_query = (
         select(User)
         .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
         .where(WorkspaceMembership.workspace_id == workspace.id)
     )
+    if recipient_user_ids is not None:
+        member_query = member_query.where(User.id.in_(recipient_user_ids))
+    members = await db.execute(member_query)
 
     detail_dict = dict(details) if details else None
-    sent = 0
+    sent_ids: list[int] = []
+    eligible_ids: list[int] = []
     for user in members.scalars().all():
         if not user.email or not user.notification_email:
             continue
         if pref_attr is not None and not getattr(user, pref_attr, True):
             continue
+        eligible_ids.append(user.id)
         idem = derive_outbound_key(
             f"{notification_type}_email",
             dedupe_key if dedupe_key is not None else subject,
@@ -170,14 +218,16 @@ async def _send_emails(
                 user.id,
             )
             ok = False
-        sent += 1 if ok else 0
+        if ok:
+            sent_ids.append(user.id)
 
     logger.info(
-        "actionable_event_email_dispatched type=%s recipients=%s",
+        "actionable_event_email_dispatched type=%s recipients=%s eligible=%s",
         notification_type,
-        sent,
+        len(sent_ids),
+        len(eligible_ids),
     )
-    return sent
+    return tuple(sent_ids), tuple(eligible_ids)
 
 
 __all__: Sequence[str] = ("NotificationDispatchResult", "notify_workspace_event")

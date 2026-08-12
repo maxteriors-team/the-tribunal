@@ -22,7 +22,13 @@ from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
-from app.models.field_service import Job, JobAssignment, ServiceLocation, Technician
+from app.models.field_service import (
+    Crew,
+    Job,
+    JobAssignment,
+    ServiceLocation,
+    Technician,
+)
 from app.models.invoice import Invoice
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline
@@ -82,11 +88,7 @@ async def _make_member(
     )
     db.add(user)
     await db.flush()
-    db.add(
-        WorkspaceMembership(
-            workspace_id=workspace_id, user_id=user.id, role="sales_rep"
-        )
-    )
+    db.add(WorkspaceMembership(workspace_id=workspace_id, user_id=user.id, role="sales_rep"))
     await db.flush()
     return user
 
@@ -755,8 +757,9 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
         location = await _make_location(db, ws.id, contact.id)
+        crew = Crew(workspace_id=ws.id, name="Install Crew")
         technician = Technician(workspace_id=ws.id, name="Alex Field")
-        db.add(technician)
+        db.add_all([crew, technician])
         await db.flush()
         svc = QuoteService(db)
 
@@ -774,36 +777,41 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
             ),
         )
         await svc.approve_quote(ws.id, quote.id)
+        start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        end = start + timedelta(hours=3)
 
         result = await svc.convert_quote(
-            ws.id, quote.id, technician_ids=[technician.id]
+            ws.id,
+            quote.id,
+            scheduled_start=start,
+            scheduled_end=end,
+            crew_id=crew.id,
+            technician_ids=[technician.id],
         )
         assert result.job_id is not None
         assert result.invoice_id is not None
+        assert result.idempotent_replay is False
         assert result.quote.converted_job_id == result.job_id
         assert result.quote.converted_invoice_id == result.invoice_id
 
-        # The job carries the quote's title, contact, and site.
         job = await db.get(Job, result.job_id)
         assert job is not None
         assert job.title == "Install lighting"
         assert job.contact_id == contact.id
         assert job.service_location_id == location.id
+        assert job.crew_id == crew.id
+        assert job.source_quote_id == quote.id
         assignments = (
-            await db.execute(
-                select(JobAssignment).where(JobAssignment.job_id == job.id)
-            )
-        ).scalars().all()
-        assert {assignment.technician_id for assignment in assignments} == {
-            technician.id
-        }
+            (await db.execute(select(JobAssignment).where(JobAssignment.job_id == job.id)))
+            .scalars()
+            .all()
+        )
+        assert {assignment.technician_id for assignment in assignments} == {technician.id}
 
-        # The invoice copied the quote's line items and totals.
         from app.models.invoice import InvoiceLineItem
 
         invoice = await db.get(Invoice, result.invoice_id)
         assert invoice is not None
-        # subtotal = (2*150) + (4*25) = 400; total = 400 + 20 tax = 420
         assert float(invoice.subtotal) == 400.0
         assert float(invoice.total) == 420.0
         line_count = len(
@@ -817,10 +825,27 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         )
         assert line_count == 2
 
-        # Re-converting returns the same ids and creates no duplicates.
-        again = await svc.convert_quote(ws.id, quote.id)
+        again = await svc.convert_quote(
+            ws.id,
+            quote.id,
+            scheduled_start=start,
+            scheduled_end=end,
+            crew_id=crew.id,
+            technician_ids=[technician.id],
+        )
         assert again.job_id == result.job_id
         assert again.invoice_id == result.invoice_id
+        assert again.idempotent_replay is True
+
+        with pytest.raises(ConflictError, match="different handoff details"):
+            await svc.convert_quote(
+                ws.id,
+                quote.id,
+                scheduled_start=start + timedelta(days=1),
+                scheduled_end=end + timedelta(days=1),
+                crew_id=crew.id,
+                technician_ids=[technician.id],
+            )
 
 
 async def test_convert_credits_paid_deposit_to_invoice() -> None:
@@ -854,7 +879,7 @@ async def test_convert_credits_paid_deposit_to_invoice() -> None:
         # Client paid 25% of 2000 = 500 on the public proposal page.
         await mark_deposit_paid(db, quote, payment_intent_id="pi_deposit_test")
 
-        result = await svc.convert_quote(ws.id, quote.id, create_job=False)
+        result = await svc.convert_quote(ws.id, quote.id, create_job=False, create_invoice=True)
         assert result.invoice_id is not None
 
         invoice = await db.get(Invoice, result.invoice_id)
@@ -863,6 +888,62 @@ async def test_convert_credits_paid_deposit_to_invoice() -> None:
         # The 500 deposit is already collected -> only 1500 is still owed.
         assert float(invoice.amount_paid) == 500.0
         assert invoice.status == "partial"
+
+
+async def test_unpaid_required_deposit_needs_confirmation_but_no_deposit_does_not() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Lighting",
+                deposit_percentage=25,
+                line_items=[QuoteLineItemCreate(name="Install", unit_price=1000)],
+            ),
+        )
+        await svc.approve_quote(ws.id, quote.id)
+        start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        end = start + timedelta(hours=2)
+        with pytest.raises(ConflictError) as exc:
+            await svc.convert_quote(
+                ws.id,
+                quote.id,
+                create_invoice=False,
+                scheduled_start=start,
+                scheduled_end=end,
+            )
+        assert exc.value.code == "unpaid_deposit_confirmation_required"
+
+        accepted = await svc.convert_quote(
+            ws.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=start,
+            scheduled_end=end,
+            confirm_unpaid_deposit=True,
+        )
+        assert accepted.job_id is not None
+
+        no_deposit = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="No deposit",
+                line_items=[QuoteLineItemCreate(name="Install", unit_price=500)],
+            ),
+        )
+        await svc.approve_quote(ws.id, no_deposit.id)
+        no_deposit_result = await svc.convert_quote(
+            ws.id,
+            no_deposit.id,
+            create_invoice=False,
+            scheduled_start=start + timedelta(days=1),
+            scheduled_end=end + timedelta(days=1),
+        )
+        assert no_deposit_result.job_id is not None
 
 
 async def test_convert_schedules_job_when_window_supplied() -> None:

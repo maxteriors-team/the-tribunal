@@ -12,7 +12,7 @@
  * reducer, passed in as `state`/`dispatch`, so the palette and estimate panel
  * stay in sync with what's on the canvas.
  */
-import { Moon, Sunrise } from "lucide-react";
+import { AlertTriangle, ImagePlus, Moon, Sunrise } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -20,19 +20,16 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type Dispatch,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
 import { indexProducts } from "@/lib/estimator/catalog";
 import { designScale, formatFeet } from "@/lib/estimator/design";
-import {
-  distance,
-  distToPolyline,
-  polylineLength,
-  snapAngle,
-} from "@/lib/estimator/geometry";
-import { loadImage } from "@/lib/estimator/photo";
+import { distance, distToPolyline, polylineLength, snapAngle } from "@/lib/estimator/geometry";
+import { fileToPhoto, loadImage } from "@/lib/estimator/photo";
 import {
   MAX_DUSK,
   beamAngleAt,
@@ -40,18 +37,15 @@ import {
   beamRotationAt,
   drawScene,
   itemHit,
+  planImageHit,
+  planImageResizeHandlePos,
   resizeHandlePos,
   rotateHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
 import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
 
-import {
-  EMPTY_DESIGN,
-  nextId,
-  type EditorAction,
-  type EditorState,
-} from "./editor-store";
+import { EMPTY_DESIGN, nextId, type EditorAction, type EditorState } from "./editor-store";
 
 interface View {
   scale: number;
@@ -67,7 +61,19 @@ type Drag =
   | { mode: "resize"; itemId: string; before: Design }
   | { mode: "beam"; itemId: string; before: Design }
   | { mode: "aim"; itemId: string; before: Design }
+  | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
+  | { mode: "plan-image-resize"; imageId: string; before: Design }
   | { mode: "cal-a" | "cal-b"; before: Design };
+
+const MAX_PLAN_IMAGES = 12;
+const MAX_PLAN_IMAGE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_PLAN_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
 
 interface LightCanvasProps {
   photo: PhotoInfo;
@@ -81,11 +87,17 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const planImageInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const fittedRef = useRef(false);
 
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [planImageElements, setPlanImageElements] = useState<Map<string, HTMLImageElement>>(
+    () => new Map(),
+  );
+  const [planImageError, setPlanImageError] = useState<string | null>(null);
+  const [imageDragActive, setImageDragActive] = useState(false);
   const [view, setView] = useState<View>({ scale: 1, ox: 0, oy: 0 });
   const [draft, setDraft] = useState<Point[]>([]);
   const [calDraft, setCalDraft] = useState<Point | null>(null);
@@ -102,6 +114,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   // keyboard and on touch.
   const [showBefore, setShowBefore] = useState(false);
   const duskId = useId();
+  const canvasHelpId = useId();
 
   const productById = useMemo(() => indexProducts(products), [products]);
   const { ftPerPx, pxPerFt, calibrated } = designScale(design, photo.width);
@@ -125,6 +138,38 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       cancelled = true;
     };
   }, [photo.dataUrl]);
+
+  const planImageSourceKey = useMemo(
+    () =>
+      JSON.stringify(
+        (design.planImages ?? []).map((image) => ({ id: image.id, dataUrl: image.dataUrl })),
+      ),
+    [design.planImages],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const images = JSON.parse(planImageSourceKey) as Array<{ id: string; dataUrl: string }>;
+    if (images.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void Promise.all(
+      images.map(async (image) => [image.id, await loadImage(image.dataUrl)] as const),
+    ).then(
+      (loaded) => {
+        if (cancelled) return;
+        setPlanImageElements(new Map(loaded));
+      },
+      () => {
+        if (!cancelled) setPlanImageError("One plan image could not be loaded.");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [planImageSourceKey]);
 
   const fitView = useCallback(() => {
     const el = containerRef.current;
@@ -169,38 +214,88 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#05080f";
     ctx.fillRect(0, 0, pw, ph);
-    ctx.setTransform(
-      dpr * view.scale,
-      0,
-      0,
-      dpr * view.scale,
-      dpr * view.ox,
-      dpr * view.oy,
-    );
+    ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy);
 
-    drawScene(
-      ctx,
-      img,
-      showBefore ? EMPTY_DESIGN : design,
-      productById,
-      pxPerFt,
-      {
-        viewScale: view.scale,
-        selection: showBefore ? null : selection,
-        draftRun:
-          !showBefore && draft.length > 0 && activeProduct
-            ? { points: draft, product: activeProduct }
-            : null,
-        draftCalPoint: showBefore ? null : calDraft,
-        hoverPt:
-          !showBefore && (tool.type === "draw" || tool.type === "calibrate")
-            ? hoverPt
-            : null,
-        dusk: showBefore ? 0 : dusk,
-        showChrome: !showBefore,
-        calibrateTool: tool.type === "calibrate",
-      },
-    );
+    drawScene(ctx, img, showBefore ? EMPTY_DESIGN : design, productById, pxPerFt, {
+      viewScale: view.scale,
+      selection: showBefore ? null : selection,
+      draftRun:
+        !showBefore && draft.length > 0 && activeProduct
+          ? { points: draft, product: activeProduct }
+          : null,
+      draftCalPoint: showBefore ? null : calDraft,
+      hoverPt: !showBefore && (tool.type === "draw" || tool.type === "calibrate") ? hoverPt : null,
+      dusk: showBefore ? 0 : dusk,
+      showChrome: !showBefore,
+      calibrateTool: tool.type === "calibrate",
+      planImageElements,
+    });
+
+    if (!showBefore) {
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const highlight of design.highlights ?? []) {
+        if (highlight.points.length < 2) continue;
+        ctx.beginPath();
+        highlight.points.forEach((point, index) =>
+          index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y),
+        );
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = highlight.color;
+        ctx.lineWidth = highlight.widthPx;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.font = "600 16px sans-serif";
+      for (const measurement of design.measurements ?? []) {
+        if (measurement.visible === false) continue;
+        ctx.strokeStyle = "#22d3ee";
+        ctx.lineWidth = 2 / Math.max(view.scale, 0.1);
+        ctx.setLineDash([8 / view.scale, 5 / view.scale]);
+        ctx.beginPath();
+        ctx.moveTo(measurement.a.x, measurement.a.y);
+        ctx.lineTo(measurement.b.x, measurement.b.y);
+        ctx.stroke();
+        if (measurement.label) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(measurement.label, (measurement.a.x + measurement.b.x) / 2, (measurement.a.y + measurement.b.y) / 2 - 8);
+        }
+      }
+      ctx.setLineDash([]);
+      for (const arrow of design.arrows ?? []) {
+        const angle = Math.atan2(arrow.b.y - arrow.a.y, arrow.b.x - arrow.a.x);
+        ctx.strokeStyle = "#f59e0b";
+        ctx.lineWidth = 3 / Math.max(view.scale, 0.1);
+        ctx.beginPath();
+        ctx.moveTo(arrow.a.x, arrow.a.y);
+        ctx.lineTo(arrow.b.x, arrow.b.y);
+        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle - Math.PI / 6), arrow.b.y - 14 * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(arrow.b.x, arrow.b.y);
+        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle + Math.PI / 6), arrow.b.y - 14 * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+      }
+      for (const annotation of design.annotations ?? []) {
+        ctx.fillStyle = "#fbbf24";
+        ctx.strokeStyle = "#111827";
+        ctx.lineWidth = 4 / Math.max(view.scale, 0.1);
+        if (annotation.type === "tree") {
+          ctx.beginPath();
+          ctx.arc(annotation.at.x, annotation.at.y, annotation.sizePx ?? 18, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fill();
+        } else if (annotation.end) {
+          ctx.beginPath();
+          ctx.moveTo(annotation.at.x, annotation.at.y);
+          ctx.lineTo(annotation.end.x, annotation.end.y);
+          ctx.stroke();
+        } else {
+          ctx.strokeText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
+          ctx.fillText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
+        }
+      }
+      ctx.restore();
+    }
   }, [
     view,
     design,
@@ -214,6 +309,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     dusk,
     showBefore,
     tool.type,
+    planImageElements,
   ]);
 
   useEffect(() => {
@@ -252,8 +348,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
    * the crew gets parts for it. Geometry is only allowed on the photo.
    */
   const insidePhoto = useCallback(
-    (pt: Point) =>
-      pt.x >= 0 && pt.y >= 0 && pt.x <= photo.width && pt.y <= photo.height,
+    (pt: Point) => pt.x >= 0 && pt.y >= 0 && pt.x <= photo.width && pt.y <= photo.height,
     [photo.width, photo.height],
   );
 
@@ -266,19 +361,78 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     [photo.width, photo.height],
   );
 
-  const zoomAt = useCallback(
-    (clientX: number, clientY: number, factor: number) => {
-      setView((v) => {
-        const rect = canvasRef.current?.getBoundingClientRect();
-        const cx = rect ? clientX - rect.left : 0;
-        const cy = rect ? clientY - rect.top : 0;
-        const scale = Math.min(40, Math.max(0.02, v.scale * factor));
-        const k = scale / v.scale;
-        return { scale, ox: cx - (cx - v.ox) * k, oy: cy - (cy - v.oy) * k };
-      });
+  const addPlanImage = useCallback(
+    async (file: File, requestedAt?: Point) => {
+      setPlanImageError(null);
+      if ((design.planImages ?? []).length >= MAX_PLAN_IMAGES) {
+        setPlanImageError(`A plan can contain up to ${MAX_PLAN_IMAGES} inset images.`);
+        return;
+      }
+      if (!ACCEPTED_PLAN_IMAGE_TYPES.has(file.type)) {
+        setPlanImageError("Use a PNG, JPEG, GIF, WebP, or AVIF image.");
+        return;
+      }
+      if (file.size > MAX_PLAN_IMAGE_BYTES) {
+        setPlanImageError("Plan images must be 2 MB or smaller.");
+        return;
+      }
+      try {
+        const uploaded = await fileToPhoto(file);
+        const maxWidth = photo.width * 0.34;
+        const maxHeight = photo.height * 0.34;
+        const scale = Math.min(1, maxWidth / uploaded.width, maxHeight / uploaded.height);
+        const widthPx = Math.max(24, uploaded.width * scale);
+        const heightPx = Math.max(24, uploaded.height * scale);
+        const preferred =
+          requestedAt && insidePhoto(requestedAt)
+            ? requestedAt
+            : { x: photo.width / 2, y: photo.height / 2 };
+        const at = {
+          x: Math.min(Math.max(preferred.x, widthPx / 2), photo.width - widthPx / 2),
+          y: Math.min(Math.max(preferred.y, heightPx / 2), photo.height - heightPx / 2),
+        };
+        dispatch({
+          type: "ADD_PLAN_IMAGE",
+          image: {
+            id: nextId("plan-image"),
+            dataUrl: uploaded.dataUrl,
+            name: file.name.trim().slice(0, 200) || "Plan image",
+            at,
+            widthPx,
+            heightPx,
+          },
+        });
+      } catch {
+        setPlanImageError("That image could not be read.");
+      }
     },
-    [],
+    [design.planImages, dispatch, insidePhoto, photo.height, photo.width],
   );
+
+  const onPlanImageInput = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void addPlanImage(file);
+  };
+
+  const onPlanImageDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setImageDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    void addPlanImage(file, toImage(event.clientX, event.clientY));
+  };
+
+  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
+    setView((v) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const cx = rect ? clientX - rect.left : 0;
+      const cy = rect ? clientY - rect.top : 0;
+      const scale = Math.min(40, Math.max(0.02, v.scale * factor));
+      const k = scale / v.scale;
+      return { scale, ox: cx - (cx - v.ox) * k, oy: cy - (cy - v.oy) * k };
+    });
+  }, []);
 
   const zoomCenter = useCallback(
     (factor: number) => {
@@ -316,18 +470,31 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       if (!last || distance(last, p) > eps) pts.push(p);
     }
     if (pts.length >= 2) {
+      const wireCircuitNumber =
+        design.runs.filter((run) => productById.get(run.productId)?.style === "wire").length + 1;
       dispatch({
         type: "ADD_RUN",
-        run: { id: nextId("run"), productId: tool.productId, points: pts },
+        run: {
+          id: nextId("run"),
+          productId: tool.productId,
+          points: pts,
+          ...(activeProduct?.style === "wire"
+            ? {
+                circuitLabel: `C${wireCircuitNumber}`,
+                wireGauge: 12 as const,
+                sourceVoltage: 12,
+              }
+            : {}),
+        },
       });
     }
     setDraft([]);
     setHoverPt(null);
-  }, [tool, draft, view.scale, dispatch]);
+  }, [tool, draft, view.scale, dispatch, design.runs, productById, activeProduct]);
 
   // ---- keyboard -----------------------------------------------------------
-  const kbRef = useRef({ draft, calDraft, selection, tool, commitDraft });
-  kbRef.current = { draft, calDraft, selection, tool, commitDraft };
+  const kbRef = useRef({ draft, calDraft, selection, tool, commitDraft, design, photo });
+  kbRef.current = { draft, calDraft, selection, tool, commitDraft, design, photo };
 
   useEffect(() => {
     const isTyping = () => {
@@ -351,6 +518,50 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         dispatch({ type: e.shiftKey ? "REDO" : "UNDO" });
         return;
       }
+      if (e.key.startsWith("Arrow") && k.selection?.kind === "planImage") {
+        const image = (k.design.planImages ?? []).find(
+          (candidate) => candidate.id === k.selection?.id,
+        );
+        if (!image) return;
+        e.preventDefault();
+        const direction = e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1;
+        const step = e.shiftKey ? 10 : 1;
+        if (e.altKey) {
+          const aspect = image.widthPx / image.heightPx;
+          const maxWidth = Math.min(
+            k.photo.width,
+            k.photo.height * aspect,
+            Math.max(24, Math.min(image.at.x, k.photo.width - image.at.x) * 2),
+            Math.max(24, Math.min(image.at.y, k.photo.height - image.at.y) * 2 * aspect),
+          );
+          const widthPx = Math.min(maxWidth, Math.max(24, image.widthPx + direction * step));
+          dispatch({
+            type: "UPDATE_PLAN_IMAGE",
+            id: image.id,
+            patch: { widthPx, heightPx: widthPx / aspect },
+          });
+        } else {
+          const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+          const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+          dispatch({
+            type: "UPDATE_PLAN_IMAGE",
+            id: image.id,
+            patch: {
+              at: {
+                x: Math.min(
+                  Math.max(image.at.x + dx, image.widthPx / 2),
+                  k.photo.width - image.widthPx / 2,
+                ),
+                y: Math.min(
+                  Math.max(image.at.y + dy, image.heightPx / 2),
+                  k.photo.height - image.heightPx / 2,
+                ),
+              },
+            },
+          });
+        }
+        return;
+      }
       switch (e.key) {
         case "Escape":
           if (k.draft.length > 0) setDraft([]);
@@ -371,6 +582,8 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
             dispatch({ type: "DELETE_RUN", id: k.selection.id });
           } else if (k.selection?.kind === "item") {
             dispatch({ type: "DELETE_ITEM", id: k.selection.id });
+          } else if (k.selection?.kind === "planImage") {
+            dispatch({ type: "DELETE_PLAN_IMAGE", id: k.selection.id });
           }
           break;
         case "v":
@@ -570,11 +783,21 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
             }
           }
         }
+        if (selection?.kind === "planImage") {
+          const image = (design.planImages ?? []).find(
+            (candidate) => candidate.id === selection.id,
+          );
+          if (image && distance(planImageResizeHandlePos(image), p) < slack * 1.6) {
+            dragRef.current = { mode: "plan-image-resize", imageId: image.id, before: design };
+            return;
+          }
+        }
         if (selection?.kind === "item") {
           const item = design.items.find((i) => i.id === selection.id);
           const itemProduct = item ? productById.get(item.productId) : undefined;
           if (
             item &&
+            itemProduct?.style !== "transformer" &&
             distance(resizeHandlePos(item, itemProduct), p) < slack * 1.6
           ) {
             dragRef.current = { mode: "resize", itemId: item.id, before: design };
@@ -589,9 +812,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           }
           // Aim last: it floats a constant gap beyond the throw grip, so it is
           // never the one a rep grabs by accident reaching for the other two.
-          const aimGrip = item
-            ? rotateHandlePos(item, itemProduct, view.scale)
-            : null;
+          const aimGrip = item ? rotateHandlePos(item, itemProduct, view.scale) : null;
           if (item && aimGrip && distance(aimGrip, p) < slack * 1.6) {
             dragRef.current = { mode: "aim", itemId: item.id, before: design };
             return;
@@ -614,7 +835,25 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
             return;
           }
         }
-        // 3) runs
+        // 3) plan images (fixtures remain topmost because their symbols render above images)
+        const planImages = design.planImages ?? [];
+        for (let i = planImages.length - 1; i >= 0; i -= 1) {
+          const image = planImages[i];
+          if (planImageHit(image, p, slack)) {
+            dispatch({
+              type: "SET_SELECTION",
+              selection: { kind: "planImage", id: image.id },
+            });
+            dragRef.current = {
+              mode: "plan-image",
+              imageId: image.id,
+              offset: { x: p.x - image.at.x, y: p.y - image.at.y },
+              before: design,
+            };
+            return;
+          }
+        }
+        // 4) runs
         const hitDist = Math.max(10 / view.scale, pxPerFt * 0.5);
         for (let i = design.runs.length - 1; i >= 0; i -= 1) {
           const run = design.runs[i];
@@ -716,6 +955,54 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         });
         return;
       }
+      case "plan-image": {
+        const image = (design.planImages ?? []).find((candidate) => candidate.id === drag.imageId);
+        if (!image) return;
+        dispatch({
+          type: "UPDATE_PLAN_IMAGE",
+          id: image.id,
+          patch: {
+            at: {
+              x: Math.min(
+                Math.max(p.x - drag.offset.x, image.widthPx / 2),
+                photo.width - image.widthPx / 2,
+              ),
+              y: Math.min(
+                Math.max(p.y - drag.offset.y, image.heightPx / 2),
+                photo.height - image.heightPx / 2,
+              ),
+            },
+          },
+          transient: true,
+        });
+        return;
+      }
+      case "plan-image-resize": {
+        const image = (design.planImages ?? []).find((candidate) => candidate.id === drag.imageId);
+        if (!image) return;
+        const left = image.at.x - image.widthPx / 2;
+        const top = image.at.y - image.heightPx / 2;
+        const aspect = image.widthPx / image.heightPx;
+        let widthPx = Math.max(24, p.x - left);
+        let heightPx = widthPx / aspect;
+        if (top + heightPx > photo.height) {
+          heightPx = Math.max(24, photo.height - top);
+          widthPx = heightPx * aspect;
+        }
+        widthPx = Math.min(widthPx, photo.width - left);
+        heightPx = widthPx / aspect;
+        dispatch({
+          type: "UPDATE_PLAN_IMAGE",
+          id: image.id,
+          patch: {
+            at: { x: left + widthPx / 2, y: top + heightPx / 2 },
+            widthPx,
+            heightPx,
+          },
+          transient: true,
+        });
+        return;
+      }
       case "resize": {
         const item = design.items.find((i) => i.id === drag.itemId);
         if (!item) return;
@@ -752,11 +1039,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: {
-            beamRotationDeg: beamRotationAt(
-              item,
-              p,
-              productById.get(item.productId),
-            ),
+            beamRotationDeg: beamRotationAt(item, p, productById.get(item.productId)),
           },
           transient: true,
         });
@@ -767,8 +1050,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         const cal = design.calibration;
         if (!cal) return;
         const at = clampToPhoto(p);
-        const calibration =
-          drag.mode === "cal-a" ? { ...cal, a: at } : { ...cal, b: at };
+        const calibration = drag.mode === "cal-a" ? { ...cal, a: at } : { ...cal, b: at };
         dispatch({ type: "SET_CALIBRATION", calibration, transient: true });
         return;
       }
@@ -819,15 +1101,15 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         : "Click both ends of something with a known size (garage door = 16 ft)";
   } else if (tool.type === "draw") {
     const liveFt =
-      draft.length > 0
-        ? polylineLength(hoverPt ? [...draft, hoverPt] : draft) * ftPerPx
-        : 0;
+      draft.length > 0 ? polylineLength(hoverPt ? [...draft, hoverPt] : draft) * ftPerPx : 0;
     hint =
       draft.length > 0
         ? `${formatFeet(liveFt)} — Enter / double-click to finish · Backspace undoes a point · Esc cancels`
         : "Click along the roofline to add points · Shift snaps angles";
   } else if (tool.type === "place") {
     hint = `Click to place ${activeProduct?.name ?? "item"} · then switch to Select (V) to move or resize`;
+  } else if (selection?.kind === "planImage") {
+    hint = "Drag or arrow keys move · corner handle or Alt + arrows resize · Delete removes";
   } else if (selection) {
     hint = "Drag to move · drag handles to adjust · Delete removes";
   }
@@ -844,10 +1126,48 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   const duskPercent = Math.round(dusk * 100);
 
   return (
-    <div ref={containerRef} className="lc-wrap">
+    <div
+      ref={containerRef}
+      className={`lc-wrap${imageDragActive ? " lc-image-drag-active" : ""}`}
+      onDragEnter={(event) => {
+        if (event.dataTransfer.types.includes("Files")) {
+          event.preventDefault();
+          setImageDragActive(true);
+        }
+      }}
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes("Files")) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setImageDragActive(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setImageDragActive(false);
+        }
+      }}
+      onDrop={onPlanImageDrop}
+    >
+      <p id={canvasHelpId} className="sr-only">
+        Interactive lighting design canvas. Choose a fixture or tool from the left rail, then use
+        the pointer on the property photo. Press V for Select, S for Set scale, Delete to remove a
+        selected fixture, plus or minus to zoom, and 0 to fit. Drop an image file onto the plan, or
+        use Add plan image, to place a movable reference inset.
+      </p>
+      <input
+        ref={planImageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+        hidden
+        onChange={onPlanImageInput}
+      />
       <canvas
         ref={canvasRef}
         className="lc-canvas"
+        tabIndex={0}
+        aria-label="Property photo lighting design canvas"
+        aria-describedby={canvasHelpId}
         style={{ cursor }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -857,18 +1177,43 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         onContextMenu={onContextMenu}
       />
 
-      <div className="lc-overlay top-left">
+      <div className="lc-overlay top-left lc-plan-actions">
         <button
           type="button"
           className={`lc-chip ${calibrated ? "lc-chip-ok" : "lc-chip-warn"}`}
           onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
           title="Set the photo scale from a known measurement"
         >
+          {!calibrated ? <AlertTriangle className="lc-chip-glyph" aria-hidden="true" /> : null}
           {calibrated && design.calibration
-            ? `Scale set — ${design.calibration.feet} ft reference`
-            : "⚠ Not to scale — click to set scale"}
+            ? `Scale set: ${design.calibration.feet} ft reference`
+            : "Not to scale. Select to set scale."}
+        </button>
+        <button
+          type="button"
+          className="lc-chip"
+          disabled={(design.planImages ?? []).length >= MAX_PLAN_IMAGES}
+          onClick={() => planImageInputRef.current?.click()}
+          title="Place a movable detail or reference image on this plan"
+        >
+          <ImagePlus className="lc-chip-glyph" aria-hidden="true" />
+          Add plan image
         </button>
       </div>
+
+      {imageDragActive ? (
+        <div className="lc-image-drop-target" aria-hidden="true">
+          <ImagePlus />
+          <strong>Drop image onto plan</strong>
+          <span>It will stay movable and resizable.</span>
+        </div>
+      ) : null}
+
+      {planImageError ? (
+        <div className="lc-overlay lc-plan-image-error" role="alert">
+          {planImageError}
+        </div>
+      ) : null}
 
       <div className="lc-overlay top-right">
         <button
@@ -895,9 +1240,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
             step={1}
             value={duskPercent}
             disabled={showBefore}
-            onChange={(e) =>
-              dispatch({ type: "SET_DUSK", dusk: Number(e.target.value) / 100 })
-            }
+            onChange={(e) => dispatch({ type: "SET_DUSK", dusk: Number(e.target.value) / 100 })}
           />
           <output className="lc-dusk-value" htmlFor={duskId}>
             {duskPercent}%
@@ -975,16 +1318,10 @@ function FeetModal({
         aria-label="Cancel setting the scale"
         onClick={onCancel}
       />
-      <div
-        className="lc-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Set photo scale"
-      >
+      <div className="lc-modal" role="dialog" aria-modal="true" aria-label="Set photo scale">
         <h3>How long is that line in real life?</h3>
         <p className="lc-modal-sub">
-          Measure off something you know — a garage door, front door, or siding
-          panel.
+          Measure off something you know — a garage door, front door, or siding panel.
         </p>
         <div className="lc-feet-row">
           <input

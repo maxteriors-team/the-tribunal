@@ -37,6 +37,7 @@ from app.schemas.inventory import (
 from app.schemas.job import (
     JobAssignRequest,
     JobCreate,
+    JobInstallationPlanResponse,
     JobListResponse,
     JobResponse,
     JobScheduleRequest,
@@ -145,6 +146,23 @@ async def get_job(
     """Get a single job with its assigned technicians."""
     service = JobService(db)
     return await service.get(job_id, workspace.id)
+
+
+@router.get("/{job_id}/installation-plan", response_model=JobInstallationPlanResponse)
+async def get_job_installation_plan(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
+    db: DB,
+) -> JobInstallationPlanResponse:
+    """Private selected sheet for authorized office staff or assigned installers."""
+    return await JobService(db).get_installation_plan(
+        job_id,
+        workspace.id,
+        membership=membership,
+        user_id=current_user.id,
+    )
 
 
 @router.patch("/{job_id}", response_model=JobResponse)

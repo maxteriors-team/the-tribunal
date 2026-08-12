@@ -13,13 +13,7 @@
  * then holiday strands and decor — so one palette covers everything the rep
  * sells on a photo instead of a separate tool per product line.
  */
-import {
-  MousePointer2,
-  Redo2,
-  Ruler,
-  Trash2,
-  Undo2,
-} from "lucide-react";
+import { MousePointer2, Redo2, Ruler, Trash2, Undo2 } from "lucide-react";
 import { type Dispatch } from "react";
 
 import {
@@ -32,21 +26,44 @@ import {
   presetNameFor,
 } from "@/lib/estimator/catalog";
 import {
-  seasonalIconForStyle,
-  tintSurface,
-} from "@/lib/estimator/seasonal-icons";
+  LANDSCAPE_WIRE_GAUGES,
+  landscapeWireLabel,
+} from "@/lib/estimator/fixtures";
+import { seasonalIconForStyle, tintSurface } from "@/lib/estimator/seasonal-icons";
 import {
   MAX_BEAM_ANGLE_DEG,
   MIN_BEAM_ANGLE_DEG,
   beamAngleFor,
   beamRotationFor,
   clampBeamAngle,
+  isLandscapePlanStyle,
   normalizeBeamRotation,
 } from "@/lib/estimator/types";
-import type { PlacedItem, Product, Run } from "@/lib/estimator/types";
+import type { Design, PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
 
 import type { EditorAction, EditorState } from "./editor-store";
+
+function newPlacedItemId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const FIXTURE_MARKER_COLORS = [
+  "#f2c94c",
+  "#f2994a",
+  "#eb5757",
+  "#2f80ed",
+  "#27ae60",
+  "#ffffff",
+  "#9b51e0",
+  "#d62f6f",
+  "#35aee2",
+  "#6b7d86",
+  "#f26b4f",
+  "#008f85",
+] as const;
 
 interface ToolPaletteProps {
   products: Product[];
@@ -84,15 +101,14 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
     (tool.type === "draw" || tool.type === "place") && tool.productId === id;
 
   const selectedRun =
-    selection?.kind === "run"
-      ? design.runs.find((r) => r.id === selection.id)
-      : undefined;
+    selection?.kind === "run" ? design.runs.find((r) => r.id === selection.id) : undefined;
   const selectedItem =
-    selection?.kind === "item"
-      ? design.items.find((i) => i.id === selection.id)
-      : undefined;
+    selection?.kind === "item" ? design.items.find((i) => i.id === selection.id) : undefined;
   const selectedItemProduct = selectedItem
     ? products.find((p) => p.id === selectedItem.productId)
+    : undefined;
+  const selectedRunProduct = selectedRun
+    ? products.find((product) => product.id === selectedRun.productId)
     : undefined;
 
   return (
@@ -134,9 +150,7 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
 
         {linear.length > 0 ? (
           <>
-            <h2 className={landscape.length > 0 ? "tp-mt" : undefined}>
-              Draw lights
-            </h2>
+            <h2 className={landscape.length > 0 ? "tp-mt" : undefined}>Draw lights</h2>
             {linear.map((p) => (
               <ProductButton
                 key={p.id}
@@ -164,12 +178,10 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
 
         {selectedRun ? (
           <div className="tp-run-options">
-            <h2 className="tp-mt">Selected strand</h2>
-            <RunOptions
-              run={selectedRun}
-              products={products}
-              dispatch={dispatch}
-            />
+            <h2 className="tp-mt">
+              {selectedRunProduct?.style === "wire" ? "Selected circuit" : "Selected strand"}
+            </h2>
+            <RunOptions run={selectedRun} products={products} design={design} dispatch={dispatch} />
           </div>
         ) : null}
 
@@ -177,6 +189,8 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
           <FixtureOptions
             item={selectedItem}
             product={selectedItemProduct}
+            products={products}
+            design={design}
             dispatch={dispatch}
           />
         ) : null}
@@ -232,9 +246,12 @@ function ProductButton({
 }) {
   const { Icon, tint } = seasonalIconForStyle(product.style);
   const linear = product.kind === "linear";
-  const price = linear
-    ? `${formatCurrency(product.price)}/ft`
-    : formatCurrency(product.price);
+  const planOnly = product.style === "wire";
+  const price = planOnly
+    ? "Plan only"
+    : linear
+      ? `${formatCurrency(product.price)}/ft`
+      : formatCurrency(product.price);
   return (
     <button
       type="button"
@@ -249,9 +266,11 @@ function ProductButton({
         })
       }
       title={
-        linear
-          ? `Trace along the photo — ${price}`
-          : `Click the photo to place — ${price} each`
+        planOnly
+          ? "Trace the wire circuit on the plan"
+          : linear
+            ? `Trace along the photo — ${price}`
+            : `Click the photo to place — ${price} each`
       }
     >
       <span
@@ -269,129 +288,325 @@ function ProductButton({
 }
 
 /**
- * Beam controls for the selected landscape fixture.
- *
- * The spread is what a rep argues about standing in the driveway — "that's
- * washing the whole wall, I want it grazing the column" — so it is editable per
- * fixture three ways: the chips pick a real lamp off the shelf, the slider hits
- * anything in between, and the gold grip on the cone tunes it against the photo.
- * The slider exists because the other two can't state "42°": chips only offer
- * five stock lamps, and dragging a grip on a photo is guesswork on a trackpad in
- * a driveway. Renders nothing for a fixture that throws no cone (a path light
- * pools on the ground) or for placed holiday decor, which has no beam at all.
- *
- * Aim sits under spread and is a separate axis: spread opens the cone, aim turns
- * it. Real installs are almost never straight up — the uplight is kicked toward
- * the column, the soffit downlight is angled onto the path — so without this the
- * photo argues for a design nobody would actually install.
+ * Type and beam controls for one selected landscape plan symbol. Switching type
+ * preserves its anchor and scales the new symbol/throw from the same drawing
+ * calibration, so an uplight can become a path light or transformer in place.
  */
 function FixtureOptions({
   item,
   product,
+  products,
+  design,
   dispatch,
 }: {
   item: PlacedItem;
   product: Product;
+  products: Product[];
+  design: Design;
   dispatch: Dispatch<EditorAction>;
 }) {
+  if (product.category !== "landscape" || !isLandscapePlanStyle(product.style)) {
+    return null;
+  }
+  const choices = products.filter(
+    (candidate) =>
+      candidate.category === "landscape" &&
+      candidate.kind === "each" &&
+      isLandscapePlanStyle(candidate.style),
+  );
+  const circuits = design.runs.filter(
+    (run) => products.find((candidate) => candidate.id === run.productId)?.style === "wire",
+  );
   const angle = beamAngleFor(product.style, item.beamAngleDeg);
-  if (angle === null) return null;
   const rotation = beamRotationFor(item.beamRotationDeg);
   const natural = product.style === "downlight" ? "down" : "up";
 
+  const markerColorButton = (color: string) => (
+    <button
+      type="button"
+      className={item.markerColor === color ? "on" : ""}
+      style={{ backgroundColor: color }}
+      aria-label={`Set marker color ${color}`}
+      aria-pressed={item.markerColor === color}
+      onClick={() =>
+        dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { markerColor: color } })
+      }
+    />
+  );
+
+  const changeType = (next: Product) => {
+    if (next.id === product.id) return;
+    const pxPerFt = product.sizeFt > 0 ? item.sizePx / product.sizeFt : 1;
+    dispatch({
+      type: "UPDATE_ITEM",
+      id: item.id,
+      patch: {
+        productId: next.id,
+        sizePx: Math.max(12, next.sizeFt * pxPerFt),
+        beamAngleDeg: undefined,
+        beamRotationDeg: undefined,
+        circuitId: next.style === "transformer" ? undefined : item.circuitId,
+      },
+    });
+  };
+
   return (
-    <div className="tp-run-options">
-      <h2 className="tp-mt">Selected fixture</h2>
+    <div className="tp-run-options est-fixture-options">
+      <h2 className="tp-mt">Selected symbol</h2>
       <div>
-        <p className="tp-opt-label">Beam angle</p>
-        <div className="tp-chip-row">
-          {BEAM_ANGLE_OPTIONS.map((option) => (
-            <button
-              key={option.deg}
-              type="button"
-              className={`tp-spacing-chip ${
-                Math.round(angle) === option.deg ? "on" : ""
-              }`}
-              aria-label={`${option.deg} degree beam — ${option.name}`}
-              aria-pressed={Math.round(angle) === option.deg}
-              onClick={() =>
-                dispatch({
-                  type: "UPDATE_ITEM",
-                  id: item.id,
-                  patch: { beamAngleDeg: option.deg },
-                })
-              }
-              title={`${option.name} — ${option.blurb}`}
-            >
-              {option.deg}&deg;
-            </button>
-          ))}
+        <p className="tp-opt-label">Change fixture type</p>
+        <div className="tp-symbol-grid" role="group" aria-label="Change selected fixture type">
+          {choices.map((choice) => {
+            const { Icon, tint } = seasonalIconForStyle(choice.style);
+            const active = choice.id === product.id;
+            return (
+              <button
+                key={choice.id}
+                type="button"
+                className={`tp-symbol-choice ${active ? "on" : ""}`}
+                aria-pressed={active}
+                title={`Change selected symbol to ${choice.name}`}
+                onClick={() => changeType(choice)}
+              >
+                <span
+                  className="tp-symbol-choice-icon"
+                  style={{ color: tint, background: tintSurface(tint) }}
+                  aria-hidden="true"
+                >
+                  <Icon className="tp-glyph" />
+                </span>
+                <span>{choice.name}</span>
+              </button>
+            );
+          })}
         </div>
-        <input
-          className="tp-range"
-          type="range"
-          min={MIN_BEAM_ANGLE_DEG}
-          max={MAX_BEAM_ANGLE_DEG}
-          step={1}
-          value={Math.round(angle)}
-          aria-label="Beam angle in degrees"
-          aria-valuetext={`${Math.round(angle)} degrees — ${beamAngleNameFor(angle)}`}
-          onChange={(e) =>
-            dispatch({
-              type: "UPDATE_ITEM",
-              id: item.id,
-              // Clamped here as well as in the reducer: a keyboard or a browser
-              // that ignores min/max must not be able to render a 0° cone.
-              patch: { beamAngleDeg: clampBeamAngle(Number(e.target.value)) },
-            })
-          }
-        />
-        <p className="tp-opt-readout">
-          {beamAngleNameFor(angle)} · {Math.round(angle)}&deg; — drag the slider,
-          or the gold grip on the photo, to fine-tune.
-        </p>
+        {product.style === "transformer" ? (
+          <p className="tp-opt-readout">
+            Power equipment symbol — shown on the plan, not the quote.
+          </p>
+        ) : angle === null ? (
+          <p className="tp-opt-readout">Ground-pool fixture — resize the pool on the photo.</p>
+        ) : null}
       </div>
+
       <div className="tp-mt">
-        <p className="tp-opt-label">Aim</p>
-        <input
-          className="tp-range"
-          type="range"
-          min={-180}
-          max={180}
-          step={1}
-          value={Math.round(rotation)}
-          aria-label="Beam aim in degrees"
-          aria-valuetext={aimLabel(rotation, natural)}
-          onChange={(e) =>
+        <p className="tp-opt-label">CRM fixture specification</p>
+        <dl className="tp-fixture-spec">
+          <div>
+            <dt>Product</dt>
+            <dd>{product.productName ?? product.name}</dd>
+          </div>
+          <div>
+            <dt>SKU</dt>
+            <dd>{product.sku ?? "Not configured"}</dd>
+          </div>
+          <div>
+            <dt>Lamp</dt>
+            <dd>{product.lampLabel ?? "Use CRM price-book specification"}</dd>
+          </div>
+          <div>
+            <dt>Accessories</dt>
+            <dd>
+              {product.accessoryLabels?.length
+                ? product.accessoryLabels.join(", ")
+                : "None configured in the CRM price book"}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="tp-mt">
+        <p className="tp-opt-label">Plan marker color</p>
+        <div className="tp-marker-colors" role="group" aria-label="Plan marker color">
+          {markerColorButton(FIXTURE_MARKER_COLORS[0])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[1])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[2])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[3])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[4])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[5])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[6])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[7])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[8])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[9])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[10])}
+          {markerColorButton(FIXTURE_MARKER_COLORS[11])}
+        </div>
+      </div>
+
+      <div className="tp-mt tp-fixture-size-actions" role="group" aria-label="Fixture symbol size">
+        <button
+          type="button"
+          className="tp-mini-btn"
+          aria-label="Decrease fixture symbol size"
+          onClick={() =>
             dispatch({
               type: "UPDATE_ITEM",
               id: item.id,
-              patch: {
-                beamRotationDeg: normalizeBeamRotation(Number(e.target.value)),
-              },
+              patch: { sizePx: Math.max(12, item.sizePx * 0.85) },
             })
           }
-        />
-        <div className="tp-aim-foot">
-          <p className="tp-opt-readout">{aimLabel(rotation, natural)}</p>
-          {/* Getting back to straight is otherwise a pixel hunt for 0 on a
-              360-wide slider, and "put it back how it was" is the single most
-              common thing a rep says after trying an aim. */}
-          <button
-            type="button"
-            className="tp-mini-btn"
-            disabled={Math.round(rotation) === 0}
-            onClick={() =>
+        >
+          Size −
+        </button>
+        <button
+          type="button"
+          className="tp-mini-btn"
+          aria-label="Increase fixture symbol size"
+          onClick={() =>
+            dispatch({
+              type: "UPDATE_ITEM",
+              id: item.id,
+              patch: { sizePx: Math.min(100_000, item.sizePx * 1.15) },
+            })
+          }
+        >
+          Size +
+        </button>
+      </div>
+
+      {product.style !== "transformer" ? (
+        <div className="tp-mt">
+          <p className="tp-opt-label">Transformer circuit</p>
+          <select
+            className="est-select"
+            value={item.circuitId ?? ""}
+            aria-label="Assigned transformer circuit"
+            onChange={(event) =>
               dispatch({
                 type: "UPDATE_ITEM",
                 id: item.id,
-                patch: { beamRotationDeg: 0 },
+                patch: { circuitId: event.target.value || undefined },
               })
             }
           >
-            Reset
-          </button>
+            <option value="">Unassigned</option>
+            {circuits.map((circuit, index) => (
+              <option key={circuit.id} value={circuit.id}>
+                {circuit.circuitLabel ?? `C${index + 1}`}
+              </option>
+            ))}
+          </select>
+          <p className="tp-opt-readout">
+            {circuits.length
+              ? "Assign this fixture to the wire circuit that feeds it."
+              : "Draw a wire circuit before assigning this fixture."}
+          </p>
         </div>
+      ) : null}
+
+      {angle !== null ? (
+        <>
+          <div>
+            <p className="tp-opt-label">Beam angle</p>
+            <div className="tp-chip-row">
+              {BEAM_ANGLE_OPTIONS.map((option) => (
+                <button
+                  key={option.deg}
+                  type="button"
+                  className={`tp-spacing-chip ${Math.round(angle) === option.deg ? "on" : ""}`}
+                  aria-label={`${option.deg} degree beam — ${option.name}`}
+                  aria-pressed={Math.round(angle) === option.deg}
+                  onClick={() =>
+                    dispatch({
+                      type: "UPDATE_ITEM",
+                      id: item.id,
+                      patch: { beamAngleDeg: option.deg },
+                    })
+                  }
+                  title={`${option.name} — ${option.blurb}`}
+                >
+                  {option.deg}&deg;
+                </button>
+              ))}
+            </div>
+            <input
+              className="tp-range"
+              type="range"
+              min={MIN_BEAM_ANGLE_DEG}
+              max={MAX_BEAM_ANGLE_DEG}
+              step={1}
+              value={Math.round(angle)}
+              aria-label="Beam angle in degrees"
+              aria-valuetext={`${Math.round(angle)} degrees — ${beamAngleNameFor(angle)}`}
+              onChange={(event) =>
+                dispatch({
+                  type: "UPDATE_ITEM",
+                  id: item.id,
+                  patch: { beamAngleDeg: clampBeamAngle(Number(event.target.value)) },
+                })
+              }
+            />
+            <p className="tp-opt-readout">
+              {beamAngleNameFor(angle)} · {Math.round(angle)}&deg; — drag the slider, or the gold
+              grip on the photo, to fine-tune.
+            </p>
+          </div>
+          <div className="tp-mt">
+            <p className="tp-opt-label">Aim</p>
+            <input
+              className="tp-range"
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={Math.round(rotation)}
+              aria-label="Beam aim in degrees"
+              aria-valuetext={aimLabel(rotation, natural)}
+              onChange={(event) =>
+                dispatch({
+                  type: "UPDATE_ITEM",
+                  id: item.id,
+                  patch: {
+                    beamRotationDeg: normalizeBeamRotation(Number(event.target.value)),
+                  },
+                })
+              }
+            />
+            <div className="tp-aim-foot">
+              <p className="tp-opt-readout">{aimLabel(rotation, natural)}</p>
+              <button
+                type="button"
+                className="tp-mini-btn"
+                disabled={Math.round(rotation) === 0}
+                onClick={() =>
+                  dispatch({
+                    type: "UPDATE_ITEM",
+                    id: item.id,
+                    patch: { beamRotationDeg: 0 },
+                  })
+                }
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      <div className="tp-mt tp-fixture-item-actions">
+        <button
+          type="button"
+          className="tp-mini-btn"
+          onClick={() =>
+            dispatch({
+              type: "ADD_ITEM",
+              item: {
+                ...item,
+                id: newPlacedItemId(),
+                at: { x: item.at.x + 20, y: item.at.y + 20 },
+              },
+            })
+          }
+        >
+          Duplicate fixture
+        </button>
+        <button
+          type="button"
+          className="tp-mini-btn danger"
+          onClick={() => dispatch({ type: "DELETE_ITEM", id: item.id })}
+        >
+          Delete fixture
+        </button>
       </div>
     </div>
   );
@@ -414,18 +629,23 @@ function aimLabel(rotationDeg: number, natural: "up" | "down"): string {
 function RunOptions({
   run,
   products,
+  design,
   dispatch,
 }: {
   run: Run;
   products: Product[];
+  design: Design;
   dispatch: Dispatch<EditorAction>;
 }) {
   const product = products.find((p) => p.id === run.productId);
   if (!product || product.kind !== "linear") return null;
+  if (product.style === "wire") {
+    return <WireCircuitOptions run={run} products={products} design={design} dispatch={dispatch} />;
+  }
 
-  const options = [
-    ...new Set([...SPACING_OPTIONS[product.style], product.spacingIn]),
-  ].sort((a, b) => a - b);
+  const options = [...new Set([...SPACING_OPTIONS[product.style], product.spacingIn])].sort(
+    (a, b) => a - b,
+  );
   const effSpacing = run.spacingIn ?? product.spacingIn;
   const effColors = run.colors ?? product.colors;
   const effSize = bulbSizeNameFor(run.bulbScale ?? product.bulbScale ?? 1);
@@ -494,5 +714,99 @@ function RunOptions({
         </select>
       </div>
     </>
+  );
+}
+
+function WireCircuitOptions({
+  run,
+  products,
+  design,
+  dispatch,
+}: {
+  run: Run;
+  products: Product[];
+  design: Design;
+  dispatch: Dispatch<EditorAction>;
+}) {
+  const transformers = design.items.filter(
+    (item) => products.find((product) => product.id === item.productId)?.style === "transformer",
+  );
+  const assignedFixtures = design.items.filter((item) => item.circuitId === run.id).length;
+
+  return (
+    <div className="tp-wire-options">
+      <p className="tp-opt-readout">
+        <strong>{run.circuitLabel ?? "Circuit"}</strong> · {assignedFixtures} assigned fixture
+        {assignedFixtures === 1 ? "" : "s"}
+      </p>
+      <label className="tp-field-label">
+        <span>Transformer</span>
+        <select
+          className="est-select"
+          value={run.transformerId ?? ""}
+          onChange={(event) =>
+            dispatch({
+              type: "UPDATE_RUN",
+              id: run.id,
+              patch: { transformerId: event.target.value || undefined },
+            })
+          }
+        >
+          <option value="">Unassigned</option>
+          {transformers.map((transformer, index) => (
+            <option key={transformer.id} value={transformer.id}>
+              Transformer {index + 1}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="tp-field-label">
+        <span>Wire gauge</span>
+        <select
+          className="est-select"
+          value={run.wireGauge ?? 12}
+          onChange={(event) =>
+            dispatch({
+              type: "UPDATE_RUN",
+              id: run.id,
+              patch: { wireGauge: Number(event.target.value) as 8 | 10 | 12 | 14 },
+            })
+          }
+        >
+          {[
+            ...LANDSCAPE_WIRE_GAUGES,
+            ...(run.wireGauge === 8 || run.wireGauge === 14 ? [run.wireGauge] : []),
+          ].map((gauge) => (
+            <option key={gauge} value={gauge}>
+              {landscapeWireLabel(gauge)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="tp-field-label">
+        <span>Transformer tap</span>
+        <select
+          className="est-select"
+          value={run.sourceVoltage ?? 12}
+          onChange={(event) =>
+            dispatch({
+              type: "UPDATE_RUN",
+              id: run.id,
+              patch: { sourceVoltage: Number(event.target.value) },
+            })
+          }
+        >
+          {[12, 13, 14, 15].map((voltage) => (
+            <option key={voltage} value={voltage}>
+              {voltage} V
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="tp-opt-readout">
+        Select fixtures on the plan to assign them to this circuit. Drag the circuit or its points
+        to refine the route.
+      </p>
+    </div>
   );
 }

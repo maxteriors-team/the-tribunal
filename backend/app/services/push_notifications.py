@@ -28,6 +28,9 @@ NOTIFICATION_TYPE_PREFS = {
     "roleplay": "notification_push_roleplay",
     "automation": "notification_push_automations",
     "new_lead": "notification_push_new_lead",
+    # Job assignments use the master notification toggles. There is no fake
+    # preference column: unknown types are intentionally master-gated only.
+    "job_assignment": None,
 }
 
 
@@ -43,6 +46,7 @@ class PushNotificationService:
         data: dict[str, Any] | None = None,
         notification_type: str | None = None,
         channel_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> bool:
         """Send a push notification to all devices of a user.
 
@@ -62,7 +66,7 @@ class PushNotificationService:
         # Check per-type preference
         if notification_type and notification_type in NOTIFICATION_TYPE_PREFS:
             pref_attr = NOTIFICATION_TYPE_PREFS[notification_type]
-            if not getattr(user, pref_attr, True):
+            if pref_attr is not None and not getattr(user, pref_attr, True):
                 return False
 
         # Fetch device tokens
@@ -74,7 +78,9 @@ class PushNotificationService:
         if not tokens:
             return False
 
-        return await self._send_notifications(tokens, title, body, data, channel_id)
+        return await self._send_notifications(
+            tokens, title, body, data, channel_id, idempotency_key=idempotency_key
+        )
 
     async def send_to_workspace_members(
         self,
@@ -113,6 +119,8 @@ class PushNotificationService:
         body: str,
         data: dict[str, Any] | None = None,
         channel_id: str | None = None,
+        *,
+        idempotency_key: str | None = None,
     ) -> bool:
         """Send push notifications to a list of Expo push tokens."""
         messages = []
@@ -125,6 +133,11 @@ class PushNotificationService:
             }
             if data:
                 message["data"] = data
+            if idempotency_key is not None:
+                message["data"] = {
+                    **message.get("data", {}),
+                    "idempotencyKey": idempotency_key,
+                }
             if channel_id:
                 message["channelId"] = channel_id
             messages.append(message)

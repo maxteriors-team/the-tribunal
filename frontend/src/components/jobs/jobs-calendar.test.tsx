@@ -18,18 +18,21 @@ import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
  * that list too, while leaving the week list — and its "This week" count — alone.
  */
 
-const { listMock, listMineMock, useWorkspaceIdMock, capabilitiesMock } = vi.hoisted(() => ({
-  listMock: vi.fn(),
-  listMineMock: vi.fn(),
-  useWorkspaceIdMock: vi.fn(),
-  capabilitiesMock: vi.fn(),
-}));
+const { listMock, listMineMock, getMock, useWorkspaceIdMock, capabilitiesMock } = vi.hoisted(
+  () => ({
+    listMock: vi.fn(),
+    listMineMock: vi.fn(),
+    getMock: vi.fn(),
+    useWorkspaceIdMock: vi.fn(),
+    capabilitiesMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/api/jobs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/jobs")>("@/lib/api/jobs");
   return {
     ...actual,
-    jobsApi: { ...actual.jobsApi, list: listMock, listMine: listMineMock },
+    jobsApi: { ...actual.jobsApi, list: listMock, listMine: listMineMock, get: getMock },
   };
 });
 
@@ -108,11 +111,11 @@ function jobList(items: Job[]): JobList {
   return { items, total: items.length };
 }
 
-function renderBoard() {
+function renderBoard(initialJobId?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <JobsCalendar />
+      <JobsCalendar initialJobId={initialJobId} />
     </QueryClientProvider>,
   );
 }
@@ -122,6 +125,7 @@ describe("JobsCalendar unscheduled queue", () => {
     vi.clearAllMocks();
     useWorkspaceIdMock.mockReturnValue("ws-1");
     signedInAs("owner");
+    getMock.mockResolvedValue(scheduledJob);
     // Mirror the backend: the week-scoped list (has date_from/date_to) never
     // returns null-start jobs; the queue is a separate status=unscheduled fetch.
     listMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
@@ -148,6 +152,21 @@ describe("JobsCalendar unscheduled queue", () => {
         date_to: expect.any(String),
       }),
     );
+  });
+
+  it("opens an authoritative job link outside the visible calendar week", async () => {
+    const linkedJob = makeJob({
+      id: "job-linked",
+      title: "Landscape lighting installation",
+      scheduled_start: "2026-10-15T15:00:00.000Z",
+      scheduled_end: "2026-10-15T17:00:00.000Z",
+    });
+    getMock.mockResolvedValue(linkedJob);
+
+    renderBoard("job-linked");
+
+    expect(await screen.findByText("Detail: Landscape lighting installation")).toBeInTheDocument();
+    expect(getMock).toHaveBeenCalledWith("ws-1", "job-linked");
   });
 
   it("does not inflate the This week count with unscheduled jobs", async () => {

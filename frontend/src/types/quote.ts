@@ -4,12 +4,7 @@ import type { components } from "@/lib/api/_generated";
 
 import type { FinancingEstimate } from "./financing";
 
-export type QuoteStatus =
-  | "draft"
-  | "sent"
-  | "approved"
-  | "declined"
-  | "expired";
+export type QuoteStatus = "draft" | "sent" | "approved" | "declined" | "expired";
 
 export interface QuoteLineItem {
   id: string;
@@ -34,6 +29,7 @@ export interface Quote {
   opportunity_id?: string | null;
   assigned_user_id?: number | null;
   assignee?: AssigneeSummary | null;
+  lighting_project_id?: string | null;
   number: string;
   title?: string | null;
   status: QuoteStatus;
@@ -52,6 +48,8 @@ export interface Quote {
   deposit_amount?: number | null;
   /** Server-computed: a deposit is owed and not yet paid. */
   deposit_required?: boolean;
+  /** Server/provider-reconciled only; staff cannot fabricate this state. */
+  deposit_paid?: boolean;
   issue_date?: string | null;
   expiry_date?: string | null;
   sent_at?: string | null;
@@ -151,10 +149,21 @@ export interface UpdateQuoteRequest {
   terms?: string;
 }
 
+export type CrewNotificationStatus = "sent" | "partial" | "not_applicable" | "failed";
+
+export interface CrewNotificationResult {
+  status: CrewNotificationStatus;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+}
+
 export interface QuoteConvertResult {
   quote: Quote;
   job_id: string | null;
   invoice_id: string | null;
+  idempotent_replay: boolean;
+  crew_notification: CrewNotificationResult;
 }
 
 /**

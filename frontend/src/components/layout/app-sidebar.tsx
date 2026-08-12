@@ -317,6 +317,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     ...POLL_60S,
   });
   const breadcrumbs = buildBreadcrumbs(pathname);
+  const focusedLandscapeProject = /^\/landscape-lighting\/[^/]+$/.test(pathname);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandMounted, setCommandMounted] = useState(false);
   // next-themes cannot know the active theme during SSR, so `resolvedTheme` is
@@ -420,7 +421,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
   }, [workspacePending, tier, pathname, router]);
 
   return (
-    <SidebarProvider data-app-shell>
+    <SidebarProvider key={focusedLandscapeProject ? "studio" : "crm"} defaultOpen={!focusedLandscapeProject} data-app-shell>
       <Sidebar
         collapsible="icon"
         className="border-r border-sidebar-border bg-gradient-to-b from-sidebar via-sidebar to-sidebar"
@@ -484,7 +485,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
       </Sidebar>
 
       <SidebarInset className="h-svh overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <header className={cn("h-14 shrink-0 items-center gap-2 border-b px-4", focusedLandscapeProject ? "hidden" : "flex")}>
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4" />
           {/* Deep routes (e.g. /contacts/123/details) must not wrap the header:

@@ -173,6 +173,38 @@ async def resolve_message_idempotency(
     )
 
 
+async def redis_idempotency_key_exists(
+    key: str,
+    *,
+    log: Any,
+    redis_getter: RedisGetter = get_redis,
+    failure_event: str = "idempotency_redis_unavailable",
+) -> bool:
+    """Return whether ``key`` exists; fail open so delivery can be retried."""
+    try:
+        client = await redis_getter()
+        return bool(await client.exists(key))
+    except Exception as exc:
+        log.warning(failure_event, key=key, error=str(exc))
+        return False
+
+
+async def set_redis_idempotency_key(
+    key: str,
+    *,
+    ttl_seconds: int,
+    log: Any,
+    redis_getter: RedisGetter = get_redis,
+    failure_event: str = "idempotency_redis_unavailable",
+) -> None:
+    """Mark a completed per-recipient delivery, failing open on Redis errors."""
+    try:
+        client = await redis_getter()
+        await client.set(key, "1", ex=ttl_seconds)
+    except Exception as exc:
+        log.warning(failure_event, key=key, error=str(exc))
+
+
 async def claim_redis_idempotency_key(
     key: str,
     *,

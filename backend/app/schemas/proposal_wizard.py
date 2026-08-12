@@ -237,11 +237,17 @@ def _validate_night_preview(value: dict[str, Any] | None) -> dict[str, Any] | No
 
 
 class ProposalWizardPayload(BaseModel):
-    """Everything the wizard submits on save/preview (selection only, no money)."""
+    """Everything the authenticated wizard submits (selection only, no money)."""
 
+    # Dedicated design tools can quote the workspace catalog price exactly, while
+    # the general sales wizard retains its configured gross-up/cash/finance model.
+    pricing_source: Literal["workspace_rules", "price_book"] = "workspace_rules"
     contact_id: int | None = None
     service_location_id: uuid.UUID | None = None
     opportunity_id: uuid.UUID | None = None
+    # Staff-only stable design link. It is deliberately omitted from the stored
+    # proposal document and from every unauthenticated public response schema.
+    lighting_project_id: uuid.UUID | None = None
     client: WizardClient | None = None
     quantities: list[WizardFixtureQty] = Field(default_factory=list)
     additional_charges: list[WizardCharge] = Field(default_factory=list)
@@ -396,6 +402,7 @@ class ProposalDocument(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     version: int = 1
+    pricing_source: Literal["workspace_rules", "price_book"] = "workspace_rules"
     client: WizardClient | None = None
     tier_order: list[str] = Field(default_factory=list)
     tiers: list[ProposalTierView] = Field(default_factory=list)

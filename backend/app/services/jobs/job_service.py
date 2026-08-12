@@ -46,12 +46,19 @@ from app.models.field_service import (
     Technician,
 )
 from app.models.invoice import Invoice, InvoiceLineItem
+from app.models.lighting_project import LightingProject
+from app.models.quote import Quote
+from app.models.user import User
+from app.models.workspace import WorkspaceMembership
 from app.schemas.job import (
+    InstallationPlanFixture,
     JobCustomerSummary,
+    JobInstallationPlanResponse,
     JobLineItemSummary,
     JobResponse,
     TechnicianSummary,
 )
+from app.schemas.lighting_project import LandscapeDraftDocument
 from app.services.automations.events import (
     EVENT_JOB_COMPLETED,
     EVENT_JOB_SCHEDULED,
@@ -80,6 +87,127 @@ class JobService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def assignment_recipient_user_ids(
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID
+    ) -> tuple[int, ...]:
+        """Deduplicated active users assigned directly or through the routed crew."""
+        job = await self.db.scalar(
+            select(Job)
+            .where(Job.id == job_id, Job.workspace_id == workspace_id)
+            .options(
+                selectinload(Job.technicians),
+                selectinload(Job.crew).selectinload(Crew.technicians),
+            )
+        )
+        if job is None:
+            return ()
+        direct = {tech.user_id for tech in job.technicians if tech.is_active and tech.user_id}
+        crew = {
+            tech.user_id
+            for tech in (job.crew.technicians if job.crew is not None else ())
+            if tech.is_active and tech.user_id
+        }
+        candidate_ids = direct | crew
+        if not candidate_ids:
+            return ()
+        active_ids = (
+            (
+                await self.db.execute(
+                    select(User.id).where(User.id.in_(candidate_ids), User.is_active.is_(True))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return tuple(sorted(active_ids))
+
+    async def get_installation_plan(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        membership: WorkspaceMembership,
+        user_id: int,
+    ) -> JobInstallationPlanResponse:
+        """Return one redacted sheet only when office policy or assignment allows."""
+        office_roles = {"owner", "admin", "manager", "dispatcher"}
+        assignment_predicate = or_(
+            Job.technicians.any(Technician.user_id == user_id),
+            Job.crew.has(Crew.technicians.any(Technician.user_id == user_id)),
+        )
+        statement = (
+            select(Job)
+            .where(Job.id == job_id, Job.workspace_id == workspace_id)
+            .options(selectinload(Job.lighting_project))
+        )
+        if membership.role not in office_roles:
+            # Sales, finance/member, and unassigned field users all collapse to the
+            # same 404 path so job/project existence is not disclosed.
+            statement = statement.where(assignment_predicate)
+        job = await self.db.scalar(statement)
+        if job is None or job.lighting_project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+        project = job.lighting_project
+        if project.status != "active" or project.contact_id != job.contact_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
+            )
+        if project.installation_shot_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
+            )
+        try:
+            document = LandscapeDraftDocument.model_validate(project.document)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
+            ) from error
+        shot = next(
+            (entry for entry in document.shots if entry.id == project.installation_shot_id),
+            None,
+        )
+        if shot is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
+            )
+
+        fixture_schedule = [
+            InstallationPlanFixture(
+                number=number,
+                item_id=item.id,
+                product_id=item.product_id,
+                catalog_item_id=item.catalog_item_id,
+                catalog_sku=item.catalog_sku,
+                lamp_catalog_item_id=item.lamp_catalog_item_id,
+                accessory_catalog_item_ids=item.accessory_catalog_item_ids or [],
+                circuit_id=item.circuit_id,
+                transformer_zone_id=item.transformer_zone_id,
+            )
+            for number, item in enumerate(shot.design.items, start=1)
+        ]
+        sheet = shot.sheet
+        return JobInstallationPlanResponse(
+            job_id=job.id,
+            project_id=project.id,
+            project_name=project.name,
+            project_version=project.version,
+            project_updated_at=project.updated_at,
+            selected_shot_id=shot.id,
+            sheet_label=sheet.label if sheet else None,
+            drawing_title=sheet.drawing_title if sheet else None,
+            drawing_number=sheet.drawing_number if sheet else None,
+            sheet=sheet,
+            photo=shot.photo,
+            design=shot.design,
+            dusk=shot.dusk,
+            settings=document.settings,
+            fixture_schedule=fixture_schedule,
+            # Procurement and checklist answers remain internal; only the field
+            # brief text required by installers crosses this boundary.
+            precon_field_brief=document.precon.notes,
+        )
 
     # ------------------------------------------------------------------ #
     # Reference validation (tenant-safe)
@@ -153,6 +281,20 @@ class JobService:
         invoice_id = data.get("invoice_id")
         if invoice_id is not None:
             await self._assert_invoice(invoice_id, workspace_id)
+        source_quote_id = data.get("source_quote_id")
+        if source_quote_id is not None:
+            await assert_workspace_owned(
+                self.db, Quote, source_quote_id, workspace_id, detail="Quote not found"
+            )
+        lighting_project_id = data.get("lighting_project_id")
+        if lighting_project_id is not None:
+            await assert_workspace_owned(
+                self.db,
+                LightingProject,
+                lighting_project_id,
+                workspace_id,
+                detail="Lighting project not found",
+            )
 
     # ------------------------------------------------------------------ #
     # Response building

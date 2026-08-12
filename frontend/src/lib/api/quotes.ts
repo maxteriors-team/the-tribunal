@@ -21,11 +21,7 @@ export interface QuotesListParams {
 }
 
 // Base CRUD from the factory (list/get/create/update/delete).
-const baseQuotesApi = createApiClient<
-  Quote,
-  CreateQuoteRequest,
-  UpdateQuoteRequest
->({
+const baseQuotesApi = createApiClient<Quote, CreateQuoteRequest, UpdateQuoteRequest>({
   resourcePath: "quotes",
 });
 
@@ -72,21 +68,17 @@ export const quotesApi = {
     channel: QuoteDeliverChannel,
     to?: string | null,
   ): Promise<QuoteDeliverResult> => {
-    return apiPost<QuoteDeliverResult>(
-      `${quotePath(workspaceId, quoteId)}/deliver`,
-      { channel, to: to ?? null },
-    );
+    return apiPost<QuoteDeliverResult>(`${quotePath(workspaceId, quoteId)}/deliver`, {
+      channel,
+      to: to ?? null,
+    });
   },
 
   approve: async (workspaceId: string, quoteId: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/approve`);
   },
 
-  decline: async (
-    workspaceId: string,
-    quoteId: string,
-    reason?: string
-  ): Promise<Quote> => {
+  decline: async (workspaceId: string, quoteId: string, reason?: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/decline`, {
       reason,
     });
@@ -101,19 +93,20 @@ export const quotesApi = {
       // ISO datetimes; supply both to schedule the created job on the calendar.
       scheduled_start?: string | null;
       scheduled_end?: string | null;
+      crew_id?: string | null;
       technician_ids?: string[];
-    }
+      confirm_unpaid_deposit?: boolean;
+    },
   ): Promise<QuoteConvertResult> => {
-    return apiPost<QuoteConvertResult>(
-      `${quotePath(workspaceId, quoteId)}/convert`,
-      {
-        create_job: options?.create_job ?? true,
-        create_invoice: options?.create_invoice ?? true,
-        scheduled_start: options?.scheduled_start ?? null,
-        scheduled_end: options?.scheduled_end ?? null,
-        technician_ids: options?.technician_ids ?? [],
-      }
-    );
+    return apiPost<QuoteConvertResult>(`${quotePath(workspaceId, quoteId)}/convert`, {
+      create_job: options?.create_job ?? true,
+      create_invoice: options?.create_invoice ?? true,
+      scheduled_start: options?.scheduled_start ?? null,
+      scheduled_end: options?.scheduled_end ?? null,
+      crew_id: options?.crew_id ?? null,
+      technician_ids: options?.technician_ids ?? [],
+      confirm_unpaid_deposit: options?.confirm_unpaid_deposit ?? false,
+    });
   },
 
   /**
@@ -132,7 +125,7 @@ export const quotesApi = {
   addService: async (
     workspaceId: string,
     quoteId: string,
-    data: QuoteServiceInput
+    data: QuoteServiceInput,
   ): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/services`, data);
   },
@@ -140,18 +133,16 @@ export const quotesApi = {
   removeService: async (
     workspaceId: string,
     quoteId: string,
-    serviceId: string
+    serviceId: string,
   ): Promise<Quote> => {
-    return apiDelete<Quote>(
-      `${quotePath(workspaceId, quoteId)}/services/${serviceId}`
-    );
+    return apiDelete<Quote>(`${quotePath(workspaceId, quoteId)}/services/${serviceId}`);
   },
 
   // Line-item sub-resource (mutations return the full quote with recomputed totals)
   addLineItem: async (
     workspaceId: string,
     quoteId: string,
-    data: QuoteLineItemInput
+    data: QuoteLineItemInput,
   ): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/line-items`, data);
   },
@@ -160,21 +151,12 @@ export const quotesApi = {
     workspaceId: string,
     quoteId: string,
     itemId: string,
-    data: Partial<QuoteLineItemInput>
+    data: Partial<QuoteLineItemInput>,
   ): Promise<Quote> => {
-    return apiPut<Quote>(
-      `${quotePath(workspaceId, quoteId)}/line-items/${itemId}`,
-      data
-    );
+    return apiPut<Quote>(`${quotePath(workspaceId, quoteId)}/line-items/${itemId}`, data);
   },
 
-  removeLineItem: async (
-    workspaceId: string,
-    quoteId: string,
-    itemId: string
-  ): Promise<Quote> => {
-    return apiDelete<Quote>(
-      `${quotePath(workspaceId, quoteId)}/line-items/${itemId}`
-    );
+  removeLineItem: async (workspaceId: string, quoteId: string, itemId: string): Promise<Quote> => {
+    return apiDelete<Quote>(`${quotePath(workspaceId, quoteId)}/line-items/${itemId}`);
   },
 };

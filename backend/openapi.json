@@ -3267,6 +3267,96 @@
         "title": "AgentUpdate",
         "type": "object"
       },
+      "AnnotationSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PointSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "imageDataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imagedataurl"
+          },
+          "rotationDeg": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": -3600.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotationdeg"
+          },
+          "sizePx": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sizepx"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "enum": [
+              "note",
+              "line",
+              "tree",
+              "photo",
+              "revision"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "at"
+        ],
+        "title": "AnnotationSchema",
+        "type": "object"
+      },
       "AppointmentAgentStat": {
         "description": "Per-agent appointment statistics.",
         "properties": {
@@ -3853,6 +3943,41 @@
           "arm_status"
         ],
         "title": "ArmStatusUpdate",
+        "type": "object"
+      },
+      "ArrowSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "id",
+          "a",
+          "b"
+        ],
+        "title": "ArrowSchema",
         "type": "object"
       },
       "AssignLeadSourceRequest": {
@@ -7210,6 +7335,30 @@
           "label"
         ],
         "title": "CalculatorSelectOption",
+        "type": "object"
+      },
+      "CalibrationSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "feet": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Feet",
+            "type": "number"
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "feet"
+        ],
+        "title": "CalibrationSchema",
         "type": "object"
       },
       "CallCreate": {
@@ -13740,6 +13889,42 @@
         "title": "CrewListResponse",
         "type": "object"
       },
+      "CrewNotificationResult": {
+        "description": "Post-commit assignment delivery; never payment/job transaction state.",
+        "properties": {
+          "failed_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "recipient_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Recipient Count",
+            "type": "integer"
+          },
+          "sent_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Sent Count",
+            "type": "integer"
+          },
+          "status": {
+            "default": "not_applicable",
+            "enum": [
+              "sent",
+              "partial",
+              "not_applicable",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "CrewNotificationResult",
+        "type": "object"
+      },
       "CrewResponse": {
         "description": "Crew response.",
         "properties": {
@@ -14418,6 +14603,79 @@
         "title": "DepositConfig",
         "type": "object"
       },
+      "DesignSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationSchema"
+            },
+            "maxItems": 2000,
+            "title": "Annotations",
+            "type": "array"
+          },
+          "arrows": {
+            "items": {
+              "$ref": "#/components/schemas/ArrowSchema"
+            },
+            "maxItems": 2000,
+            "title": "Arrows",
+            "type": "array"
+          },
+          "calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalibrationSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/HighlightSchema"
+            },
+            "maxItems": 1000,
+            "title": "Highlights",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlacedItemSchema"
+            },
+            "maxItems": 5000,
+            "title": "Items",
+            "type": "array"
+          },
+          "measurements": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementSchema"
+            },
+            "maxItems": 2000,
+            "title": "Measurements",
+            "type": "array"
+          },
+          "planImages": {
+            "items": {
+              "$ref": "#/components/schemas/PlanImageSchema"
+            },
+            "maxItems": 12,
+            "title": "Planimages",
+            "type": "array"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunSchema"
+            },
+            "maxItems": 5000,
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "title": "DesignSchema",
+        "type": "object"
+      },
       "DiscountType": {
         "description": "Discount type options.",
         "enum": [
@@ -14456,6 +14714,67 @@
         ],
         "title": "DiscoverySourceType",
         "type": "string"
+      },
+      "DocumentSettingsSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "fixtureNumbersVisible": {
+            "default": true,
+            "title": "Fixturenumbersvisible",
+            "type": "boolean"
+          },
+          "halosVisible": {
+            "default": true,
+            "title": "Halosvisible",
+            "type": "boolean"
+          },
+          "legend": {
+            "$ref": "#/components/schemas/LegendSettingsSchema"
+          },
+          "measurementsVisible": {
+            "default": true,
+            "title": "Measurementsvisible",
+            "type": "boolean"
+          },
+          "paperSize": {
+            "default": "tabloid",
+            "enum": [
+              "tabloid",
+              "super-b",
+              "letter",
+              "arch-c",
+              "arch-d",
+              "ansi-d"
+            ],
+            "title": "Papersize",
+            "type": "string"
+          },
+          "planFit": {
+            "default": "contain",
+            "enum": [
+              "contain",
+              "cover"
+            ],
+            "title": "Planfit",
+            "type": "string"
+          },
+          "planOpacity": {
+            "default": 1,
+            "maximum": 1.0,
+            "minimum": 0.1,
+            "title": "Planopacity",
+            "type": "number"
+          },
+          "sourceVoltage": {
+            "default": 13,
+            "maximum": 24.0,
+            "minimum": 10.0,
+            "title": "Sourcevoltage",
+            "type": "number"
+          }
+        },
+        "title": "DocumentSettingsSchema",
+        "type": "object"
       },
       "DraftActionRequest": {
         "additionalProperties": false,
@@ -16795,6 +17114,44 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HighlightSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "title": "Color",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PointSchema"
+            },
+            "maxItems": 5000,
+            "minItems": 2,
+            "title": "Points",
+            "type": "array"
+          },
+          "widthPx": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 500.0,
+            "title": "Widthpx",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "points",
+          "color",
+          "widthPx"
+        ],
+        "title": "HighlightSchema",
+        "type": "object"
+      },
       "HumanProfileCreate": {
         "description": "Schema for creating a human profile.",
         "properties": {
@@ -17604,6 +17961,100 @@
           "created_at"
         ],
         "title": "ImprovementSuggestionResponse",
+        "type": "object"
+      },
+      "InstallationPlanFixture": {
+        "description": "Price-free fixture schedule row for the selected installation sheet.",
+        "properties": {
+          "accessory_catalog_item_ids": {
+            "items": {
+              "maxLength": 250,
+              "type": "string"
+            },
+            "title": "Accessory Catalog Item Ids",
+            "type": "array"
+          },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Item Id"
+          },
+          "catalog_sku": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Sku"
+          },
+          "circuit_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit Id"
+          },
+          "item_id": {
+            "maxLength": 250,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "lamp_catalog_item_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lamp Catalog Item Id"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "product_id": {
+            "maxLength": 250,
+            "title": "Product Id",
+            "type": "string"
+          },
+          "transformer_zone_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transformer Zone Id"
+          }
+        },
+        "required": [
+          "number",
+          "item_id",
+          "product_id"
+        ],
+        "title": "InstallationPlanFixture",
         "type": "object"
       },
       "IntegrationCreate": {
@@ -20317,6 +20768,125 @@
         "title": "JobExpenseResponse",
         "type": "object"
       },
+      "JobInstallationPlanResponse": {
+        "description": "Assignment-scoped, read-only projection of one selected installation sheet.",
+        "properties": {
+          "design": {
+            "$ref": "#/components/schemas/DesignSchema"
+          },
+          "drawing_number": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Number"
+          },
+          "drawing_title": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawing Title"
+          },
+          "dusk": {
+            "title": "Dusk",
+            "type": "number"
+          },
+          "fixture_schedule": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationPlanFixture"
+            },
+            "title": "Fixture Schedule",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "photo": {
+            "$ref": "#/components/schemas/PhotoSchema"
+          },
+          "precon_field_brief": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Precon Field Brief",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "project_updated_at": {
+            "format": "date-time",
+            "title": "Project Updated At",
+            "type": "string"
+          },
+          "project_version": {
+            "title": "Project Version",
+            "type": "integer"
+          },
+          "selected_shot_id": {
+            "maxLength": 250,
+            "title": "Selected Shot Id",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/DocumentSettingsSchema"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SheetMetadataSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sheet_label": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Label"
+          }
+        },
+        "required": [
+          "job_id",
+          "project_id",
+          "project_name",
+          "project_version",
+          "project_updated_at",
+          "selected_shot_id",
+          "photo",
+          "design",
+          "dusk",
+          "settings"
+        ],
+        "title": "JobInstallationPlanResponse",
+        "type": "object"
+      },
       "JobLineItemSummary": {
         "description": "One unit of scope of work — deliberately price-free.\n\nProjected from the linked invoice's line items. A separate schema from\n:class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one\ncarries ``unit_price``, ``discount``, and ``total``, and a field technician\nmust never receive money on a job payload. Write-capable tiers still get the\npriced view from the invoice/quote endpoints; this projection only governs\nwhat rides on the job.\n\nAdding a money field here leaks it to every technician — don't.",
         "properties": {
@@ -20714,6 +21284,18 @@
             ],
             "title": "Invoice Id"
           },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
+          },
           "line_items": {
             "items": {
               "$ref": "#/components/schemas/JobLineItemSummary"
@@ -20766,6 +21348,18 @@
               }
             ],
             "title": "Service Location Id"
+          },
+          "source_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Quote Id"
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
@@ -21369,6 +21963,122 @@
           }
         },
         "title": "LandscapeConfig",
+        "type": "object"
+      },
+      "LandscapeDraftDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "activeShotId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activeshotid"
+          },
+          "activeWorkflowTab": {
+            "anyOf": [
+              {
+                "enum": [
+                  "drawing",
+                  "schedule",
+                  "bom",
+                  "electrical",
+                  "proposal",
+                  "precon"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activeworkflowtab"
+          },
+          "precon": {
+            "$ref": "#/components/schemas/PreconStateSchema"
+          },
+          "procurement": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProcurementStateSchema"
+            },
+            "propertyNames": {
+              "maxLength": 250
+            },
+            "title": "Procurement",
+            "type": "object"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/ProposalDraftSchema"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/DocumentSettingsSchema"
+          },
+          "shots": {
+            "items": {
+              "$ref": "#/components/schemas/LandscapeShotSchema"
+            },
+            "maxItems": 6,
+            "title": "Shots",
+            "type": "array"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "version": {
+            "const": 2,
+            "default": 2,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "LandscapeDraftDocument",
+        "type": "object"
+      },
+      "LandscapeShotSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "design": {
+            "$ref": "#/components/schemas/DesignSchema"
+          },
+          "dusk": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Dusk",
+            "type": "number"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "photo": {
+            "$ref": "#/components/schemas/PhotoSchema"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SheetMetadataSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "photo",
+          "design",
+          "dusk"
+        ],
+        "title": "LandscapeShotSchema",
         "type": "object"
       },
       "LaunchCampaignResponse": {
@@ -23293,6 +24003,359 @@
         "title": "LeadSourceWinnerSummary",
         "type": "object"
       },
+      "LegendSettingsSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "scale": {
+            "default": 1,
+            "maximum": 2.0,
+            "minimum": 0.5,
+            "title": "Scale",
+            "type": "number"
+          },
+          "visible": {
+            "default": true,
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "title": "LegendSettingsSchema",
+        "type": "object"
+      },
+      "LightingProjectCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandscapeDraftDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installation_shot_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Shot Id"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "service_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Location Id"
+          }
+        },
+        "required": [
+          "contact_id",
+          "name"
+        ],
+        "title": "LightingProjectCreate",
+        "type": "object"
+      },
+      "LightingProjectDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "contact_name": {
+            "title": "Contact Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id"
+          },
+          "document": {
+            "$ref": "#/components/schemas/LandscapeDraftDocument"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "installation_shot_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Shot Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "service_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Location Id"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Id"
+          },
+          "updater_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updater Name"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "contact_id",
+          "contact_name",
+          "service_location_id",
+          "opportunity_id",
+          "assigned_user_id",
+          "name",
+          "status",
+          "version",
+          "installation_shot_id",
+          "updated_by_id",
+          "updater_name",
+          "created_at",
+          "updated_at",
+          "document",
+          "created_by_id"
+        ],
+        "title": "LightingProjectDetail",
+        "type": "object"
+      },
+      "LightingProjectUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "assigned_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned User Id"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LandscapeDraftDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "installation_shot_id": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Shot Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "opportunity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Id"
+          },
+          "service_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Location Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "LightingProjectUpdate",
+        "type": "object"
+      },
       "LinearFeetEstimateRequest": {
         "description": "A rep's measured roofline plus optional per-service knobs.\n\n``feet`` is the measured linear footage; the optional flags let the rep model\na fuller quote (permanent zones, seasonal takedown/storage) without leaving\nthe estimator.\n\n``per_ft_override`` and ``christmas_per_ft_override`` are **internal-only**\nadjustments to the permanent and seasonal linear-foot rates for *this*\nestimate. They let a rep tune the $/ft for one job without editing the\nworkspace's customer-facing pricing config, and are never serialized to the\nclient comparison (the public schema has no per-foot field). ``None`` on\neither means \"use the standard configured rate\" for that side.",
         "properties": {
@@ -23952,6 +25015,52 @@
           "phone_number"
         ],
         "title": "ManualContactCreate",
+        "type": "object"
+      },
+      "MeasurementSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "a": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "b": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible"
+          }
+        },
+        "required": [
+          "id",
+          "a",
+          "b"
+        ],
+        "title": "MeasurementSchema",
         "type": "object"
       },
       "MemberResponse": {
@@ -30614,6 +31723,43 @@
         "title": "PaginatedLeadProspects",
         "type": "object"
       },
+      "PaginatedLightingProjects": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LightingProjectDetail"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "PaginatedLightingProjects",
+        "type": "object"
+      },
       "PaginatedMessageTemplates": {
         "description": "Paginated message templates response.",
         "properties": {
@@ -31035,6 +32181,34 @@
           "username"
         ],
         "title": "ParseCalcomUrlResponse",
+        "type": "object"
+      },
+      "PaymentMilestoneSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 250,
+            "title": "Label",
+            "type": "string"
+          },
+          "percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "percent"
+        ],
+        "title": "PaymentMilestoneSchema",
         "type": "object"
       },
       "PendingActionListResponse": {
@@ -32286,6 +33460,34 @@
         "title": "PhoneNumberUpdate",
         "type": "object"
       },
+      "PhotoSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "dataUrl": {
+            "title": "Dataurl",
+            "type": "string"
+          },
+          "height": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataUrl",
+          "width",
+          "height"
+        ],
+        "title": "PhotoSchema",
+        "type": "object"
+      },
       "PipelineCreate": {
         "description": "Create pipeline schema.",
         "properties": {
@@ -32583,6 +33785,215 @@
           }
         },
         "title": "PipelineUpdate",
+        "type": "object"
+      },
+      "PlacedItemSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "accessoryCatalogItemIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 160,
+                  "type": "string"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessorycatalogitemids"
+          },
+          "at": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "beamAngleDeg": {
+            "anyOf": [
+              {
+                "maximum": 179.0,
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beamangledeg"
+          },
+          "beamRotationDeg": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": -3600.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beamrotationdeg"
+          },
+          "catalogItemId": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogitemid"
+          },
+          "catalogSku": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogsku"
+          },
+          "circuitId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuitid"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "lampCatalogItemId": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lampcatalogitemid"
+          },
+          "markerColor": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Markercolor"
+          },
+          "productId": {
+            "maxLength": 250,
+            "title": "Productid",
+            "type": "string"
+          },
+          "sizePx": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Sizepx",
+            "type": "number"
+          },
+          "transformerZoneId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transformerzoneid"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "at",
+          "sizePx"
+        ],
+        "title": "PlacedItemSchema",
+        "type": "object"
+      },
+      "PlanImageSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "$ref": "#/components/schemas/PointSchema"
+          },
+          "dataUrl": {
+            "title": "Dataurl",
+            "type": "string"
+          },
+          "heightPx": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Heightpx",
+            "type": "number"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 250,
+            "title": "Name",
+            "type": "string"
+          },
+          "widthPx": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Widthpx",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "dataUrl",
+          "name",
+          "at",
+          "widthPx",
+          "heightPx"
+        ],
+        "title": "PlanImageSchema",
+        "type": "object"
+      },
+      "PointSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "PointSchema",
         "type": "object"
       },
       "PortalResponse": {
@@ -33349,6 +34760,70 @@
         "title": "PreBookingReserveResponse",
         "type": "object"
       },
+      "PreconResponseSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Comment",
+            "type": "string"
+          },
+          "itemId": {
+            "maxLength": 250,
+            "title": "Itemid",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "no",
+                  "na"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "itemId"
+        ],
+        "title": "PreconResponseSchema",
+        "type": "object"
+      },
+      "PreconStateSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "leadInstaller": {
+            "default": "",
+            "maxLength": 250,
+            "title": "Leadinstaller",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "responses": {
+            "items": {
+              "$ref": "#/components/schemas/PreconResponseSchema"
+            },
+            "maxItems": 26,
+            "title": "Responses",
+            "type": "array"
+          }
+        },
+        "title": "PreconStateSchema",
+        "type": "object"
+      },
       "PricingSettings": {
         "description": "The full sales-pricing config for a workspace (read view, lenient).\n\nMirrors the uploaded wizard's ``CONFIG`` minus the fixture catalog. Sensible\nlighting defaults so a brand-new workspace prices before customization; the\nseed script overwrites tiers/care-plan/savings/bistro with real data.",
         "properties": {
@@ -33636,6 +35111,57 @@
           }
         },
         "title": "PricingSettingsUpdate",
+        "type": "object"
+      },
+      "ProcurementStateSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogItemId": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogitemid"
+          },
+          "catalogSku": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogsku"
+          },
+          "orderedQuantity": {
+            "default": 0,
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Orderedquantity",
+            "type": "number"
+          },
+          "receivedQuantity": {
+            "default": 0,
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Receivedquantity",
+            "type": "number"
+          },
+          "supplierNote": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Suppliernote",
+            "type": "string"
+          }
+        },
+        "title": "ProcurementStateSchema",
         "type": "object"
       },
       "PromptVersionActivateResponse": {
@@ -34502,6 +36028,15 @@
             ],
             "title": "Notes"
           },
+          "pricing_source": {
+            "default": "workspace_rules",
+            "enum": [
+              "workspace_rules",
+              "price_book"
+            ],
+            "title": "Pricing Source",
+            "type": "string"
+          },
           "selected_cash_total": {
             "default": 0,
             "title": "Selected Cash Total",
@@ -34571,6 +36106,156 @@
           }
         },
         "title": "ProposalDocument",
+        "type": "object"
+      },
+      "ProposalDraftSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "commitments": {
+            "items": {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Commitments",
+            "type": "array"
+          },
+          "designIntent": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Designintent",
+            "type": "string"
+          },
+          "electricalResponsibility": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Electricalresponsibility",
+            "type": "string"
+          },
+          "enhancements": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalEnhancementSchema"
+            },
+            "maxItems": 100,
+            "title": "Enhancements",
+            "type": "array"
+          },
+          "paymentMilestones": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentMilestoneSchema"
+            },
+            "maxItems": 20,
+            "title": "Paymentmilestones",
+            "type": "array"
+          },
+          "selectedCarePlanKey": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selectedcareplankey"
+          },
+          "selectedTierKey": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selectedtierkey"
+          },
+          "showCombinedTotal": {
+            "default": true,
+            "title": "Showcombinedtotal",
+            "type": "boolean"
+          },
+          "showFixtureDetails": {
+            "default": true,
+            "title": "Showfixturedetails",
+            "type": "boolean"
+          },
+          "signatureDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signaturedate"
+          },
+          "signatureName": {
+            "default": "",
+            "maxLength": 250,
+            "title": "Signaturename",
+            "type": "string"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalZoneSchema"
+            },
+            "maxItems": 100,
+            "title": "Zones",
+            "type": "array"
+          }
+        },
+        "title": "ProposalDraftSchema",
+        "type": "object"
+      },
+      "ProposalEnhancementSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogItemId": {
+            "maxLength": 160,
+            "title": "Catalogitemid",
+            "type": "string"
+          },
+          "catalogSku": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogsku"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Quantity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "catalogItemId",
+          "quantity"
+        ],
+        "title": "ProposalEnhancementSchema",
         "type": "object"
       },
       "ProposalFinancing": {
@@ -35047,7 +36732,7 @@
         "type": "object"
       },
       "ProposalWizardPayload": {
-        "description": "Everything the wizard submits on save/preview (selection only, no money).",
+        "description": "Everything the authenticated wizard submits (selection only, no money).",
         "properties": {
           "additional_charges": {
             "items": {
@@ -35147,6 +36832,18 @@
               }
             ]
           },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
+          },
           "mockups": {
             "items": {
               "$ref": "#/components/schemas/ProposalMockup"
@@ -35199,6 +36896,15 @@
                 "type": "null"
               }
             ]
+          },
+          "pricing_source": {
+            "default": "workspace_rules",
+            "enum": [
+              "workspace_rules",
+              "price_book"
+            ],
+            "title": "Pricing Source",
+            "type": "string"
           },
           "quantities": {
             "items": {
@@ -35255,6 +36961,42 @@
           }
         },
         "title": "ProposalWizardPayload",
+        "type": "object"
+      },
+      "ProposalZoneSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 250,
+            "title": "Name",
+            "type": "string"
+          },
+          "shotIds": {
+            "items": {
+              "maxLength": 250,
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Shotids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ProposalZoneSchema",
         "type": "object"
       },
       "ProspectIdentityKind": {
@@ -37528,8 +39270,13 @@
         "type": "object"
       },
       "QuoteConvertRequest": {
-        "description": "Choose what an approved quote converts into. Defaults to both.\n\nAn optional ``scheduled_start``/``scheduled_end`` window schedules the created\njob on the calendar in one step; omit both to land the job unscheduled.",
+        "description": "Choose what an approved quote converts into. Defaults to both.\n\nExplicit unpaid confirmation never changes provider-derived payment truth.",
         "properties": {
+          "confirm_unpaid_deposit": {
+            "default": false,
+            "title": "Confirm Unpaid Deposit",
+            "type": "boolean"
+          },
           "create_invoice": {
             "default": true,
             "title": "Create Invoice",
@@ -37539,6 +39286,18 @@
             "default": true,
             "title": "Create Job",
             "type": "boolean"
+          },
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crew Id"
           },
           "scheduled_end": {
             "anyOf": [
@@ -37577,8 +39336,16 @@
         "type": "object"
       },
       "QuoteConvertResponse": {
-        "description": "Result of converting an approved quote into a job and/or an invoice.",
+        "description": "Authoritative conversion links plus best-effort crew delivery.",
         "properties": {
+          "crew_notification": {
+            "$ref": "#/components/schemas/CrewNotificationResult"
+          },
+          "idempotent_replay": {
+            "default": false,
+            "title": "Idempotent Replay",
+            "type": "boolean"
+          },
           "invoice_id": {
             "anyOf": [
               {
@@ -38003,6 +39770,12 @@
             ],
             "title": "Deposit Amount Fixed"
           },
+          "deposit_paid": {
+            "description": "Provider-reconciled deposit truth for authenticated staff views.",
+            "readOnly": true,
+            "title": "Deposit Paid",
+            "type": "boolean"
+          },
           "deposit_paid_at": {
             "anyOf": [
               {
@@ -38098,6 +39871,18 @@
               }
             ],
             "title": "Last Viewed At"
+          },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
           },
           "line_items": {
             "items": {
@@ -38272,7 +40057,8 @@
           "created_at",
           "updated_at",
           "deposit_amount",
-          "deposit_required"
+          "deposit_required",
+          "deposit_paid"
         ],
         "title": "QuoteDetailResponse",
         "type": "object"
@@ -38814,6 +40600,12 @@
             ],
             "title": "Deposit Amount Fixed"
           },
+          "deposit_paid": {
+            "description": "Provider-reconciled deposit truth for authenticated staff views.",
+            "readOnly": true,
+            "title": "Deposit Paid",
+            "type": "boolean"
+          },
           "deposit_paid_at": {
             "anyOf": [
               {
@@ -38909,6 +40701,18 @@
               }
             ],
             "title": "Last Viewed At"
+          },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
           },
           "notes": {
             "anyOf": [
@@ -39057,7 +40861,8 @@
           "created_at",
           "updated_at",
           "deposit_amount",
-          "deposit_required"
+          "deposit_required",
+          "deposit_paid"
         ],
         "title": "QuoteResponse",
         "type": "object"
@@ -43173,6 +44978,44 @@
         "title": "ReviewsStats",
         "type": "object"
       },
+      "RevisionRowSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "default": "",
+            "maxLength": 250,
+            "title": "Author",
+            "type": "string"
+          },
+          "date": {
+            "default": "",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "default": "",
+            "maxLength": 250,
+            "title": "Number",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "RevisionRowSchema",
+        "type": "object"
+      },
       "RoleplayStats": {
         "description": "Roleplay / practice-arena activity metrics for the dashboard.",
         "properties": {
@@ -43219,6 +45062,144 @@
           "last_run_at"
         ],
         "title": "RoleplayStats",
+        "type": "object"
+      },
+      "RunSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bulbScale": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulbscale"
+          },
+          "circuitLabel": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuitlabel"
+          },
+          "colors": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 250,
+                  "type": "string"
+                },
+                "maxItems": 24,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colors"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PointSchema"
+            },
+            "maxItems": 5000,
+            "title": "Points",
+            "type": "array"
+          },
+          "productId": {
+            "maxLength": 250,
+            "title": "Productid",
+            "type": "string"
+          },
+          "sourceVoltage": {
+            "anyOf": [
+              {
+                "maximum": 24.0,
+                "minimum": 10.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcevoltage"
+          },
+          "spacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1200.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacingin"
+          },
+          "transformerId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transformerid"
+          },
+          "transformerZoneId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transformerzoneid"
+          },
+          "wireGauge": {
+            "anyOf": [
+              {
+                "enum": [
+                  8,
+                  10,
+                  12,
+                  14
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wiregauge"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "points"
+        ],
+        "title": "RunSchema",
         "type": "object"
       },
       "SalesPerformanceBreakdownRow": {
@@ -44620,6 +46601,69 @@
         ],
         "title": "ServicePlanType",
         "type": "string"
+      },
+      "SheetMetadataSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "drawingNumber": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawingnumber"
+          },
+          "drawingTitle": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawingtitle"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "proposalZoneId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposalzoneid"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/RevisionRowSchema"
+            },
+            "maxItems": 100,
+            "title": "Revisions",
+            "type": "array"
+          }
+        },
+        "title": "SheetMetadataSchema",
+        "type": "object"
       },
       "SizeRate": {
         "description": "A size/variant option (e.g. a tree size) with its own net install price.",
@@ -70003,6 +72047,65 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan": {
+      "get": {
+        "description": "Private selected sheet for authorized office staff or assigned installers.",
+        "operationId": "get_job_installation_plan_api_v1_workspaces__workspace_id__jobs__job_id__installation_plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInstallationPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Job Installation Plan",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials": {
       "get": {
         "description": "Materials consumed on a job (costs redacted below billing:read).",
@@ -72188,6 +74291,349 @@
         "summary": "List Lead Source Campaigns",
         "tags": [
           "Lead Sources"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lighting-projects": {
+      "get": {
+        "description": "List projects with CRM and archive filters.",
+        "operationId": "list_lighting_projects_api_v1_workspaces__workspace_id__lighting_projects_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "contact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contact Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "opportunity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opportunity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assigned_user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assigned User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedLightingProjects"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Lighting Projects",
+        "tags": [
+          "Lighting Projects"
+        ]
+      },
+      "post": {
+        "description": "Create a contact-linked lighting project.",
+        "operationId": "create_lighting_project_api_v1_workspaces__workspace_id__lighting_projects_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LightingProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightingProjectDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Lighting Project",
+        "tags": [
+          "Lighting Projects"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lighting-projects/{project_id}": {
+      "get": {
+        "description": "Get one project and its complete current drawing.",
+        "operationId": "get_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightingProjectDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Lighting Project",
+        "tags": [
+          "Lighting Projects"
+        ]
+      },
+      "patch": {
+        "description": "Version-check and update one project without force-overwriting.",
+        "operationId": "update_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LightingProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightingProjectDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Lighting Project",
+        "tags": [
+          "Lighting Projects"
         ]
       }
     },

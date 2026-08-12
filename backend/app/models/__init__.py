@@ -80,6 +80,7 @@ from app.models.lead_source import (
     LeadSourceSpendEntry,
     LeadSourceType,
 )
+from app.models.lighting_project import LightingProject
 from app.models.link_click import LinkClick
 from app.models.message_attachment import MessageAttachment
 from app.models.message_template import MessageTemplate
@@ -225,6 +226,7 @@ __all__ = [
     "LeadSourceSpendEntry",
     "LeadSourceType",
     "OfferLeadMagnet",
+    "LightingProject",
     "Automation",
     "AutomationEvent",
     "AutomationExecution",

@@ -132,6 +132,51 @@ async def test_dispatch_email_respects_per_type_pref(monkeypatch: pytest.MonkeyP
     email.assert_not_awaited()
 
 
+async def test_notify_workspace_event_targets_and_reports_each_recipient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = uuid.uuid4()
+    user_one = SimpleNamespace(
+        id=7, email="one@example.com", notification_email=True, is_active=True
+    )
+    user_two = SimpleNamespace(
+        id=8, email="two@example.com", notification_email=True, is_active=True
+    )
+    db = AsyncMock()
+    db.get.return_value = SimpleNamespace(id=workspace_id)
+    db.execute.return_value = SimpleNamespace(
+        scalars=lambda: SimpleNamespace(all=lambda: [user_one, user_two])
+    )
+    push = AsyncMock(side_effect=[True, False])
+    email = AsyncMock(side_effect=[True, False])
+    monkeypatch.setattr(notifications.push_notification_service, "send_to_user", push)
+    monkeypatch.setattr(notifications, "send_event_notification_email", email)
+
+    result = await notifications.notify_workspace_event(
+        db,
+        workspace_id=workspace_id,
+        notification_type="job_assignment",
+        title="Assigned",
+        body="Plan available",
+        email_subject="Assigned",
+        recipient_user_ids=[7, 8, 7],
+        dedupe_key="job:1:v1",
+    )
+
+    assert result.recipient_count == 2
+    assert result.delivered_recipient_count == 1
+    assert result.failed_recipient_count == 1
+    assert result.delivered_recipient_ids == (7,)
+    assert result.failed_recipient_ids == (8,)
+    assert push.await_count == 2
+    assert push.await_args_list[0].kwargs["idempotency_key"] == "job:1:v1"
+    assert email.await_count == 2
+    assert (
+        email.await_args_list[0].kwargs["idempotency_key"]
+        != email.await_args_list[1].kwargs["idempotency_key"]
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Per-service firing points
 # --------------------------------------------------------------------------- #

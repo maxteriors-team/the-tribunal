@@ -16,12 +16,26 @@ import type {
   Calibration,
   Design,
   PlacedItem,
+  PlanImage,
   Run,
+  LandscapeAnnotation,
+  LandscapeMeasurementLine,
+  LandscapeHighlightStroke,
+  LandscapeArrow,
   Selection,
   Tool,
 } from "@/lib/estimator/types";
 
-export const EMPTY_DESIGN: Design = { calibration: null, runs: [], items: [] };
+export const EMPTY_DESIGN: Design = {
+  calibration: null,
+  runs: [],
+  items: [],
+  planImages: [],
+  annotations: [],
+  measurements: [],
+  highlights: [],
+  arrows: [],
+};
 
 const HISTORY_LIMIT = 60;
 
@@ -48,7 +62,18 @@ export type EditorAction =
       type: "UPDATE_RUN";
       id: string;
       patch: Partial<
-        Pick<Run, "points" | "productId" | "spacingIn" | "colors" | "bulbScale">
+        Pick<
+          Run,
+          | "points"
+          | "productId"
+          | "spacingIn"
+          | "colors"
+          | "bulbScale"
+          | "circuitLabel"
+          | "transformerId"
+          | "wireGauge"
+          | "sourceVoltage"
+        >
       >;
       transient?: boolean;
     }
@@ -66,11 +91,30 @@ export type EditorAction =
           | "productId"
           | "beamAngleDeg"
           | "beamRotationDeg"
+          | "circuitId"
+          | "markerColor"
         >
       >;
       transient?: boolean;
     }
   | { type: "DELETE_ITEM"; id: string }
+  | { type: "ADD_PLAN_IMAGE"; image: PlanImage }
+  | {
+      type: "UPDATE_PLAN_IMAGE";
+      id: string;
+      patch: Partial<Pick<PlanImage, "at" | "widthPx" | "heightPx" | "name">>;
+      transient?: boolean;
+    }
+  | { type: "DELETE_PLAN_IMAGE"; id: string }
+  | { type: "ADD_ANNOTATION"; annotation: LandscapeAnnotation }
+  | { type: "DELETE_ANNOTATION"; id: string }
+  | { type: "ADD_MEASUREMENT"; measurement: LandscapeMeasurementLine }
+  | { type: "DELETE_MEASUREMENT"; id: string }
+  | { type: "ADD_HIGHLIGHT"; highlight: LandscapeHighlightStroke }
+  | { type: "DELETE_HIGHLIGHT"; id: string }
+  | { type: "ADD_ARROW"; arrow: LandscapeArrow }
+  | { type: "DELETE_ARROW"; id: string }
+  | { type: "CLEAR_SYMBOLS" }
   | { type: "SET_CALIBRATION"; calibration: Calibration | null; transient?: boolean }
   | { type: "CLEAR_DESIGN" }
   | { type: "RESET"; design?: Design }
@@ -95,29 +139,19 @@ export function initialEditorState(): EditorState {
   };
 }
 
-function pushHistory(
-  state: EditorState,
-  before: Design,
-): Pick<EditorState, "past" | "future"> {
+function pushHistory(state: EditorState, before: Design): Pick<EditorState, "past" | "future"> {
   const past = [...state.past, before];
   if (past.length > HISTORY_LIMIT) past.shift();
   return { past, future: [] };
 }
 
 /** Set the design; non-transient changes push the previous design onto history. */
-function withDesign(
-  state: EditorState,
-  design: Design,
-  transient?: boolean,
-): EditorState {
+function withDesign(state: EditorState, design: Design, transient?: boolean): EditorState {
   if (transient) return { ...state, design };
   return { ...state, design, ...pushHistory(state, state.design) };
 }
 
-export function editorReducer(
-  state: EditorState,
-  action: EditorAction,
-): EditorState {
+export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "SET_TOOL":
       return { ...state, tool: action.tool, selection: null };
@@ -139,9 +173,7 @@ export function editorReducer(
         state,
         {
           ...state.design,
-          runs: state.design.runs.map((r) =>
-            r.id === action.id ? { ...r, ...action.patch } : r,
-          ),
+          runs: state.design.runs.map((r) => (r.id === action.id ? { ...r, ...action.patch } : r)),
         },
         action.transient,
       );
@@ -150,6 +182,9 @@ export function editorReducer(
         ...withDesign(state, {
           ...state.design,
           runs: state.design.runs.filter((r) => r.id !== action.id),
+          items: state.design.items.map((item) =>
+            item.circuitId === action.id ? { ...item, circuitId: undefined } : item,
+          ),
         }),
         selection: null,
       };
@@ -178,9 +213,89 @@ export function editorReducer(
         ...withDesign(state, {
           ...state.design,
           items: state.design.items.filter((i) => i.id !== action.id),
+          runs: state.design.runs.map((run) =>
+            run.transformerId === action.id ? { ...run, transformerId: undefined } : run,
+          ),
         }),
         selection: null,
       };
+
+    case "ADD_PLAN_IMAGE":
+      return {
+        ...withDesign(state, {
+          ...state.design,
+          planImages: [...(state.design.planImages ?? []), action.image],
+        }),
+        tool: { type: "select" },
+        selection: { kind: "planImage", id: action.image.id },
+      };
+    case "UPDATE_PLAN_IMAGE":
+      return withDesign(
+        state,
+        {
+          ...state.design,
+          planImages: (state.design.planImages ?? []).map((image) =>
+            image.id === action.id ? { ...image, ...action.patch } : image,
+          ),
+        },
+        action.transient,
+      );
+    case "DELETE_PLAN_IMAGE":
+      return {
+        ...withDesign(state, {
+          ...state.design,
+          planImages: (state.design.planImages ?? []).filter((image) => image.id !== action.id),
+        }),
+        selection: null,
+      };
+    case "ADD_ANNOTATION":
+      return withDesign(state, {
+        ...state.design,
+        annotations: [...(state.design.annotations ?? []), action.annotation],
+      });
+    case "DELETE_ANNOTATION":
+      return withDesign(state, {
+        ...state.design,
+        annotations: (state.design.annotations ?? []).filter((entry) => entry.id !== action.id),
+      });
+    case "ADD_MEASUREMENT":
+      return withDesign(state, {
+        ...state.design,
+        measurements: [...(state.design.measurements ?? []), action.measurement],
+      });
+    case "DELETE_MEASUREMENT":
+      return withDesign(state, {
+        ...state.design,
+        measurements: (state.design.measurements ?? []).filter((entry) => entry.id !== action.id),
+      });
+    case "ADD_HIGHLIGHT":
+      return withDesign(state, {
+        ...state.design,
+        highlights: [...(state.design.highlights ?? []), action.highlight],
+      });
+    case "DELETE_HIGHLIGHT":
+      return withDesign(state, {
+        ...state.design,
+        highlights: (state.design.highlights ?? []).filter((entry) => entry.id !== action.id),
+      });
+    case "ADD_ARROW":
+      return withDesign(state, {
+        ...state.design,
+        arrows: [...(state.design.arrows ?? []), action.arrow],
+      });
+    case "DELETE_ARROW":
+      return withDesign(state, {
+        ...state.design,
+        arrows: (state.design.arrows ?? []).filter((entry) => entry.id !== action.id),
+      });
+    case "CLEAR_SYMBOLS":
+      return withDesign(state, {
+        ...state.design,
+        annotations: [],
+        measurements: [],
+        highlights: [],
+        arrows: [],
+      });
 
     case "APPLY_COLORS_ALL": {
       if (state.design.runs.length === 0) return state;
@@ -198,12 +313,17 @@ export function editorReducer(
       );
 
     case "CLEAR_DESIGN":
-      // Clears runs + items but keeps the photo scale (calibration).
+      // Clears priced lighting geometry but keeps plan references and scale.
       return {
         ...withDesign(state, {
           calibration: state.design.calibration,
           runs: [],
           items: [],
+          planImages: state.design.planImages ?? [],
+          annotations: state.design.annotations ?? [],
+          measurements: state.design.measurements ?? [],
+          highlights: state.design.highlights ?? [],
+          arrows: state.design.arrows ?? [],
         }),
         selection: null,
       };

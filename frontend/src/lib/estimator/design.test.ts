@@ -79,7 +79,12 @@ describe("designToEstimateInputs", () => {
   it("routes a roofline run into whole feet", () => {
     const design: Design = {
       calibration: cal,
-      runs: [run("r1", roofline.id, [{ x: 0, y: 0 }, { x: 400, y: 0 }])],
+      runs: [
+        run("r1", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+        ]),
+      ],
       items: [],
     };
     const out = designToEstimateInputs(design, productById, PHOTO_W);
@@ -91,8 +96,14 @@ describe("designToEstimateInputs", () => {
     const design: Design = {
       calibration: cal,
       runs: [
-        run("r1", roofline.id, [{ x: 0, y: 0 }, { x: 300, y: 0 }]),
-        run("r2", roofline.id, [{ x: 0, y: 0 }, { x: 200, y: 0 }]),
+        run("r1", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 300, y: 0 },
+        ]),
+        run("r2", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 200, y: 0 },
+        ]),
       ],
       items: [],
     };
@@ -102,7 +113,12 @@ describe("designToEstimateInputs", () => {
   it("routes per-ft decor runs into christmas_items feet", () => {
     const design: Design = {
       calibration: cal,
-      runs: [run("r1", mini.id, [{ x: 0, y: 0 }, { x: 250, y: 0 }])],
+      runs: [
+        run("r1", mini.id, [
+          { x: 0, y: 0 },
+          { x: 250, y: 0 },
+        ]),
+      ],
       items: [],
     };
     const out = designToEstimateInputs(design, productById, PHOTO_W);
@@ -124,8 +140,14 @@ describe("designToEstimateInputs", () => {
     const design: Design = {
       calibration: cal,
       runs: [
-        run("r1", roofline.id, [{ x: 0, y: 0 }, { x: 500, y: 0 }]),
-        run("r2", mini.id, [{ x: 0, y: 0 }, { x: 120, y: 0 }]),
+        run("r1", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 500, y: 0 },
+        ]),
+        run("r2", mini.id, [
+          { x: 0, y: 0 },
+          { x: 120, y: 0 },
+        ]),
       ],
       items: [{ id: "i1", productId: wreath.id, at: { x: 5, y: 5 }, sizePx: 40 }],
     };
@@ -140,18 +162,26 @@ describe("designToEstimateInputs", () => {
   it("drops sub-foot stray runs after rounding", () => {
     const design: Design = {
       calibration: cal,
-      runs: [run("r1", mini.id, [{ x: 0, y: 0 }, { x: 3, y: 0 }])], // 0.3ft
+      runs: [
+        run("r1", mini.id, [
+          { x: 0, y: 0 },
+          { x: 3, y: 0 },
+        ]),
+      ], // 0.3ft
       items: [],
     };
-    expect(designToEstimateInputs(design, productById, PHOTO_W).christmas_items).toEqual(
-      {},
-    );
+    expect(designToEstimateInputs(design, productById, PHOTO_W).christmas_items).toEqual({});
   });
 
   it("ignores runs whose product is unknown", () => {
     const design: Design = {
       calibration: cal,
-      runs: [run("r1", "ghost", [{ x: 0, y: 0 }, { x: 400, y: 0 }])],
+      runs: [
+        run("r1", "ghost", [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+        ]),
+      ],
       items: [],
     };
     const out = designToEstimateInputs(design, productById, PHOTO_W);
@@ -262,7 +292,25 @@ describe("designToEstimateInputs — landscape", () => {
     target: { field: "bistro" },
   };
 
-  const productById = indexProducts([uplight, bistro]);
+  const transformer: Product = {
+    ...uplight,
+    id: "fixture-transformer",
+    name: "Transformer",
+    style: "transformer",
+    sizeFt: 3,
+    target: { field: "annotation", annotationType: "transformer" },
+  };
+
+  const wire: Product = {
+    ...bistro,
+    id: "landscape-wire",
+    name: "Wire circuit",
+    price: 0,
+    style: "wire",
+    target: { field: "annotation", annotationType: "wire" },
+  };
+
+  const productById = indexProducts([uplight, bistro, transformer, wire]);
 
   it("counts each placed fixture by type, for the package to resolve", () => {
     const items: PlacedItem[] = [
@@ -270,15 +318,54 @@ describe("designToEstimateInputs — landscape", () => {
       { id: "i2", productId: uplight.id, at: { x: 40, y: 10 }, sizePx: 100 },
       { id: "i3", productId: uplight.id, at: { x: 70, y: 10 }, sizePx: 100 },
     ];
-    const out = designToEstimateInputs(
-      { calibration: cal, runs: [], items },
-      productById,
-      PHOTO_W,
-    );
+    const out = designToEstimateInputs({ calibration: cal, runs: [], items }, productById, PHOTO_W);
     expect(out.fixtures).toEqual({ uplight: 3 });
     // Landscape counts never leak into the holiday buckets.
     expect(out.feet).toBe(0);
     expect(out.christmas_items).toEqual({});
+  });
+
+  it("keeps the transformer as a plan symbol instead of adding an unpriced fixture", () => {
+    const out = designToEstimateInputs(
+      {
+        calibration: cal,
+        runs: [],
+        items: [{ id: "tx", productId: transformer.id, at: { x: 10, y: 10 }, sizePx: 30 }],
+      },
+      productById,
+      PHOTO_W,
+    );
+
+    expect(out.fixtures).toEqual({});
+    expect(out.christmas_items).toEqual({});
+  });
+
+  it("keeps plan-only wire routes out of quote-producing footage", () => {
+    const out = designToEstimateInputs(
+      {
+        calibration: cal,
+        runs: [
+          {
+            id: "circuit-1",
+            productId: wire.id,
+            points: [
+              { x: 0, y: 0 },
+              { x: 500, y: 0 },
+            ],
+            circuitLabel: "C1",
+            wireGauge: 12,
+            sourceVoltage: 12,
+          },
+        ],
+        items: [],
+      },
+      productById,
+      PHOTO_W,
+    );
+
+    expect(out.feet).toBe(0);
+    expect(out.bistro_feet).toBe(0);
+    expect(out.fixtures).toEqual({});
   });
 
   it("totals several photos of one job into a single set of inputs", () => {
@@ -338,11 +425,7 @@ describe("designToEstimateInputs — landscape", () => {
         ],
       },
     ];
-    const out = designToEstimateInputs(
-      { calibration: cal, runs, items: [] },
-      productById,
-      PHOTO_W,
-    );
+    const out = designToEstimateInputs({ calibration: cal, runs, items: [] }, productById, PHOTO_W);
     expect(out.bistro_feet).toBe(40);
     expect(out.feet).toBe(0);
   });

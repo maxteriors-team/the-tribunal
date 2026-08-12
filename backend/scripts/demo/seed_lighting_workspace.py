@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import uuid
+from contextlib import suppress
 
 from sqlalchemy import or_, select
 
@@ -181,6 +182,32 @@ FIXTURES: dict[str, dict] = {
         "price": 376,
         "parts": [("59205842", "TM Path Light Body", 1)],
     },
+}
+
+# Connected-load inputs used by the landscape plan's electrical calculator.
+# These remain catalog attributes so a workspace can override a fixture without
+# changing calculator code. Wattage is fixture input power, not energy usage.
+ELECTRICAL_SPECS: dict[str, dict[str, float]] = {
+    "best-luxor": {"transformer_capacity_watts": 300},
+    "best-zdc-up": {"fixture_watts": 9.1, "input_voltage": 12},
+    "best-zdc-down": {"fixture_watts": 9.1, "input_voltage": 12},
+    "best-zdc-mod-path": {"fixture_watts": 3.6, "input_voltage": 12},
+    "best-zdc-path2": {"fixture_watts": 3.6, "input_voltage": 12},
+    "best-zd-up": {"fixture_watts": 5, "input_voltage": 12},
+    "best-zd-narrow": {"fixture_watts": 5, "input_voltage": 12},
+    "best-zd-mod-path": {"fixture_watts": 2, "input_voltage": 12},
+    "best-zd-path": {"fixture_watts": 2.2, "input_voltage": 12},
+    "best-zd-down": {"fixture_watts": 5, "input_voltage": 12},
+    "best-cora-in-grade": {"fixture_watts": 5, "input_voltage": 12},
+    "better-dx": {"transformer_capacity_watts": 300},
+    "better-well": {"fixture_watts": 5, "input_voltage": 12},
+    "better-accent": {"fixture_watts": 5, "input_voltage": 12},
+    "better-path": {"fixture_watts": 3, "input_voltage": 12},
+    "better-mod-path": {"fixture_watts": 3, "input_voltage": 12},
+    "better-cora-in-grade": {"fixture_watts": 5, "input_voltage": 12},
+    "ess-ex": {"transformer_capacity_watts": 150},
+    "ess-accent": {"fixture_watts": 4, "input_voltage": 12},
+    "ess-path": {"fixture_watts": 3, "input_voltage": 12},
 }
 
 # ─── Bistro / patio string-lighting price-book items ─────────────────────────
@@ -599,10 +626,8 @@ async def seed(workspace_ref: str) -> None:
     async with AsyncSessionLocal() as db:
         # Resolve workspace by slug, or by UUID when the ref parses as one.
         clauses = [Workspace.slug == workspace_ref]
-        try:
+        with suppress(ValueError):
             clauses.append(Workspace.id == uuid.UUID(workspace_ref))
-        except ValueError:
-            pass
         workspace = (await db.execute(select(Workspace).where(or_(*clauses)))).scalar_one_or_none()
         if workspace is None:
             raise SystemExit(f"Workspace not found: {workspace_ref!r}")
@@ -624,7 +649,9 @@ async def seed(workspace_ref: str) -> None:
             components = [
                 {"sku": sku, "description": desc, "qty": qty} for sku, desc, qty in fx["parts"]
             ]
-            attributes = {"transformer": True} if fx.get("transformer") else None
+            attributes = dict(ELECTRICAL_SPECS.get(key, {}))
+            if fx.get("transformer"):
+                attributes["transformer"] = True
             item = existing.get(key)
             if item is None:
                 db.add(
@@ -641,7 +668,7 @@ async def seed(workspace_ref: str) -> None:
                         # and an item that is not attachable never reaches the
                         # technician's on-site menu at all.
                         is_attachable=True,
-                        attributes=attributes,
+                        attributes=attributes or None,
                         components=components,
                     )
                 )
@@ -651,7 +678,9 @@ async def seed(workspace_ref: str) -> None:
                 item.kind = "product"
                 item.unit_price = fx["price"]
                 item.is_active = True
-                item.attributes = attributes
+                merged_attributes = dict(item.attributes or {})
+                merged_attributes.update(attributes)
+                item.attributes = merged_attributes or None
                 item.components = components
                 # ``is_attachable`` is deliberately NOT reasserted on update: an
                 # operator who pulled a fixture off the field menu in the Price

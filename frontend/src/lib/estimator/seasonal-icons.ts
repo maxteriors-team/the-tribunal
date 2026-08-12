@@ -23,6 +23,7 @@ import {
   Sparkles,
   Spline,
   TreePine,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,8 @@ type SeasonalKind =
   | "ingrade"
   | "pathlight"
   | "downlight"
+  | "transformer"
+  | "wire"
   | "bistro";
 
 const SPECS: Record<SeasonalKind, SeasonalIconSpec> = {
@@ -66,6 +69,8 @@ const SPECS: Record<SeasonalKind, SeasonalIconSpec> = {
   ingrade: { Icon: Disc, tint: "#f0d08a", label: "In-grade well light" },
   pathlight: { Icon: LampFloor, tint: "#c9a26b", label: "Path light" },
   downlight: { Icon: LampWallDown, tint: "#b98f5a", label: "Downlight" },
+  transformer: { Icon: Zap, tint: "#9b7ad1", label: "Transformer" },
+  wire: { Icon: Cable, tint: "#35aee2", label: "Wire circuit" },
   bistro: { Icon: PartyPopper, tint: "#e6c07b", label: "Bistro string lighting" },
 };
 
@@ -94,6 +99,8 @@ const STYLE_KIND: Record<RenderStyle, SeasonalKind> = {
   ingrade: "ingrade",
   pathlight: "pathlight",
   downlight: "downlight",
+  transformer: "transformer",
+  wire: "wire",
   bistro: "bistro",
 };
 

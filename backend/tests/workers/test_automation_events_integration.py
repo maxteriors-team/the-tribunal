@@ -12,7 +12,7 @@ executed: it writes a ``ContactTag`` row with no external provider.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -260,14 +260,19 @@ async def test_quote_lifecycle_emits_and_runs_automations() -> None:
         await db.commit()
         assert await _contact_has_tag(db, contact.id, "quote-approved")
 
-        await QuoteService(db).convert_quote(ws.id, quote.id)
+        start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        end = start + timedelta(hours=2)
+        await QuoteService(db).convert_quote(
+            ws.id, quote.id, scheduled_start=start, scheduled_end=end
+        )
         await _drain(db)
         await db.commit()
         assert await _contact_has_tag(db, contact.id, "quote-converted")
 
-        # Re-converting an already-converted quote is a no-op and must not
-        # enqueue a second event (idempotent — no double-fire).
-        await QuoteService(db).convert_quote(ws.id, quote.id)
+        # An exact retry is a no-op and must not enqueue a second event.
+        await QuoteService(db).convert_quote(
+            ws.id, quote.id, scheduled_start=start, scheduled_end=end
+        )
         pending = await db.execute(
             select(AutomationEvent).where(
                 AutomationEvent.workspace_id == ws.id,

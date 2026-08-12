@@ -2,11 +2,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LightDesigner } from "@/components/estimator/light-designer";
+import {
+  LightDesigner,
+  type LandscapeProjectPersistenceAdapter,
+} from "@/components/estimator/light-designer";
 import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { designToEstimateInputs } from "@/lib/estimator/design";
+import { loadLandscapeDraft, saveLandscapeDraft } from "@/lib/estimator/landscape-draft";
 import type { LinearFeetEstimateResult } from "@/types/estimate";
 
 // Server pricing is always mocked — the component only ever sends feet/counts.
@@ -25,15 +29,31 @@ vi.mock("@/lib/api/sales-wizard", () => ({
   salesWizardApi: {
     listCatalog: vi.fn(),
     getPricing: vi.fn(),
+    preview: vi.fn(),
+    save: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/estimator/landscape-draft", () => ({
+  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal) => ({
+    version: 2,
+    activeShotId,
+    shots,
+    updatedAt: updatedAt ?? "2026-08-11T10:00:00.000Z",
+    ...(proposal ? { proposal } : {}),
+  })),
+  loadLandscapeDraft: vi.fn(),
+  saveLandscapeDraft: vi.fn(),
 }));
 
 // jsdom can't decode images or drive a real canvas, so mock the photo loader:
 // upload resolves a fixed PhotoInfo and the canvas gets a fake decoded image.
 vi.mock("@/lib/estimator/photo", () => ({
-  fileToPhoto: vi
-    .fn()
-    .mockResolvedValue({ dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 }),
+  fileToPhoto: vi.fn().mockResolvedValue({
+    dataUrl: "data:image/png;base64,AAAA",
+    width: 1200,
+    height: 800,
+  }),
   loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
 }));
 
@@ -74,7 +94,13 @@ vi.mock("@/lib/estimator/design", async (importOriginal) => ({
 
 const ESTIMATE: LinearFeetEstimateResult = {
   feet: 100,
-  permanent: { enabled: true, total: 3300, per_ft: 32, roofline_cost: 3200, custom_total: 0 },
+  permanent: {
+    enabled: true,
+    total: 3300,
+    per_ft: 32,
+    roofline_cost: 3200,
+    custom_total: 0,
+  },
   christmas: {
     enabled: true,
     total: 900,
@@ -191,13 +217,22 @@ function stubCanvas() {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 }
 
-function renderEstimator(proposal?: DesignerProposalHost) {
+function renderEstimator(
+  proposal?: DesignerProposalHost,
+  focus: "all" | "landscape" = "all",
+  landscapeProject?: LandscapeProjectPersistenceAdapter,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <LightDesigner workspaceId="ws_1" proposal={proposal} />
+      <LightDesigner
+        workspaceId="ws_1"
+        proposal={proposal}
+        focus={focus}
+        landscapeProject={landscapeProject}
+      />
     </QueryClientProvider>,
   );
 }
@@ -216,9 +251,7 @@ function shotTabs() {
 
 /** The photo the canvas is currently showing, 1-based. */
 function activeShotIndex() {
-  return shotTabs().findIndex(
-    (tab) => tab.getAttribute("aria-current") === "true",
-  );
+  return shotTabs().findIndex((tab) => tab.getAttribute("aria-current") === "true");
 }
 
 /**
@@ -231,11 +264,70 @@ function enableService(name: RegExp) {
 
 describe("LightDesigner", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     stubCanvas();
     // Reset the design mapping each test; landscape cases override it.
     vi.mocked(designToEstimateInputs).mockReturnValue(MAPPED);
     vi.mocked(salesWizardApi.listCatalog).mockResolvedValue(PRICE_BOOK);
     vi.mocked(salesWizardApi.getPricing).mockResolvedValue(PRICING);
+    vi.mocked(salesWizardApi.preview).mockResolvedValue({
+      title: "Landscape lighting proposal",
+      tiers: [
+        {
+          ["key"]: "best",
+          label: "Best",
+          name: "Premier",
+          popular: true,
+          lines: [
+            {
+              item_id: "best-zdc-up",
+              name: "ZDC Color Uplight",
+              quantity: 2,
+              unit_price: 785,
+              line_total: 1570,
+              transformer: false,
+            },
+          ],
+          pricing: {
+            subtotal_net: 1570,
+            overhead: 0,
+            commission: 0,
+            profit: 0,
+            tax: 0,
+            financed_total: 1570,
+            cash_total: 1500,
+            monthly_payment: 131,
+          },
+        },
+      ],
+      selection: {
+        selected_tier: "best",
+        selected_financed_total: 1570,
+        selected_cash_total: 1500,
+        deposit_due_now: 0,
+      },
+      care_plan: { fixture_count: 2, options: [] },
+      categories: ["landscape"],
+      line_count: 1,
+      services: [],
+      mockups: [],
+    } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
+    vi.mocked(salesWizardApi.save).mockResolvedValue({
+      id: "quote-1",
+      workspace_id: "workspace-1",
+      number: "Q-1042",
+      title: "Landscape lighting proposal",
+      status: "draft",
+      subtotal: 1500,
+      tax_amount: 0,
+      total: 1500,
+      currency: "USD",
+      attach_count: 0,
+      attach_value: 0,
+      view_count: 0,
+      created_at: "2026-08-11T00:00:00Z",
+      updated_at: "2026-08-11T00:00:00Z",
+    } as Awaited<ReturnType<typeof salesWizardApi.save>>);
     vi.mocked(estimatorApi.estimate).mockResolvedValue(ESTIMATE);
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "",
@@ -251,6 +343,13 @@ describe("LightDesigner", () => {
     vi.mocked(estimatorApi.createQuote).mockResolvedValue({
       number: "QUO-000007",
     } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
+    vi.mocked(loadLandscapeDraft).mockResolvedValue(null);
+    vi.mocked(saveLandscapeDraft).mockImplementation(async (workspaceId, shots) => ({
+      workspaceId,
+      shots,
+      savedAt: "2026-08-10T20:57:00.000Z",
+      schemaVersion: 1,
+    }));
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -267,17 +366,11 @@ describe("LightDesigner", () => {
 
     // After upload: the tool palette + the landscape fixture types + estimate.
     expect(screen.getByRole("heading", { name: /^Tools$/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Select & edit/i }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: /^Uplight/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Select & edit/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Uplight/i })).toBeInTheDocument();
 
     // Christmas is a separate service: its products appear once it's toggled on.
-    expect(
-      screen.queryByRole("button", { name: /C9 Roofline — Warm White/i }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /C9 Roofline — Warm White/i })).toBeNull();
     enableService(/^Christmas$/);
     expect(
       await screen.findByRole("button", { name: /C9 Roofline — Warm White/i }),
@@ -292,6 +385,82 @@ describe("LightDesigner", () => {
     );
   });
 
+  it("opens a dedicated proposal-sheet workflow when focused on landscape lighting", async () => {
+    const { container } = renderEstimator(undefined, "landscape");
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Start the landscape lighting drawing/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Fixture legend")).toBeInTheDocument();
+    expect(screen.getAllByText("Untitled lighting project")).not.toHaveLength(0);
+    expect(screen.getByLabelText("Drawing sheet tools")).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveValue("tabloid");
+    expect(screen.getByRole("button", { name: /Add sheet/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Build quote/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", {
+        name: /Landscape lighting project sections/i,
+      }),
+    ).toBeInTheDocument();
+
+    await uploadPhoto(container);
+
+    const wireTool = await screen.findByRole("button", { name: "Wire" });
+    fireEvent.click(wireTool);
+    expect(wireTool).toHaveAttribute("aria-pressed", "true");
+
+    const uplightTool = await screen.findByRole("button", { name: /^Uplight:/i });
+    fireEvent.click(uplightTool);
+    expect(uplightTool).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "Maxteriors Exterior Lighting" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(
+      screen.getByRole("complementary", { name: "Fixture and drawing tools" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Services in this design")).toBeNull();
+    expect(screen.queryByText("Include seasonal takedown")).toBeNull();
+    expect(screen.queryByText("Save to customer")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Fixture Schedule" }));
+    expect(screen.getByRole("heading", { name: "Fixture Schedule" })).toBeInTheDocument();
+    expect(screen.getByText(/Place fixtures on the Drawing Sheet/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "BOM" }));
+    expect(screen.getByRole("heading", { name: "Bill of Materials" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Electrical" }));
+    expect(screen.getByRole("heading", { name: "Electrical Plan" })).toBeInTheDocument();
+    expect(screen.getByText("Connected load")).toBeInTheDocument();
+    expect(screen.getByText(/Place fixture icons on the drawing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Draw a wire circuit on the Drawing Sheet/i)).toBeInTheDocument();
+
+    await waitFor(() => expect(saveLandscapeDraft).toHaveBeenCalled());
+    expect(screen.getByTitle("Drafts are saved automatically in this browser")).toHaveTextContent(
+      /Saved locally/i,
+    );
+  });
+
+  it("accepts a downloaded image dragged onto an empty drawing sheet", async () => {
+    renderEstimator(undefined, "landscape");
+    const dropZone = await screen.findByRole("region", {
+      name: "Landscape drawing sheet file drop zone",
+    });
+    const image = new File(["aerial"], "downloaded-aerial.png", { type: "image/png" });
+    const dataTransfer = { types: ["Files"], files: [image], dropEffect: "none" };
+
+    fireEvent.dragEnter(dropZone, { dataTransfer });
+    expect(screen.getByText("Release to place this image on Sheet L-1")).toBeInTheDocument();
+    fireEvent.drop(dropZone, { dataTransfer });
+
+    expect(
+      await screen.findByLabelText(/property photo lighting design canvas/i),
+    ).toBeInTheDocument();
+  });
+
   it("derives the decor palette from the workspace christmas catalog", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
@@ -299,9 +468,7 @@ describe("LightDesigner", () => {
 
     // The `each` wreath category becomes a placeable decor product.
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /Wreath \(up to 36 in\)/i }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /Wreath \(up to 36 in\)/i })).toBeInTheDocument(),
     );
     expect(screen.getByText(/Place decor/i)).toBeInTheDocument();
   });
@@ -315,9 +482,7 @@ describe("LightDesigner", () => {
     expect(screen.getByLabelText(/Customer name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Customer email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Customer phone/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Save & share link only/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save & share link only/i })).toBeInTheDocument();
 
     // The email button is present on every estimate (no need to save first),
     // but disabled until a customer email is entered.
@@ -332,16 +497,13 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
 
     // All three Good/Better/Best cards render by their client-facing name.
-    expect(
-      await screen.findByRole("button", { name: /Essential/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Essential/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Middle/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Premier/i })).toBeInTheDocument();
 
     // No explicit pick yet → the most-inclusive package (Premier) is the default,
     // so the seasonal headline shows its total, not the à la carte christmas total.
-    const grandRow = () =>
-      container.querySelector(".ep-total-grand") as HTMLElement;
+    const grandRow = () => container.querySelector(".ep-total-grand") as HTMLElement;
     expect(grandRow()).toHaveTextContent("$1,400");
     expect(grandRow()).not.toHaveTextContent("$900");
 
@@ -366,9 +528,7 @@ describe("LightDesigner", () => {
 
     // Save & share without an explicit pick persists the resolved default
     // (most-inclusive package), so the public page folds that package's total.
-    fireEvent.click(
-      screen.getByRole("button", { name: /Save & share link only/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Save & share link only/i }));
     await waitFor(() =>
       expect(estimatorApi.share).toHaveBeenCalledWith(
         "ws_1",
@@ -416,9 +576,7 @@ describe("LightDesigner", () => {
     const seasonalBtn = await screen.findByRole("button", {
       name: /Create seasonal quote/i,
     });
-    expect(
-      screen.getByRole("button", { name: /Create permanent quote/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Create permanent quote/i })).toBeInTheDocument();
 
     fireEvent.click(seasonalBtn);
 
@@ -432,18 +590,14 @@ describe("LightDesigner", () => {
     );
 
     // The created quote's number is confirmed inline with a link into Quotes.
-    expect(
-      await screen.findByText(/Quote QUO-000007 created/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Quote QUO-000007 created/i)).toBeInTheDocument();
   });
 
   it("converts the permanent side when the permanent quote button is used", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /Create permanent quote/i }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /Create permanent quote/i }));
 
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
@@ -496,9 +650,7 @@ describe("LightDesigner", () => {
         "email",
       ),
     );
-    expect(
-      await screen.findByText(/Emailed to buyer@example\.com/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Emailed to buyer@example\.com/i)).toBeInTheDocument();
   });
 
   it("texts the estimate to the customer's phone, minting a share link first", async () => {
@@ -530,18 +682,11 @@ describe("LightDesigner", () => {
     fireEvent.click(textBtn);
 
     await waitFor(() =>
-      expect(estimatorApi.deliver).toHaveBeenCalledWith(
-        "ws_1",
-        "tok_123",
-        "+15551234567",
-        "sms",
-      ),
+      expect(estimatorApi.deliver).toHaveBeenCalledWith("ws_1", "tok_123", "+15551234567", "sms"),
     );
     // Names the rail, so a bare phone number never leaves the rep guessing
     // whether this went out as a text or an email.
-    expect(
-      await screen.findByText(/Texted to \+15551234567/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Texted to \+15551234567/i)).toBeInTheDocument();
   });
 
   it("tells the rep what to fix when a text can't be sent", async () => {
@@ -558,8 +703,7 @@ describe("LightDesigner", () => {
         response: {
           status: 422,
           data: {
-            detail:
-              "No SMS-enabled phone number in this workspace \u2014 add one under Settings.",
+            detail: "No SMS-enabled phone number in this workspace \u2014 add one under Settings.",
           },
         },
       }),
@@ -572,9 +716,7 @@ describe("LightDesigner", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Text estimate/i }));
 
-    expect(
-      await screen.findByText(/add one under Settings/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/add one under Settings/i)).toBeInTheDocument();
   });
 
   // ── Quote Builder host: the one photo tool, embedded in the wizard ────────
@@ -593,18 +735,12 @@ describe("LightDesigner", () => {
         photo: expect.objectContaining({ width: 1200 }),
       }),
     ]);
-    expect(
-      screen.getByRole("button", { name: /save to proposal/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /back to quote/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save to proposal/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back to quote/i })).toBeInTheDocument();
     // The wizard owns the customer and the quote, so the standalone share and
     // convert flows stay out of the way.
     expect(screen.queryByText("Save to customer")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /client preview/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /client preview/i })).not.toBeInTheDocument();
   });
 
   it("hands the host the composite plus the measured fixtures on save", async () => {
@@ -631,18 +767,14 @@ describe("LightDesigner", () => {
     // type to the product its chosen package sells.
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        shots: [
-          expect.objectContaining({ image: "data:image/jpeg;base64,LIT" }),
-        ],
+        shots: [expect.objectContaining({ image: "data:image/jpeg;base64,LIT" })],
         fixtures: { uplight: 4 },
         services: ["landscape"],
         rooflineFeet: 100,
         bistroFeet: 32,
       }),
     );
-    expect(
-      await screen.findByText(/Saved 1 design to the proposal at/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Saved 1 design to the proposal at/i)).toBeInTheDocument();
   });
 
   it("tallies drawn fixture types against the product the package sells", async () => {
@@ -660,9 +792,7 @@ describe("LightDesigner", () => {
     // The rep drew a *type*; the package resolves it to the real product and
     // the SKU the crew pulls.
     await waitFor(() =>
-      expect(container.querySelector(".ep-line-sku")?.textContent).toBe(
-        "ZD Uplight · best-zd-up",
-      ),
+      expect(container.querySelector(".ep-line-sku")?.textContent).toBe("ZD Uplight · best-zd-up"),
     );
   });
 
@@ -678,9 +808,7 @@ describe("LightDesigner", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    expect(
-      await screen.findByText(/doesn’t include downlight/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/doesn’t include downlight/i)).toBeInTheDocument();
     expect(container.querySelector(".ep-line-sku.missing")).not.toBeNull();
   });
 
@@ -702,9 +830,7 @@ describe("LightDesigner", () => {
     // Adding Christmas to the quote brings the holiday palette back.
     enableService(/^Christmas$/);
     await waitFor(() =>
-      expect(container.querySelector(".est-client-preview")).toHaveClass(
-        "cmp-festive",
-      ),
+      expect(container.querySelector(".est-client-preview")).toHaveClass("cmp-festive"),
     );
   });
 
@@ -716,16 +842,10 @@ describe("LightDesigner", () => {
 
     // Landscape leads with the chosen package's own point; Christmas argues its
     // own case rather than sharing one blended list.
-    expect(
-      await screen.findByText("Architectural Landscape Lighting"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Seasonal Christmas Lighting"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Architectural Landscape Lighting")).toBeInTheDocument();
+    expect(screen.getByText("Seasonal Christmas Lighting")).toBeInTheDocument();
     expect(screen.getByText("Color change from your phone")).toBeInTheDocument();
-    expect(
-      screen.getByText("Takedown and storage included"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Takedown and storage included")).toBeInTheDocument();
     // Permanent isn't being sold here, so its pitch stays off the page.
     expect(screen.queryByText("Never hang lights again")).toBeNull();
   });
@@ -779,9 +899,7 @@ describe("LightDesigner", () => {
     expect(estimatorApi.estimate).not.toHaveBeenCalledWith(
       "ws_1",
       expect.objectContaining({
-        custom_lines: expect.arrayContaining([
-          expect.objectContaining({ label: "Still typing" }),
-        ]),
+        custom_lines: expect.arrayContaining([expect.objectContaining({ label: "Still typing" })]),
       }),
     );
   });
@@ -799,9 +917,7 @@ describe("LightDesigner", () => {
       expect(estimatorApi.estimate).toHaveBeenCalledWith(
         "ws_1",
         expect.objectContaining({
-          custom_lines: [
-            expect.objectContaining({ side: "permanent", unit_price: 90 }),
-          ],
+          custom_lines: [expect.objectContaining({ side: "permanent", unit_price: 90 })],
         }),
       ),
     );
@@ -819,14 +935,10 @@ describe("LightDesigner", () => {
       ),
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /Remove Bucket truck day/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Remove Bucket truck day/i }));
     // The row is gone, so the next request (and the share) carries no add-on.
     expect(screen.queryByDisplayValue("Bucket truck day")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Save & share link only/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Save & share link only/i }));
     await waitFor(() =>
       expect(estimatorApi.share).toHaveBeenCalledWith(
         "ws_1",
@@ -847,12 +959,9 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     await screen.findByRole("button", { name: /Premier/i });
 
-    const grandRow = () =>
-      container.querySelector(".ep-total-grand") as HTMLElement;
+    const grandRow = () => container.querySelector(".ep-total-grand") as HTMLElement;
     // Premier is $1,400 on its card…
-    expect(
-      screen.getByRole("button", { name: /Premier/i }),
-    ).toHaveTextContent("$1,400");
+    expect(screen.getByRole("button", { name: /Premier/i })).toHaveTextContent("$1,400");
     // …and the seasonal headline carries the $200 of add-ons on top of it.
     await waitFor(() => expect(grandRow()).toHaveTextContent("$1,600"));
   });
@@ -901,7 +1010,12 @@ describe("LightDesigner", () => {
         "ws_1",
         expect.objectContaining({
           custom_lines: [
-            { label: "Trip charge", quantity: 1, unit_price: 75, side: "seasonal" },
+            {
+              label: "Trip charge",
+              quantity: 1,
+              unit_price: 75,
+              side: "seasonal",
+            },
           ],
         }),
       ),
@@ -984,15 +1098,11 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     await uploadPhoto(container);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /save 2 designs to proposal/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save 2 designs to proposal/i }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0].shots).toHaveLength(2);
-    expect(
-      await screen.findByText(/Saved 2 designs to the proposal at/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Saved 2 designs to the proposal at/i)).toBeInTheDocument();
   });
 
   it("drops a removed photo from the totals and the strip", async () => {
@@ -1029,9 +1139,7 @@ describe("LightDesigner", () => {
     fireEvent.click(screen.getByRole("button", { name: /remove photo 1/i }));
 
     expect(container.querySelector("canvas")).toBeNull();
-    expect(
-      screen.getByText(/Design their lights on a photo/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Design their lights on a photo/i)).toBeInTheDocument();
   });
 
   it("hands the photos to the host on the way back to the quote", async () => {
@@ -1058,21 +1166,330 @@ describe("LightDesigner", () => {
   it("resumes every photo the host held from the last visit", async () => {
     // Leaving the designer for the quote and coming back must restore the whole
     // set, not just the shot that happened to be saved.
-    const photo = { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 };
+    const photo = {
+      dataUrl: "data:image/png;base64,AAAA",
+      width: 1200,
+      height: 800,
+    };
     renderEstimator({
       onSave: vi.fn(),
       onShotsChange: vi.fn(),
       onClose: vi.fn(),
       initial: {
         shots: [
-          { id: "s1", photo, design: { runs: [], items: [], calibration: null }, dusk: 0.52 },
-          { id: "s2", photo, design: { runs: [], items: [], calibration: null }, dusk: 0.52 },
+          {
+            id: "s1",
+            photo,
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.52,
+          },
+          {
+            id: "s2",
+            photo,
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.52,
+          },
         ],
       },
     });
 
     expect(shotTabs()).toHaveLength(2);
     expect(activeShotIndex()).toBe(0);
+  });
+
+  it("uses the server-project adapter without restoring or saving the workspace browser draft", async () => {
+    const onLandscapeDraftChange = vi.fn();
+    const photo = {
+      dataUrl: "data:image/png;base64,AAAA",
+      width: 1200,
+      height: 800,
+    };
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: "server-shot",
+        shots: [
+          {
+            id: "server-shot",
+            photo,
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-11T09:00:00.000Z",
+      },
+      onLandscapeDraftChange,
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      resetKey: 0,
+    };
+
+    renderEstimator(undefined, "landscape", adapter);
+    expect(await screen.findByRole("slider", { name: "Dusk" })).toHaveValue("40");
+    expect(screen.getByRole("button", { name: "Add photo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
+    expect(screen.queryByText("Lighting plan")).not.toBeInTheDocument();
+    expect(loadLandscapeDraft).not.toHaveBeenCalled();
+    expect(saveLandscapeDraft).not.toHaveBeenCalled();
+    expect(onLandscapeDraftChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("slider", { name: "Dusk" }), {
+      target: { value: "55" },
+    });
+    await waitFor(
+      () =>
+        expect(onLandscapeDraftChange).toHaveBeenCalledWith(
+          expect.objectContaining({
+            version: 2,
+            activeShotId: "server-shot",
+            shots: [expect.objectContaining({ id: "server-shot", dusk: 0.55 })],
+          }),
+        ),
+      { timeout: 1_500 },
+    );
+    expect(saveLandscapeDraft).not.toHaveBeenCalled();
+  });
+
+  it("prices Good, Better, and Best fixtures with a care plan and creates the quote here", async () => {
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: { uplight: 2 },
+      bistro_feet: 0,
+    });
+    vi.mocked(salesWizardApi.getPricing).mockResolvedValue({
+      ...PRICING,
+      tier_order: ["good", "better", "best"],
+      tiers: [
+        {
+          ["key"]: "good",
+          label: "Good",
+          tab: "Good",
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+        },
+        {
+          ["key"]: "better",
+          label: "Better",
+          tab: "Better",
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+        },
+        {
+          ["key"]: "best",
+          label: "Best",
+          tab: "Best",
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+        },
+      ],
+    } as Awaited<ReturnType<typeof salesWizardApi.getPricing>>);
+    vi.mocked(salesWizardApi.preview).mockResolvedValue({
+      title: "Patio lighting",
+      tiers: [
+        {
+          ["key"]: "good",
+          label: "Good",
+          popular: false,
+          lines: [
+            {
+              item_id: "best-zd-up",
+              name: "ZD Uplight",
+              quantity: 2,
+              unit_price: 500,
+              line_total: 1000,
+              transformer: false,
+            },
+          ],
+          pricing: {
+            subtotal_net: 1000,
+            overhead: 0,
+            commission: 0,
+            profit: 0,
+            tax: 0,
+            financed_total: 1000,
+            cash_total: 950,
+            monthly_payment: 84,
+          },
+        },
+        {
+          ["key"]: "better",
+          label: "Better",
+          popular: true,
+          lines: [
+            {
+              item_id: "best-zd-up",
+              name: "ZD Uplight",
+              quantity: 2,
+              unit_price: 700,
+              line_total: 1400,
+              transformer: false,
+            },
+          ],
+          pricing: {
+            subtotal_net: 1400,
+            overhead: 0,
+            commission: 0,
+            profit: 0,
+            tax: 0,
+            financed_total: 1400,
+            cash_total: 1330,
+            monthly_payment: 117,
+          },
+        },
+        {
+          ["key"]: "best",
+          label: "Best",
+          popular: false,
+          lines: [
+            {
+              item_id: "best-zd-up",
+              name: "ZD Uplight",
+              quantity: 2,
+              unit_price: 900,
+              line_total: 1800,
+              transformer: false,
+            },
+          ],
+          pricing: {
+            subtotal_net: 1800,
+            overhead: 0,
+            commission: 0,
+            profit: 0,
+            tax: 0,
+            financed_total: 1800,
+            cash_total: 1710,
+            monthly_payment: 150,
+          },
+        },
+      ],
+      selection: {
+        selected_tier: "good",
+        selected_financed_total: 1000,
+        selected_cash_total: 950,
+        deposit_due_now: 0,
+      },
+      care_plan: {
+        fixture_count: 2,
+        options: [
+          {
+            ["key"]: "essential",
+            name: "Essential Care",
+            price: 249,
+            savings: 0,
+            visits: 1,
+            repair_discount: 10,
+            popular: true,
+            blurb: "Annual aiming and inspection",
+          },
+        ],
+      },
+      categories: ["landscape"],
+      line_count: 1,
+      services: [],
+      mockups: [],
+    } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: "server-shot",
+        shots: [
+          {
+            id: "server-shot",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: {
+              runs: [],
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
+              ],
+              calibration: null,
+            },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-11T09:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "project-1",
+      projectName: "Patio lighting",
+      contactName: "Pat Lee",
+      contactId: 42,
+      installationShotId: "server-shot",
+      onSelectInstallationShot: vi.fn().mockResolvedValue(undefined),
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+
+    renderEstimator(undefined, "landscape", adapter);
+    fireEvent.click(screen.getByRole("button", { name: "Open proposal pricing" }));
+
+    expect(await screen.findByRole("button", { name: /Good.*\$950\.00/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Better.*\$1,330\.00/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Best.*\$1,710\.00/i })).toBeInTheDocument();
+    expect(screen.getAllByText("CRM price book")).toHaveLength(3);
+    expect(screen.queryByText(/financed/i)).not.toBeInTheDocument();
+    expect(screen.getByText("$500.00")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Better.*\$1,330\.00/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Essential Care.*\$249\.00\/year/i }));
+    const createQuote = screen.getByRole("button", { name: "Create draft quote" });
+    await waitFor(() => expect(createQuote).toBeEnabled());
+    fireEvent.click(createQuote);
+
+    await waitFor(() =>
+      expect(salesWizardApi.save).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          pricing_source: "price_book",
+          contact_id: 42,
+          lighting_project_id: "project-1",
+          selected_tier: "better",
+          care_plan_tier: "essential",
+          care_count_manual: 2,
+        }),
+      ),
+    );
+    expect(adapter.flushBeforeProposal).toHaveBeenCalled();
+    expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
+  });
+
+  it("requires and persists an installation-sheet selection before quoting", async () => {
+    const onSelectInstallationShot = vi.fn().mockResolvedValue(undefined);
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-11T09:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "project-1",
+      projectName: "Patio lighting",
+      contactId: 42,
+      installationShotId: null,
+      onSelectInstallationShot,
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+
+    renderEstimator(undefined, "landscape", adapter);
+    expect(
+      await screen.findByRole("button", { name: "Use L-1 as installation sheet" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use L-1 as installation sheet" }));
+    await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
+    fireEvent.click(screen.getByRole("button", { name: "Open proposal pricing" }));
+    expect(await screen.findByText(/Select and save an installation sheet/)).toBeInTheDocument();
   });
 
   it("can share and quote a line item with nothing drawn on the photo", async () => {
@@ -1086,8 +1503,7 @@ describe("LightDesigner", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    const share = () =>
-      screen.getByRole("button", { name: /Save & share link only/i });
+    const share = () => screen.getByRole("button", { name: /Save & share link only/i });
     expect(share()).toBeDisabled();
 
     await fillLineItem("Consultation", "75");
@@ -1103,5 +1519,4 @@ describe("LightDesigner", () => {
       ),
     );
   });
-
 });

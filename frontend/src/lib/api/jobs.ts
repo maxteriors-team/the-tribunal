@@ -15,6 +15,9 @@ export type JobUpdateRequest = Schemas["JobUpdate"];
 export type JobScheduleRequest = Schemas["JobScheduleRequest"];
 export type JobAssignRequest = Schemas["JobAssignRequest"];
 export type JobTechnician = Schemas["TechnicianSummary"];
+export type JobCrew = Schemas["CrewResponse"];
+export type JobCrewList = Schemas["CrewListResponse"];
+export type JobInstallationPlan = Schemas["JobInstallationPlanResponse"];
 
 // Field execution: time tracking, expenses, profitability.
 export type TimeEntry = Schemas["TimeEntryResponse"];
@@ -56,6 +59,11 @@ export const jobsApi = {
   list: (workspaceId: string, query: JobListParams = {}): Promise<JobList> =>
     apiClient.get(BASE, { path: { workspace_id: workspaceId }, query }),
 
+  listCrews: (workspaceId: string): Promise<JobCrewList> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/crews", {
+      path: { workspace_id: workspaceId },
+    }),
+
   /** Jobs assigned to the signed-in user, for their own calendar. */
   listMine: (workspaceId: string, query: JobCalendarParams = {}): Promise<JobList> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/calendar/mine", {
@@ -68,6 +76,10 @@ export const jobsApi = {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
 
+  installationPlan: (workspaceId: string, jobId: string): Promise<JobInstallationPlan> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
   create: (workspaceId: string, body: JobCreateRequest): Promise<Job> =>
     apiClient.post(BASE, { path: { workspace_id: workspaceId }, body }),
 
@@ -95,12 +107,9 @@ export const jobsApi = {
     }),
 
   unassign: (workspaceId: string, jobId: string, technicianId: string): Promise<Job> =>
-    apiClient.del(
-      "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments/{technician_id}",
-      {
-        path: { workspace_id: workspaceId, job_id: jobId, technician_id: technicianId },
-      },
-    ),
+    apiClient.del("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/assignments/{technician_id}", {
+      path: { workspace_id: workspaceId, job_id: jobId, technician_id: technicianId },
+    }),
 
   // ----- Field execution: time tracking, expenses, profitability ----- //
   listTimeEntries: (workspaceId: string, jobId: string): Promise<TimeEntry[]> =>
@@ -108,7 +117,11 @@ export const jobsApi = {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
 
-  clockIn: (workspaceId: string, jobId: string, body: ClockInRequest = { rate: 0 }): Promise<TimeEntry> =>
+  clockIn: (
+    workspaceId: string,
+    jobId: string,
+    body: ClockInRequest = { rate: 0 },
+  ): Promise<TimeEntry> =>
     apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-in", {
       path: { workspace_id: workspaceId, job_id: jobId },
       body,

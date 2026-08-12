@@ -247,6 +247,7 @@ class InvoiceService:
         created_by_id: int | None = None,
         amount_paid: float = 0.0,
         payment_intent_id: str | None = None,
+        commit: bool = True,
     ) -> InvoiceDetailResponse:
         """Create a draft invoice with its initial line items and computed totals.
 
@@ -304,17 +305,21 @@ class InvoiceService:
             if invoice.status == "paid":
                 invoice.paid_at = datetime.now(UTC)
         self.db.add(invoice)
-        await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-
-        self.log.info(
-            "invoice_created",
-            invoice_id=str(invoice.id),
-            workspace_id=str(workspace_id),
-            number=invoice.number,
-            total=float(invoice.total),
-            amount_paid=float(invoice.amount_paid),
-        )
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(invoice, ["line_items"])
+            self.log.info(
+                "invoice_created",
+                invoice_id=str(invoice.id),
+                workspace_id=str(workspace_id),
+                number=invoice.number,
+                total=float(invoice.total),
+                amount_paid=float(invoice.amount_paid),
+            )
+        else:
+            # Quote conversion owns one transaction for quote, job, and invoice.
+            # Flush assigns IDs while leaving rollback/commit to that caller.
+            await self.db.flush()
         return serialize_invoice(invoice, InvoiceDetailResponse)
 
     async def get_invoice(

@@ -116,6 +116,13 @@ const servicePlans = createResourceQueryKeys("service-plans");
 const quotes = createResourceQueryKeys("quotes");
 const leadMagnets = createResourceQueryKeys("lead-magnets");
 const leadSources = createResourceQueryKeys("lead-sources");
+const lightingProjectResource = createResourceQueryKeys("lighting-projects");
+const lightingProjects = {
+  ...lightingProjectResource,
+  browserDraft: (workspaceId: string) => ["lighting-project-browser-draft", workspaceId] as const,
+  proposalPreview: (workspaceId: string, selectionSignature: string) =>
+    ["lighting-project-proposal-preview", workspaceId, selectionSignature] as const,
+};
 const businessLocations = createResourceQueryKeys("business-locations");
 const messageTemplates = createResourceQueryKeys("message-templates");
 const messageTests = createResourceQueryKeys("message-tests");
@@ -379,6 +386,9 @@ export const queryKeys = {
     ...jobs,
     materials: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "materials"] as const,
+    crews: (workspaceId: string) => [...jobs.all(workspaceId), "crews"] as const,
+    installationPlan: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "installation-plan"] as const,
     mine: (workspaceId: string, params?: QueryKeyParams | null) =>
       [...jobs.all(workspaceId), "mine", normalizeQueryKeyParams(params)] as const,
     timeEntries: (workspaceId: string, jobId: string) =>
@@ -417,6 +427,7 @@ export const queryKeys = {
   },
   knowledgeDocuments: createResourceQueryKeys("knowledge-documents"),
   leadMagnets,
+  lightingProjects,
   leadSources: {
     ...leadSources,
     campaigns: (workspaceId: string, leadSourceId: string) =>

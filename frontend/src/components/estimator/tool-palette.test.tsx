@@ -30,6 +30,10 @@ const UPLIGHT: Product = {
   colors: ["#ffd9a0"],
   spacingIn: 24,
   sizeFt: 1,
+  productName: "ZDC Color Uplight",
+  sku: "FX-ZDC-UP",
+  lampLabel: "2700K LED",
+  accessoryLabels: ["Long shroud", "Ground stake"],
   target: { field: "landscape", fixtureType: "uplight" },
 };
 
@@ -39,8 +43,28 @@ const PATH_LIGHT: Product = {
   ...UPLIGHT,
   id: "path",
   name: "Path light",
-  style: "stake",
-  target: { field: "landscape", fixtureType: "path" },
+  style: "pathlight",
+  target: { field: "landscape", fixtureType: "pathlight" },
+};
+
+const TRANSFORMER: Product = {
+  ...UPLIGHT,
+  id: "transformer",
+  name: "Transformer",
+  style: "transformer",
+  sizeFt: 3,
+  target: { field: "annotation", annotationType: "transformer" },
+};
+
+const WIRE: Product = {
+  ...UPLIGHT,
+  id: "landscape-wire",
+  name: "Wire circuit",
+  kind: "linear",
+  style: "wire",
+  price: 0,
+  sizeFt: 0,
+  target: { field: "annotation", annotationType: "wire" },
 };
 
 function stateWith(item: PlacedItem): EditorState {
@@ -56,13 +80,7 @@ function stateWith(item: PlacedItem): EditorState {
 
 function renderPalette(item: PlacedItem, products: Product[] = [UPLIGHT]) {
   const dispatch = vi.fn();
-  render(
-    <ToolPalette
-      products={products}
-      state={stateWith(item)}
-      dispatch={dispatch}
-    />,
-  );
+  render(<ToolPalette products={products} state={stateWith(item)} dispatch={dispatch} />);
   return dispatch;
 }
 
@@ -75,6 +93,41 @@ const placed = (over: Partial<PlacedItem> = {}): PlacedItem => ({
 });
 
 describe("FixtureOptions beam slider", () => {
+  it("keeps the price-book specification and per-fixture marker, size, duplicate, and delete controls", () => {
+    const dispatch = renderPalette(placed());
+
+    expect(screen.getByText("ZDC Color Uplight")).toBeInTheDocument();
+    expect(screen.getByText("FX-ZDC-UP")).toBeInTheDocument();
+    expect(screen.getByText("2700K LED")).toBeInTheDocument();
+    expect(screen.getByText("Long shroud, Ground stake")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Set marker color #f2c94c" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: { markerColor: "#f2c94c" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Increase fixture symbol size" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: { sizePx: 46 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate fixture" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ADD_ITEM",
+      item: expect.objectContaining({
+        id: expect.any(String),
+        at: { x: 120, y: 120 },
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete fixture" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "DELETE_ITEM", id: "item-1" });
+  });
+
   it("starts at the fixture's current spread", () => {
     renderPalette(placed({ beamAngleDeg: 42 }));
 
@@ -136,6 +189,109 @@ describe("FixtureOptions beam slider", () => {
     renderPalette(placed({ productId: "path" }), [PATH_LIGHT]);
 
     expect(screen.queryByLabelText(/Beam angle in degrees/i)).toBeNull();
+  });
+
+  it("changes a placed fixture to another icon without moving its anchor", () => {
+    const dispatch = renderPalette(placed(), [UPLIGHT, PATH_LIGHT, TRANSFORMER]);
+
+    fireEvent.click(screen.getByTitle("Change selected symbol to Transformer"));
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: {
+        productId: "transformer",
+        sizePx: 120,
+        beamAngleDeg: undefined,
+        beamRotationDeg: undefined,
+        circuitId: undefined,
+      },
+    });
+  });
+
+  it("shows transformer as plan-only equipment with no beam controls", () => {
+    renderPalette(placed({ productId: "transformer" }), [UPLIGHT, TRANSFORMER]);
+
+    expect(screen.getByText(/Power equipment symbol/i)).toBeInTheDocument();
+    expect(screen.getByTitle("Change selected symbol to Transformer")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByLabelText(/Beam angle in degrees/i)).toBeNull();
+  });
+});
+
+describe("landscape wire circuit controls", () => {
+  const circuit = {
+    id: "circuit-1",
+    productId: WIRE.id,
+    points: [
+      { x: 10, y: 10 },
+      { x: 100, y: 100 },
+    ],
+    circuitLabel: "C1",
+    transformerId: "transformer-1",
+    wireGauge: 12 as const,
+    sourceVoltage: 12,
+  };
+  const transformer = placed({ id: "transformer-1", productId: TRANSFORMER.id });
+
+  it("assigns a selected fixture to a drawn circuit", () => {
+    const dispatch = vi.fn();
+    const fixture = placed();
+    render(
+      <ToolPalette
+        products={[UPLIGHT, TRANSFORMER, WIRE]}
+        state={{
+          ...stateWith(fixture),
+          design: { ...EMPTY_DESIGN, runs: [circuit], items: [fixture, transformer] },
+        }}
+        dispatch={dispatch}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Assigned transformer circuit"), {
+      target: { value: "circuit-1" },
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: { circuitId: "circuit-1" },
+    });
+  });
+
+  it("edits transformer, wire gauge, and tap for a selected circuit", () => {
+    const dispatch = vi.fn();
+    render(
+      <ToolPalette
+        products={[UPLIGHT, TRANSFORMER, WIRE]}
+        state={{
+          ...stateWith(transformer),
+          design: { ...EMPTY_DESIGN, runs: [circuit], items: [transformer] },
+          selection: { kind: "run", id: circuit.id },
+        }}
+        dispatch={dispatch}
+      />,
+    );
+
+    expect(screen.getByText("C1").closest("p")).toHaveTextContent("C1 · 0 assigned fixtures");
+    expect(screen.getByRole("option", { name: "12/2 AWG" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "10/2 AWG" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "14 AWG" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Wire gauge"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Transformer tap"), { target: { value: "13" } });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_RUN",
+      id: "circuit-1",
+      patch: { wireGauge: 10 },
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_RUN",
+      id: "circuit-1",
+      patch: { sourceVoltage: 13 },
+    });
   });
 });
 
