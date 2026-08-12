@@ -155,6 +155,54 @@ class TestReminderWorkerKey:
         call_kwargs = sms_instance.send_message.call_args.kwargs
         assert call_kwargs["idempotency_key"] == derive("reminder", 4242, 60)
 
+    def test_new_booking_inside_reminder_window_does_not_fire_immediately(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from app.workers.reminder_worker import ReminderWorker
+
+        now = datetime.now(UTC)
+        appt = SimpleNamespace(
+            id=4242,
+            agent=SimpleNamespace(
+                reminder_enabled=True,
+                reminder_offsets=[1440, 120, 30],
+                reminder_channels=["sms"],
+            ),
+            workspace=SimpleNamespace(settings={}),
+            scheduled_at=now + timedelta(hours=15),
+            created_at=now - timedelta(seconds=30),
+            reminders_sent=[],
+            reminders_sent_email=[],
+        )
+
+        due = ReminderWorker()._collect_due_reminders([appt], now)
+
+        assert due == []
+
+    def test_reminder_fires_after_booking_precedes_the_window(self) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from app.workers.reminder_worker import ReminderWorker
+
+        now = datetime.now(UTC)
+        appt = SimpleNamespace(
+            id=4242,
+            agent=SimpleNamespace(
+                reminder_enabled=True,
+                reminder_offsets=[120],
+                reminder_channels=["sms"],
+            ),
+            workspace=SimpleNamespace(settings={}),
+            scheduled_at=now + timedelta(minutes=90),
+            created_at=now - timedelta(days=1),
+            reminders_sent=[],
+            reminders_sent_email=[],
+        )
+
+        due = ReminderWorker()._collect_due_reminders([appt], now)
+
+        assert due == [(appt, 120, "sms")]
+
     async def test_value_reinforcement_passes_per_appointment_key(self) -> None:
         from app.workers.reminder_worker import ReminderWorker
 

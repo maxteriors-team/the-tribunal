@@ -15,8 +15,8 @@ delete it, and it applies to contacts one at a time as they qualify.
 
 ## Create one in the app
 
-1. Open **Automations** in the sidebar (under Tools).
-2. Click **Create Automation**.
+1. Open **Automations** at `/automations`.
+2. Select **Create Automation**.
 3. Fill in **Name** and, optionally, **Description**.
 4. Pick a **Trigger Type** — when the rule should fire.
 5. Pick an **Action** — what should happen.

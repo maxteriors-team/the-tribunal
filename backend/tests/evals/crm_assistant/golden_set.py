@@ -360,7 +360,27 @@ _HOW_TO: tuple[GoldenCase, ...] = (
         utterance="How do I set up an automation in this CRM?",
         expected_tools=("search_help",),
         forbidden_tools=("create_automation",),
-        notes="No product corpus exists, so today this is answered from model priors.",
+        notes="Product guidance must come from the bundled help source.",
+    ),
+    GoldenCase(
+        id="howto_create_send_invoice",
+        category="how_to",
+        utterance="How do I create and send an invoice to a customer?",
+        expected_tools=("search_help",),
+        notes="The answer must use the Invoices route and exact UI labels.",
+    ),
+    GoldenCase(
+        id="howto_import_contacts",
+        category="how_to",
+        utterance="Where do I import a CSV of contacts?",
+        expected_tools=("search_help",),
+        forbidden_tools=("create_contact",),
+    ),
+    GoldenCase(
+        id="howto_receive_inventory",
+        category="how_to",
+        utterance="How do I receive new inventory stock?",
+        expected_tools=("search_help",),
     ),
     GoldenCase(
         id="howto_campaign_vs_automation",

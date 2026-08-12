@@ -37,8 +37,7 @@ waiting for its start date is `scheduled`.
 
 ## Building one
 
-Create a campaign from **Campaigns** in the sidebar. The SMS wizard walks
-through six steps:
+Open **Campaigns** at `/campaigns`. Select the creation control for the channel: `/campaigns/sms/new`, `/campaigns/voice/new`, `/campaigns/email/new`, or `/campaigns/pre-booking/new`. The shared starter route is `/campaigns/new`. The SMS wizard walks through six steps:
 
 1. **Basics** — name, description, and the sending phone number.
 2. **Contacts** — who receives it.
