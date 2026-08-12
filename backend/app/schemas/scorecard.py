@@ -19,6 +19,13 @@ class CallReasonStat(BaseModel):
     count: int
 
 
+class DailyLeadCount(BaseModel):
+    """New leads captured on one calendar day (workspace-local)."""
+
+    date: date
+    count: int
+
+
 class ReceptionistScorecard(BaseModel):
     """Aggregated receptionist performance for a workspace over a date range."""
 
@@ -42,6 +49,17 @@ class ReceptionistScorecard(BaseModel):
     revenue_booked: float  # sum of opportunity amounts created in the range
     deposits_booked: float  # closed-won opportunity revenue in the range
     currency: str
+
+    # --- New lead intake ----------------------------------------------------
+    # "Lead" is a contacts row, counted by ``created_at`` — the same definition
+    # the Contacts page stat cards use for "new leads". No status/source filter,
+    # so a bulk import (e.g. Jobber) lands every imported client on its import
+    # day rather than its original acquisition day.
+    new_leads_total: int
+    # One entry per calendar day in the range, ascending, zero-filled so a day
+    # with no leads is an explicit 0 instead of a gap in the series.
+    new_leads_by_day: list[DailyLeadCount]
+    avg_new_leads_per_day: float | None  # null when the range covers no days
 
     # --- After-hours coverage ----------------------------------------------
     after_hours_calls: int

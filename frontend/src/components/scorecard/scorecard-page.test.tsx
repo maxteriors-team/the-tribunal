@@ -43,6 +43,13 @@ function sampleScorecard(
       { reason: "pricing", count: 11 },
       { reason: "booking", count: 7 },
     ],
+    new_leads_total: 6,
+    new_leads_by_day: [
+      { date: "2026-01-01", count: 4 },
+      { date: "2026-01-02", count: 0 },
+      { date: "2026-01-03", count: 2 },
+    ],
+    avg_new_leads_per_day: 2,
     ...overrides,
   };
 }
@@ -92,7 +99,35 @@ describe("ScorecardPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the setup empty state when there are no receptionist calls", async () => {
+  it("shows the setup empty state when there are no calls and no leads", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(
+      sampleScorecard({
+        calls_total: 0,
+        calls_answered: 0,
+        answer_rate: null,
+        top_call_reasons: [],
+        new_leads_total: 0,
+        new_leads_by_day: [],
+        avg_new_leads_per_day: null,
+      }),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText("No receptionist calls yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Connect a phone number" }),
+    ).toHaveAttribute("href", "/phone-numbers");
+    // The metric grid is hidden until there is something to show.
+    expect(screen.queryByText("Calls answered")).not.toBeInTheDocument();
+  });
+
+  it("still shows the scorecard when leads exist but no calls do", async () => {
+    // Lead capture runs through forms and imports too, so zero calls must not
+    // hide lead intake behind the "connect a phone number" setup prompt.
     useWorkspaceIdMock.mockReturnValue("ws-1");
     getScorecardMock.mockResolvedValue(
       sampleScorecard({
@@ -105,14 +140,47 @@ describe("ScorecardPage", () => {
 
     renderPage();
 
+    expect(await screen.findByText("New leads")).toBeInTheDocument();
     expect(
-      await screen.findByText("No receptionist calls yet"),
+      screen.queryByText("No receptionist calls yet"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reports new leads per day", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(sampleScorecard());
+
+    renderPage();
+
+    // Stat card: total plus the per-day average.
+    expect(await screen.findByText("New leads")).toBeInTheDocument();
+    expect(screen.getByText("2/day average")).toBeInTheDocument();
+
+    // Chart: one bar per day in the range, including the zero day, each
+    // labelled with its own count.
+    expect(screen.getByTitle("Jan 1: 4 leads")).toBeInTheDocument();
+    expect(screen.getByTitle("Jan 2: 0 leads")).toBeInTheDocument();
+    expect(screen.getByTitle("Jan 3: 2 leads")).toBeInTheDocument();
+  });
+
+  it("shows an empty chart state when no leads landed in the range", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(
+      sampleScorecard({
+        new_leads_total: 0,
+        new_leads_by_day: [
+          { date: "2026-01-01", count: 0 },
+          { date: "2026-01-02", count: 0 },
+        ],
+        avg_new_leads_per_day: 0,
+      }),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByText("No new leads in this range"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Connect a phone number" }),
-    ).toHaveAttribute("href", "/phone-numbers");
-    // The metric grid is hidden until calls exist.
-    expect(screen.queryByText("Calls answered")).not.toBeInTheDocument();
   });
 
   it("requests data for the selected workspace", async () => {

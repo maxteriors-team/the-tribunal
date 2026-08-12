@@ -10,6 +10,7 @@ import {
   Timer,
   MessageSquareReply,
   ListChecks,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -56,6 +57,20 @@ function formatSeconds(seconds: number | null): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.round(seconds % 60);
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+/** Render an API date (YYYY-MM-DD) without letting the local timezone shift it.
+ *
+ * `new Date("2026-01-05")` parses as UTC midnight, which renders as Jan 4 for
+ * anyone west of UTC — the exact off-by-one-day the server-side local bucketing
+ * avoids. Formatting from the parts keeps the label matching its bucket.
+ */
+function formatDayLabel(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function ScorecardPage() {
@@ -114,7 +129,10 @@ export function ScorecardPage() {
 }
 
 function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
-  if (data.calls_total === 0) {
+  // Lead intake is independent of the receptionist, so a workspace capturing
+  // leads through forms/imports with no calls yet still has a scorecard worth
+  // showing. Only fall back to the empty state when there is nothing at all.
+  if (data.calls_total === 0 && data.new_leads_total === 0) {
     return (
       <PageEmptyState
         icon={<PhoneCall className="size-8" />}
@@ -130,6 +148,17 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
   }
 
   const metrics = [
+    {
+      key: "new-leads",
+      label: "New leads",
+      icon: UserPlus,
+      value: formatNumber(data.new_leads_total),
+      sub:
+        data.avg_new_leads_per_day === null
+          ? "in selected range"
+          : `${formatNumber(data.avg_new_leads_per_day)}/day average`,
+      tone: "text-foreground",
+    },
     {
       key: "answered",
       label: "Calls answered",
@@ -207,6 +236,8 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
         ))}
       </div>
 
+      <NewLeadsByDayCard data={data} />
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -238,5 +269,86 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** Daily new-lead intake as a scaled bar series.
+ *
+ * Deliberately hand-rolled: the app ships no charting library, and a bar
+ * series scaled against the range max needs no axis maths to stay readable.
+ */
+function NewLeadsByDayCard({ data }: { data: ReceptionistScorecard }) {
+  const days = data.new_leads_by_day;
+  const peak = days.reduce((max, d) => Math.max(max, d.count), 0);
+
+  // Long ranges (90 days) can't show a label per bar without collapsing into
+  // noise, so thin them to roughly six evenly spaced ticks.
+  const labelStep = Math.max(1, Math.ceil(days.length / 6));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserPlus className="size-4 text-muted-foreground" />
+          New leads per day
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {days.length === 0 || peak === 0 ? (
+          <PageEmptyState
+            title="No new leads in this range"
+            description="New contacts are counted on the day they're created. Capture a lead through a form, call, or import to see the daily trend."
+          />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {formatNumber(data.new_leads_total)}
+              </span>{" "}
+              new {data.new_leads_total === 1 ? "lead" : "leads"}
+              {data.avg_new_leads_per_day === null
+                ? null
+                : ` · ${formatNumber(data.avg_new_leads_per_day)}/day average`}
+              {` · peak ${formatNumber(peak)}`}
+            </p>
+
+            <div
+              className="flex h-40 items-end gap-px"
+              role="img"
+              aria-label={`New leads per day from ${data.start_date} to ${data.end_date}. ${formatNumber(data.new_leads_total)} total, peak ${formatNumber(peak)} in one day.`}
+            >
+              {days.map((day) => (
+                <div
+                  key={day.date}
+                  className="flex h-full flex-1 items-end"
+                  title={`${formatDayLabel(day.date)}: ${formatNumber(day.count)} ${day.count === 1 ? "lead" : "leads"}`}
+                >
+                  <div
+                    className={
+                      day.count === 0
+                        ? "w-full rounded-sm bg-muted"
+                        : "w-full rounded-sm bg-primary"
+                    }
+                    // A zero day still renders a hairline track so the timeline
+                    // reads as continuous instead of looking like missing data.
+                    style={{
+                      height: day.count === 0 ? "2px" : `${(day.count / peak) * 100}%`,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between text-xs text-muted-foreground">
+              {days
+                .filter((_, i) => i % labelStep === 0)
+                .map((day) => (
+                  <span key={day.date}>{formatDayLabel(day.date)}</span>
+                ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
