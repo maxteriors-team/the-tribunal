@@ -54,9 +54,11 @@ sibling explicitly.
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import os
+import pkgutil
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -88,7 +90,6 @@ from app.core.encryption import (  # noqa: E402
     hash_phone,
     hash_value,
 )
-from app.db.session import AsyncSessionLocal  # noqa: E402
 from scripts._harness import (  # noqa: E402
     EXIT_FAILURE,
     EXIT_OK,
@@ -97,6 +98,7 @@ from scripts._harness import (  # noqa: E402
     bootstrap,
     log_event,
     run,
+    script_sessionmaker,
 )
 
 logger = logging.getLogger("rotate")
@@ -138,11 +140,19 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     :func:`ensure_targets_valid` will say so loudly rather than let the rotation
     quietly no-op.
     """
+    from app.models.caller_memory import CallerMemory
     from app.models.contact import Contact
+    from app.models.conversation import Conversation, Message
+    from app.models.demo_request import DemoRequest
+    from app.models.field_service import ServiceLocation
     from app.models.human_profile import HumanProfile
     from app.models.lead_magnet_lead import LeadMagnetLead
+    from app.models.lead_prospect import LeadProspect
     from app.models.link_click import LinkClick
     from app.models.message_attachment import MessageAttachment
+    from app.models.opt_out import GlobalOptOut
+    from app.models.phone_message import PhoneMessage
+    from app.models.referral_partner import ReferralPartner
     from app.models.user import User
 
     return (
@@ -176,6 +186,50 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
         ),
         RotationTarget(LinkClick, ("ip_address",)),
         RotationTarget(MessageAttachment, ("source_url",)),
+        # Conversation/message payloads. These carry the bulk of the customer
+        # PII in the product (SMS bodies, call transcripts, recording URLs) and
+        # were absent from this list while their columns were encrypted, so a
+        # rotation would have left every one of them readable only under a key
+        # the operator had just discarded.
+        RotationTarget(
+            Conversation,
+            ("workspace_phone", "contact_phone", "last_message_preview"),
+            {
+                "workspace_phone": "workspace_phone_hash",
+                "contact_phone": "contact_phone_hash",
+            },
+        ),
+        RotationTarget(
+            Message,
+            ("body", "subject", "recipient_email", "sender_email", "recording_url", "transcript"),
+        ),
+        RotationTarget(
+            ServiceLocation,
+            (
+                "address_line1",
+                "address_line2",
+                "city",
+                "state",
+                "postal_code",
+                "access_notes",
+            ),
+        ),
+        RotationTarget(
+            PhoneMessage,
+            ("caller_name", "callback_number", "reason", "message_body"),
+        ),
+        RotationTarget(ReferralPartner, ("email", "phone")),
+        RotationTarget(
+            LeadProspect,
+            ("email", "phone_number"),
+            {"email": "email_hash", "phone_number": "phone_hash"},
+        ),
+        # Opt-out records gate every outbound send. An unrotatable phone number
+        # here does not merely break a page: the suppression lookup stops
+        # matching and the system texts people who asked it to stop.
+        RotationTarget(GlobalOptOut, ("phone_number",), {"phone_number": "phone_hash"}),
+        RotationTarget(DemoRequest, ("phone_number",), {"phone_number": "phone_hash"}),
+        RotationTarget(CallerMemory, ("summary",)),
     )
 
 
@@ -258,6 +312,80 @@ def validate_targets(targets: Sequence[RotationTarget]) -> list[str]:
     return problems
 
 
+def undeclared_encrypted_columns(targets: Sequence[RotationTarget]) -> list[str]:
+    """Return every mapped ``EncryptedString`` column missing from ``targets``.
+
+    :func:`validate_targets` only proves the *declared* columns are really
+    encrypted. It says nothing about the inverse, which is the more dangerous
+    direction: a column that is encrypted but never declared is silently skipped
+    by the rotation, and once the old key is discarded its data is unreadable
+    forever — and the app raises :class:`InvalidToken` on every read of it, so
+    the failure surfaces as a 500 on whatever page loads that row.
+
+    Enumerated off the mapper registry rather than a hand-maintained list, so
+    adding an ``EncryptedString`` column anywhere fails this check until the
+    column is registered for rotation.
+    """
+    # Import every model module so the registry is complete: a model that no
+    # other import path has touched would otherwise be invisible here, which is
+    # exactly the blind spot this function exists to close.
+    import app.models
+
+    for module in pkgutil.iter_modules(app.models.__path__):
+        importlib.import_module(f"app.models.{module.name}")
+
+    from app.db.base import Base
+
+    declared: set[tuple[str, str]] = set()
+    for target in targets:
+        mapper = sa.inspect(target.model, raiseerr=False)
+        if mapper is None:
+            continue
+        for name in target.columns:
+            column = mapper.columns.get(name)
+            if column is not None:
+                declared.add((mapper.local_table.name, column.name))
+    # Rotated by _rotate_workspace_credentials rather than a RotationTarget.
+    declared.add(("workspace_integrations", "credentials"))
+
+    missing: list[str] = []
+    for mapper in Base.registry.mappers:
+        table = mapper.local_table.name if isinstance(mapper.local_table, sa.Table) else ""
+        for column in mapper.columns:
+            if not isinstance(column.type, EncryptedString):
+                continue
+            if (table, column.name) not in declared:
+                missing.append(f"{mapper.class_.__name__}.{column.key} ({table}.{column.name})")
+    return sorted(set(missing))
+
+
+def ensure_full_coverage(targets: Sequence[RotationTarget]) -> None:
+    """Abort when any encrypted column in the schema is missing from ``targets``.
+
+    Separate from :func:`ensure_targets_valid` because this is a property of the
+    canonical :func:`rotation_targets` list against the whole mapper registry,
+    not of an arbitrary list of targets.
+
+    Raises :class:`ScriptAbortError` carrying :data:`EXIT_FAILURE`, before a
+    single row is read.
+    """
+    undeclared = undeclared_encrypted_columns(targets)
+    if not undeclared:
+        return
+
+    listed = "\n".join(f"   ✗ {column}" for column in undeclared)
+    print(f"\n{_RULE}\n RESULT: FAIL — rotation aborted before any data was touched\n{_RULE}")
+    raise ScriptAbortError(
+        f"REFUSING TO ROTATE — {len(undeclared)} encrypted column(s) are not "
+        f"declared for rotation:\n{listed}\n"
+        "   Each column above is encrypted at rest but would be skipped by this\n"
+        "   pass, leaving it readable only under the key you are discarding.\n"
+        "   Add it to rotation_targets() (with its *_hash sibling, if any) and\n"
+        "   re-run. Nothing was read or written.",
+        exit_code=EXIT_FAILURE,
+    )
+
+
 def ensure_targets_valid(targets: Sequence[RotationTarget]) -> None:
     """Abort the run when any declared target is misdeclared.
 
@@ -298,6 +426,14 @@ class RotationStats:
     scanned: int
     rotated: int
     skipped_invalid: int
+    absent: bool = False
+    """The table is declared but does not exist in this database.
+
+    A model whose migration has not been applied to this environment has no rows
+    to rotate, so this is not a failure — but it must be reported distinctly, or
+    it renders identically to a genuinely empty table and an operator cannot
+    tell "nothing to do" apart from "never looked".
+    """
 
     @property
     def failed(self) -> bool:
@@ -320,6 +456,8 @@ class RotationStats:
             return "FAIL"
         if self.degraded:
             return "PARTIAL"
+        if self.absent:
+            return "absent"
         return "ok"
 
 
@@ -569,6 +707,19 @@ async def _rotate_workspace_credentials(
     )
 
 
+async def _existing_tables(session: AsyncSession) -> set[str]:
+    """Return the table names that actually exist in the target database.
+
+    A declared model whose migration has not reached this environment would
+    otherwise abort the whole pass with ``UndefinedTableError`` and roll back
+    every table rotated before it.
+    """
+    rows = await session.execute(
+        sa.text("select table_name from information_schema.tables where table_schema = 'public'")
+    )
+    return set(rows.scalars().all())
+
+
 async def rotate_all(
     session: AsyncSession,
     *,
@@ -578,7 +729,16 @@ async def rotate_all(
 ) -> list[RotationStats]:
     """Rotate every declared target plus the workspace credential blobs."""
     all_stats: list[RotationStats] = []
+    present = await _existing_tables(session)
     for target in targets:
+        if target.label not in present:
+            # Loud, and distinct from an empty table in the summary.
+            stats = RotationStats(
+                table=target.label, scanned=0, rotated=0, skipped_invalid=0, absent=True
+            )
+            all_stats.append(stats)
+            _log_table(stats)
+            continue
         stats = await _rotate_string_columns(
             session,
             target=target,
@@ -598,7 +758,7 @@ def _log_table(stats: RotationStats) -> None:
     """Emit one structured record per rotated table."""
     log_event(
         logger,
-        logging.WARNING if stats.failed or stats.degraded else logging.INFO,
+        logging.WARNING if stats.failed or stats.degraded or stats.absent else logging.INFO,
         "rotated table",
         table=stats.table,
         scanned=stats.scanned,
@@ -613,6 +773,8 @@ async def _run(ctx: ExecutionContext) -> int:
     # actually encrypted makes the whole pass a no-op.
     targets = rotation_targets()
     ensure_targets_valid(targets)
+    # ... and the inverse check: nothing encrypted may be left out of the pass.
+    ensure_full_coverage(targets)
 
     old_fernet = _old_fernet()
 
@@ -633,7 +795,17 @@ async def _run(ctx: ExecutionContext) -> int:
 
     started = time.monotonic()
     try:
-        async with AsyncSessionLocal() as session, session.begin():
+        # The session factory is built here, from ``ctx.env``, rather than
+        # imported: ``app.db.session`` freezes ``AsyncSessionLocal`` from the
+        # ambient ``DATABASE_URL`` at import time, which is the developer's dev
+        # database. Using it would rotate the *local* rows under a key named for
+        # production and report success — the exact silent-wrong-database
+        # failure ``script_sessionmaker`` exists to prevent.
+        async with (
+            script_sessionmaker(ctx) as session_factory,
+            session_factory() as session,
+            session.begin(),
+        ):
             all_stats = await rotate_all(
                 session,
                 targets=targets,
