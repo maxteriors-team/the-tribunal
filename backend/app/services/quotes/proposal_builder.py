@@ -22,6 +22,7 @@ from app.schemas.pricing import (
     ChristmasPricing,
     PermanentPricing,
     PricingSettings,
+    TierPricing,
     ValueProp,
 )
 from app.schemas.proposal_wizard import (
@@ -61,6 +62,23 @@ class CatalogEntry:
 
 def _d(value: float | int | Decimal) -> Decimal:
     return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _price_book_tier(base: Decimal, additional: Decimal, config: PricingSettings) -> TierPricing:
+    """Price one package directly from catalog rows, with no finance/cash fork."""
+    total = base + additional if base > 0 else base
+    commission = pp.commission_amount(total, config) if total > 0 else Decimal("0")
+    return TierPricing(
+        base=float(base),
+        additional=float(additional),
+        financed_total=float(total),
+        cash_total=float(total),
+        cash_savings=0,
+        monthly_payment=0,
+        monthly_by_term={},
+        commission_financed=float(commission),
+        commission_cash=float(commission),
+    )
 
 
 def _active_categories(payload: ProposalWizardPayload) -> list[str]:
@@ -180,10 +198,12 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
     """Build the snapshot + the canonical line items for the selected tier."""
     qty_map = {q.item_id: _d(q.quantity) for q in payload.quantities}
 
-    # Add-on charges: rep enters net, we gross up (matches every other price).
+    use_price_book = payload.pricing_source == "price_book"
+
+    # Add-on charges follow the same pricing source as catalog lines.
     charges: list[ProposalCharge] = []
     for c in payload.additional_charges:
-        amount = pp.gross_up_price(c.net_amount, config)
+        amount = _d(c.net_amount) if use_price_book else pp.gross_up_price(c.net_amount, config)
         if amount > 0:
             charges.append(
                 ProposalCharge(
@@ -221,14 +241,16 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             if entry is None:
                 continue
             quantity = qty_map.get(iid, Decimal("0"))
-            gross = pp.gross_up_price(entry.unit_price, config)
-            line_total = gross * quantity
+            unit_price = (
+                entry.unit_price if use_price_book else pp.gross_up_price(entry.unit_price, config)
+            )
+            line_total = unit_price * quantity
             base += line_total
             lines.append(
                 ProposalLine(
                     item_id=iid,
                     name=entry.name,
-                    unit_price=float(gross),
+                    unit_price=float(unit_price),
                     quantity=float(quantity),
                     line_total=float(line_total),
                     transformer=entry.transformer,
@@ -243,7 +265,11 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             (_d(c.amount) for c in _charges_for(charges, key, known_tier_keys)),
             Decimal("0"),
         )
-        pricing = pp.price_tier(base, tier_additional, config)
+        pricing = (
+            _price_book_tier(base, tier_additional, config)
+            if use_price_book
+            else pp.price_tier(base, tier_additional, config)
+        )
         tier_views.append(
             ProposalTierView(
                 key=key,
@@ -371,6 +397,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         category_sections=category_sections,
         config=config,
         catalog=catalog,
+        pricing_source=payload.pricing_source,
     )
 
     # Financing eligibility is presentation-only. Keep the existing price buffer
@@ -393,9 +420,12 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         category_totals["bistro"] = bistro.total
 
     financing = ProposalFinancing(
-        enabled=pp.financing_is_eligible(selection.grand_financed, category_totals, config),
+        enabled=(
+            not use_price_book
+            and pp.financing_is_eligible(selection.grand_financed, category_totals, config)
+        ),
         provider=config.financing.provider,
-        terms=pp.finance_terms(config),
+        terms=[] if use_price_book else pp.finance_terms(config),
         default_term=config.financing.default_term,
         max_amount=config.financing.max_amount,
         headline=config.financing.headline,
@@ -406,6 +436,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
 
     document = ProposalDocument(
         version=1,
+        pricing_source=payload.pricing_source,
         client=payload.client,
         tier_order=[v.key for v in tier_views],
         tiers=tier_views,
@@ -494,6 +525,7 @@ def select_tier(
     category_sections: list[ProposalCategorySection],
     config: PricingSettings,
     catalog: dict[str, CatalogEntry] | None = None,
+    pricing_source: str = "workspace_rules",
 ) -> TierSelection:
     """Derive the canonical line items + totals for one selected package.
 
@@ -576,10 +608,14 @@ def select_tier(
         (_d(li.unit_price) * _d(li.quantity) - _d(li.discount) for li in line_items),
         Decimal("0"),
     )
-    grand_cash = pp.cash_price(grand_financed, config) if grand_financed > 0 else Decimal("0")
-    grand_monthly = (
-        pp.monthly_payment(grand_financed, config) if grand_financed > 0 else Decimal("0")
-    )
+    if pricing_source == "price_book":
+        grand_cash = grand_financed
+        grand_monthly = Decimal("0")
+    else:
+        grand_cash = pp.cash_price(grand_financed, config) if grand_financed > 0 else Decimal("0")
+        grand_monthly = (
+            pp.monthly_payment(grand_financed, config) if grand_financed > 0 else Decimal("0")
+        )
 
     return TierSelection(
         line_items=line_items,
@@ -616,7 +652,11 @@ def add_charge(
     Does **not** reprice — the caller pairs this with :func:`reprice_document`,
     which is what turns the charge into quote lines and totals.
     """
-    amount = pp.gross_up_price(net_amount, config)
+    amount = (
+        _d(net_amount)
+        if document.pricing_source == "price_book"
+        else pp.gross_up_price(net_amount, config)
+    )
     if amount <= 0:
         raise ValueError("A service needs an amount above zero")
     charge = ProposalCharge(
@@ -681,6 +721,7 @@ def reprice_document(
         category_sections=document.category_sections,
         config=config,
         catalog=catalog,
+        pricing_source=document.pricing_source,
     )
     update: dict[str, Any] = {
         "selected_financed_total": selection.selected_financed,

@@ -22,7 +22,7 @@ import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { useJobs, useMyJobsCalendar } from "@/hooks/useJobs";
+import { useJob, useJobs, useMyJobsCalendar } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import type { Job, JobListParams, JobTechnician } from "@/lib/api/jobs";
 import { getWeekRange } from "@/lib/calendar/calendar-derivations";
@@ -122,7 +122,7 @@ function JobCard({
   );
 }
 
-export function JobsCalendar() {
+export function JobsCalendar({ initialJobId }: { initialJobId?: string }) {
   const workspaceId = useWorkspaceId();
   const { can } = useCapabilities();
   // jobs:write — admins/managers/dispatchers. Field technicians have jobs:read
@@ -135,7 +135,7 @@ export function JobsCalendar() {
   const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const [mineOnly, setMineOnly] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialJobId ?? null);
 
   const { weekStart, weekStartIso, weekEndIso, weekDays } = useMemo(
     () => getWeekRange(currentDate),
@@ -170,17 +170,21 @@ export function JobsCalendar() {
     [mineOnly, jobs, unscheduledQuery.data?.items],
   );
 
-  // Resolve the open job from the live lists so the detail dialog reflects edits
-  // after a refetch, and closes itself if the job is deleted or filtered out.
-  // Check the queue too: unscheduled jobs are clicked straight from that panel
-  // and aren't in the week-scoped `jobs` list.
-  const selectedJob = useMemo(
+  // Resolve ordinary selections from the live lists. A `?job=` deep link may
+  // point outside the visible week, so load that authoritative job directly.
+  const listedSelectedJob = useMemo(
     () =>
       jobs.find((job) => job.id === selectedJobId) ??
       queue.find((job) => job.id === selectedJobId) ??
       null,
     [jobs, queue, selectedJobId],
   );
+  const linkedJobQuery = useJob(
+    workspaceId ?? "",
+    selectedJobId ?? "",
+    Boolean(selectedJobId) && listedSelectedJob === null,
+  );
+  const selectedJob = listedSelectedJob ?? linkedJobQuery.data ?? null;
 
   // Changing the visible set (week, status, or the "my jobs" scope) clears any
   // open job so the detail dialog can't resurrect when that job scrolls back

@@ -656,6 +656,7 @@ export function useSalesWizard(
     const hasChristmas = categories.includes("christmas");
     const permFeet = Number.parseFloat(permanent.feet) || 0;
     return {
+      pricing_source: "workspace_rules",
       // Linked customer wins over the server's email/phone lookup, so re-quoting
       // an existing client files on their record instead of creating a twin.
       contact_id: linkedContactId,

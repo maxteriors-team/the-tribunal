@@ -75,18 +75,17 @@ export function fixtureSpec(type: FixtureType): FixtureTypeSpec {
   return SPEC_BY_TYPE.get(type) ?? FIXTURE_TYPES[0];
 }
 
-/**
- * Hardware a rep never draws on a photo: transformers, wire, controllers, and
- * billable services. Excluded so the palette only ever resolves to things that
- * make light.
- */
+/** Identify the package's transformer without mistaking wire or labor for one. */
+function isTransformer(item: CatalogItemResponse): boolean {
+  return item.attributes?.transformer === true || /\btransformer\b/.test(item.name.toLowerCase());
+}
+
+/** Hardware that is not one of the four light-emitting fixture types. */
 function isDrawableFixture(item: CatalogItemResponse): boolean {
-  if (item.attributes?.transformer === true) return false;
+  if (isTransformer(item)) return false;
   if (item.attributes?.drawable === false) return false;
   if (item.kind === "service") return false;
-  return !/\b(transformer|wire|cable|controller|hub|labor|permit|trip)\b/.test(
-    item.name.toLowerCase(),
-  );
+  return !/\b(wire|cable|controller|hub|labor|permit|trip)\b/.test(item.name.toLowerCase());
 }
 
 /**
@@ -128,7 +127,21 @@ export interface ResolvedFixture {
   itemId: string | null;
 }
 
+export interface ResolvedTransformer {
+  item: CatalogItemResponse | null;
+  itemId: string | null;
+}
+
 export type FixtureResolution = Record<FixtureType, ResolvedFixture>;
+
+export const LANDSCAPE_WIRE_PRODUCT_ID = "landscape-wire";
+export const LANDSCAPE_WIRE_GAUGES = [12, 10] as const;
+
+export type QuotedLandscapeWireGauge = (typeof LANDSCAPE_WIRE_GAUGES)[number];
+
+export function landscapeWireLabel(gauge: 8 | 10 | 12 | 14): string {
+  return gauge === 10 || gauge === 12 ? `${gauge}/2 AWG` : `${gauge} AWG`;
+}
 
 /** Stable id the wizard keys quantities on (mirrors `QuoteService`'s lookup). */
 function itemKey(item: CatalogItemResponse): string {
@@ -154,12 +167,8 @@ export function resolveTierFixtures(
     byKey.set(item.id, item);
   }
 
-  const tier =
-    (pricing?.tiers ?? []).find((t) => t.key === tierKey) ??
-    (pricing?.tiers ?? [])[0];
-  const orderedIds = (tier?.sections ?? []).flatMap(
-    (section) => section.item_ids ?? [],
-  );
+  const tier = (pricing?.tiers ?? []).find((t) => t.key === tierKey) ?? (pricing?.tiers ?? [])[0];
+  const orderedIds = (tier?.sections ?? []).flatMap((section) => section.item_ids ?? []);
 
   const resolution = Object.fromEntries(
     FIXTURE_TYPES.map((spec) => [
@@ -178,18 +187,98 @@ export function resolveTierFixtures(
   return resolution;
 }
 
+/** Resolve the plan's transformer to the product sold by the selected package. */
+export function resolveTierTransformer(
+  pricing: PricingSettings | null | undefined,
+  catalog: readonly CatalogItemResponse[] | null | undefined,
+  tierKey: string | null | undefined,
+): ResolvedTransformer {
+  const byKey = new Map<string, CatalogItemResponse>();
+  for (const item of catalog ?? []) {
+    if (item.sku) byKey.set(item.sku, item);
+    byKey.set(item.id, item);
+  }
+  const tier =
+    (pricing?.tiers ?? []).find((candidate) => candidate.key === tierKey) ??
+    (pricing?.tiers ?? [])[0];
+  const orderedIds = (tier?.sections ?? []).flatMap((section) => section.item_ids ?? []);
+  const item = orderedIds
+    .map((id) => byKey.get(id))
+    .find((candidate) => candidate?.is_active && isTransformer(candidate));
+  return { item: item ?? null, itemId: item ? itemKey(item) : null };
+}
+
+function catalogWireGauge(item: CatalogItemResponse): QuotedLandscapeWireGauge | null {
+  const attributeGauge = item.attributes?.wire_gauge ?? item.attributes?.gauge;
+  const numericGauge =
+    typeof attributeGauge === "number"
+      ? attributeGauge
+      : typeof attributeGauge === "string"
+        ? Number.parseInt(attributeGauge, 10)
+        : Number.NaN;
+  if (numericGauge === 10 || numericGauge === 12) return numericGauge;
+
+  const searchable = `${item.name} ${item.sku ?? ""}`;
+  for (const gauge of LANDSCAPE_WIRE_GAUGES) {
+    const cableSize = new RegExp(`\\b${gauge}\\s*(?:/|x|-)\\s*2\\b`, "i");
+    if (cableSize.test(searchable) && /\b(?:wire|cable)\b/i.test(searchable)) return gauge;
+  }
+  return null;
+}
+
+/** Resolve a per-foot 12/2 or 10/2 wire item carried by one proposal tier. */
+export function resolveTierWire(
+  pricing: PricingSettings | null | undefined,
+  catalog: readonly CatalogItemResponse[] | null | undefined,
+  tierKey: string | null | undefined,
+  gauge: QuotedLandscapeWireGauge,
+): CatalogItemResponse | null {
+  const byKey = new Map<string, CatalogItemResponse>();
+  for (const item of catalog ?? []) {
+    if (item.sku) byKey.set(item.sku, item);
+    byKey.set(item.id, item);
+  }
+  const tier =
+    (pricing?.tiers ?? []).find((candidate) => candidate.key === tierKey) ??
+    (pricing?.tiers ?? [])[0];
+  const orderedIds = (tier?.sections ?? []).flatMap((section) => section.item_ids ?? []);
+  return (
+    orderedIds
+      .map((id) => byKey.get(id))
+      .find((item) => item?.is_active && catalogWireGauge(item) === gauge) ?? null
+  );
+}
+
+function fixtureLampLabel(item: CatalogItemResponse | null): string | null {
+  const attributes = item?.attributes ?? {};
+  const lamp = attributes.lamp ?? attributes.lamp_type ?? attributes.color_temperature;
+  return typeof lamp === "string" && lamp.trim() ? lamp.trim() : null;
+}
+
+function fixtureAccessoryLabels(item: CatalogItemResponse | null): string[] {
+  return (item?.components ?? []).flatMap((component) => {
+    const description = component.description?.trim();
+    const sku = component.sku?.trim();
+    const label = description || sku;
+    return label ? [label] : [];
+  });
+}
+
 /** Whether the workspace has any landscape fixtures to draw at all. */
 export function hasLandscapeFixtures(resolution: FixtureResolution): boolean {
   return FIXTURE_TYPES.some((spec) => resolution[spec.type].item !== null);
 }
 
 /**
- * The landscape half of the drawable palette: one entry per fixture type,
- * annotated with the product the current package resolves it to. Prices are the
- * catalog's net rate for display only — the server still prices the quote.
+ * The landscape palette: four light-emitting fixture types plus a transformer
+ * plan symbol. Prices are display hints only; transformer placement is an
+ * annotation and does not alter quote quantities.
  */
-export function buildFixturePalette(resolution: FixtureResolution): Product[] {
-  return FIXTURE_TYPES.map((spec) => {
+export function buildFixturePalette(
+  resolution: FixtureResolution,
+  transformer: ResolvedTransformer = { item: null, itemId: null },
+): Product[] {
+  const fixtures = FIXTURE_TYPES.map((spec) => {
     const resolved = resolution[spec.type];
     return {
       id: `fixture-${spec.type}`,
@@ -201,11 +290,46 @@ export function buildFixturePalette(resolution: FixtureResolution): Product[] {
       colors: COLOR_PRESETS["Warm White"],
       spacingIn: 0,
       sizeFt: spec.sizeFt,
-      // The product this package actually installs for the type, so the rep can
-      // see (and the crew can pull) the real SKU behind a drawn light.
       productName: resolved.item?.name ?? null,
       sku: resolved.itemId,
+      lampLabel: fixtureLampLabel(resolved.item),
+      accessoryLabels: fixtureAccessoryLabels(resolved.item),
       target: { field: "landscape" as const, fixtureType: spec.type },
     };
   });
+  return [
+    ...fixtures,
+    {
+      id: "fixture-transformer",
+      name: "Transformer",
+      category: "landscape" as const,
+      kind: "each" as const,
+      price: transformer.item?.unit_price ?? 0,
+      style: "transformer" as const,
+      colors: [],
+      spacingIn: 0,
+      sizeFt: 3,
+      productName: transformer.item?.name ?? null,
+      sku: transformer.itemId,
+      lampLabel: null,
+      accessoryLabels: fixtureAccessoryLabels(transformer.item),
+      target: { field: "annotation" as const, annotationType: "transformer" as const },
+    },
+    {
+      id: LANDSCAPE_WIRE_PRODUCT_ID,
+      name: "Wire circuit",
+      category: "landscape" as const,
+      kind: "linear" as const,
+      price: 0,
+      style: "wire" as const,
+      colors: ["#35aee2"],
+      spacingIn: 0,
+      sizeFt: 0,
+      productName: null,
+      sku: null,
+      lampLabel: null,
+      accessoryLabels: [],
+      target: { field: "annotation" as const, annotationType: "wire" as const },
+    },
+  ];
 }

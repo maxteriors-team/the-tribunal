@@ -174,13 +174,13 @@ export const salesNavItems: AppNavItem[] = [
     requires: "billing:read",
   },
   {
-    // Folded into the unified Quotes & Estimates hub as a tab (one quoting home
-    // instead of competing estimator routes); kept in the command palette and
-    // reachable by URL, but out of the sidebar. Deep-links straight to the tab.
-    title: "Light Designer",
-    url: "/quotes?tab=designer",
+    // Landscape design is a distinct, visual sales workflow: it needs a direct
+    // front door rather than hiding behind the Quotes table. Mixed-service work
+    // can still use the designer tab inside Quotes.
+    title: "Landscape Lighting",
+    url: "/landscape-lighting",
     icon: Ruler,
-    sidebar: false,
+    sidebar: true,
     commandPalette: true,
     requires: "billing:read",
   },
@@ -610,6 +610,7 @@ export const breadcrumbLabels: Record<string, string> = {
   quotes: "Quotes & Estimates",
   "sales-wizard": "Quote Builder",
   estimator: "Light Designer",
+  "landscape-lighting": "Landscape Lighting",
   invoices: "Invoices",
   "christmas-lights": "Christmas Light Estimator",
   new: "New",

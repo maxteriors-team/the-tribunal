@@ -5254,6 +5254,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Installation Plan
+         * @description Private selected sheet for authorized office staff or assigned installers.
+         */
+        get: operations["get_job_installation_plan_api_v1_workspaces__workspace_id__jobs__job_id__installation_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials": {
         parameters: {
             query?: never;
@@ -5808,6 +5828,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/lighting-projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Lighting Projects
+         * @description List projects with CRM and archive filters.
+         */
+        get: operations["list_lighting_projects_api_v1_workspaces__workspace_id__lighting_projects_get"];
+        put?: never;
+        /**
+         * Create Lighting Project
+         * @description Create a contact-linked lighting project.
+         */
+        post: operations["create_lighting_project_api_v1_workspaces__workspace_id__lighting_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/lighting-projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lighting Project
+         * @description Get one project and its complete current drawing.
+         */
+        get: operations["get_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Lighting Project
+         * @description Version-check and update one project without force-overwriting.
+         */
+        patch: operations["update_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/members/bulk": {
@@ -10990,6 +11058,26 @@ export interface components {
             /** Voice Provider */
             voice_provider?: string | null;
         };
+        /** AnnotationSchema */
+        AnnotationSchema: {
+            at: components["schemas"]["PointSchema"];
+            end?: components["schemas"]["PointSchema"] | null;
+            /** Id */
+            id: string;
+            /** Imagedataurl */
+            imageDataUrl?: string | null;
+            /** Rotationdeg */
+            rotationDeg?: number | null;
+            /** Sizepx */
+            sizePx?: number | null;
+            /** Text */
+            text?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "note" | "line" | "tree" | "photo" | "revision";
+        };
         /**
          * AppointmentAgentStat
          * @description Per-agent appointment statistics.
@@ -11207,6 +11295,15 @@ export interface components {
         ArmStatusUpdate: {
             /** Arm Status */
             arm_status: string;
+        };
+        /** ArrowSchema */
+        ArrowSchema: {
+            a: components["schemas"]["PointSchema"];
+            b: components["schemas"]["PointSchema"];
+            /** Id */
+            id: string;
+            /** Label */
+            label?: string | null;
         };
         /**
          * AssignLeadSourceRequest
@@ -12715,6 +12812,13 @@ export interface components {
             multiplier?: number | null;
             /** Value */
             value: string;
+        };
+        /** CalibrationSchema */
+        CalibrationSchema: {
+            a: components["schemas"]["PointSchema"];
+            b: components["schemas"]["PointSchema"];
+            /** Feet */
+            feet: number;
         };
         /**
          * CallCreate
@@ -15064,6 +15168,33 @@ export interface components {
             total: number;
         };
         /**
+         * CrewNotificationResult
+         * @description Post-commit assignment delivery; never payment/job transaction state.
+         */
+        CrewNotificationResult: {
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /**
+             * Recipient Count
+             * @default 0
+             */
+            recipient_count: number;
+            /**
+             * Sent Count
+             * @default 0
+             */
+            sent_count: number;
+            /**
+             * Status
+             * @default not_applicable
+             * @enum {string}
+             */
+            status: "sent" | "partial" | "not_applicable" | "failed";
+        };
+        /**
          * CrewResponse
          * @description Crew response.
          */
@@ -15388,6 +15519,24 @@ export interface components {
              */
             value: number;
         };
+        /** DesignSchema */
+        DesignSchema: {
+            /** Annotations */
+            annotations?: components["schemas"]["AnnotationSchema"][];
+            /** Arrows */
+            arrows?: components["schemas"]["ArrowSchema"][];
+            calibration?: components["schemas"]["CalibrationSchema"] | null;
+            /** Highlights */
+            highlights?: components["schemas"]["HighlightSchema"][];
+            /** Items */
+            items?: components["schemas"]["PlacedItemSchema"][];
+            /** Measurements */
+            measurements?: components["schemas"]["MeasurementSchema"][];
+            /** Planimages */
+            planImages?: components["schemas"]["PlanImageSchema"][];
+            /** Runs */
+            runs?: components["schemas"]["RunSchema"][];
+        };
         /**
          * DiscountType
          * @description Discount type options.
@@ -15406,6 +15555,47 @@ export interface components {
          * @enum {string}
          */
         DiscoverySourceType: "google_places" | "web_scrape" | "web_people" | "csv_import" | "manual" | "api" | "linkedin" | "meta_ad_library" | "google_ads_transparency" | "other";
+        /** DocumentSettingsSchema */
+        DocumentSettingsSchema: {
+            /**
+             * Fixturenumbersvisible
+             * @default true
+             */
+            fixtureNumbersVisible: boolean;
+            /**
+             * Halosvisible
+             * @default true
+             */
+            halosVisible: boolean;
+            legend?: components["schemas"]["LegendSettingsSchema"];
+            /**
+             * Measurementsvisible
+             * @default true
+             */
+            measurementsVisible: boolean;
+            /**
+             * Papersize
+             * @default tabloid
+             * @enum {string}
+             */
+            paperSize: "tabloid" | "super-b" | "letter" | "arch-c" | "arch-d" | "ansi-d";
+            /**
+             * Planfit
+             * @default contain
+             * @enum {string}
+             */
+            planFit: "contain" | "cover";
+            /**
+             * Planopacity
+             * @default 1
+             */
+            planOpacity: number;
+            /**
+             * Sourcevoltage
+             * @default 13
+             */
+            sourceVoltage: number;
+        };
         /**
          * DraftActionRequest
          * @description Optional operator overrides when queuing the drafted action.
@@ -16428,6 +16618,17 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HighlightSchema */
+        HighlightSchema: {
+            /** Color */
+            color: string;
+            /** Id */
+            id: string;
+            /** Points */
+            points: components["schemas"]["PointSchema"][];
+            /** Widthpx */
+            widthPx: number;
+        };
         /**
          * HumanProfileCreate
          * @description Schema for creating a human profile.
@@ -16780,6 +16981,30 @@ export interface components {
             suggested_greeting: string | null;
             /** Suggested Prompt */
             suggested_prompt: string;
+        };
+        /**
+         * InstallationPlanFixture
+         * @description Price-free fixture schedule row for the selected installation sheet.
+         */
+        InstallationPlanFixture: {
+            /** Accessory Catalog Item Ids */
+            accessory_catalog_item_ids?: string[];
+            /** Catalog Item Id */
+            catalog_item_id?: string | null;
+            /** Catalog Sku */
+            catalog_sku?: string | null;
+            /** Circuit Id */
+            circuit_id?: string | null;
+            /** Item Id */
+            item_id: string;
+            /** Lamp Catalog Item Id */
+            lamp_catalog_item_id?: string | null;
+            /** Number */
+            number: number;
+            /** Product Id */
+            product_id: string;
+            /** Transformer Zone Id */
+            transformer_zone_id?: string | null;
         };
         /**
          * IntegrationCreate
@@ -17899,6 +18124,52 @@ export interface components {
             updated_at: string;
         };
         /**
+         * JobInstallationPlanResponse
+         * @description Assignment-scoped, read-only projection of one selected installation sheet.
+         */
+        JobInstallationPlanResponse: {
+            design: components["schemas"]["DesignSchema"];
+            /** Drawing Number */
+            drawing_number?: string | null;
+            /** Drawing Title */
+            drawing_title?: string | null;
+            /** Dusk */
+            dusk: number;
+            /** Fixture Schedule */
+            fixture_schedule?: components["schemas"]["InstallationPlanFixture"][];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            photo: components["schemas"]["PhotoSchema"];
+            /**
+             * Precon Field Brief
+             * @default
+             */
+            precon_field_brief: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Project Updated At
+             * Format: date-time
+             */
+            project_updated_at: string;
+            /** Project Version */
+            project_version: number;
+            /** Selected Shot Id */
+            selected_shot_id: string;
+            settings: components["schemas"]["DocumentSettingsSchema"];
+            sheet?: components["schemas"]["SheetMetadataSchema"] | null;
+            /** Sheet Label */
+            sheet_label?: string | null;
+        };
+        /**
          * JobLineItemSummary
          * @description One unit of scope of work — deliberately price-free.
          *
@@ -18093,6 +18364,8 @@ export interface components {
             id: string;
             /** Invoice Id */
             invoice_id?: string | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["JobLineItemSummary"][];
             /** Scheduled End */
@@ -18102,6 +18375,8 @@ export interface components {
             service_location?: components["schemas"]["JobSiteSummary"] | null;
             /** Service Location Id */
             service_location_id: string | null;
+            /** Source Quote Id */
+            source_quote_id?: string | null;
             status: components["schemas"]["JobStatus"];
             /** Technicians */
             technicians?: components["schemas"]["TechnicianSummary"][];
@@ -18340,6 +18615,43 @@ export interface components {
         LandscapeConfig: {
             /** Perks */
             perks?: string[];
+        };
+        /** LandscapeDraftDocument */
+        LandscapeDraftDocument: {
+            /** Activeshotid */
+            activeShotId?: string | null;
+            /** Activeworkflowtab */
+            activeWorkflowTab?: ("drawing" | "schedule" | "bom" | "electrical" | "proposal" | "precon") | null;
+            precon?: components["schemas"]["PreconStateSchema"];
+            /** Procurement */
+            procurement?: {
+                [key: string]: components["schemas"]["ProcurementStateSchema"];
+            };
+            proposal?: components["schemas"]["ProposalDraftSchema"];
+            settings?: components["schemas"]["DocumentSettingsSchema"];
+            /** Shots */
+            shots?: components["schemas"]["LandscapeShotSchema"][];
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt?: string;
+            /**
+             * Version
+             * @default 2
+             * @constant
+             */
+            version: 2;
+        };
+        /** LandscapeShotSchema */
+        LandscapeShotSchema: {
+            design: components["schemas"]["DesignSchema"];
+            /** Dusk */
+            dusk: number;
+            /** Id */
+            id: string;
+            photo: components["schemas"]["PhotoSchema"];
+            sheet?: components["schemas"]["SheetMetadataSchema"] | null;
         };
         /**
          * LaunchCampaignResponse
@@ -19090,6 +19402,105 @@ export interface components {
              */
             spend: number;
         };
+        /** LegendSettingsSchema */
+        LegendSettingsSchema: {
+            position?: components["schemas"]["PointSchema"];
+            /**
+             * Scale
+             * @default 1
+             */
+            scale: number;
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
+        };
+        /** LightingProjectCreate */
+        LightingProjectCreate: {
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            /** Contact Id */
+            contact_id: number;
+            document?: components["schemas"]["LandscapeDraftDocument"] | null;
+            /** Installation Shot Id */
+            installation_shot_id?: string | null;
+            /** Name */
+            name: string;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+        };
+        /** LightingProjectDetail */
+        LightingProjectDetail: {
+            /** Assigned User Id */
+            assigned_user_id: number | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Contact Name */
+            contact_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Id */
+            created_by_id: number | null;
+            document: components["schemas"]["LandscapeDraftDocument"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installation Shot Id */
+            installation_shot_id: string | null;
+            /** Name */
+            name: string;
+            /** Opportunity Id */
+            opportunity_id: string | null;
+            /** Service Location Id */
+            service_location_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Id */
+            updated_by_id: number | null;
+            /** Updater Name */
+            updater_name: string | null;
+            /** Version */
+            version: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** LightingProjectUpdate */
+        LightingProjectUpdate: {
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            document?: components["schemas"]["LandscapeDraftDocument"] | null;
+            /** Expected Version */
+            expected_version: number;
+            /** Installation Shot Id */
+            installation_shot_id?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Opportunity Id */
+            opportunity_id?: string | null;
+            /** Service Location Id */
+            service_location_id?: string | null;
+            /** Status */
+            status?: ("active" | "archived") | null;
+        };
         /**
          * LinearFeetEstimateRequest
          * @description A rep's measured roofline plus optional per-service knobs.
@@ -19284,6 +19695,17 @@ export interface components {
             utm_source?: string | null;
             /** Utm Term */
             utm_term?: string | null;
+        };
+        /** MeasurementSchema */
+        MeasurementSchema: {
+            a: components["schemas"]["PointSchema"];
+            b: components["schemas"]["PointSchema"];
+            /** Id */
+            id: string;
+            /** Label */
+            label?: string | null;
+            /** Visible */
+            visible?: boolean | null;
         };
         /**
          * MemberResponse
@@ -21646,6 +22068,19 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** PaginatedLightingProjects */
+        PaginatedLightingProjects: {
+            /** Items */
+            items: components["schemas"]["LightingProjectDetail"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
         /**
          * PaginatedMessageTemplates
          * @description Paginated message templates response.
@@ -21833,6 +22268,15 @@ export interface components {
             slug: string;
             /** Username */
             username: string;
+        };
+        /** PaymentMilestoneSchema */
+        PaymentMilestoneSchema: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Percent */
+            percent: number;
         };
         /**
          * PendingActionListResponse
@@ -22287,6 +22731,15 @@ export interface components {
             /** Tracking Label */
             tracking_label?: string | null;
         };
+        /** PhotoSchema */
+        PhotoSchema: {
+            /** Dataurl */
+            dataUrl: string;
+            /** Height */
+            height: number;
+            /** Width */
+            width: number;
+        };
         /**
          * PipelineCreate
          * @description Create pipeline schema.
@@ -22419,6 +22872,55 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+        };
+        /** PlacedItemSchema */
+        PlacedItemSchema: {
+            /** Accessorycatalogitemids */
+            accessoryCatalogItemIds?: string[] | null;
+            at: components["schemas"]["PointSchema"];
+            /** Beamangledeg */
+            beamAngleDeg?: number | null;
+            /** Beamrotationdeg */
+            beamRotationDeg?: number | null;
+            /** Catalogitemid */
+            catalogItemId?: string | null;
+            /** Catalogsku */
+            catalogSku?: string | null;
+            /** Circuitid */
+            circuitId?: string | null;
+            /** Id */
+            id: string;
+            /** Lampcatalogitemid */
+            lampCatalogItemId?: string | null;
+            /** Markercolor */
+            markerColor?: string | null;
+            /** Productid */
+            productId: string;
+            /** Sizepx */
+            sizePx: number;
+            /** Transformerzoneid */
+            transformerZoneId?: string | null;
+        };
+        /** PlanImageSchema */
+        PlanImageSchema: {
+            at: components["schemas"]["PointSchema"];
+            /** Dataurl */
+            dataUrl: string;
+            /** Heightpx */
+            heightPx: number;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Widthpx */
+            widthPx: number;
+        };
+        /** PointSchema */
+        PointSchema: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** PortalResponse */
         PortalResponse: {
@@ -22758,6 +23260,33 @@ export interface components {
             /** Slots Remaining */
             slots_remaining: number;
         };
+        /** PreconResponseSchema */
+        PreconResponseSchema: {
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /** Itemid */
+            itemId: string;
+            /** Value */
+            value?: ("yes" | "no" | "na") | null;
+        };
+        /** PreconStateSchema */
+        PreconStateSchema: {
+            /**
+             * Leadinstaller
+             * @default
+             */
+            leadInstaller: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Responses */
+            responses?: components["schemas"]["PreconResponseSchema"][];
+        };
         /**
          * PricingSettings
          * @description The full sales-pricing config for a workspace (read view, lenient).
@@ -22834,6 +23363,28 @@ export interface components {
             /** Tiers */
             tiers?: components["schemas"]["TierConfig"][] | null;
             upsell?: components["schemas"]["UpsellConfig"] | null;
+        };
+        /** ProcurementStateSchema */
+        ProcurementStateSchema: {
+            /** Catalogitemid */
+            catalogItemId?: string | null;
+            /** Catalogsku */
+            catalogSku?: string | null;
+            /**
+             * Orderedquantity
+             * @default 0
+             */
+            orderedQuantity: number;
+            /**
+             * Receivedquantity
+             * @default 0
+             */
+            receivedQuantity: number;
+            /**
+             * Suppliernote
+             * @default
+             */
+            supplierNote: string;
         };
         /**
          * PromptVersionActivateResponse
@@ -23160,6 +23711,12 @@ export interface components {
             /** Notes */
             notes?: string | null;
             /**
+             * Pricing Source
+             * @default workspace_rules
+             * @enum {string}
+             */
+            pricing_source: "workspace_rules" | "price_book";
+            /**
              * Selected Cash Total
              * @default 0
              */
@@ -23189,6 +23746,64 @@ export interface components {
              * @default 1
              */
             version: number;
+        };
+        /** ProposalDraftSchema */
+        ProposalDraftSchema: {
+            /** Commitments */
+            commitments?: string[];
+            /**
+             * Designintent
+             * @default
+             */
+            designIntent: string;
+            /**
+             * Electricalresponsibility
+             * @default
+             */
+            electricalResponsibility: string;
+            /** Enhancements */
+            enhancements?: components["schemas"]["ProposalEnhancementSchema"][];
+            /** Paymentmilestones */
+            paymentMilestones?: components["schemas"]["PaymentMilestoneSchema"][];
+            /** Selectedcareplankey */
+            selectedCarePlanKey?: string | null;
+            /** Selectedtierkey */
+            selectedTierKey?: string | null;
+            /**
+             * Showcombinedtotal
+             * @default true
+             */
+            showCombinedTotal: boolean;
+            /**
+             * Showfixturedetails
+             * @default true
+             */
+            showFixtureDetails: boolean;
+            /** Signaturedate */
+            signatureDate?: string | null;
+            /**
+             * Signaturename
+             * @default
+             */
+            signatureName: string;
+            /** Zones */
+            zones?: components["schemas"]["ProposalZoneSchema"][];
+        };
+        /** ProposalEnhancementSchema */
+        ProposalEnhancementSchema: {
+            /** Catalogitemid */
+            catalogItemId: string;
+            /** Catalogsku */
+            catalogSku?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Quantity */
+            quantity: number;
         };
         /**
          * ProposalFinancing
@@ -23348,7 +23963,7 @@ export interface components {
         };
         /**
          * ProposalWizardPayload
-         * @description Everything the wizard submits on save/preview (selection only, no money).
+         * @description Everything the authenticated wizard submits (selection only, no money).
          */
         ProposalWizardPayload: {
             /** Additional Charges */
@@ -23366,6 +23981,8 @@ export interface components {
             /** Contact Id */
             contact_id?: number | null;
             deposit?: components["schemas"]["WizardDepositSelection"] | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Mockups */
             mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
@@ -23377,6 +23994,12 @@ export interface components {
             /** Opportunity Id */
             opportunity_id?: string | null;
             permanent?: components["schemas"]["WizardPermanentSelection"] | null;
+            /**
+             * Pricing Source
+             * @default workspace_rules
+             * @enum {string}
+             */
+            pricing_source: "workspace_rules" | "price_book";
             /** Quantities */
             quantities?: components["schemas"]["WizardFixtureQty"][];
             /** Selected Tier */
@@ -23387,6 +24010,20 @@ export interface components {
             terms?: string | null;
             /** Title */
             title?: string | null;
+        };
+        /** ProposalZoneSchema */
+        ProposalZoneSchema: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Shotids */
+            shotIds?: string[];
         };
         /**
          * ProspectIdentityKind
@@ -24332,10 +24969,14 @@ export interface components {
          * QuoteConvertRequest
          * @description Choose what an approved quote converts into. Defaults to both.
          *
-         *     An optional ``scheduled_start``/``scheduled_end`` window schedules the created
-         *     job on the calendar in one step; omit both to land the job unscheduled.
+         *     Explicit unpaid confirmation never changes provider-derived payment truth.
          */
         QuoteConvertRequest: {
+            /**
+             * Confirm Unpaid Deposit
+             * @default false
+             */
+            confirm_unpaid_deposit: boolean;
             /**
              * Create Invoice
              * @default true
@@ -24346,6 +24987,8 @@ export interface components {
              * @default true
              */
             create_job: boolean;
+            /** Crew Id */
+            crew_id?: string | null;
             /** Scheduled End */
             scheduled_end?: string | null;
             /** Scheduled Start */
@@ -24355,9 +24998,15 @@ export interface components {
         };
         /**
          * QuoteConvertResponse
-         * @description Result of converting an approved quote into a job and/or an invoice.
+         * @description Authoritative conversion links plus best-effort crew delivery.
          */
         QuoteConvertResponse: {
+            crew_notification?: components["schemas"]["CrewNotificationResult"];
+            /**
+             * Idempotent Replay
+             * @default false
+             */
+            idempotent_replay: boolean;
             /** Invoice Id */
             invoice_id?: string | null;
             /** Job Id */
@@ -24494,6 +25143,11 @@ export interface components {
             readonly deposit_amount: number | null;
             /** Deposit Amount Fixed */
             deposit_amount_fixed?: number | null;
+            /**
+             * Deposit Paid
+             * @description Provider-reconciled deposit truth for authenticated staff views.
+             */
+            readonly deposit_paid: boolean;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
             /** Deposit Percentage */
@@ -24519,6 +25173,8 @@ export interface components {
             issue_date?: string | null;
             /** Last Viewed At */
             last_viewed_at?: string | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["QuoteLineItemResponse"][];
             /** Notes */
@@ -24775,6 +25431,11 @@ export interface components {
             readonly deposit_amount: number | null;
             /** Deposit Amount Fixed */
             deposit_amount_fixed?: number | null;
+            /**
+             * Deposit Paid
+             * @description Provider-reconciled deposit truth for authenticated staff views.
+             */
+            readonly deposit_paid: boolean;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
             /** Deposit Percentage */
@@ -24800,6 +25461,8 @@ export interface components {
             issue_date?: string | null;
             /** Last Viewed At */
             last_viewed_at?: string | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Notes */
             notes?: string | null;
             /** Number */
@@ -26454,6 +27117,31 @@ export interface components {
             /** Total Reviews */
             total_reviews: number;
         };
+        /** RevisionRowSchema */
+        RevisionRowSchema: {
+            /**
+             * Author
+             * @default
+             */
+            author: string;
+            /**
+             * Date
+             * @default
+             */
+            date: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Number
+             * @default
+             */
+            number: string;
+        };
         /**
          * RoleplayStats
          * @description Roleplay / practice-arena activity metrics for the dashboard.
@@ -26469,6 +27157,31 @@ export interface components {
             runs_this_week: number;
             /** Total Runs */
             total_runs: number;
+        };
+        /** RunSchema */
+        RunSchema: {
+            /** Bulbscale */
+            bulbScale?: number | null;
+            /** Circuitlabel */
+            circuitLabel?: string | null;
+            /** Colors */
+            colors?: string[] | null;
+            /** Id */
+            id: string;
+            /** Points */
+            points: components["schemas"]["PointSchema"][];
+            /** Productid */
+            productId: string;
+            /** Sourcevoltage */
+            sourceVoltage?: number | null;
+            /** Spacingin */
+            spacingIn?: number | null;
+            /** Transformerid */
+            transformerId?: string | null;
+            /** Transformerzoneid */
+            transformerZoneId?: string | null;
+            /** Wiregauge */
+            wireGauge?: (8 | 10 | 12 | 14) | null;
         };
         /**
          * SalesPerformanceBreakdownRow
@@ -27123,6 +27836,19 @@ export interface components {
          * @enum {string}
          */
         ServicePlanType: "lighting_care_plan" | "christmas_lights" | "maintenance";
+        /** SheetMetadataSchema */
+        SheetMetadataSchema: {
+            /** Drawingnumber */
+            drawingNumber?: string | null;
+            /** Drawingtitle */
+            drawingTitle?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Proposalzoneid */
+            proposalZoneId?: string | null;
+            /** Revisions */
+            revisions?: components["schemas"]["RevisionRowSchema"][];
+        };
         /**
          * SizeRate
          * @description A size/variant option (e.g. a tree size) with its own net install price.
@@ -40075,6 +40801,38 @@ export interface operations {
             };
         };
     };
+    get_job_installation_plan_api_v1_workspaces__workspace_id__jobs__job_id__installation_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobInstallationPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_job_materials_api_v1_workspaces__workspace_id__jobs__job_id__materials_get: {
         parameters: {
             query?: never;
@@ -41234,6 +41992,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeadSourceCampaignResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_lighting_projects_api_v1_workspaces__workspace_id__lighting_projects_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                status?: ("active" | "archived") | null;
+                contact_id?: number | null;
+                opportunity_id?: string | null;
+                assigned_user_id?: number | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedLightingProjects"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_lighting_project_api_v1_workspaces__workspace_id__lighting_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightingProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightingProjectDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightingProjectDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightingProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightingProjectDetail"];
                 };
             };
             /** @description Validation Error */

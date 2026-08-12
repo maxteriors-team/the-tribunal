@@ -18,9 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
+from app.models.contact import Contact
+from app.models.lighting_project import LightingProject
 from app.models.workspace import Workspace
 from app.schemas.pricing import MAINTENANCE_THROUGH_TOKEN
-from app.schemas.quote import QuoteUpdate
 from app.schemas.proposal_wizard import (
     ProposalMockup,
     ProposalWizardPayload,
@@ -33,6 +34,7 @@ from app.schemas.proposal_wizard import (
     WizardFixtureQty,
     WizardPermanentSelection,
 )
+from app.schemas.quote import QuoteUpdate
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -235,6 +237,39 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         skus = {part.sku: part.qty for part in doc.fulfillment}
         assert skus["59409312"] == 1.0
         assert skus["59400232"] == 12.0
+
+
+async def test_price_book_mode_skips_finance_and_uses_catalog_prices_exactly() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.pricing_source = "price_book"
+        payload.categories = ["landscape"]
+        payload.bistro = None
+
+        doc = await svc.preview_from_wizard(ws.id, payload)
+
+        best = doc.tiers[0]
+        assert doc.pricing_source == "price_book"
+        assert best.lines[0].unit_price == 2266.0
+        assert best.lines[1].unit_price == 785.0
+        assert best.pricing.base == 11686.0
+        assert best.pricing.additional == 500.0
+        assert best.pricing.financed_total == 12186.0
+        assert best.pricing.cash_total == 12186.0
+        assert best.pricing.monthly_payment == 0
+        assert best.pricing.monthly_by_term == {}
+        assert doc.financing is not None
+        assert doc.financing.enabled is False
+        assert doc.financing.terms == []
+        assert doc.selected_cash_total == doc.selected_financed_total == 12186.0
+        assert doc.grand_monthly_payment == 0
+
+        quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        assert quote.total == 12186.0
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["pricing_source"] == "price_book"
 
 
 async def test_save_persists_snapshot_and_recomputed_lines() -> None:
@@ -686,8 +721,7 @@ async def test_deliver_quote_validates_missing_destination_and_channel() -> None
 
 
 async def test_wizard_deposit_persists_and_shows_in_document() -> None:
-    """A rep-set wizard deposit is priced into the document (on the financed
-    total) and persisted onto the saved quote."""
+    """A rep-set wizard deposit is priced into the document and quote."""
 
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
@@ -705,6 +739,84 @@ async def test_wizard_deposit_persists_and_shows_in_document() -> None:
         assert saved.deposit_percentage == 50.0
         assert saved.deposit_amount == 8391.0
         assert saved.deposit_required is True
+        assert saved.deposit_paid is False
+
+
+async def test_landscape_wizard_uses_workspace_deposit_and_persists_project_link() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        ws.settings = {
+            **ws.settings,
+            "pricing": {
+                **ws.settings["pricing"],
+                "deposit": {"enabled": True, "mode": "percentage", "value": 25},
+            },
+        }
+        contact = Contact(
+            workspace_id=ws.id,
+            first_name="Sarah",
+            phone_number="+15551234567",
+            phone_hash="wizard-link-test",
+        )
+        db.add(contact)
+        await db.flush()
+        document = {
+            "version": 2,
+            "activeShotId": "install-front",
+            "shots": [
+                {
+                    "id": "install-front",
+                    "photo": {
+                        "dataUrl": "data:image/png;base64,AAAA",
+                        "width": 1200,
+                        "height": 800,
+                    },
+                    "design": {"calibration": None, "runs": [], "items": [], "planImages": []},
+                    "dusk": 0.35,
+                }
+            ],
+            "updatedAt": "2026-08-12T00:00:00Z",
+        }
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Front elevation",
+            document=document,
+            version=1,
+            installation_shot_id="install-front",
+        )
+        db.add(project)
+        await db.flush()
+
+        payload = _payload()
+        payload.contact_id = contact.id
+        payload.categories = ["landscape"]
+        payload.bistro = None
+        payload.lighting_project_id = project.id
+        saved = await QuoteService(db).save_from_wizard(ws.id, payload, created_by_id=None)
+
+        assert saved.lighting_project_id == project.id
+        assert saved.deposit_percentage == 25
+        assert saved.deposit_required is True
+
+        no_deposit_payload = _payload()
+        no_deposit_payload.contact_id = contact.id
+        no_deposit_payload.categories = ["landscape"]
+        no_deposit_payload.bistro = None
+        no_deposit_payload.lighting_project_id = project.id
+        no_deposit_payload.deposit = None
+        ws.settings = {
+            **ws.settings,
+            "pricing": {
+                **ws.settings["pricing"],
+                "deposit": {"enabled": False, "mode": "percentage", "value": 0},
+            },
+        }
+        no_deposit = await QuoteService(db).save_from_wizard(
+            ws.id, no_deposit_payload, created_by_id=None
+        )
+        assert no_deposit.deposit_amount is None
+        assert no_deposit.deposit_required is False
 
 
 async def test_wizard_links_contact_and_converts_to_scheduled_job() -> None:

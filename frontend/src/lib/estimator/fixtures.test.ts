@@ -7,7 +7,10 @@ import {
   buildFixturePalette,
   classifyFixture,
   hasLandscapeFixtures,
+  landscapeWireLabel,
   resolveTierFixtures,
+  resolveTierTransformer,
+  resolveTierWire,
 } from "./fixtures";
 
 function item(
@@ -49,13 +52,9 @@ function pricing(): PricingSettings {
           { title: "Smart Transformer", item_ids: ["best-luxor"] },
           {
             title: "Fixtures",
-            item_ids: [
-              "best-zdc-up",
-              "best-zdc-down",
-              "best-zdc-path",
-              "best-cora-in-grade",
-            ],
+            item_ids: ["best-zdc-up", "best-zdc-down", "best-zdc-path", "best-cora-in-grade"],
           },
+          { title: "Wire", item_ids: ["best-wire-12", "best-wire-10"] },
         ],
       },
       {
@@ -65,6 +64,7 @@ function pricing(): PricingSettings {
         sections: [
           { title: "Transformer", item_ids: ["ess-ex"] },
           { title: "Fixtures", item_ids: ["ess-accent", "ess-path"] },
+          { title: "Wire", item_ids: ["ess-wire-12"] },
         ],
       },
     ],
@@ -82,6 +82,9 @@ const CATALOG = [
   item("ess-ex", "EX 150W Transformer", { attributes: { transformer: true } }),
   item("ess-accent", "EVO Accent Uplight", { unit_price: 172 }),
   item("ess-path", "Pathway Light", { unit_price: 376 }),
+  item("best-wire-12", "12/2 Low Voltage Wire", { unit_price: 1.25 }),
+  item("best-wire-10", "Pro Cable", { attributes: { wire_gauge: 10 }, unit_price: 1.85 }),
+  item("ess-wire-12", "12-2 Landscape Cable", { unit_price: 0.95 }),
 ];
 
 describe("classifyFixture", () => {
@@ -102,9 +105,9 @@ describe("classifyFixture", () => {
   });
 
   it("lets an explicit attribute override an unhelpful product name", () => {
-    expect(
-      classifyFixture({ name: "Model 7714", attributes: { fixture_type: "pathlight" } }),
-    ).toBe("pathlight");
+    expect(classifyFixture({ name: "Model 7714", attributes: { fixture_type: "pathlight" } })).toBe(
+      "pathlight",
+    );
   });
 
   it("returns null for something that isn't a landscape fixture", () => {
@@ -139,39 +142,64 @@ describe("resolveTierFixtures", () => {
   });
 
   it("skips inactive products so a retired SKU is never quoted", () => {
-    const retired = CATALOG.map((c) =>
-      c.sku === "best-zdc-up" ? { ...c, is_active: false } : c,
-    );
+    const retired = CATALOG.map((c) => (c.sku === "best-zdc-up" ? { ...c, is_active: false } : c));
     expect(resolveTierFixtures(pricing(), retired, "best").uplight.itemId).toBeNull();
   });
 
   it("reports no landscape fixtures for a workspace with an empty price book", () => {
-    expect(hasLandscapeFixtures(resolveTierFixtures(pricing(), [], "best"))).toBe(
-      false,
-    );
+    expect(hasLandscapeFixtures(resolveTierFixtures(pricing(), [], "best"))).toBe(false);
+  });
+});
+
+describe("resolveTierWire", () => {
+  it("resolves the 12/2 and 10/2 wire carried by the selected package", () => {
+    expect(resolveTierWire(pricing(), CATALOG, "best", 12)?.sku).toBe("best-wire-12");
+    expect(resolveTierWire(pricing(), CATALOG, "best", 10)?.sku).toBe("best-wire-10");
+    expect(resolveTierWire(pricing(), CATALOG, "essential", 10)).toBeNull();
+  });
+
+  it("formats the two offered cable sizes without changing legacy labels", () => {
+    expect(landscapeWireLabel(12)).toBe("12/2 AWG");
+    expect(landscapeWireLabel(10)).toBe("10/2 AWG");
+    expect(landscapeWireLabel(8)).toBe("8 AWG");
   });
 });
 
 describe("buildFixturePalette", () => {
-  it("offers four type entries carrying the resolved SKU and product name", () => {
+  it("offers fixture icons and the package's transformer", () => {
     const palette = buildFixturePalette(
       resolveTierFixtures(pricing(), CATALOG, "best"),
+      resolveTierTransformer(pricing(), CATALOG, "best"),
     );
-    expect(palette).toHaveLength(4);
+    expect(palette).toHaveLength(6);
     const uplight = palette.find((p) => p.id === "fixture-uplight");
     expect(uplight?.name).toBe("Uplight");
     expect(uplight?.productName).toBe("ZDC Color Uplight");
     expect(uplight?.sku).toBe("best-zdc-up");
     expect(uplight?.price).toBe(785);
     expect(uplight?.target).toEqual({ field: "landscape", fixtureType: "uplight" });
+    expect(palette.find((p) => p.id === "landscape-wire")).toMatchObject({
+      name: "Wire circuit",
+      kind: "linear",
+      style: "wire",
+      target: { field: "annotation", annotationType: "wire" },
+    });
+    expect(palette.find((p) => p.id === "fixture-transformer")).toMatchObject({
+      productName: "Luxor Smart 300W Transformer",
+      sku: "best-luxor",
+      style: "transformer",
+      target: { field: "annotation", annotationType: "transformer" },
+    });
   });
 
   it("still offers a type the package can't fill, with no SKU behind it", () => {
     const palette = buildFixturePalette(
       resolveTierFixtures(pricing(), CATALOG, "essential"),
+      resolveTierTransformer(pricing(), CATALOG, "essential"),
     );
     const downlight = palette.find((p) => p.id === "fixture-downlight");
     expect(downlight?.sku).toBeNull();
     expect(downlight?.productName).toBeNull();
+    expect(palette.find((p) => p.id === "fixture-transformer")?.sku).toBe("ess-ex");
   });
 });

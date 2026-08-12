@@ -6,6 +6,8 @@ import {
   type JobAssignRequest,
   type JobCalendarParams,
   type JobCreateRequest,
+  type JobCrewList,
+  type JobInstallationPlan,
   type JobList,
   type JobListParams,
   type JobScheduleRequest,
@@ -25,6 +27,16 @@ export function useJobs(workspaceId: string, params: JobListParams = {}, enabled
   });
 }
 
+/** Load one authoritative job, including jobs outside the visible calendar week. */
+export function useJob(workspaceId: string, jobId: string, enabled = true) {
+  return useQuery<Schemas["JobResponse"]>({
+    queryKey: queryKeys.jobs.detail(workspaceId, jobId),
+    queryFn: () => jobsApi.get(workspaceId, jobId),
+    enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
+    retry: false,
+  });
+}
+
 /** Jobs assigned to the signed-in user — their personal calendar. */
 export function useMyJobsCalendar(
   workspaceId: string,
@@ -34,6 +46,25 @@ export function useMyJobsCalendar(
   return useQuery<JobList>({
     queryKey: queryKeys.jobs.mine(workspaceId, params as Record<string, unknown>),
     queryFn: () => jobsApi.listMine(workspaceId, params),
+    enabled: enabled && Boolean(workspaceId),
+  });
+}
+
+/** Assignment-scoped read-only installation copy for a job detail dialog. */
+export function useJobInstallationPlan(workspaceId: string, jobId: string, enabled = true) {
+  return useQuery<JobInstallationPlan>({
+    queryKey: queryKeys.jobs.installationPlan(workspaceId, jobId),
+    queryFn: () => jobsApi.installationPlan(workspaceId, jobId),
+    enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
+    retry: false,
+  });
+}
+
+/** Active workspace crews for routing the installation team. */
+export function useWorkspaceCrews(workspaceId: string, enabled = true) {
+  return useQuery<JobCrewList>({
+    queryKey: queryKeys.jobs.crews(workspaceId),
+    queryFn: () => jobsApi.listCrews(workspaceId),
     enabled: enabled && Boolean(workspaceId),
   });
 }
@@ -92,13 +123,10 @@ export function useSetMemberOnRoster(workspaceId: string) {
   return useMutation({
     mutationFn: ({ technicianId, userId, name, email, onRoster }: RosterToggleInput) =>
       technicianId
-        ? apiClient.put(
-            "/api/v1/workspaces/{workspace_id}/technicians/{technician_id}",
-            {
-              path: { workspace_id: workspaceId, technician_id: technicianId },
-              body: { is_active: onRoster },
-            },
-          )
+        ? apiClient.put("/api/v1/workspaces/{workspace_id}/technicians/{technician_id}", {
+            path: { workspace_id: workspaceId, technician_id: technicianId },
+            body: { is_active: onRoster },
+          })
         : apiClient.post("/api/v1/workspaces/{workspace_id}/technicians", {
             path: { workspace_id: workspaceId },
             body: {
@@ -119,8 +147,7 @@ export function useSetMemberOnRoster(workspaceId: string) {
 
 function useJobInvalidation(workspaceId: string) {
   const queryClient = useQueryClient();
-  return () =>
-    void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
+  return () => void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
 }
 
 export function useCreateJob(workspaceId: string) {

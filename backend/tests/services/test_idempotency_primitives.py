@@ -21,6 +21,8 @@ from app.services.idempotency import (
     encode_client_state,
     idempotency_headers,
     is_message_send_applied,
+    redis_idempotency_key_exists,
+    set_redis_idempotency_key,
     webhook_key_prefix,
 )
 
@@ -156,3 +158,19 @@ async def test_redis_claim_fails_open_on_redis_error() -> None:
         key="calcom:webhook:evt_1",
         error="redis down",
     )
+
+
+async def test_redis_delivery_marker_reads_and_sets_with_ttl() -> None:
+    redis_client = MagicMock()
+    redis_client.exists = AsyncMock(return_value=1)
+    redis_client.set = AsyncMock(return_value=True)
+    getter = AsyncMock(return_value=redis_client)
+    log = MagicMock()
+
+    assert await redis_idempotency_key_exists("job:recipient:7", log=log, redis_getter=getter)
+    await set_redis_idempotency_key(
+        "job:recipient:7", ttl_seconds=3600, log=log, redis_getter=getter
+    )
+
+    redis_client.exists.assert_awaited_once_with("job:recipient:7")
+    redis_client.set.assert_awaited_once_with("job:recipient:7", "1", ex=3600)

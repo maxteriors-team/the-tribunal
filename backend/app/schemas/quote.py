@@ -232,15 +232,16 @@ class QuoteDeliverResult(BaseModel):
 class QuoteConvertRequest(BaseModel):
     """Choose what an approved quote converts into. Defaults to both.
 
-    An optional ``scheduled_start``/``scheduled_end`` window schedules the created
-    job on the calendar in one step; omit both to land the job unscheduled.
+    Explicit unpaid confirmation never changes provider-derived payment truth.
     """
 
     create_job: bool = True
     create_invoice: bool = True
     scheduled_start: datetime | None = None
     scheduled_end: datetime | None = None
+    crew_id: uuid.UUID | None = None
     technician_ids: list[uuid.UUID] = Field(default_factory=list)
+    confirm_unpaid_deposit: bool = False
 
     @model_validator(mode="after")
     def _check_window(self) -> "QuoteConvertRequest":
@@ -249,7 +250,21 @@ class QuoteConvertRequest(BaseModel):
             raise ValueError("scheduled_start and scheduled_end must be provided together")
         if start is not None and end is not None and end <= start:
             raise ValueError("scheduled_end must be after scheduled_start")
+        if not self.create_job and (start is not None or self.crew_id or self.technician_ids):
+            raise ValueError("schedule and installation team require create_job")
         return self
+
+
+CrewNotificationStatus = Literal["sent", "partial", "not_applicable", "failed"]
+
+
+class CrewNotificationResult(BaseModel):
+    """Post-commit assignment delivery; never payment/job transaction state."""
+
+    status: CrewNotificationStatus = "not_applicable"
+    recipient_count: int = Field(default=0, ge=0)
+    sent_count: int = Field(default=0, ge=0)
+    failed_count: int = Field(default=0, ge=0)
 
 
 class QuoteResponse(BaseModel):
@@ -262,6 +277,8 @@ class QuoteResponse(BaseModel):
     opportunity_id: uuid.UUID | None = None
     assigned_user_id: int | None = None
     assignee: AssigneeSummary | None = None
+    # Authenticated linkage only. PublicProposal has no corresponding field.
+    lighting_project_id: uuid.UUID | None = None
     number: str
     title: str | None = None
     status: QuoteStatus
@@ -357,6 +374,12 @@ class QuoteResponse(BaseModel):
         """True when a deposit is owed and not yet paid."""
         return self.deposit_amount is not None and self.deposit_paid_at is None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def deposit_paid(self) -> bool:
+        """Provider-reconciled deposit truth for authenticated staff views."""
+        return self.deposit_paid_at is not None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -391,8 +414,10 @@ class PaginatedQuotes(BaseModel):
 
 
 class QuoteConvertResponse(BaseModel):
-    """Result of converting an approved quote into a job and/or an invoice."""
+    """Authoritative conversion links plus best-effort crew delivery."""
 
     quote: QuoteDetailResponse
     job_id: uuid.UUID | None = None
     invoice_id: uuid.UUID | None = None
+    idempotent_replay: bool = False
+    crew_notification: CrewNotificationResult = Field(default_factory=CrewNotificationResult)

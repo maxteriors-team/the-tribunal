@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -23,6 +23,8 @@ import { LightCanvas } from "./light-canvas";
 vi.mock("@/lib/estimator/render", () => ({
   drawScene: vi.fn(),
   itemHit: vi.fn(() => false),
+  planImageHit: vi.fn(() => false),
+  planImageResizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
   beamHandlePos: vi.fn(() => null),
   beamAngleAt: vi.fn(() => 30),
@@ -34,6 +36,11 @@ vi.mock("@/lib/estimator/render", () => ({
 
 vi.mock("@/lib/estimator/photo", () => ({
   loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1000, naturalHeight: 800 }),
+  fileToPhoto: vi.fn().mockResolvedValue({
+    dataUrl: "data:image/png;base64,PLAN",
+    width: 200,
+    height: 100,
+  }),
 }));
 
 const PHOTO: PhotoInfo = {
@@ -41,6 +48,10 @@ const PHOTO: PhotoInfo = {
   width: 1000,
   height: 800,
 };
+
+beforeEach(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+});
 
 const UPLIGHT: Product = {
   id: "fixture-uplight",
@@ -70,12 +81,7 @@ function setup() {
     state = editorReducer(state, action);
   });
   const { container, rerender } = render(
-    <LightCanvas
-      photo={PHOTO}
-      products={[UPLIGHT]}
-      state={state}
-      dispatch={dispatch}
-    />,
+    <LightCanvas photo={PHOTO} products={[UPLIGHT]} state={state} dispatch={dispatch} />,
   );
   const canvas = container.querySelector("canvas")!;
   // Identity mapping: canvas origin at (0,0), one client px per image px.
@@ -97,8 +103,7 @@ function setup() {
     fireEvent.pointerDown(canvas, { clientX: x, clientY: y, button: 0, pointerId: 1 });
     fireEvent.pointerUp(canvas, { clientX: x, clientY: y, button: 0, pointerId: 1 });
   };
-  const placed = () =>
-    dispatch.mock.calls.filter(([a]) => a.type === "ADD_ITEM").length;
+  const placed = () => dispatch.mock.calls.filter(([a]) => a.type === "ADD_ITEM").length;
 
   return { clickAt, placed, dispatch, rerender };
 }
@@ -140,32 +145,28 @@ describe("LightCanvas — geometry stays on the photo", () => {
 function setupCanvas() {
   const seen: EditorAction[] = [];
   function Harness() {
-    const [state, rawDispatch] = React.useReducer(
-      editorReducer,
-      undefined,
-      () => ({
-        ...initialEditorState(),
-        tool: { type: "place" as const, productId: UPLIGHT.id },
-      }),
-    );
+    const [state, rawDispatch] = React.useReducer(editorReducer, undefined, () => ({
+      ...initialEditorState(),
+      tool: { type: "place" as const, productId: UPLIGHT.id },
+    }));
     const dispatch = (action: EditorAction) => {
       seen.push(action);
       rawDispatch(action);
     };
-    return (
-      <LightCanvas
-        photo={PHOTO}
-        products={[UPLIGHT]}
-        state={state}
-        dispatch={dispatch}
-      />
-    );
+    return <LightCanvas photo={PHOTO} products={[UPLIGHT]} state={state} dispatch={dispatch} />;
   }
   const { container } = render(<Harness />);
   const canvas = container.querySelector("canvas")!;
   vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
-    left: 0, top: 0, width: PHOTO.width, height: PHOTO.height,
-    right: PHOTO.width, bottom: PHOTO.height, x: 0, y: 0, toJSON: () => ({}),
+    left: 0,
+    top: 0,
+    width: PHOTO.width,
+    height: PHOTO.height,
+    right: PHOTO.width,
+    bottom: PHOTO.height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
   } as DOMRect);
   canvas.setPointerCapture = vi.fn();
   canvas.releasePointerCapture = vi.fn();
@@ -175,14 +176,93 @@ function setupCanvas() {
     return Number(label.replace("%", ""));
   };
   const placed = () => seen.filter((a) => a.type === "ADD_ITEM").length;
-  return { canvas, zoom, placed, seen };
+  return { canvas, container, zoom, placed, seen };
 }
+
+describe("LightCanvas — plan images", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("drops an image at the pointer and adds a movable plan inset", async () => {
+    const { container, seen } = setupCanvas();
+    const wrapper = container.querySelector(".lc-wrap")!;
+    const file = new File(["image"], "pool-detail.png", { type: "image/png" });
+
+    fireEvent.drop(wrapper, {
+      clientX: 500,
+      clientY: 400,
+      dataTransfer: { files: [file], types: ["Files"] },
+    });
+
+    await waitFor(() =>
+      expect(seen.find((action) => action.type === "ADD_PLAN_IMAGE")).toMatchObject({
+        image: {
+          name: "pool-detail.png",
+          dataUrl: "data:image/png;base64,PLAN",
+          at: { x: 500, y: 400 },
+          widthPx: 200,
+          heightPx: 100,
+        },
+      }),
+    );
+  });
+
+  it("moves and proportionally resizes a selected image from the keyboard", async () => {
+    const { container, seen } = setupCanvas();
+    const wrapper = container.querySelector(".lc-wrap")!;
+    const file = new File(["image"], "pool-detail.png", { type: "image/png" });
+    fireEvent.drop(wrapper, {
+      clientX: 500,
+      clientY: 400,
+      dataTransfer: { files: [file], types: ["Files"] },
+    });
+    await waitFor(() => expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(true));
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true, shiftKey: true });
+
+    await waitFor(() =>
+      expect(seen.filter((action) => action.type === "UPDATE_PLAN_IMAGE")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ patch: { at: { x: 501, y: 400 } } }),
+          expect.objectContaining({ patch: { widthPx: 210, heightPx: 105 } }),
+        ]),
+      ),
+    );
+  });
+
+  it("offers a keyboard/touch-safe file picker alternative to drag and drop", async () => {
+    const { container, seen } = setupCanvas();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["image"], "detail.webp", { type: "image/webp" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(true));
+  });
+
+  it("rejects oversized plan images before they enter autosave", async () => {
+    const { container, seen } = setupCanvas();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "too-large.png", {
+      type: "image/png",
+    });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
+    expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(false);
+  });
+});
 
 describe("LightCanvas — touch gestures", () => {
   beforeEach(() => vi.clearAllMocks());
 
   const touch = (id: number, x: number, y: number) => ({
-    pointerId: id, clientX: x, clientY: y, button: 0, pointerType: "touch",
+    pointerId: id,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    pointerType: "touch",
   });
 
   it("pinching outward zooms in — an iPad has no wheel, middle button, or spacebar", () => {
@@ -246,7 +326,6 @@ describe("LightCanvas — touch gestures", () => {
   });
 });
 
-
 /**
  * Harness with one fixture already placed and selected, so the grips around it
  * are live. The geometry behind the grips is unit-tested in render.test.ts; what
@@ -271,20 +350,20 @@ function setupSelectedFixture() {
       seen.push(action);
       rawDispatch(action);
     };
-    return (
-      <LightCanvas
-        photo={PHOTO}
-        products={[UPLIGHT]}
-        state={state}
-        dispatch={dispatch}
-      />
-    );
+    return <LightCanvas photo={PHOTO} products={[UPLIGHT]} state={state} dispatch={dispatch} />;
   }
   const { container } = render(<Harness />);
   const canvas = container.querySelector("canvas")!;
   vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
-    left: 0, top: 0, width: PHOTO.width, height: PHOTO.height,
-    right: PHOTO.width, bottom: PHOTO.height, x: 0, y: 0, toJSON: () => ({}),
+    left: 0,
+    top: 0,
+    width: PHOTO.width,
+    height: PHOTO.height,
+    right: PHOTO.width,
+    bottom: PHOTO.height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
   } as DOMRect);
   canvas.setPointerCapture = vi.fn();
   canvas.releasePointerCapture = vi.fn();
@@ -301,13 +380,22 @@ describe("LightCanvas — beam spread grip", () => {
     const { canvas, seen, item } = setupSelectedFixture();
 
     fireEvent.pointerDown(canvas, {
-      clientX: 480, clientY: 300, button: 0, pointerId: 1,
+      clientX: 480,
+      clientY: 300,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerMove(canvas, {
-      clientX: 560, clientY: 300, button: 0, pointerId: 1,
+      clientX: 560,
+      clientY: 300,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerUp(canvas, {
-      clientX: 560, clientY: 300, button: 0, pointerId: 1,
+      clientX: 560,
+      clientY: 300,
+      button: 0,
+      pointerId: 1,
     });
 
     const edits = seen.filter((a) => a.type === "UPDATE_ITEM");
@@ -331,10 +419,16 @@ describe("LightCanvas — beam spread grip", () => {
     const { canvas, seen } = setupSelectedFixture();
 
     fireEvent.pointerDown(canvas, {
-      clientX: 402, clientY: 300, button: 0, pointerId: 1,
+      clientX: 402,
+      clientY: 300,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerMove(canvas, {
-      clientX: 402, clientY: 250, button: 0, pointerId: 1,
+      clientX: 402,
+      clientY: 250,
+      button: 0,
+      pointerId: 1,
     });
 
     const patch = seen.find((a) => a.type === "UPDATE_ITEM");
@@ -352,13 +446,22 @@ describe("LightCanvas — beam aim grip", () => {
     const { canvas, seen, item } = setupSelectedFixture();
 
     fireEvent.pointerDown(canvas, {
-      clientX: 400, clientY: 280, button: 0, pointerId: 1,
+      clientX: 400,
+      clientY: 280,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerMove(canvas, {
-      clientX: 300, clientY: 320, button: 0, pointerId: 1,
+      clientX: 300,
+      clientY: 320,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerUp(canvas, {
-      clientX: 300, clientY: 320, button: 0, pointerId: 1,
+      clientX: 300,
+      clientY: 320,
+      button: 0,
+      pointerId: 1,
     });
 
     const edits = seen.filter((a) => a.type === "UPDATE_ITEM");
@@ -385,10 +488,16 @@ describe("LightCanvas — beam aim grip", () => {
     const { canvas, seen } = setupSelectedFixture();
 
     fireEvent.pointerDown(canvas, {
-      clientX: 401, clientY: 300, button: 0, pointerId: 1,
+      clientX: 401,
+      clientY: 300,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerMove(canvas, {
-      clientX: 401, clientY: 250, button: 0, pointerId: 1,
+      clientX: 401,
+      clientY: 250,
+      button: 0,
+      pointerId: 1,
     });
 
     const patch = seen.find((a) => a.type === "UPDATE_ITEM");
@@ -400,19 +509,20 @@ describe("LightCanvas — beam aim grip", () => {
     const { canvas, seen } = setupSelectedFixture();
 
     fireEvent.pointerDown(canvas, {
-      clientX: 700, clientY: 100, button: 0, pointerId: 1,
+      clientX: 700,
+      clientY: 100,
+      button: 0,
+      pointerId: 1,
     });
     fireEvent.pointerMove(canvas, {
-      clientX: 720, clientY: 120, button: 0, pointerId: 1,
+      clientX: 720,
+      clientY: 120,
+      button: 0,
+      pointerId: 1,
     });
 
     expect(
-      seen.filter(
-        (a) =>
-          a.type === "UPDATE_ITEM" &&
-          "patch" in a &&
-          "beamRotationDeg" in a.patch,
-      ),
+      seen.filter((a) => a.type === "UPDATE_ITEM" && "patch" in a && "beamRotationDeg" in a.patch),
     ).toHaveLength(0);
   });
 });

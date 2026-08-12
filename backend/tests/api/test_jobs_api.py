@@ -89,6 +89,40 @@ def _job_response(**overrides: object) -> dict[str, object]:
     return base
 
 
+def _installation_plan_response() -> dict[str, object]:
+    return {
+        "job_id": str(JOB_ID),
+        "project_id": str(uuid.uuid4()),
+        "project_name": "Front elevation",
+        "project_version": 3,
+        "project_updated_at": datetime.now(UTC).isoformat(),
+        "selected_shot_id": "install-front",
+        "sheet_label": "Front",
+        "drawing_title": "Installation",
+        "drawing_number": "L-1",
+        "sheet": {"label": "Front", "revisions": []},
+        "photo": {
+            "dataUrl": "data:image/png;base64,AAAA",
+            "width": 1200,
+            "height": 800,
+        },
+        "design": {
+            "calibration": None,
+            "runs": [],
+            "items": [],
+            "planImages": [],
+            "annotations": [],
+            "measurements": [],
+            "highlights": [],
+            "arrows": [],
+        },
+        "dusk": 0.35,
+        "settings": {},
+        "fixture_schedule": [],
+        "precon_field_brief": "Confirm transformer location.",
+    }
+
+
 @pytest.fixture
 def mock_service() -> AsyncMock:
     """A JobService stand-in returning canned responses for every method."""
@@ -96,6 +130,7 @@ def mock_service() -> AsyncMock:
     service.list.return_value = {"items": [_job_response()], "total": 1}
     service.list_for_user.return_value = {"items": [], "total": 0}
     service.get.return_value = _job_response()
+    service.get_installation_plan.return_value = _installation_plan_response()
     service.create.return_value = _job_response()
     service.update.return_value = _job_response(title="Updated")
     service.schedule.return_value = _job_response(status=JobStatus.SCHEDULED.value)
@@ -176,6 +211,23 @@ class TestListAndGet:
         response = await client.get(_base(f"/{JOB_ID}"))
         assert response.status_code == 200
         assert response.json()["id"] == str(JOB_ID)
+
+    async def test_installation_plan_is_authenticated_and_assignment_scoped(
+        self, client: AsyncClient, mock_service: AsyncMock
+    ) -> None:
+        response = await client.get(_base(f"/{JOB_ID}/installation-plan"))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["selected_shot_id"] == "install-front"
+        assert "procurement" not in body
+        assert "deposit" not in body
+        kwargs = mock_service.get_installation_plan.await_args.kwargs
+        assert kwargs["user_id"] == 7
+        assert kwargs["membership"].role == "dispatcher"
+
+    async def test_installation_plan_requires_auth(self, noauth_client: AsyncClient) -> None:
+        response = await noauth_client.get(_base(f"/{JOB_ID}/installation-plan"))
+        assert response.status_code == 401
 
     async def test_calendar_mine_resolves_current_user(
         self, client: AsyncClient, mock_service: AsyncMock

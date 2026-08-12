@@ -22,6 +22,7 @@ from typing import cast
 import structlog
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -30,8 +31,9 @@ from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
-from app.models.field_service import ServiceLocation
+from app.models.field_service import Job, ServiceLocation
 from app.models.human_nudge import HumanNudge
+from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
@@ -302,29 +304,69 @@ class QuoteService:
 
         Only ids that were actually supplied are checked. A foreign id 404s
         exactly like a missing one, so a caller cannot bind a quote to another
-        tenant's contact and have the platform email/SMS that contact (which
-        would echo their decrypted details back in the response).
+        tenant's contact and have the platform echo decrypted details.
         """
         if contact_id is not None:
             await assert_workspace_owned(
                 self.db, Contact, contact_id, workspace_id, detail="Contact not found"
             )
         if service_location_id is not None:
-            await assert_workspace_owned(
+            location = await assert_workspace_owned(
                 self.db,
                 ServiceLocation,
                 service_location_id,
                 workspace_id,
                 detail="Service location not found",
             )
+            if contact_id is not None and location.contact_id != contact_id:
+                raise ValidationError("Service location does not belong to the selected contact")
         if opportunity_id is not None:
-            await assert_workspace_owned(
+            opportunity = await assert_workspace_owned(
                 self.db,
                 Opportunity,
                 opportunity_id,
                 workspace_id,
                 detail="Opportunity not found",
             )
+            if (
+                contact_id is not None
+                and opportunity.primary_contact_id is not None
+                and opportunity.primary_contact_id != contact_id
+            ):
+                raise ValidationError("Opportunity does not belong to the selected contact")
+
+    async def _validated_lighting_project(
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        contact_id: int,
+        service_location_id: uuid.UUID | None,
+        opportunity_id: uuid.UUID | None,
+    ) -> LightingProject:
+        project = await assert_workspace_owned(
+            self.db,
+            LightingProject,
+            project_id,
+            workspace_id,
+            detail="Lighting project not found",
+        )
+        if project.status != "active" or project.contact_id != contact_id:
+            raise ValidationError("Lighting project does not belong to the selected contact")
+        if service_location_id is not None and project.service_location_id != service_location_id:
+            raise ValidationError(
+                "Lighting project does not belong to the selected service location"
+            )
+        if opportunity_id is not None and project.opportunity_id != opportunity_id:
+            raise ValidationError("Lighting project does not belong to the selected opportunity")
+        if project.installation_shot_id is None:
+            raise ValidationError("Select and save an installation sheet before creating a quote")
+        from app.schemas.lighting_project import LandscapeDraftDocument
+
+        document = LandscapeDraftDocument.model_validate(project.document)
+        if project.installation_shot_id not in {shot.id for shot in document.shots}:
+            raise ValidationError("Selected installation sheet is missing from the project")
+        return project
 
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
@@ -2084,18 +2126,29 @@ class QuoteService:
         contact_id = payload.contact_id
         if contact_id is None:
             contact_id = await self._resolve_wizard_contact(workspace_id, payload)
+        lighting_project = None
+        if payload.lighting_project_id is not None:
+            if contact_id is None:
+                raise ValidationError("A lighting project quote requires a linked contact")
+            lighting_project = await self._validated_lighting_project(
+                workspace_id,
+                payload.lighting_project_id,
+                contact_id=contact_id,
+                service_location_id=payload.service_location_id,
+                opportunity_id=payload.opportunity_id,
+            )
         assigned_user_id = await self._default_assignee_id(
             workspace_id,
             opportunity_id=payload.opportunity_id,
             created_by_id=created_by_id,
         )
-
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=contact_id,
             service_location_id=payload.service_location_id,
             opportunity_id=payload.opportunity_id,
             assigned_user_id=assigned_user_id,
+            lighting_project_id=lighting_project.id if lighting_project else None,
             number=await self._next_quote_number(workspace_id),
             title=payload.title or self._wizard_title(document),
             currency="USD",
@@ -2871,7 +2924,7 @@ class QuoteService:
     # Conversion
     # ------------------------------------------------------------------
 
-    async def convert_quote(
+    async def convert_quote(  # noqa: PLR0912, PLR0915
         self,
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
@@ -2880,127 +2933,201 @@ class QuoteService:
         create_invoice: bool = True,
         scheduled_start: datetime | None = None,
         scheduled_end: datetime | None = None,
+        crew_id: uuid.UUID | None = None,
         technician_ids: Sequence[uuid.UUID] = (),
+        confirm_unpaid_deposit: bool = False,
     ) -> QuoteConvertResponse:
-        """Convert an approved quote into a job and/or an invoice (idempotent).
-
-        Re-running returns the already-linked job/invoice rather than creating
-        duplicates. A job needs a ``contact_id``; converting to an invoice copies
-        the quote's line items verbatim. When ``scheduled_start``/``scheduled_end``
-        are supplied, the created job lands on the calendar as ``scheduled``.
-        """
+        """Atomically convert one approved quote, with exact-retry semantics."""
         from app.services.invoices import InvoiceService
         from app.services.jobs import JobService
+        from app.services.payments.quote_deposit_service import deposit_amount
 
-        quote = await get_or_404(
-            self.db,
-            Quote,
-            quote_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items)],
+        if (scheduled_start is None) != (scheduled_end is None):
+            raise ValidationError("scheduled_start and scheduled_end must be provided together")
+        if (
+            scheduled_start is not None
+            and scheduled_end is not None
+            and scheduled_end <= scheduled_start
+        ):
+            raise ValidationError("scheduled_end must be after scheduled_start")
+        if not create_job and (crew_id is not None or technician_ids):
+            raise ValidationError("An installation team requires job creation")
+
+        quote_result = await self.db.execute(
+            select(Quote)
+            .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+            .options(selectinload(Quote.line_items))
+            .with_for_update()
         )
+        quote = quote_result.scalar_one_or_none()
+        if quote is None:
+            raise NotFoundError("Quote not found")
         if quote.status != "approved":
             raise ConflictError("Only an approved quote can be converted")
+        if create_job and (scheduled_start is None or scheduled_end is None):
+            raise ValidationError("A complete schedule window is required to create a job")
 
-        job_id = quote.converted_job_id
-        invoice_id = quote.converted_invoice_id
-        prior_job_id = job_id
-        prior_invoice_id = invoice_id
-
-        # Create the invoice first so the job can be linked to it for costing
-        # (its profitability reads revenue from the linked invoice).
-        if create_invoice and invoice_id is None:
-            # A deposit the client already paid on the proposal page opens the
-            # invoice as a credit, so the balance due is the remainder rather
-            # than the full total -- otherwise conversion re-bills the deposit.
-            from app.services.payments.quote_deposit_service import deposit_amount
-
-            paid_deposit = 0.0
-            if quote.deposit_paid_at is not None:
-                paid_deposit = deposit_amount(quote) or 0.0
-            invoice = await InvoiceService(self.db).create_invoice(
+        if quote.lighting_project_id is not None:
+            project = await self._validated_lighting_project(
                 workspace_id,
-                InvoiceCreate(
+                quote.lighting_project_id,
+                contact_id=cast(int, quote.contact_id),
+                service_location_id=quote.service_location_id,
+                opportunity_id=quote.opportunity_id,
+            )
+            if project.installation_shot_id is None:
+                raise ConflictError("The linked project no longer has an installation sheet")
+
+        deposit_due = deposit_amount(quote)
+        if (
+            create_job
+            and deposit_due is not None
+            and quote.deposit_paid_at is None
+            and not confirm_unpaid_deposit
+        ):
+            raise ConflictError(
+                "Required deposit is unpaid; confirm before scheduling",
+                code="unpaid_deposit_confirmation_required",
+                details={"deposit_amount": deposit_due},
+            )
+
+        requested_technicians = tuple(dict.fromkeys(technician_ids))
+        existing_job = None
+        if quote.converted_job_id is not None:
+            existing_job = await self.db.scalar(
+                select(Job)
+                .where(
+                    Job.id == quote.converted_job_id,
+                    Job.workspace_id == workspace_id,
+                )
+                .options(selectinload(Job.technicians))
+            )
+        if existing_job is None:
+            existing_job = await self.db.scalar(
+                select(Job)
+                .where(
+                    Job.source_quote_id == quote.id,
+                    Job.workspace_id == workspace_id,
+                )
+                .options(selectinload(Job.technicians))
+            )
+
+        requested_flags_conflict = (not create_job and existing_job is not None) or (
+            not create_invoice and quote.converted_invoice_id is not None
+        )
+        if existing_job is not None:
+            existing_technicians = {technician.id for technician in existing_job.technicians}
+            exact_job_retry = (
+                create_job
+                and existing_job.scheduled_start == scheduled_start
+                and existing_job.scheduled_end == scheduled_end
+                and existing_job.crew_id == crew_id
+                and existing_technicians == set(requested_technicians)
+            )
+            if not exact_job_retry or requested_flags_conflict:
+                raise ConflictError("Quote was already converted with different handoff details")
+        elif quote.converted_job_id is not None or requested_flags_conflict:
+            raise ConflictError("Quote conversion links no longer match the requested handoff")
+
+        if quote.converted_invoice_id is not None and not create_invoice:
+            raise ConflictError("Quote was already converted with different create flags")
+
+        idempotent_replay = existing_job is not None or quote.converted_invoice_id is not None
+        job_id = existing_job.id if existing_job is not None else quote.converted_job_id
+        invoice_id = quote.converted_invoice_id
+        created_something = False
+        try:
+            if create_invoice and invoice_id is None:
+                paid_deposit = (
+                    float(deposit_due or 0.0) if quote.deposit_paid_at is not None else 0.0
+                )
+                invoice = await InvoiceService(self.db).create_invoice(
+                    workspace_id,
+                    InvoiceCreate(
+                        contact_id=quote.contact_id,
+                        opportunity_id=quote.opportunity_id,
+                        currency=quote.currency,
+                        tax_amount=float(quote.tax_amount or 0),
+                        discount_amount=float(quote.discount_amount or 0),
+                        notes=quote.notes,
+                        terms=quote.terms,
+                        line_items=[
+                            InvoiceLineItemCreate(
+                                name=line.name,
+                                description=line.description,
+                                quantity=float(line.quantity),
+                                unit_price=float(line.unit_price),
+                                discount=float(line.discount),
+                            )
+                            for line in quote.line_items
+                        ],
+                    ),
+                    created_by_id=quote.created_by_id,
+                    amount_paid=paid_deposit,
+                    payment_intent_id=(quote.deposit_payment_intent_id if paid_deposit else None),
+                    commit=False,
+                )
+                invoice_id = invoice.id
+                quote.converted_invoice_id = invoice_id
+                created_something = True
+
+            if create_job and existing_job is None:
+                if quote.contact_id is None:
+                    raise ConflictError("Cannot create a job from a quote with no contact")
+                job = await JobService(self.db).create(
+                    workspace_id,
+                    {
+                        "contact_id": quote.contact_id,
+                        "service_location_id": quote.service_location_id,
+                        "crew_id": crew_id,
+                        "title": quote.title or f"Quote {quote.number}",
+                        "description": quote.notes,
+                        "invoice_id": invoice_id,
+                        "source_quote_id": quote.id,
+                        "lighting_project_id": quote.lighting_project_id,
+                        "technician_ids": list(requested_technicians),
+                        "scheduled_start": scheduled_start,
+                        "scheduled_end": scheduled_end,
+                    },
+                )
+                job_id = job.id
+                quote.converted_job_id = job_id
+                created_something = True
+
+            if created_something:
+                await emit_automation_event(
+                    self.db,
+                    workspace_id=quote.workspace_id,
+                    event_type=EVENT_QUOTE_CONVERTED,
                     contact_id=quote.contact_id,
-                    opportunity_id=quote.opportunity_id,
-                    currency=quote.currency,
-                    tax_amount=float(quote.tax_amount or 0),
-                    discount_amount=float(quote.discount_amount or 0),
-                    notes=quote.notes,
-                    terms=quote.terms,
-                    line_items=[
-                        InvoiceLineItemCreate(
-                            name=li.name,
-                            description=li.description,
-                            quantity=float(li.quantity),
-                            unit_price=float(li.unit_price),
-                            discount=float(li.discount),
-                        )
-                        for li in quote.line_items
-                    ],
-                ),
-                created_by_id=quote.created_by_id,
-                amount_paid=paid_deposit,
-                # Carry the deposit's intent id so the invoice keeps a handle on
-                # the money already taken; a later balance payment arrives under
-                # a different intent, so ``record_payment`` still applies it.
-                payment_intent_id=quote.deposit_payment_intent_id if paid_deposit else None,
-            )
-            invoice_id = invoice.id
-            quote.converted_invoice_id = invoice_id
+                    payload={
+                        "quote_id": str(quote.id),
+                        "number": quote.number,
+                        "job_id": str(job_id) if job_id else None,
+                        "invoice_id": str(invoice_id) if invoice_id else None,
+                    },
+                )
+            await self.db.commit()
+        except IntegrityError as error:
+            await self.db.rollback()
+            if "uq_field_service_jobs_source_quote" in str(error):
+                raise ConflictError("Quote conversion raced; retry the exact handoff") from error
+            raise
 
-        if create_job and job_id is None:
-            if quote.contact_id is None:
-                raise ConflictError("Cannot create a job from a quote with no contact")
-            job_data: dict[str, object] = {
-                "contact_id": quote.contact_id,
-                "service_location_id": quote.service_location_id,
-                "title": quote.title or f"Quote {quote.number}",
-                "description": quote.notes,
-                # Link the job to the just-created invoice (or a previously
-                # converted one) so its P&L has a revenue side.
-                "invoice_id": invoice_id,
-                "technician_ids": list(technician_ids),
-            }
-            # An optional schedule window lands the job ``scheduled`` in one step
-            # (JobService derives the status from the presence of the window).
-            if scheduled_start is not None and scheduled_end is not None:
-                job_data["scheduled_start"] = scheduled_start
-                job_data["scheduled_end"] = scheduled_end
-            job = await JobService(self.db).create(workspace_id, job_data)
-            job_id = job.id
-            quote.converted_job_id = job_id
-
-        # Emit only when this call actually converted something — re-running an
-        # already-converted quote is a no-op and must not re-fire the event.
-        if job_id != prior_job_id or invoice_id != prior_invoice_id:
-            await emit_automation_event(
-                self.db,
-                workspace_id=quote.workspace_id,
-                event_type=EVENT_QUOTE_CONVERTED,
-                contact_id=quote.contact_id,
-                payload={
-                    "quote_id": str(quote.id),
-                    "number": quote.number,
-                    "job_id": str(job_id) if job_id else None,
-                    "invoice_id": str(invoice_id) if invoice_id else None,
-                },
-            )
-
-        await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-
         self.log.info(
             "quote_converted",
             quote_id=str(quote.id),
             workspace_id=str(workspace_id),
             job_id=str(job_id) if job_id else None,
             invoice_id=str(invoice_id) if invoice_id else None,
+            idempotent_replay=idempotent_replay and not created_something,
         )
         return QuoteConvertResponse(
             quote=await self._detail_response(quote),
             job_id=job_id,
             invoice_id=invoice_id,
+            idempotent_replay=idempotent_replay and not created_something,
         )
 
     # ------------------------------------------------------------------

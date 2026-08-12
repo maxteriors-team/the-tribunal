@@ -4,6 +4,7 @@ import { CalendarClock, Loader2, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { InstallationPlanPanel } from "@/components/jobs/installation-plan-panel";
 import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
 import { JobMaterialsPanel } from "@/components/jobs/job-materials-panel";
@@ -118,8 +119,7 @@ export function JobDetailDialog({
   const subtitle =
     [
       job.customer?.name,
-      job.scheduled_start &&
-        formatDate(job.scheduled_start, { pattern: "EEE, MMM d 'at' h:mm a" }),
+      job.scheduled_start && formatDate(job.scheduled_start, { pattern: "EEE, MMM d 'at' h:mm a" }),
     ]
       .filter(Boolean)
       .join(" · ") || "Not scheduled yet";
@@ -205,160 +205,161 @@ export function JobDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList
-            className={`grid w-full ${showNeighbors ? "grid-cols-3" : "grid-cols-2"}`}
-          >
+          <TabsList className={`grid w-full ${showNeighbors ? "grid-cols-4" : "grid-cols-3"}`}>
             <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
+            {job.lighting_project_id ? (
+              <TabsTrigger value="installation-plan">Installation plan</TabsTrigger>
+            ) : null}
             <TabsTrigger value="field-work">Field work</TabsTrigger>
             {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
           </TabsList>
           <TabsContent value="details" className="space-y-5 pt-2">
-          {/* Site, customer, access notes and scope: the technician's "what am I
+            {/* Site, customer, access notes and scope: the technician's "what am I
               doing and where", and useful to dispatch too. */}
-          <JobBrief job={job} />
+            <JobBrief job={job} />
 
-          {readOnly ? (
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-2">
-                <Users className="size-4" />
-                Assigned
-              </Label>
-              {(job.technicians ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No technicians assigned.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {(job.technicians ?? []).map((tech) => (
-                    <div
-                      key={tech.id}
-                      className="flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2"
-                    >
-                      <Avatar className="size-5">
-                        <AvatarFallback
-                          className="text-[9px] text-white"
-                          style={{ backgroundColor: tech.color }}
-                        >
-                          {technicianInitials(tech.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs">{tech.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Schedule */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-2">
-                  <CalendarClock className="size-4" />
-                  Time window
-                </Label>
-                {/* Stacked on a phone: two `datetime-local` inputs side by side
-                    clip their own value at 390px wide. */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Input
-                    aria-label="Start"
-                    type="datetime-local"
-                    value={start}
-                    onChange={(event) => setStart(event.target.value)}
-                  />
-                  <Input
-                    aria-label="End"
-                    type="datetime-local"
-                    value={end}
-                    onChange={(event) => setEnd(event.target.value)}
-                  />
-                </div>
-                {windowError && <p className="text-xs text-destructive">{windowError}</p>}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleSchedule}
-                  disabled={busy || !start || !end || Boolean(windowError)}
-                >
-                  {scheduleJob.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                  Save schedule
-                </Button>
-              </div>
-
-              {/* Status */}
-              <div className="space-y-1.5">
-                <Label htmlFor="job-status">Status</Label>
-                <Select value={job.status} onValueChange={(value) => handleStatus(value as JobStatus)}>
-                  <SelectTrigger id="job-status" disabled={busy}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {JOB_STATUS_VALUES.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {jobStatusLabel(status)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Technicians */}
+            {readOnly ? (
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-2">
                   <Users className="size-4" />
-                  Assigned technicians
+                  Assigned
                 </Label>
-                <TechnicianSelect
-                  technicians={technicians}
-                  selectedIds={selectedTechs}
-                  onToggle={toggleTech}
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void handleSaveTechnicians()}
-                  disabled={busy || !techDirty}
-                >
-                  {(assignTechs.isPending || unassignTech.isPending) && (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  )}
-                  Save assignments
-                </Button>
+                {(job.technicians ?? []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No technicians assigned.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {(job.technicians ?? []).map((tech) => (
+                      <div
+                        key={tech.id}
+                        className="flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2"
+                      >
+                        <Avatar className="size-5">
+                          <AvatarFallback
+                            className="text-[9px] text-white"
+                            style={{ backgroundColor: tech.color }}
+                          >
+                            {technicianInitials(tech.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs">{tech.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+            ) : (
+              <>
+                {/* Schedule */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-2">
+                    <CalendarClock className="size-4" />
+                    Time window
+                  </Label>
+                  {/* Stacked on a phone: two `datetime-local` inputs side by side
+                    clip their own value at 390px wide. */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Input
+                      aria-label="Start"
+                      type="datetime-local"
+                      value={start}
+                      onChange={(event) => setStart(event.target.value)}
+                    />
+                    <Input
+                      aria-label="End"
+                      type="datetime-local"
+                      value={end}
+                      onChange={(event) => setEnd(event.target.value)}
+                    />
+                  </div>
+                  {windowError && <p className="text-xs text-destructive">{windowError}</p>}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleSchedule}
+                    disabled={busy || !start || !end || Boolean(windowError)}
+                  >
+                    {scheduleJob.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                    Save schedule
+                  </Button>
+                </div>
 
-              {/* Delete */}
-              <div className="flex justify-end border-t pt-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={busy}
-                >
-                  <Trash2 className="mr-2 size-4" />
-                  Delete job
-                </Button>
-              </div>
-            </>
-          )}
+                {/* Status */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="job-status">Status</Label>
+                  <Select
+                    value={job.status}
+                    onValueChange={(value) => handleStatus(value as JobStatus)}
+                  >
+                    <SelectTrigger id="job-status" disabled={busy}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JOB_STATUS_VALUES.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {jobStatusLabel(status)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Technicians */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-2">
+                    <Users className="size-4" />
+                    Assigned technicians
+                  </Label>
+                  <TechnicianSelect
+                    technicians={technicians}
+                    selectedIds={selectedTechs}
+                    onToggle={toggleTech}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleSaveTechnicians()}
+                    disabled={busy || !techDirty}
+                  >
+                    {(assignTechs.isPending || unassignTech.isPending) && (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    )}
+                    Save assignments
+                  </Button>
+                </div>
+
+                {/* Delete */}
+                <div className="flex justify-end border-t pt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={busy}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Delete job
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
+          {job.lighting_project_id ? (
+            <TabsContent value="installation-plan" className="space-y-5 pt-2">
+              <InstallationPlanPanel workspaceId={workspaceId} jobId={job.id} />
+            </TabsContent>
+          ) : null}
           <TabsContent value="field-work" className="space-y-5 pt-2">
             <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
             {/* Materials sit beside time and expenses: same tab, separate
                 section, because stock consumption moves real inventory rather
                 than just recording a number. */}
             <div className="border-t pt-4">
-              <JobMaterialsPanel
-                workspaceId={workspaceId}
-                jobId={job.id}
-                readOnly={readOnly}
-              />
+              <JobMaterialsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
             </div>
           </TabsContent>
           {showNeighbors && (
             <TabsContent value="neighbors" className="pt-2">
-              <JobNeighborsPanel
-                workspaceId={workspaceId}
-                jobId={job.id}
-                readOnly={readOnly}
-              />
+              <JobNeighborsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
             </TabsContent>
           )}
         </Tabs>

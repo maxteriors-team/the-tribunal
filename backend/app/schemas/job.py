@@ -12,6 +12,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 
 from app.models.field_service import JobStatus
+from app.schemas.lighting_project import (
+    DesignSchema,
+    DocumentSettingsSchema,
+    DocumentText,
+    PhotoSchema,
+    SheetMetadataSchema,
+    ShortText,
+)
 
 
 class JobCreate(BaseModel):
@@ -172,6 +180,8 @@ class JobResponse(BaseModel):
     crew_id: uuid.UUID | None
     business_location_id: uuid.UUID | None = None
     invoice_id: uuid.UUID | None = None
+    source_quote_id: uuid.UUID | None = None
+    lighting_project_id: uuid.UUID | None = None
     title: str
     description: str | None
     status: JobStatus
@@ -196,3 +206,38 @@ class JobListResponse(BaseModel):
 
     items: list[JobResponse]
     total: int
+
+
+class InstallationPlanFixture(BaseModel):
+    """Price-free fixture schedule row for the selected installation sheet."""
+
+    number: int
+    item_id: ShortText
+    product_id: ShortText
+    catalog_item_id: ShortText | None = None
+    catalog_sku: ShortText | None = None
+    lamp_catalog_item_id: ShortText | None = None
+    accessory_catalog_item_ids: list[ShortText] = Field(default_factory=list)
+    circuit_id: ShortText | None = None
+    transformer_zone_id: ShortText | None = None
+
+
+class JobInstallationPlanResponse(BaseModel):
+    """Assignment-scoped, read-only projection of one selected installation sheet."""
+
+    job_id: uuid.UUID
+    project_id: uuid.UUID
+    project_name: str
+    project_version: int
+    project_updated_at: datetime
+    selected_shot_id: ShortText
+    sheet_label: ShortText | None = None
+    drawing_title: ShortText | None = None
+    drawing_number: ShortText | None = None
+    sheet: SheetMetadataSchema | None = None
+    photo: PhotoSchema
+    design: DesignSchema
+    dusk: float
+    settings: DocumentSettingsSchema
+    fixture_schedule: list[InstallationPlanFixture] = Field(default_factory=list)
+    precon_field_brief: DocumentText = ""

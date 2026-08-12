@@ -8,7 +8,7 @@
  */
 import type { FixtureType } from "@/lib/estimator/fixtures";
 import type { ServiceKey } from "@/lib/estimator/services";
-import type { Design, PhotoInfo } from "@/lib/estimator/types";
+import type { Design, LandscapeSheetMetadata, PhotoInfo } from "@/lib/estimator/types";
 
 /**
  * One photo of the job and what the rep drew on it. A job is usually more than
@@ -24,6 +24,8 @@ export interface DesignerShot {
   design: Design;
   /** Dusk level this shot is shown at. */
   dusk: number;
+  /** Drawing-sheet title, revision, and proposal-zone metadata. */
+  sheet?: LandscapeSheetMetadata;
 }
 
 /** A rendered shot: the composite the client sees, kept with its drawing. */

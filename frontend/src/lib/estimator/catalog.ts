@@ -119,6 +119,8 @@ export const SPACING_OPTIONS: Record<RenderStyle, number[]> = {
   ingrade: [],
   pathlight: [],
   downlight: [],
+  transformer: [],
+  wire: [],
   bistro: [12, 18, 24, 36],
 };
 
@@ -134,6 +136,8 @@ export const STYLE_LABELS: Record<RenderStyle, string> = {
   ingrade: "In-grade",
   pathlight: "Path light",
   downlight: "Downlight",
+  transformer: "Transformer",
+  wire: "Wire circuit",
   bistro: "Bistro string",
 };
 
@@ -150,6 +154,8 @@ const DEFAULT_SPACING: Record<RenderStyle, number> = {
   ingrade: 0,
   pathlight: 0,
   downlight: 0,
+  transformer: 0,
+  wire: 0,
   bistro: 24,
 };
 
@@ -202,8 +208,7 @@ function styleForCategory(key: string, unit: "each" | "per_ft"): RenderStyle {
  * any small/medium/large hint in the option.
  */
 function sizeFtFor(categoryKey: string, optionKey: string, optionName: string): number {
-  const base =
-    categoryKey === "trees" ? 12 : categoryKey === "bushes" ? 4 : 3;
+  const base = categoryKey === "trees" ? 12 : categoryKey === "bushes" ? 4 : 3;
   const hint = `${optionKey} ${optionName}`.toLowerCase();
   if (/\b(large|xl|tall|over)\b/.test(hint)) return base * 1.4;
   if (/\b(small|mini|up to)\b/.test(hint)) return base * 0.7;
@@ -215,9 +220,7 @@ function sizeFtFor(categoryKey: string, optionKey: string, optionName: string): 
  * feet=0 estimate (no design yet) since `christmas_catalog` is returned
  * regardless of measured footage.
  */
-export function buildCatalog(
-  estimate: LinearFeetEstimateResult | null | undefined,
-): Product[] {
+export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefined): Product[] {
   const perFt = estimate?.christmas.per_ft ?? 0;
   const products = rooflineProducts(perFt);
 

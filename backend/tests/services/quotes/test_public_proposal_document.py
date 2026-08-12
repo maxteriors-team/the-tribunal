@@ -44,7 +44,7 @@ PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
 # gutters on it"). It is preview-only and never persisted, but classifying it
 # keeps the guard honest: telling a homeowner what the business wishes it had
 # sold them is not client-facing under any circumstances.
-INTERNAL_ONLY_FIELDS = frozenset({"fulfillment", "attach_warning"})
+INTERNAL_ONLY_FIELDS = frozenset({"fulfillment", "attach_warning", "pricing_source"})
 
 
 def _document() -> dict[str, Any]:

@@ -12,11 +12,7 @@ import {
   rotateHandlePos,
   withRunOverrides,
 } from "./render";
-import {
-  DEFAULT_BEAM_ANGLE_DEG,
-  MAX_BEAM_ANGLE_DEG,
-  MIN_BEAM_ANGLE_DEG,
-} from "./types";
+import { DEFAULT_BEAM_ANGLE_DEG, MAX_BEAM_ANGLE_DEG, MIN_BEAM_ANGLE_DEG } from "./types";
 import type { Design, PlacedItem, Product, Run } from "./types";
 
 // jsdom ships no canvas 2D context. A permissive stub records the calls the
@@ -33,6 +29,7 @@ function fakeCtx() {
     scale: vi.fn(),
     drawImage: vi.fn(),
     fillRect: vi.fn(),
+    strokeRect: vi.fn(),
     fillText: vi.fn(),
     measureText: vi.fn(() => ({ width: 20 })),
     save: vi.fn(),
@@ -41,6 +38,7 @@ function fakeCtx() {
     closePath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
     arc: vi.fn(),
     arcTo: vi.fn(),
     ellipse: vi.fn(),
@@ -97,6 +95,35 @@ const wreath: Product = {
   target: { field: "christmas", category: "wreaths", option: "standard" },
 };
 
+const uplight: Product = {
+  ...wreath,
+  id: "fixture-uplight",
+  name: "Uplight",
+  category: "landscape",
+  style: "uplight",
+  sizeFt: 14,
+  target: { field: "landscape", fixtureType: "uplight" },
+};
+
+const transformer: Product = {
+  ...wreath,
+  id: "fixture-transformer",
+  name: "Transformer",
+  category: "landscape",
+  style: "transformer",
+  target: { field: "annotation", annotationType: "transformer" },
+};
+
+const wire: Product = {
+  ...wreath,
+  id: "landscape-wire",
+  name: "Wire circuit",
+  category: "landscape",
+  kind: "linear",
+  style: "wire",
+  target: { field: "annotation", annotationType: "wire" },
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -139,6 +166,67 @@ describe("drawScene", () => {
     // Night wash fill covers the full photo.
     expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 1200, 800);
   });
+
+  it("draws fixture symbols, transformer, and inset images only on the editable plan", () => {
+    const design: Design = {
+      calibration: null,
+      runs: [
+        {
+          id: "circuit-1",
+          productId: wire.id,
+          points: [
+            { x: 100, y: 400 },
+            { x: 500, y: 400 },
+          ],
+          circuitLabel: "C1",
+          wireGauge: 12,
+          sourceVoltage: 12,
+        },
+      ],
+      items: [
+        { id: "up", productId: uplight.id, at: { x: 200, y: 200 }, sizePx: 120 },
+        { id: "tx", productId: transformer.id, at: { x: 400, y: 200 }, sizePx: 30 },
+      ],
+      planImages: [
+        {
+          id: "detail",
+          dataUrl: "data:image/png;base64,AAAA",
+          name: "Pool detail.png",
+          at: { x: 600, y: 400 },
+          widthPx: 200,
+          heightPx: 120,
+        },
+      ],
+    };
+    const products = new Map<string, Product>([
+      [uplight.id, uplight],
+      [transformer.id, transformer],
+      [wire.id, wire],
+    ]);
+    const planCtx = fakeCtx();
+    drawScene(planCtx, fakePhoto(), design, products, 40, {
+      viewScale: 1,
+      dusk: 0.52,
+      showChrome: true,
+      planImageElements: new Map([["detail", {} as HTMLImageElement]]),
+    });
+    expect(planCtx.drawImage).toHaveBeenCalledTimes(2);
+    expect(planCtx.stroke).toHaveBeenCalled();
+    expect(planCtx.arcTo).toHaveBeenCalled();
+    expect(planCtx.fillText).toHaveBeenCalledWith("C1", expect.any(Number), expect.any(Number));
+    expect(planCtx.fillText).toHaveBeenCalledWith("UP1", 0, expect.any(Number));
+    expect(planCtx.fillText).toHaveBeenCalledWith("T1", 0, expect.any(Number));
+
+    const duskCtx = fakeCtx();
+    drawScene(duskCtx, fakePhoto(), design, products, 40, {
+      viewScale: 1,
+      dusk: 0.52,
+      showChrome: false,
+      planImageElements: new Map([["detail", {} as HTMLImageElement]]),
+    });
+    expect(duskCtx.drawImage).toHaveBeenCalledTimes(1);
+    expect(duskCtx.arcTo).not.toHaveBeenCalled();
+  });
 });
 
 describe("drawRunLights / drawPlacedItem styles", () => {
@@ -150,9 +238,7 @@ describe("drawRunLights / drawPlacedItem styles", () => {
       { x: 200, y: 0 },
     ];
     for (const style of ["c9", "mini", "garland", "stake", "permanent"] as const) {
-      expect(() =>
-        drawRunLights(ctx, pts, { ...c9, style }, 40, 2),
-      ).not.toThrow();
+      expect(() => drawRunLights(ctx, pts, { ...c9, style }, 40, 2)).not.toThrow();
     }
     const tree: PlacedItem = {
       id: "t",
@@ -160,9 +246,7 @@ describe("drawRunLights / drawPlacedItem styles", () => {
       at: { x: 100, y: 100 },
       sizePx: 120,
     };
-    expect(() =>
-      drawPlacedItem(ctx, tree, { ...wreath, style: "treewrap" }, 40, 2),
-    ).not.toThrow();
+    expect(() => drawPlacedItem(ctx, tree, { ...wreath, style: "treewrap" }, 40, 2)).not.toThrow();
   });
 
   it("renders a scaled (jumbo) bulb without throwing", () => {
@@ -172,9 +256,7 @@ describe("drawRunLights / drawPlacedItem styles", () => {
       { x: 0, y: 0 },
       { x: 200, y: 0 },
     ];
-    expect(() =>
-      drawRunLights(ctx, pts, { ...c9, bulbScale: 1.6 }, 40, 2),
-    ).not.toThrow();
+    expect(() => drawRunLights(ctx, pts, { ...c9, bulbScale: 1.6 }, 40, 2)).not.toThrow();
     expect(ctx.drawImage).toHaveBeenCalled();
   });
 });
@@ -264,16 +346,12 @@ describe("landscape fixture geometry", () => {
   });
 
   /** Half-width of the cone at the end of the throw, from the fixture's spread. */
-  const halfWidth = (reach: number, deg: number) =>
-    reach * Math.tan((deg * Math.PI) / 360);
+  const halfWidth = (reach: number, deg: number) => reach * Math.tan((deg * Math.PI) / 360);
 
   it("puts the spread grip on the cone's edge at the default lamp angle", () => {
     const grip = beamHandlePos(item, uplight)!;
     expect(grip.y).toBe(100); // end of the throw, same as the resize grip
-    expect(grip.x).toBeCloseTo(
-      200 + halfWidth(300, DEFAULT_BEAM_ANGLE_DEG.uplight),
-      5,
-    );
+    expect(grip.x).toBeCloseTo(200 + halfWidth(300, DEFAULT_BEAM_ANGLE_DEG.uplight), 5);
   });
 
   it("opens and closes the cone with the fixture's own beam angle", () => {
@@ -394,9 +472,7 @@ describe("landscape fixture geometry", () => {
       // a range. Straight down from an uplight is a half turn either way, and
       // the canonical circle is [-180, 180) — so it reads -180, not +180.
       expect(beamRotationAt(item, { x: 200, y: 700 }, uplight)).toBeCloseTo(-180, 5);
-      expect(
-        Math.abs(beamRotationAt(item, { x: 199, y: 700 }, uplight)),
-      ).toBeGreaterThan(179);
+      expect(Math.abs(beamRotationAt(item, { x: 199, y: 700 }, uplight))).toBeGreaterThan(179);
     });
 
     it("offers no aim grip on fixtures with no beam to aim", () => {
@@ -411,8 +487,7 @@ describe("landscape fixture geometry", () => {
       const rotation = (beamRotationDeg?: number) => {
         const ctx = fakeCtx();
         drawPlacedItem(ctx, { ...item, beamRotationDeg }, uplight, 15, 1);
-        return (ctx.rotate as unknown as ReturnType<typeof vi.fn>).mock
-          .calls[0][0] as number;
+        return (ctx.rotate as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as number;
       };
       // Straight up asks the canvas for no rotation at all...
       expect(rotation()).toBeCloseTo(0, 5);

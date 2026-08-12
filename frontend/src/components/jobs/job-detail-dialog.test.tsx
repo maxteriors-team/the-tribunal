@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JobDetailDialog } from "@/components/jobs/job-detail-dialog";
 import type { Job } from "@/lib/api/jobs";
@@ -17,17 +18,45 @@ import type { Job } from "@/lib/api/jobs";
  * no way to find the job. It renders for both roles, and never shows money.
  */
 
-const { mutation } = vi.hoisted(() => ({
+const { mutation, installationPlanQuery, canvasContext } = vi.hoisted(() => ({
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  installationPlanQuery: vi.fn(),
+  canvasContext: {
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    closePath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    scale: vi.fn(),
+    setTransform: vi.fn(),
+    fillText: vi.fn(),
+    measureText: vi.fn(() => ({ width: 10 })),
+    createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+  },
 }));
 
 vi.mock("@/hooks/useJobs", () => ({
   useWorkspaceTechnicians: () => ({ data: { items: [] } }),
+  useJobInstallationPlan: () => installationPlanQuery(),
   useScheduleJob: mutation,
   useUpdateJob: mutation,
   useAssignTechnicians: mutation,
   useUnassignTechnician: mutation,
   useDeleteJob: mutation,
+}));
+
+vi.mock("@/lib/estimator/photo", () => ({
+  loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
 }));
 
 // Field-work costing has its own suite; keep this one on the dispatch tab.
@@ -102,6 +131,17 @@ function renderDialog(readOnly: boolean, jobToRender: Job = fullJob) {
 }
 
 describe("JobDetailDialog", () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      canvasContext as unknown as CanvasRenderingContext2D,
+    );
+    installationPlanQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: undefined,
+      refetch: vi.fn(),
+    });
+  });
   it("renders no dispatch write controls when read-only", () => {
     renderDialog(true);
 
@@ -124,6 +164,40 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("button", { name: /Delete job/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Dispatch" })).toBeInTheDocument();
+  });
+
+  it("loads only the selected read-only installation plan and exposes print/download", async () => {
+    installationPlanQuery.mockReturnValue({
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      data: {
+        job_id: "job-1",
+        project_id: "project-1",
+        project_name: "Front elevation",
+        project_version: 4,
+        project_updated_at: "2026-08-12T00:00:00Z",
+        selected_shot_id: "install-front",
+        sheet_label: "Front",
+        drawing_title: "Installation plan",
+        drawing_number: "L-1",
+        photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+        design: { calibration: null, runs: [], items: [], planImages: [] },
+        dusk: 0.35,
+        settings: {},
+        fixture_schedule: [{ number: 1, item_id: "fixture-1", catalog_sku: "UP-01" }],
+        precon_field_brief: "Confirm transformer location.",
+      },
+    });
+    renderDialog(true, { ...fullJob, lighting_project_id: "project-1" });
+    await userEvent.click(screen.getByRole("tab", { name: "Installation plan" }));
+
+    expect(await screen.findByRole("heading", { name: "Installation plan" })).toBeInTheDocument();
+    expect(screen.getByText(/Confirm transformer location/)).toBeInTheDocument();
+    expect(screen.getByText(/UP-01/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Print/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download PNG/ })).toBeInTheDocument();
+    expect(screen.queryByText(/deposit|procurement/i)).not.toBeInTheDocument();
   });
 });
 
@@ -189,7 +263,10 @@ describe("JobDetailDialog field brief", () => {
   });
 
   it("keeps the call action off a customer with no phone number", () => {
-    renderDialog(true, makeJob({ customer: { id: 1349, name: "Helen Vasquez", phone_number: null } }));
+    renderDialog(
+      true,
+      makeJob({ customer: { id: 1349, name: "Helen Vasquez", phone_number: null } }),
+    );
 
     expect(screen.getByText("Helen Vasquez")).toBeInTheDocument();
     expect(screen.getByText("No phone number on file.")).toBeInTheDocument();

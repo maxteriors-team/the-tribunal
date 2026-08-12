@@ -22,6 +22,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -36,6 +37,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.field_service import ServiceLocation
+    from app.models.lighting_project import LightingProject
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -73,6 +75,7 @@ class Quote(Base):
     __table_args__ = (
         # Human quote number is unique within a workspace, not globally.
         UniqueConstraint("workspace_id", "number", name="uq_quotes_workspace_number"),
+        Index("ix_quotes_workspace_lighting_project", "workspace_id", "lighting_project_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -108,6 +111,13 @@ class Quote(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    # Editable landscape design that produced this quote. Private plan data is
+    # exposed only through authenticated job routes, never public proposals.
+    lighting_project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lighting_projects.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     # Human-facing quote number, unique per workspace (e.g. "QUO-000123").
@@ -261,6 +271,9 @@ class Quote(Base):
     service_location: Mapped["ServiceLocation | None"] = relationship("ServiceLocation")
     assignee: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+    lighting_project: Mapped["LightingProject | None"] = relationship(
+        "LightingProject", back_populates="quotes", foreign_keys=[lighting_project_id]
+    )
     line_items: Mapped[list["QuoteLineItem"]] = relationship(
         "QuoteLineItem",
         back_populates="quote",

@@ -61,6 +61,8 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
+    from app.models.lighting_project import LightingProject
+    from app.models.quote import Quote
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -479,6 +481,12 @@ class Job(Base):
             unique=True,
             postgresql_where=text("recurring_template_id IS NOT NULL"),
         ),
+        UniqueConstraint("source_quote_id", name="uq_field_service_jobs_source_quote"),
+        Index(
+            "ix_field_service_jobs_workspace_lighting_project",
+            "workspace_id",
+            "lighting_project_id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -536,6 +544,17 @@ class Job(Base):
         nullable=True,
         index=True,
     )
+    # Accepted quote and editable landscape source copied atomically on conversion.
+    source_quote_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quotes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    lighting_project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("lighting_projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -571,6 +590,10 @@ class Job(Base):
     service_location: Mapped["ServiceLocation | None"] = relationship("ServiceLocation")
     crew: Mapped["Crew | None"] = relationship("Crew")
     business_location: Mapped["BusinessLocation | None"] = relationship("BusinessLocation")
+    source_quote: Mapped["Quote | None"] = relationship("Quote", foreign_keys=[source_quote_id])
+    lighting_project: Mapped["LightingProject | None"] = relationship(
+        "LightingProject", back_populates="jobs", foreign_keys=[lighting_project_id]
+    )
 
     # The tag rows. Deleting a job removes its assignments.
     assignments: Mapped[list["JobAssignment"]] = relationship(

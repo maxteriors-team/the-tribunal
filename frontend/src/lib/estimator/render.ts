@@ -17,6 +17,7 @@ import {
   beamAngleFor,
   beamRotationFor,
   clampBeamAngle,
+  isLandscapePlanStyle,
   isLandscapeStyle,
   normalizeBeamRotation,
 } from "./types";
@@ -24,6 +25,7 @@ import type {
   Calibration,
   Design,
   PlacedItem,
+  PlanImage,
   Product,
   RenderStyle,
   Run,
@@ -89,12 +91,7 @@ function bulbSprite(color: string): HTMLCanvasElement {
 }
 
 /** Draw one glowing bulb. `r` is the core radius in current canvas units. */
-function drawBulb(
-  ctx: CanvasRenderingContext2D,
-  p: Point,
-  r: number,
-  color: string,
-): void {
+function drawBulb(ctx: CanvasRenderingContext2D, p: Point, r: number, color: string): void {
   const glowR = r * 3.6;
   ctx.drawImage(bulbSprite(color), p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
 }
@@ -117,6 +114,26 @@ function strokePath(
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawWireCircuit(ctx: CanvasRenderingContext2D, run: Run, viewScale: number): void {
+  if (run.points.length < 2) return;
+  const vs = Math.max(viewScale, 0.001);
+  strokePath(ctx, run.points, "rgba(4, 16, 24, 0.82)", 4.5 / vs);
+  strokePath(ctx, run.points, "#35aee2", 2.2 / vs, [10 / vs, 4 / vs]);
+
+  const anchor = run.points[Math.floor(run.points.length / 2)];
+  if (!anchor) return;
+  const label = run.circuitLabel ?? "Circuit";
+  ctx.save();
+  ctx.font = `700 ${10 / vs}px ui-sans-serif, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = "rgba(5, 16, 24, 0.9)";
+  ctx.fillRect(anchor.x - 17 / vs, anchor.y - 17 / vs, 34 / vs, 14 / vs);
+  ctx.fillStyle = "#dff6ff";
+  ctx.fillText(label, anchor.x, anchor.y - 5 / vs);
   ctx.restore();
 }
 
@@ -146,12 +163,7 @@ export function drawRunLights(
         const off = jitter(i * 13 + 1) * inch * 3;
         const nx = -Math.sin(q.angle);
         const ny = Math.cos(q.angle);
-        drawBulb(
-          ctx,
-          { x: q.p.x + nx * off, y: q.p.y + ny * off },
-          r,
-          colors[i % colors.length],
-        );
+        drawBulb(ctx, { x: q.p.x + nx * off, y: q.p.y + ny * off }, r, colors[i % colors.length]);
       });
       break;
     }
@@ -164,12 +176,7 @@ export function drawRunLights(
         const off = jitter(i * 7 + 3) * inch * 1.8;
         const nx = -Math.sin(q.angle);
         const ny = Math.cos(q.angle);
-        drawBulb(
-          ctx,
-          { x: q.p.x + nx * off, y: q.p.y + ny * off },
-          r,
-          colors[i % colors.length],
-        );
+        drawBulb(ctx, { x: q.p.x + nx * off, y: q.p.y + ny * off }, r, colors[i % colors.length]);
       });
       break;
     }
@@ -353,12 +360,7 @@ function drawLandscapeFixture(
     return;
   }
 
-  const beam = beamGeometry(
-    product.style,
-    size,
-    item.beamAngleDeg,
-    item.beamRotationDeg,
-  );
+  const beam = beamGeometry(product.style, size, item.beamAngleDeg, item.beamRotationDeg);
   if (!beam) return;
   const { reach, topW, dir, rot } = beam;
   const baseW = Math.max(1.5, topW * 0.18);
@@ -397,6 +399,106 @@ function drawLandscapeFixture(
   ctx.fill();
 }
 
+const PLAN_SYMBOL_COLORS: Partial<Record<RenderStyle, string>> = {
+  uplight: "#dc534b",
+  pathlight: "#d7a33e",
+  downlight: "#477bb8",
+  ingrade: "#4b9a70",
+  transformer: "#9b7ad1",
+};
+
+/** Draw a compact, zoom-stable landscape drafting symbol at an item's anchor. */
+function drawLandscapePlanSymbol(
+  ctx: CanvasRenderingContext2D,
+  item: PlacedItem,
+  style: RenderStyle,
+  viewScale: number,
+  label?: string,
+): void {
+  const vs = Math.max(viewScale, 0.01);
+  const r = 11 / vs;
+  const color = item.markerColor ?? PLAN_SYMBOL_COLORS[style] ?? "#4fd9ff";
+  ctx.save();
+  ctx.translate(item.at.x, item.at.y);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 1.8 / vs;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = "rgba(8, 14, 30, 0.9)";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+  ctx.shadowBlur = 4 / vs;
+  const drawTag = () => {
+    if (!label) return;
+    ctx.shadowBlur = 0;
+    ctx.font = `700 ${8 / vs}px ui-sans-serif, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const width = Math.max(ctx.measureText(label).width + 6 / vs, 24 / vs);
+    ctx.fillStyle = "rgba(7, 13, 23, 0.9)";
+    ctx.fillRect(-width / 2, r + 3 / vs, width, 12 / vs);
+    ctx.fillStyle = "#f7f8f7";
+    ctx.fillText(label, 0, r + 5 / vs);
+  };
+
+  if (style === "transformer") {
+    roundRect(ctx, -r, -r * 0.82, r * 2, r * 1.64, 3 / vs);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Lightning bolt: recognizable at plan scale without relying on text.
+    ctx.beginPath();
+    ctx.moveTo(r * 0.14, -r * 0.56);
+    ctx.lineTo(-r * 0.28, r * 0.05);
+    ctx.lineTo(r * 0.08, r * 0.05);
+    ctx.lineTo(-r * 0.14, r * 0.56);
+    ctx.lineTo(r * 0.34, -r * 0.12);
+    ctx.lineTo(-r * 0.02, -r * 0.12);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    drawTag();
+    ctx.restore();
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  if (style === "ingrade") {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.5 / vs, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  } else if (style === "pathlight") {
+    ctx.beginPath();
+    ctx.moveTo(0, r * 0.52);
+    ctx.lineTo(0, -r * 0.08);
+    ctx.moveTo(-r * 0.52, -r * 0.08);
+    ctx.quadraticCurveTo(0, -r * 0.62, r * 0.52, -r * 0.08);
+    ctx.moveTo(-r * 0.52, -r * 0.08);
+    ctx.lineTo(r * 0.52, -r * 0.08);
+    ctx.stroke();
+  } else {
+    const direction = style === "downlight" ? 1 : -1;
+    const endY = direction * r * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -direction * r * 0.42);
+    ctx.lineTo(0, endY);
+    ctx.moveTo(-r * 0.3, endY - direction * r * 0.28);
+    ctx.lineTo(0, endY);
+    ctx.lineTo(r * 0.3, endY - direction * r * 0.28);
+    ctx.stroke();
+  }
+  drawTag();
+  ctx.restore();
+}
+
 export function drawPlacedItem(
   ctx: CanvasRenderingContext2D,
   item: PlacedItem,
@@ -411,6 +513,9 @@ export function drawPlacedItem(
     drawLandscapeFixture(ctx, item, product);
     return;
   }
+  // A transformer is plan equipment, not a light source. Its drafting symbol is
+  // added with editor chrome so the customer-facing dusk image remains clean.
+  if (product.style === "transformer") return;
 
   if (product.style === "treewrap") {
     const h = item.sizePx;
@@ -418,14 +523,7 @@ export function drawPlacedItem(
     const botW = h * 0.13;
     const top = { x: item.at.x, y: item.at.y - h / 2 };
     // soft ambient glow
-    const g = ctx.createRadialGradient(
-      item.at.x,
-      item.at.y,
-      0,
-      item.at.x,
-      item.at.y,
-      h * 0.5,
-    );
+    const g = ctx.createRadialGradient(item.at.x, item.at.y, 0, item.at.x, item.at.y, h * 0.5);
     g.addColorStop(0, rgba(colors[0], 0.25));
     g.addColorStop(1, rgba(colors[0], 0));
     ctx.fillStyle = g;
@@ -528,6 +626,8 @@ export interface SceneOpts {
   dusk?: number;
   showChrome?: boolean;
   calibrateTool?: boolean;
+  /** Decoded image elements keyed by persisted plan-image id. */
+  planImageElements?: ReadonlyMap<string, CanvasImageSource>;
 }
 
 export function drawScene(
@@ -555,7 +655,9 @@ export function drawScene(
   ctx.globalCompositeOperation = "lighter";
   for (const run of design.runs) {
     const p = productById.get(run.productId);
-    if (p) drawRunLights(ctx, run.points, withRunOverrides(p, run), pxPerFt, minR);
+    if (p && p.style !== "wire") {
+      drawRunLights(ctx, run.points, withRunOverrides(p, run), pxPerFt, minR);
+    }
   }
   for (const item of design.items) {
     const p = productById.get(item.productId);
@@ -567,21 +669,77 @@ export function drawScene(
     drawPlacedItem(ctx, item, p, pxPerFt, minR);
     if (!additive) ctx.globalCompositeOperation = "lighter";
   }
-  if (opts.draftRun && opts.draftRun.points.length > 0) {
-    const pts = opts.hoverPt
-      ? [...opts.draftRun.points, opts.hoverPt]
-      : opts.draftRun.points;
+  if (opts.draftRun && opts.draftRun.points.length > 0 && opts.draftRun.product.style !== "wire") {
+    const pts = opts.hoverPt ? [...opts.draftRun.points, opts.hoverPt] : opts.draftRun.points;
     drawRunLights(ctx, pts, opts.draftRun.product, pxPerFt, minR);
   }
   ctx.restore();
 
   if (!opts.showChrome) return;
 
+  // Reference/detail images belong to the construction plan rather than the
+  // photorealistic dusk export. Fixtures render above them so symbols stay clear.
+  for (const image of design.planImages ?? []) {
+    const source = opts.planImageElements?.get(image.id);
+    if (!source) continue;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 8 / vs;
+    ctx.drawImage(
+      source,
+      image.at.x - image.widthPx / 2,
+      image.at.y - image.heightPx / 2,
+      image.widthPx,
+      image.heightPx,
+    );
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.72)";
+    ctx.lineWidth = 1 / vs;
+    ctx.strokeRect(
+      image.at.x - image.widthPx / 2,
+      image.at.y - image.heightPx / 2,
+      image.widthPx,
+      image.heightPx,
+    );
+    ctx.restore();
+  }
+
+  // Wire circuits are construction-plan chrome. They stay off dusk exports and
+  // quote geometry, but remain editable and printable on the field plan.
+  for (const run of design.runs) {
+    const product = productById.get(run.productId);
+    if (product?.style === "wire") drawWireCircuit(ctx, run, vs);
+  }
+
+  // Persistent symbols identify fixtures over their glow. They are editor/plan
+  // chrome rather than part of the photorealistic dusk export.
+  const fixtureNumbers = new Map<RenderStyle, number>();
+  const fixtureCodes: Partial<Record<RenderStyle, string>> = {
+    uplight: "UP",
+    ingrade: "IG",
+    pathlight: "PL",
+    downlight: "DL",
+    transformer: "T",
+  };
+  for (const item of design.items) {
+    const product = productById.get(item.productId);
+    if (product && isLandscapePlanStyle(product.style)) {
+      const number = (fixtureNumbers.get(product.style) ?? 0) + 1;
+      fixtureNumbers.set(product.style, number);
+      drawLandscapePlanSymbol(
+        ctx,
+        item,
+        product.style,
+        vs,
+        `${fixtureCodes[product.style] ?? "F"}${number}`,
+      );
+    }
+  }
+
   // draft helper line + vertices
   if (opts.draftRun && opts.draftRun.points.length > 0) {
-    const pts = opts.hoverPt
-      ? [...opts.draftRun.points, opts.hoverPt]
-      : opts.draftRun.points;
+    const pts = opts.hoverPt ? [...opts.draftRun.points, opts.hoverPt] : opts.draftRun.points;
     strokePath(ctx, pts, "rgba(255,255,255,0.55)", 1.2 / vs, [5 / vs, 4 / vs]);
     for (const p of opts.draftRun.points) handleDot(ctx, p, 3 / vs);
   }
@@ -606,16 +764,21 @@ export function drawScene(
       const spreadGrip = beamHandlePos(item, product);
       if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
       // Third, a cyan **round** grip floating past the end of the throw: aim.
-      // Round vs square is the tell — a rep glancing at the photo mid-pitch
-      // reads shape faster than colour, and this is the one grip that swings
-      // the light rather than resizing it. Tethered so it reads as attached to
-      // this fixture instead of a stray dot on the photo.
       const aimGrip = rotateHandlePos(item, product, vs);
       if (aimGrip) {
         const throwEnd = resizeHandlePos(item, product);
         strokePath(ctx, [throwEnd, aimGrip], "rgba(79,217,255,0.75)", 1.2 / vs);
         handleDot(ctx, aimGrip, 5 / vs, "#4fd9ff");
       }
+    } else if (item && product?.style === "transformer") {
+      const r = 15 / vs;
+      ctx.save();
+      ctx.strokeStyle = "rgba(245,200,66,0.95)";
+      ctx.lineWidth = 1.6 / vs;
+      ctx.setLineDash([7 / vs, 5 / vs]);
+      roundRect(ctx, item.at.x - r, item.at.y - r, r * 2, r * 2, 4 / vs);
+      ctx.stroke();
+      ctx.restore();
     } else if (item) {
       const r = item.sizePx / 2 + 6 / vs;
       ctx.save();
@@ -628,6 +791,24 @@ export function drawScene(
       ctx.restore();
       handleSquare(ctx, resizeHandlePos(item), 5 / vs);
     }
+  } else if (opts.selection?.kind === "planImage") {
+    const image = (design.planImages ?? []).find(
+      (candidate) => candidate.id === opts.selection!.id,
+    );
+    if (image) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(245,200,66,0.95)";
+      ctx.lineWidth = 1.8 / vs;
+      ctx.setLineDash([7 / vs, 5 / vs]);
+      ctx.strokeRect(
+        image.at.x - image.widthPx / 2,
+        image.at.y - image.heightPx / 2,
+        image.widthPx,
+        image.heightPx,
+      );
+      ctx.restore();
+      handleSquare(ctx, planImageResizeHandlePos(image), 5 / vs);
+    }
   }
 
   // calibration line — only while the scale tool is active
@@ -636,13 +817,10 @@ export function drawScene(
   if (opts.draftCalPoint) {
     handleSquare(ctx, opts.draftCalPoint, 5 / vs, "#4fd9ff");
     if (opts.hoverPt) {
-      strokePath(
-        ctx,
-        [opts.draftCalPoint, opts.hoverPt],
-        "rgba(79,217,255,0.9)",
-        2 / vs,
-        [6 / vs, 4 / vs],
-      );
+      strokePath(ctx, [opts.draftCalPoint, opts.hoverPt], "rgba(79,217,255,0.9)", 2 / vs, [
+        6 / vs,
+        4 / vs,
+      ]);
     }
   }
 }
@@ -667,12 +845,7 @@ export function withRunOverrides(product: Product, run: Run): Product {
  */
 export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
   if (product && isLandscapeStyle(product.style)) {
-    const beam = beamGeometry(
-      product.style,
-      item.sizePx,
-      item.beamAngleDeg,
-      item.beamRotationDeg,
-    );
+    const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
     if (!beam) {
       const r = item.sizePx / 2;
       return { x: item.at.x + r, y: item.at.y + r * POOL_SQUASH };
@@ -691,23 +864,11 @@ export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
  * I want it grazing the column"). `null` for anything without a cone — a path
  * light's spread *is* its pool, already dragged by the resize grip.
  */
-export function beamHandlePos(
-  item: PlacedItem,
-  product?: Product,
-): Point | null {
+export function beamHandlePos(item: PlacedItem, product?: Product): Point | null {
   if (!product) return null;
-  const beam = beamGeometry(
-    product.style,
-    item.sizePx,
-    item.beamAngleDeg,
-    item.beamRotationDeg,
-  );
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
   if (!beam) return null;
-  return fromBeamSpace(
-    item.at,
-    { x: beam.topW / 2, y: beam.dir * beam.reach },
-    beam.rot,
-  );
+  return fromBeamSpace(item.at, { x: beam.topW / 2, y: beam.dir * beam.reach }, beam.rot);
 }
 
 /**
@@ -733,19 +894,10 @@ export function rotateHandlePos(
   viewScale: number,
 ): Point | null {
   if (!product) return null;
-  const beam = beamGeometry(
-    product.style,
-    item.sizePx,
-    item.beamAngleDeg,
-    item.beamRotationDeg,
-  );
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
   if (!beam) return null;
   const gap = ROTATE_GRIP_GAP_PX / Math.max(viewScale, 0.01);
-  return fromBeamSpace(
-    item.at,
-    { x: 0, y: beam.dir * (beam.reach + gap) },
-    beam.rot,
-  );
+  return fromBeamSpace(item.at, { x: 0, y: beam.dir * (beam.reach + gap) }, beam.rot);
 }
 
 /**
@@ -755,14 +907,8 @@ export function rotateHandlePos(
  * Only the *direction* to the pointer is read, never the distance, so swinging
  * the beam around can't also stretch or shrink the throw the rep already set.
  */
-export function beamRotationAt(
-  item: PlacedItem,
-  p: Point,
-  product?: Product,
-): number {
-  const beam = product
-    ? beamGeometry(product.style, item.sizePx, item.beamAngleDeg)
-    : null;
+export function beamRotationAt(item: PlacedItem, p: Point, product?: Product): number {
+  const beam = product ? beamGeometry(product.style, item.sizePx, item.beamAngleDeg) : null;
   const dir = beam?.dir ?? -1;
   const dx = p.x - item.at.x;
   const dy = p.y - item.at.y;
@@ -802,12 +948,7 @@ function drawFixtureSelection(
   ctx.strokeStyle = "rgba(245,200,66,0.9)";
   ctx.lineWidth = 1.6 / vs;
   ctx.setLineDash([7 / vs, 5 / vs]);
-  const beam = beamGeometry(
-    product.style,
-    item.sizePx,
-    item.beamAngleDeg,
-    item.beamRotationDeg,
-  );
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
   if (!beam) {
     const r = item.sizePx / 2;
     ctx.beginPath();
@@ -830,12 +971,7 @@ function drawFixtureSelection(
   ctx.restore();
 }
 
-function handleSquare(
-  ctx: CanvasRenderingContext2D,
-  p: Point,
-  r: number,
-  color = "#ffffff",
-): void {
+function handleSquare(ctx: CanvasRenderingContext2D, p: Point, r: number, color = "#ffffff"): void {
   ctx.save();
   ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(10,14,26,0.9)";
@@ -847,12 +983,7 @@ function handleSquare(
   ctx.restore();
 }
 
-function handleDot(
-  ctx: CanvasRenderingContext2D,
-  p: Point,
-  r: number,
-  color = "#ffffff",
-): void {
+function handleDot(ctx: CanvasRenderingContext2D, p: Point, r: number, color = "#ffffff"): void {
   ctx.save();
   ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(10,14,26,0.9)";
@@ -864,11 +995,7 @@ function handleDot(
   ctx.restore();
 }
 
-export function drawCalibration(
-  ctx: CanvasRenderingContext2D,
-  cal: Calibration,
-  vs: number,
-): void {
+export function drawCalibration(ctx: CanvasRenderingContext2D, cal: Calibration, vs: number): void {
   strokePath(ctx, [cal.a, cal.b], "rgba(79,217,255,0.95)", 2 / vs);
   // end ticks
   const ang = Math.atan2(cal.b.y - cal.a.y, cal.b.x - cal.a.x) + Math.PI / 2;
@@ -939,11 +1066,20 @@ export function itemHitRadius(item: PlacedItem, product?: Product): number {
   return item.sizePx / 2;
 }
 
-export function itemHit(
-  item: PlacedItem,
-  p: Point,
-  slack: number,
-  product?: Product,
-): boolean {
+export function itemHit(item: PlacedItem, p: Point, slack: number, product?: Product): boolean {
   return distance(item.at, p) <= itemHitRadius(item, product) + slack;
+}
+
+export function planImageHit(image: PlanImage, point: Point, slack: number): boolean {
+  return (
+    Math.abs(point.x - image.at.x) <= image.widthPx / 2 + slack &&
+    Math.abs(point.y - image.at.y) <= image.heightPx / 2 + slack
+  );
+}
+
+export function planImageResizeHandlePos(image: PlanImage): Point {
+  return {
+    x: image.at.x + image.widthPx / 2,
+    y: image.at.y + image.heightPx / 2,
+  };
 }

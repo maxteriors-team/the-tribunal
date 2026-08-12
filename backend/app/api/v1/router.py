@@ -41,6 +41,7 @@ from app.api.v1 import (
     lead_form,
     lead_magnets,
     lead_sources,
+    lighting_projects,
     message_templates,
     message_tests,
     nudges,
@@ -233,6 +234,11 @@ api_router.include_router(
     quotes.router,
     prefix="/workspaces/{workspace_id}/quotes",
     tags=["Quotes"],
+)
+api_router.include_router(
+    lighting_projects.router,
+    prefix="/workspaces/{workspace_id}/lighting-projects",
+    tags=["Lighting Projects"],
 )
 api_router.include_router(
     catalog.router,

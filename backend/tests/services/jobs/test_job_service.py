@@ -21,6 +21,7 @@ from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.field_service import Crew, JobAssignment, JobStatus, Technician
+from app.models.lighting_project import LightingProject
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.jobs import JobService
@@ -110,6 +111,63 @@ async def _technician(
 def _window() -> tuple[datetime, datetime]:
     start = datetime.now(UTC) + timedelta(days=1)
     return start, start + timedelta(hours=2)
+
+
+def _landscape_document() -> dict:
+    return {
+        "version": 2,
+        "activeShotId": "other",
+        "shots": [
+            {
+                "id": "install-front",
+                "photo": {
+                    "dataUrl": "data:image/png;base64,AAAA",
+                    "width": 1200,
+                    "height": 800,
+                },
+                "design": {
+                    "calibration": None,
+                    "runs": [],
+                    "items": [
+                        {
+                            "id": "fixture-1",
+                            "productId": "uplight",
+                            "at": {"x": 20, "y": 30},
+                            "sizePx": 24,
+                            "catalogSku": "UP-01",
+                        }
+                    ],
+                    "planImages": [],
+                },
+                "dusk": 0.4,
+                "sheet": {
+                    "label": "Front",
+                    "drawingTitle": "Installation",
+                    "drawingNumber": "L-1",
+                },
+            },
+            {
+                "id": "other",
+                "photo": {
+                    "dataUrl": "data:image/png;base64,BBBB",
+                    "width": 800,
+                    "height": 600,
+                },
+                "design": {"calibration": None, "runs": [], "items": [], "planImages": []},
+                "dusk": 0.1,
+            },
+        ],
+        "updatedAt": "2026-08-12T00:00:00Z",
+        "procurement": {
+            "fixture-1": {
+                "catalogSku": "UP-01",
+                "orderedQuantity": 4,
+                "receivedQuantity": 2,
+                "supplierNote": "private cost/vendor note",
+            }
+        },
+        "precon": {"responses": [], "leadInstaller": "Hidden", "notes": "Field brief"},
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -365,9 +423,7 @@ async def test_list_filters_by_business_location() -> None:
                 "business_location_id": branch.id,
             },
         )
-        unassigned = await service.create(
-            ws.id, {"contact_id": contact.id, "title": "Unassigned"}
-        )
+        unassigned = await service.create(ws.id, {"contact_id": contact.id, "title": "Unassigned"})
 
         # Filtering by the branch returns only that branch's job.
         filtered = await service.list(ws.id, business_location_id=branch.id)
@@ -491,4 +547,104 @@ async def test_get_cross_workspace_404() -> None:
         job = await JobService(db).create(ws.id, {"contact_id": contact.id, "title": "Q"})
         with pytest.raises(HTTPException) as exc:
             await JobService(db).get(job.id, other.id)
+        assert exc.value.status_code == 404
+
+
+async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        assigned_user = await _user(db)
+        assigned = await _member(db, ws.id, assigned_user.id)
+        assigned.role = "technician"
+        assigned_tech = await _technician(db, ws.id, user_id=assigned_user.id)
+        crew_user = await _user(db)
+        crew_tech = await _technician(db, ws.id, user_id=crew_user.id)
+        crew = await _crew(db, ws.id)
+        crew_tech.crew_id = crew.id
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Front plan",
+            document=_landscape_document(),
+            version=4,
+            installation_shot_id="install-front",
+        )
+        db.add(project)
+        await db.flush()
+        job = await JobService(db).create(
+            ws.id,
+            {
+                "contact_id": contact.id,
+                "title": "Install",
+                "lighting_project_id": project.id,
+                "crew_id": crew.id,
+                "technician_ids": [assigned_tech.id],
+            },
+        )
+
+        plan = await JobService(db).get_installation_plan(
+            job.id,
+            ws.id,
+            membership=assigned,
+            user_id=assigned_user.id,
+        )
+        payload = plan.model_dump(mode="json", by_alias=True)
+        assert plan.selected_shot_id == "install-front"
+        assert plan.photo.data_url.endswith("AAAA")
+        assert plan.fixture_schedule[0].catalog_sku == "UP-01"
+        assert plan.precon_field_brief == "Field brief"
+        assert "procurement" not in payload
+        assert "leadInstaller" not in str(payload)
+        assert "BBBB" not in str(payload)
+
+        crew_membership = await _member(db, ws.id, crew_user.id)
+        crew_membership.role = "technician"
+        crew_plan = await JobService(db).get_installation_plan(
+            job.id,
+            ws.id,
+            membership=crew_membership,
+            user_id=crew_user.id,
+        )
+        assert crew_plan.selected_shot_id == "install-front"
+
+        unassigned_user = await _user(db)
+        unassigned = await _member(db, ws.id, unassigned_user.id)
+        unassigned.role = "technician"
+        with pytest.raises(HTTPException) as exc:
+            await JobService(db).get_installation_plan(
+                job.id,
+                ws.id,
+                membership=unassigned,
+                user_id=unassigned_user.id,
+            )
+        assert exc.value.status_code == 404
+
+        unassigned.role = "sales_rep"
+        with pytest.raises(HTTPException) as exc:
+            await JobService(db).get_installation_plan(
+                job.id,
+                ws.id,
+                membership=unassigned,
+                user_id=unassigned_user.id,
+            )
+        assert exc.value.status_code == 404
+
+        unassigned.role = "manager"
+        manager_plan = await JobService(db).get_installation_plan(
+            job.id,
+            ws.id,
+            membership=unassigned,
+            user_id=unassigned_user.id,
+        )
+        assert manager_plan.project_id == project.id
+
+        other = await _workspace(db)
+        with pytest.raises(HTTPException) as exc:
+            await JobService(db).get_installation_plan(
+                job.id,
+                other.id,
+                membership=unassigned,
+                user_id=unassigned_user.id,
+            )
         assert exc.value.status_code == 404

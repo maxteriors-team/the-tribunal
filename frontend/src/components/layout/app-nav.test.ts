@@ -184,18 +184,14 @@ describe("setupNavItem (first-run \"Finish setup\" entry)", () => {
   });
 });
 
-describe("Light Designer nav item (folded into the Quotes hub)", () => {
-  const designer = allNavItems.find((i) => i.title === "Light Designer");
+describe("Landscape Lighting builder nav item", () => {
+  const designer = allNavItems.find((i) => i.title === "Landscape Lighting");
 
-  it("is a command-palette-only deep link into the Quotes designer tab", () => {
+  it("has a dedicated, searchable entry in the Sales section", () => {
     expect(designer).toBeDefined();
-    // Lives as a tab in the unified Quotes & Estimates hub, so it deep-links to
-    // the tab rather than the retired standalone /estimator route.
-    expect(designer!.url).toBe("/quotes?tab=designer");
-    // Out of the sidebar (one quoting home), but still searchable + URL-reachable.
-    expect(designer!.sidebar).toBe(false);
+    expect(designer!.url).toBe("/landscape-lighting");
+    expect(designer!.sidebar).toBe(true);
     expect(designer!.commandPalette).toBe(true);
-    // Gated like the other quoting surfaces.
     expect(designer!.requires).toBe("billing:read");
   });
 

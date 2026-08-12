@@ -10,8 +10,10 @@ mutations return the full quote detail because they recompute the parent totals.
 """
 
 import uuid
-from typing import Annotated
+from datetime import UTC
+from typing import Annotated, Literal
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
@@ -38,6 +40,7 @@ from app.schemas.proposal import (
 )
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
+    CrewNotificationResult,
     PaginatedQuotes,
     QuoteAssignmentRequest,
     QuoteConvertRequest,
@@ -52,8 +55,15 @@ from app.schemas.quote import (
     QuoteServiceCreate,
     QuoteUpdate,
 )
+from app.services.idempotency import (
+    redis_idempotency_key_exists,
+    set_redis_idempotency_key,
+)
+from app.services.jobs import JobService
+from app.services.notifications import notify_workspace_event
 from app.services.quotes import QuoteService
 
+logger = structlog.get_logger(__name__)
 router = APIRouter(route_class=ServiceErrorRoute)
 # No-auth, token-keyed client proposal surface. Uses ServiceErrorRoute so the
 # service's NotFoundError/ConflictError map to 404/409 at the boundary.
@@ -228,15 +238,101 @@ async def convert_quote(
 ) -> QuoteConvertResponse:
     """Convert an approved quote into a scheduled job and/or an invoice."""
     service = QuoteService(db)
-    return await service.convert_quote(
+    result = await service.convert_quote(
         workspace_id,
         quote_id,
         create_job=payload.create_job,
         create_invoice=payload.create_invoice,
         scheduled_start=payload.scheduled_start,
         scheduled_end=payload.scheduled_end,
+        crew_id=payload.crew_id,
         technician_ids=payload.technician_ids,
+        confirm_unpaid_deposit=payload.confirm_unpaid_deposit,
     )
+    if result.job_id is None or payload.scheduled_start is None:
+        return result
+
+    recipients = await JobService(db).assignment_recipient_user_ids(result.job_id, workspace_id)
+    if not recipients:
+        result.crew_notification = CrewNotificationResult(status="not_applicable")
+        return result
+
+    assert payload.scheduled_start is not None
+    assert payload.scheduled_end is not None
+    schedule_version = (
+        f"{payload.scheduled_start.isoformat()}:{payload.scheduled_end.isoformat()}:"
+        f"{payload.crew_id}:{','.join(sorted(map(str, payload.technician_ids)))}"
+    )
+    dedupe_key = f"job_assignment:{result.job_id}:{schedule_version}"
+    recipient_keys = {user_id: f"{dedupe_key}:recipient:{user_id}" for user_id in recipients}
+    pending_recipient_list: list[int] = []
+    for user_id in recipients:
+        already_delivered = await redis_idempotency_key_exists(
+            recipient_keys[user_id],
+            log=logger,
+            failure_event="job_assignment_dedupe_unavailable",
+        )
+        if not already_delivered:
+            pending_recipient_list.append(user_id)
+    pending_recipients = tuple(pending_recipient_list)
+    if not pending_recipients:
+        result.crew_notification = CrewNotificationResult(
+            status="sent",
+            recipient_count=len(recipients),
+            sent_count=len(recipients),
+        )
+        return result
+    try:
+        delivery = await notify_workspace_event(
+            db,
+            workspace_id=workspace_id,
+            notification_type="job_assignment",
+            title="Landscape installation assigned",
+            body="Your installation plan is available in Tribunal.",
+            data={
+                "type": "job_assignment",
+                "jobId": str(result.job_id),
+                "screen": f"/(tabs)/jobs/{result.job_id}",
+            },
+            channel_id="jobs",
+            email_subject="Landscape installation assigned",
+            email_heading="Installation assignment",
+            email_intro="Your installation plan is available in Tribunal.",
+            email_details={
+                "Scheduled": payload.scheduled_start.astimezone(UTC).strftime(
+                    "%b %d, %Y at %I:%M %p UTC"
+                ),
+                "Job": str(result.job_id),
+            },
+            dedupe_key=dedupe_key,
+            recipient_user_ids=pending_recipients,
+        )
+        for user_id in delivery.delivered_recipient_ids:
+            await set_redis_idempotency_key(
+                recipient_keys[user_id],
+                ttl_seconds=60 * 60 * 24 * 30,
+                log=logger,
+                failure_event="job_assignment_dedupe_unavailable",
+            )
+        already_sent = len(recipients) - len(pending_recipients)
+        sent = already_sent + delivery.delivered_recipient_count
+        failed = delivery.failed_recipient_count
+        notification_status: Literal["sent", "partial", "failed"] = (
+            "sent" if sent == len(recipients) else "partial" if sent > 0 else "failed"
+        )
+        result.crew_notification = CrewNotificationResult(
+            status=notification_status,
+            recipient_count=len(recipients),
+            sent_count=sent,
+            failed_count=failed,
+        )
+    except Exception:  # Delivery is post-commit and must not lie about conversion.
+        result.crew_notification = CrewNotificationResult(
+            status="failed",
+            recipient_count=len(recipients),
+            failed_count=len(pending_recipients),
+        )
+    return result
 
 
 # Sales wizard: config-driven multi-tier proposal builder. Preview computes the
