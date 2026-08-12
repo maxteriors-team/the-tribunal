@@ -2089,6 +2089,11 @@
             "title": "Channel Mode",
             "type": "string"
           },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {
@@ -2249,6 +2254,16 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
+          },
           "reminder_enabled": {
             "default": true,
             "title": "Reminder Enabled",
@@ -2304,12 +2319,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "default": {},
             "title": "Tool Settings",
             "type": "object"
@@ -2406,6 +2416,11 @@
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
+          },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -2573,6 +2588,16 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
+          },
           "reminder_enabled": {
             "title": "Reminder Enabled",
             "type": "boolean"
@@ -2616,12 +2641,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "title": "Tool Settings",
             "type": "object"
           },
@@ -2808,6 +2828,17 @@
               }
             ],
             "title": "Channel Mode"
+          },
+          "confirmation_email_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Email Enabled"
           },
           "description": {
             "anyOf": [
@@ -3065,6 +3096,20 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Channels"
+          },
           "reminder_enabled": {
             "anyOf": [
               {
@@ -3161,12 +3206,7 @@
           "tool_settings": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -25035,6 +25075,20 @@
           "phone_number"
         ],
         "title": "ManualContactCreate",
+        "type": "object"
+      },
+      "MarkAllReadResponse": {
+        "description": "Result of clearing every unread thread in a workspace.",
+        "properties": {
+          "conversations_marked": {
+            "title": "Conversations Marked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversations_marked"
+        ],
+        "title": "MarkAllReadResponse",
         "type": "object"
       },
       "MeasurementSchema": {
@@ -47439,6 +47493,132 @@
         "title": "TaxConfig",
         "type": "object"
       },
+      "TeachAIRequest": {
+        "description": "Human-approved correction to one AI-generated SMS reply.",
+        "properties": {
+          "ideal_response": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "format": "uuid",
+            "title": "Source Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_message_id",
+          "ideal_response"
+        ],
+        "title": "TeachAIRequest",
+        "type": "object"
+      },
+      "TeachAIResponse": {
+        "description": "Saved correction and its agent target; never returned across tenants.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ideal_response": {
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "agent_id",
+          "conversation_id",
+          "source_message_id",
+          "ideal_response",
+          "note",
+          "is_active",
+          "agent_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TeachAIResponse",
+        "type": "object"
+      },
       "TeamMemberResponse": {
         "description": "Schema for team member response.",
         "properties": {
@@ -48555,6 +48735,18 @@
       "TimelineItem": {
         "description": "A unified timeline item.",
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/TimelineAttachment"
@@ -49116,6 +49308,25 @@
           "created_at"
         ],
         "title": "UnattributedLeadResponse",
+        "type": "object"
+      },
+      "UnreadSummary": {
+        "description": "Workspace-wide unread rollup backing the header chat badge.\n\n``unread_messages`` is the sum of every thread's ``unread_count`` (what the\nbadge shows); ``unread_conversations`` is how many threads are waiting.",
+        "properties": {
+          "unread_conversations": {
+            "title": "Unread Conversations",
+            "type": "integer"
+          },
+          "unread_messages": {
+            "title": "Unread Messages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread_conversations",
+          "unread_messages"
+        ],
+        "title": "UnreadSummary",
         "type": "object"
       },
       "UpdateMemberRoleRequest": {
@@ -66908,6 +67119,104 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/conversations/read": {
+      "post": {
+        "description": "Mark every conversation in the workspace as read.",
+        "operationId": "mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkAllReadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Mark All Conversations Read",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/unread": {
+      "get": {
+        "description": "Unread rollup for the workspace, polled by the header chat badge.",
+        "operationId": "get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Unread Summary",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}": {
       "get": {
         "description": "Get a conversation with its messages.",
@@ -67702,6 +68011,134 @@
           }
         ],
         "summary": "Send Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
+      "post": {
+        "description": "Mark a single conversation as read.",
+        "operationId": "mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Mark Conversation Read",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
+      "post": {
+        "description": "Save or update a human-approved correction for one AI SMS reply.",
+        "operationId": "teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachAIRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeachAIResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Teach Ai",
         "tags": [
           "Conversations"
         ]
