@@ -3,8 +3,10 @@
 ## Goal
 When a **new** lead is created through lead source `ls_n2dSPTZe` (the permholidaylights
 Facebook funnel), automatically:
-1. Tag the lead **`FB Perm Lighting Lead`**.
-2. Text the lead's phone (normalized to E.164):
+1. Tag the lead **`Perm Light Lead`** and **`Facebook`**, and stamp the lead source's
+   `source_type` = `facebook_ads` so the ROI dashboard counts these leads as Facebook.
+2. Text the lead's phone (normalized to E.164) **only when the lead source is not
+   already messaging on capture** — see "Shipped state" below:
    > Hi {first_name}, it's Max with Maxteriors — got your permanent roofline lighting estimate. Happy to answer any questions or get your free design consultation booked. When's a good time to reach you?
 
 Fallback trigger: also match leads whose submission `source_detail` = `permholidaylights instant quote`.
@@ -60,12 +62,28 @@ Fallback trigger: also match leads whose submission `source_detail` = `permholid
 ```
 
 ## Automation record (created by the ops script)
-- `name`: "FB Perm Lighting Lead — auto text"
+- `name`: "Perm Light Lead — auto text"
 - `trigger_type`: `lead_created`
 - `trigger_config`: `{ lead_source_public_key: "ls_n2dSPTZe", lead_source_id: "<resolved>", source_detail: "permholidaylights instant quote" }`
 - `actions`:
-  1. `{ "type": "add_tag", "config": { "tag": "FB Perm Lighting Lead" } }`
-  2. `{ "type": "send_sms", "config": { "message": "<the SMS copy>", "fallbacks": { "first_name": "there" } } }`
+  1. `{ "type": "add_tag", "config": { "tag": "Perm Light Lead" } }`
+  2. `{ "type": "add_tag", "config": { "tag": "Facebook" } }`
+  3. `{ "type": "send_sms", ... }` — **omitted** under the default `--sms auto` when the
+     lead source already auto-texts/-calls (see below).
+
+## Shipped state (production, 2026-08-12)
+- `ls_n2dSPTZe` has `action = auto_text` with its own `message_template`, so the form
+  already texts every lead on capture. Adding `send_sms` here would text each lead
+  **twice**. `--sms auto` (default) detects this and installs the automation **tag-only**;
+  `--sms on` forces the second touch, `--sms off` always suppresses it.
+- The source was already `source_type = facebook_ads`, so attribution needed no change.
+- Installed automation: `Perm Light Lead — tag only` (2 `add_tag` actions), `is_active = true`,
+  workspace `ba0e0e99-c7c9-45ec-9625-567d54d6e9c2`.
+- `--backfill` tagged the **57** contacts already attributed to the source (54 were untagged).
+  Selector is `contacts.first_touch_lead_source_id`, matching what the ROI dashboard counts.
+- Note `emit_automation_event(require_active_automation=True)` no-ops when nothing listens —
+  that is why zero `lead_created` events existed for this source before the automation was
+  installed. It is now the workspace's active listener, so future captures queue events.
 - `is_active`: true
 
 Action order = tag first, then SMS, so an unsendable/invalid phone still gets tagged.
