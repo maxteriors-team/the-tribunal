@@ -338,6 +338,12 @@ class TestOpportunityFiltersBehaviorPreserved:
         stmt = apply_opportunity_filters(select(Opportunity), _WORKSPACE_ID, owner_id=owner_id)
         assert "opportunities.assigned_user_id" in _sql(stmt)
 
+    def test_contact_id_narrows_to_the_primary_contact(self) -> None:
+        # The contact sidebar lists a single lead's deals; without this the
+        # panel would render the whole workspace board.
+        stmt = apply_opportunity_filters(select(Opportunity), _WORKSPACE_ID, contact_id=42)
+        assert "opportunities.primary_contact_id = 42" in _sql(stmt)
+
     def test_filter_rules_supported(self) -> None:
         stmt = apply_opportunity_filters(
             select(Opportunity),

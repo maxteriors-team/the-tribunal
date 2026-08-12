@@ -14,6 +14,8 @@ export interface OpportunitiesListParams {
   pipeline_id?: string;
   stage_id?: string;
   owner_id?: number;
+  /** Only deals where this contact is the primary contact. */
+  contact_id?: number;
 }
 
 export interface OpportunitiesListResponse {

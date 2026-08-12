@@ -61,6 +61,15 @@ interface OpportunityCreateSheetProps {
   stages: PipelineStage[];
   /** Stage to pre-select (e.g. the column the user added from). */
   defaultStageId?: string;
+  /**
+   * Contact this deal belongs to. Set when adding from a contact record so the
+   * card lands on the board already linked to the lead (name, phone, and
+   * click-to-call come from that link), instead of as an orphan card someone
+   * has to reattach by hand.
+   */
+  contactId?: number;
+  /** Deal name to pre-fill (e.g. the contact's name). */
+  defaultName?: string;
   canAssignOwners: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,17 +80,20 @@ export function OpportunityCreateSheet({
   pipelineId,
   stages,
   defaultStageId,
+  contactId,
+  defaultName,
   canAssignOwners,
   open,
   onOpenChange,
 }: OpportunityCreateSheetProps) {
   const queryClient = useQueryClient();
   const initialStageId = defaultStageId ?? stages[0]?.id ?? "";
+  const initialName = defaultName ?? "";
 
   const form = useForm<CreateOpportunityFormValues>({
     resolver: zodResolver(createOpportunitySchema),
     defaultValues: {
-      name: "",
+      name: initialName,
       stage_id: initialStageId,
       assigned_user_id: null,
       amount: "",
@@ -89,11 +101,12 @@ export function OpportunityCreateSheet({
     },
   });
 
-  // Re-sync the pre-selected stage whenever the sheet (re)opens from a column.
+  // Re-sync the pre-filled name/stage whenever the sheet (re)opens — the column
+  // it was opened from, or the contact it was opened for, may have changed.
   useEffect(() => {
     if (open) {
       form.reset({
-        name: "",
+        name: initialName,
         stage_id: initialStageId,
         assigned_user_id: null,
         amount: "",
@@ -101,7 +114,7 @@ export function OpportunityCreateSheet({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialStageId]);
+  }, [open, initialStageId, initialName]);
 
   const createMutation = useMutation({
     mutationFn: (values: CreateOpportunityFormValues): Promise<Opportunity> => {
@@ -110,6 +123,7 @@ export function OpportunityCreateSheet({
         name: values.name.trim(),
         pipeline_id: pipelineId,
         stage_id: values.stage_id,
+        primary_contact_id: contactId,
         description: values.description.trim() || undefined,
         amount: amount === "" ? undefined : Number(amount),
         assigned_user_id: canAssignOwners ? values.assigned_user_id : undefined,

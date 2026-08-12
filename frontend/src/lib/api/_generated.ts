@@ -43901,6 +43901,7 @@ export interface operations {
                 pipeline_id?: string | null;
                 stage_id?: string | null;
                 owner_id?: number | null;
+                contact_id?: number | null;
                 status?: string | null;
                 source?: string | null;
                 value_min?: number | string | null;
