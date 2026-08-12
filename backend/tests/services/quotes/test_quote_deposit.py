@@ -159,7 +159,18 @@ async def test_checkout_persists_session_and_returns_url(monkeypatch) -> None:
         assert refreshed.deposit_paid_at is None
 
 
-async def test_webhook_marks_deposit_paid_idempotently() -> None:
+async def test_webhook_marks_deposit_paid_idempotently(monkeypatch) -> None:
+    notifications: list[dict[str, object]] = []
+
+    async def _capture_notification(_db, **kwargs):
+        notifications.append(kwargs)
+        return 1
+
+    monkeypatch.setattr(
+        "app.services.payments.customer_payment_notifications.notify_customer_payment",
+        _capture_notification,
+    )
+
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
@@ -175,13 +186,29 @@ async def test_webhook_marks_deposit_paid_idempotently() -> None:
 
         proposal = await svc.get_public_proposal(token)
         assert proposal.deposit_paid is True
+        assert notifications == [
+            {
+                "workspace_id": ws.id,
+                "amount": 321.0,
+                "currency": "USD",
+                "description": f"Deposit on {proposal.number}",
+                "idempotency_scope": "quote_deposit_operator_email",
+                "idempotency_id": quote_id,
+                "deep_link": "/(tabs)/quotes",
+                "client_name": "Dana Homeowner",
+                "client_email": contact.email,
+                "client_phone": contact.phone_number,
+                "quote_number": proposal.number,
+            }
+        ]
 
-        # Idempotent: replaying the webhook keeps a single paid transition.
+        # Idempotent: replaying the webhook keeps a single paid transition/email.
         refreshed = await db.get(Quote, quote_id)
         first_paid_at = refreshed.deposit_paid_at
         await deposit.handle_deposit_checkout_session_completed(session, db)
         again = await db.get(Quote, quote_id)
         assert again.deposit_paid_at == first_paid_at
+        assert len(notifications) == 1
 
 
 async def test_checkout_rejects_bad_states(monkeypatch) -> None:

@@ -531,8 +531,16 @@ async def send_payment_received_notification(
     currency: str,
     description: str | None,
     idempotency_key: uuid.UUID | None = None,
+    client_name: str | None = None,
+    client_email: str | None = None,
+    client_phone: str | None = None,
+    quote_number: str | None = None,
 ) -> bool:
-    """Email an operator when a caller completes an in-call payment/deposit."""
+    """Email an operator a payment receipt with minimal CRM client details.
+
+    Payment credentials and provider identifiers stay out of email; the provider
+    remains the source of truth for payment status.
+    """
     amount_str = f"{amount:.2f} {currency.upper()}"
     subject = f"Payment Received — {amount_str}"
 
@@ -543,8 +551,21 @@ async def send_payment_received_notification(
     label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
     value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
 
-    # Description is operator/agent-supplied free text; escape so it can't inject markup.
-    safe_description = html_escape(description) if description else "(no description)"
+    # Every value can originate in customer/operator input; escape before interpolation.
+    details = [
+        ("Amount", amount_str),
+        ("For", description or "(no description)"),
+        ("Client", client_name),
+        ("Client email", client_email),
+        ("Client phone", client_phone),
+        ("Quote", quote_number),
+    ]
+    detail_html = "".join(
+        f'<p style="{label_style}">{html_escape(label)}</p>'
+        f'<p style="{value_style}">{html_escape(value)}</p>'
+        for label, value in details
+        if value
+    )
 
     html_content = f"""<!DOCTYPE html>
 <html>
@@ -556,16 +577,14 @@ async def send_payment_received_notification(
     <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="color: #1a1a1a; margin-bottom: 5px;">Payment Received</h1>
     </div>
-    <p>A caller just completed a payment for <strong>{html_escape(workspace_name)}</strong>.</p>
+    <p>A customer payment was confirmed for <strong>{html_escape(workspace_name)}</strong>.</p>
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
-        <p style="{label_style}">Amount</p>
-        <p style="{value_style}">{html_escape(amount_str)}</p>
-        <p style="{label_style}">For</p>
-        <p style="{value_style}">{safe_description}</p>
+        {detail_html}
     </div>
+    <p style="color: #666; font-size: 13px;">The payment provider remains the source of truth.</p>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by your AI voice assistant
+        Sent by your CRM
     </p>
 </body>
 </html>"""
