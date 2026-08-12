@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from app.models.contact import Contact
 from app.services.payments import call_payment_service
 
 if TYPE_CHECKING:
@@ -254,6 +255,12 @@ async def _notify_deposit_paid(db: AsyncSession, quote: Quote) -> None:
     amount = deposit_amount(quote) or 0.0
     if amount <= 0:
         return
+    contact = await db.get(Contact, quote.contact_id) if quote.contact_id is not None else None
+    client_name = None
+    if contact is not None:
+        client_name = (
+            " ".join(part for part in (contact.first_name, contact.last_name) if part) or None
+        )
     try:
         await notify_customer_payment(
             db,
@@ -264,6 +271,10 @@ async def _notify_deposit_paid(db: AsyncSession, quote: Quote) -> None:
             idempotency_scope="quote_deposit_operator_email",
             idempotency_id=quote.id,
             deep_link="/(tabs)/quotes",
+            client_name=client_name,
+            client_email=contact.email if contact else None,
+            client_phone=contact.phone_number if contact else None,
+            quote_number=quote.number,
         )
     except Exception as exc:  # pragma: no cover - best-effort notification
         logger.warning("quote_deposit_notify_failed", quote_id=str(quote.id), error=str(exc))

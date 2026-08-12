@@ -78,6 +78,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, accepted-quote co
 - Installation imagery is authenticated and assignment-scoped with 404 non-disclosure.
 - Payment truth remains Stripe-derived; scheduling an unpaid required deposit needs explicit acknowledgement but cannot mark it paid.
 - Notifications target active direct/crew installers, honor existing master/preferences, use deterministic dedupe, report partial/failure separately, and omit imagery/tokens.
+- Internal payment receipts identify the client using CRM name, email, phone, and quote number; payment credentials and provider identifiers remain excluded, and all customer-supplied values are HTML-escaped.
 - Read-only installer actions support print/download while preserving the editable project as the single design source.
 
 ## Open — needs a decision from you

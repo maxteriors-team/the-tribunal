@@ -35,6 +35,10 @@ async def notify_customer_payment(
     idempotency_scope: str,
     idempotency_id: uuid.UUID,
     deep_link: str | None = None,
+    client_name: str | None = None,
+    client_email: str | None = None,
+    client_phone: str | None = None,
+    quote_number: str | None = None,
 ) -> int:
     """Push + email every workspace member that a customer payment landed.
 
@@ -98,6 +102,10 @@ async def notify_customer_payment(
                 amount=amount_value,
                 currency=currency,
                 description=description,
+                client_name=client_name,
+                client_email=client_email,
+                client_phone=client_phone,
+                quote_number=quote_number,
                 idempotency_key=derive_outbound_key(idempotency_scope, idempotency_id, user.id),
             )
             sent += 1 if ok else 0

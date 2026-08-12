@@ -164,6 +164,35 @@ async def test_invoice_email_omits_pay_button_without_url(fake_resend: _FakeRese
 
 
 @pytest.mark.asyncio
+async def test_payment_receipt_includes_minimal_client_info_and_escapes_it(
+    fake_resend: _FakeResend,
+) -> None:
+    sent = await email.send_payment_received_notification(
+        to_email="office@example.com",
+        workspace_name="Maxteriors Lighting",
+        amount=250.0,
+        currency="usd",
+        description="Deposit on QUO-42",
+        client_name="Kim <script>alert(1)</script>",
+        client_email="kim@example.com",
+        client_phone="+15869184195",
+        quote_number="QUO-42",
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    html = params["html"]
+    assert "Client" in html
+    assert "Kim &lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "kim@example.com" in html
+    assert "+15869184195" in html
+    assert "QUO-42" in html
+    assert "payment provider remains the source of truth" in html
+    assert "<script>alert(1)</script>" not in html
+    assert "payment_intent" not in html
+
+
+@pytest.mark.asyncio
 async def test_quote_email_renders_view_proposal_button(fake_resend: _FakeResend) -> None:
     key = uuid.uuid4()
 

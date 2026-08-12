@@ -724,6 +724,17 @@ class InvoiceService:
         )
 
         try:
+            contact = (
+                await self.db.get(Contact, invoice.contact_id)
+                if invoice.contact_id is not None
+                else None
+            )
+            client_name = None
+            if contact is not None:
+                client_name = (
+                    " ".join(part for part in (contact.first_name, contact.last_name) if part)
+                    or None
+                )
             await notify_customer_payment(
                 self.db,
                 workspace_id=invoice.workspace_id,
@@ -733,6 +744,9 @@ class InvoiceService:
                 idempotency_scope="invoice_payment_operator_email",
                 idempotency_id=invoice.id,
                 deep_link="/(tabs)/invoices",
+                client_name=client_name,
+                client_email=contact.email if contact else None,
+                client_phone=contact.phone_number if contact else None,
             )
         except Exception as exc:  # pragma: no cover - best-effort notification
             self.log.warning(
