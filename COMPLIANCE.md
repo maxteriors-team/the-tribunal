@@ -96,3 +96,16 @@ None for this approved implementation.
 - US/EU/UK consumer contract, withdrawal, transactional-email, privacy, and accessibility requirements before launch in each served jurisdiction.
 - Notification provider and Stripe data-processing/retention terms.
 - Local Mailpit exercised the exact assignment email renderer/idempotency-key path and proved one recipient plus no imagery/token leakage; it does not prove Resend delivery or inbox placement.
+
+
+## Addendum — Teach AI and website-lead qualification
+
+Snapshot: 12 August 2026 · NOT LEGAL ADVICE
+
+- **Personal data — Confirmed:** approved lessons retain encrypted customer SMS, AI replies, ideal replies, and optional operator notes.
+- **Tenant isolation — Fixed:** CRM-write authorization protects lesson creation; conversation, source message, agent, retrieval, and timeline agent metadata are workspace-scoped or server-derived.
+- **Prompt injection — Fixed:** active examples are capped at 12/6,000 prompt characters, JSON-quoted, marked untrusted, and cannot override truthfulness, opt-out, qualification, booking, or tool rules.
+- **Automated sales qualification — Fixed in code:** off by default, reuses captured form answers, asks one missing question at a time, requires evidence/score, preserves human handoff, and removes booking/availability tools until qualification persists.
+- **Messaging — Unchanged:** Teach AI has no send path; existing consent and opt-out controls remain the only customer-message gates.
+- **Key rotation — Fixed:** all four new `EncryptedString` columns are registered in `scripts/ops/reencrypt_with_old_key.py`, with a regression guard.
+- **LAWYER before relying broadly:** define lesson retention and deletion propagation, disclose AI/personal-data reuse, and confirm lawful basis/data-subject rights where EU/UK leads are served.

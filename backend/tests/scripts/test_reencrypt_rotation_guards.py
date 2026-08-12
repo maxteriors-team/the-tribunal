@@ -102,7 +102,17 @@ class TestTargetValidation:
 
     def test_real_rotation_targets_are_all_encrypted(self) -> None:
         """The shipped target list must match the shipped models."""
-        assert rotate.validate_targets(rotate.rotation_targets()) == []
+        targets = rotate.rotation_targets()
+        assert rotate.validate_targets(targets) == []
+        training_target = next(
+            target for target in targets if target.label == "agent_training_examples"
+        )
+        assert training_target.columns == (
+            "customer_message",
+            "ai_response",
+            "ideal_response",
+            "operator_note",
+        )
 
 
 class TestReportExitCodes:
