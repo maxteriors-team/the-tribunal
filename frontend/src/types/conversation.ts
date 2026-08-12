@@ -41,8 +41,9 @@ export interface Conversation {
   channel: string;
   status: "active" | "archived" | "blocked";
   unread_count: number;
-  last_message_preview?: string;
-  last_message_at?: string;
+  // Nullable on the wire: a thread with no messages yet serializes these as null.
+  last_message_preview?: string | null;
+  last_message_at?: string | null;
   last_message_direction?: MessageDirection;
   ai_enabled: boolean;
   ai_paused: boolean;

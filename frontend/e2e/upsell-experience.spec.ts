@@ -385,6 +385,14 @@ async function installLeadTechApi(page: Page) {
       return;
     }
 
+    // The app shell polls the unread rollup on every page to badge the chat
+    // menu. An empty inbox keeps the notifier from fetching the thread list,
+    // so this stays the only conversations request in these flows.
+    if (request.method() === "GET" && pathname.endsWith("/conversations/unread")) {
+      await route.fulfill(json({ unread_conversations: 0, unread_messages: 0 }));
+      return;
+    }
+
     unexpectedRequests.push(`${request.method()} ${pathname}`);
     await route.fulfill(json({ detail: "Unexpected test request" }));
   });

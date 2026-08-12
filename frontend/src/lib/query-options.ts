@@ -25,6 +25,11 @@ export const REALTIME = {
   refetchInterval: 5_000,
 } as const;
 
+export const POLL_15S = {
+  staleTime: 10_000,
+  refetchInterval: 15_000,
+} as const;
+
 export const POLL_30S = {
   staleTime: 25_000,
   refetchInterval: 30_000,

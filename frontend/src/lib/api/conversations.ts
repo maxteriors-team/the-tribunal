@@ -25,6 +25,16 @@ export interface ConversationsListResponse {
   pages: number;
 }
 
+/** Workspace-wide unread rollup that backs the header chat badge. */
+export interface UnreadSummary {
+  unread_conversations: number;
+  unread_messages: number;
+}
+
+export interface MarkAllReadResponse {
+  conversations_marked: number;
+}
+
 export interface SendMessageRequest {
   contact_id: number;
   body: string;
@@ -64,6 +74,30 @@ export const conversationsApi = {
     return apiPost<Message>(
       `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/messages`,
       { body }
+    );
+  },
+
+  /** Unread rollup for the whole workspace (one aggregate query server-side). */
+  getUnreadSummary: async (workspaceId: string): Promise<UnreadSummary> => {
+    return apiGet<UnreadSummary>(
+      `/api/v1/workspaces/${workspaceId}/conversations/unread`
+    );
+  },
+
+  /** Clear one thread's unread counter. Returns the updated thread. */
+  markRead: async (
+    workspaceId: string,
+    conversationId: string
+  ): Promise<Conversation> => {
+    return apiPost<Conversation>(
+      `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/read`
+    );
+  },
+
+  /** Clear every unread thread in the workspace. */
+  markAllRead: async (workspaceId: string): Promise<MarkAllReadResponse> => {
+    return apiPost<MarkAllReadResponse>(
+      `/api/v1/workspaces/${workspaceId}/conversations/read`
     );
   },
 
