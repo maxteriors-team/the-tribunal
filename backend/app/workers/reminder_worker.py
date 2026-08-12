@@ -1,7 +1,13 @@
 """Appointment reminder worker.
 
-Sends SMS reminders before scheduled appointments using the same phone number
-the contact was originally reached on, ensuring a seamless conversation thread.
+Sends reminders before scheduled appointments on the channels the agent is
+configured for (``agent.reminder_channels``): SMS goes out on the same phone
+number the contact was originally reached on, keeping one conversation thread,
+and email goes to the contact's address.
+
+Each channel tracks its own fired offsets (``reminders_sent`` for SMS,
+``reminders_sent_email`` for email). Sharing one array would make an SMS send at
+an offset silently suppress the email at the same offset.
 
 Supports multi-touch sequences: fires a separate SMS for each configured offset
 in agent.reminder_offsets (e.g. 1440 min = 24 h, 120 min = 2 h, 30 min before)
@@ -32,22 +38,68 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.workspace import Workspace
 from app.services.calendar.reminder_service import resolve_from_number
+from app.services.email import send_appointment_reminder_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
-from app.utils.timezones import resolve_workspace_timezone
+from app.utils.timezones import resolve_workspace_timezone, workspace_timezone_name
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
 MAX_REMINDERS_PER_TICK = 20
 
-# Agentless appointments use this single offset (minutes before)
+# Agentless appointments (manually scheduled, no agent to read settings from)
+# fall back to this offset when the workspace has not configured its own.
 _AGENTLESS_DEFAULT_OFFSETS = [60]
+
+SMS_CHANNEL = "sms"
+EMAIL_CHANNEL = "email"
+DEFAULT_CHANNELS: tuple[str, ...] = (SMS_CHANNEL,)
+
+# Per-channel dedupe columns. Kept as an explicit allowlist because the column
+# name is interpolated into raw SQL below.
+_SENT_COLUMN_BY_CHANNEL = {
+    SMS_CHANNEL: "reminders_sent",
+    EMAIL_CHANNEL: "reminders_sent_email",
+}
 
 # Sentinel stored in reminders_sent to indicate the value-reinforcement message
 # has already been sent for an appointment.  Uses -1 because normal reminder
 # offsets are always positive integers and the column is ARRAY(Integer).
 VR_SENTINEL = -1
+
+
+def _channels_for(agent: Agent | None) -> tuple[str, ...]:
+    """Return the reminder channels configured for ``agent``.
+
+    Unknown values are dropped rather than dispatched: a typo in the column must
+    not become an unroutable send that retries forever.
+    """
+    configured = list(getattr(agent, "reminder_channels", None) or []) if agent is not None else []
+    channels = tuple(c for c in configured if c in _SENT_COLUMN_BY_CHANNEL)
+    return channels or DEFAULT_CHANNELS
+
+
+def _agentless_offsets(workspace: Workspace | None) -> list[int]:
+    """Return reminder offsets for an appointment with no agent.
+
+    Manually scheduled appointments have no agent to read settings from, so the
+    workspace can set its own default in
+    ``settings["reminder_defaults"]["offsets"]``.
+    """
+    settings_blob = getattr(workspace, "settings", None) or {}
+    defaults = settings_blob.get("reminder_defaults") if isinstance(settings_blob, dict) else None
+    offsets = defaults.get("offsets") if isinstance(defaults, dict) else None
+    if not isinstance(offsets, list):
+        return _AGENTLESS_DEFAULT_OFFSETS
+    valid = [int(o) for o in offsets if isinstance(o, int) and o > 0]
+    return valid or _AGENTLESS_DEFAULT_OFFSETS
+
+
+def _sent_offsets(appt: Appointment, channel: str) -> list[int]:
+    """Return the offsets already fired for ``appt`` on ``channel``."""
+    column = _SENT_COLUMN_BY_CHANNEL.get(channel, "reminders_sent")
+    return list(getattr(appt, column, None) or [])
 
 
 class ReminderWorker(RetryableWorker, BaseWorker):
@@ -100,44 +152,118 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             if not appointments:
                 return
 
-            # Build the list of (appointment, offset) pairs that are due
-            due_pairs: list[tuple[Appointment, int]] = []
-            for appt in appointments:
-                agent = appt.agent
-                if agent is not None and not agent.reminder_enabled:
-                    continue
+            due = self._collect_due_reminders(appointments, now)
 
-                offsets = (
-                    agent.reminder_offsets
-                    if agent is not None and agent.reminder_offsets
-                    else _AGENTLESS_DEFAULT_OFFSETS
-                )
-                already_sent: list[int] = list(appt.reminders_sent or [])
+            if due:
+                self.logger.info("Processing appointment reminders", count=len(due))
 
-                for offset in offsets:
-                    if offset in already_sent:
-                        continue  # Already fired this touchpoint
-                    threshold = now + timedelta(minutes=offset)
-                    if appt.scheduled_at <= threshold:
-                        due_pairs.append((appt, offset))
-
-            if due_pairs:
-                self.logger.info(
-                    "Processing appointment reminders",
-                    count=len(due_pairs),
-                )
-
-                for appt, offset in due_pairs:
+                for appt, offset, channel in due:
+                    sender = (
+                        self._send_reminder_email
+                        if channel == EMAIL_CHANNEL
+                        else self._send_reminder
+                    )
                     await self.execute_with_retry(
-                        self._send_reminder,
+                        sender,
                         appt,
                         offset,
                         db,
-                        item_key=derive_worker_retry_key("reminder", appt.id, "offset", offset),
+                        item_key=derive_worker_retry_key(
+                            "reminder", appt.id, f"{channel}_offset", offset
+                        ),
                     )
 
             # Value-reinforcement pre-appointment messages
             await self._process_value_reinforcement(appointments, now, db)
+
+    def _collect_due_reminders(
+        self,
+        appointments: Sequence[Appointment],
+        now: datetime,
+    ) -> list[tuple[Appointment, int, str]]:
+        """Return the ``(appointment, offset, channel)`` triples that are due now."""
+        due: list[tuple[Appointment, int, str]] = []
+        for appt in appointments:
+            agent = appt.agent
+            if agent is not None and not agent.reminder_enabled:
+                continue
+
+            offsets = (
+                agent.reminder_offsets
+                if agent is not None and agent.reminder_offsets
+                else _agentless_offsets(appt.workspace)
+            )
+
+            for channel in _channels_for(agent):
+                already_sent = set(_sent_offsets(appt, channel))
+                for offset in offsets:
+                    if offset in already_sent:
+                        continue  # Already fired this touchpoint on this channel
+                    due_at = appt.scheduled_at - timedelta(minutes=offset)
+                    if due_at < appt.created_at:
+                        # The appointment was created inside this reminder window.
+                        # Skip the stale touchpoint instead of sending a "reminder"
+                        # seconds after the booking confirmation.
+                        continue
+                    if now >= due_at:
+                        due.append((appt, offset, channel))
+        return due
+
+    async def _send_reminder_email(
+        self,
+        appt: Appointment,
+        offset_minutes: int,
+        db: AsyncSession,
+    ) -> None:
+        """Email a single appointment reminder for the given offset.
+
+        Email is not covered by the SMS opt-out list (that is a TCPA control on
+        texts), so the only gate here is having an address to send to.
+        """
+        log = self.logger.bind(
+            appointment_id=appt.id,
+            offset_minutes=offset_minutes,
+            channel=EMAIL_CHANNEL,
+        )
+        contact = appt.contact
+        workspace = appt.workspace
+        if contact is None or workspace is None:
+            log.warning("Missing contact or workspace")
+            return
+
+        if not contact.email:
+            # Nothing will ever change within this appointment's window, so mark
+            # it fired rather than re-evaluating it every 60s until the meeting.
+            log.info("Skipping email reminder — contact has no email", contact_id=contact.id)
+            await self._mark_offset_sent(appt, offset_minutes, db, channel=EMAIL_CHANNEL)
+            await db.commit()
+            return
+
+        agent = appt.agent
+        body = self._render_reminder_body(
+            template=agent.reminder_template if agent is not None else None,
+            contact=contact,
+            appointment=appt,
+            workspace=workspace,
+            agent=agent,
+        )
+
+        sent = await send_appointment_reminder_email(
+            to_email=contact.email,
+            contact_name=contact.full_name or "there",
+            business_name=workspace.name or "",
+            body_text=body,
+            appointment_time=appt.scheduled_at,
+            timezone=workspace_timezone_name(workspace),
+            idempotency_key=derive_outbound_key("reminder_email", appt.id, offset_minutes),
+        )
+        if not sent:
+            log.warning("Reminder email not accepted by provider, will retry next tick")
+            return
+
+        log.info("Appointment reminder email sent")
+        await self._mark_offset_sent(appt, offset_minutes, db, channel=EMAIL_CHANNEL)
+        await db.commit()
 
     async def _send_reminder(
         self,
@@ -383,31 +509,33 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         appt: Appointment,
         offset_minutes: int,
         db: AsyncSession,
+        channel: str = SMS_CHANNEL,
     ) -> None:
-        """Append offset_minutes to appointment.reminders_sent and update reminder_sent_at.
+        """Record that ``offset_minutes`` fired for ``appt`` on ``channel``.
 
         Uses PostgreSQL array_append to avoid overwriting concurrent updates.
-        After the append we refresh the ORM object so subsequent reads are
-        accurate within the same session.
+        After the append we sync the ORM object so subsequent reads are accurate
+        within the same session.
 
         The ``offset_minutes`` value may be ``VR_SENTINEL`` (-1) for the
         value-reinforcement message.
         """
+        column = _SENT_COLUMN_BY_CHANNEL.get(channel, "reminders_sent")
         now = datetime.now(UTC)
         await db.execute(
             text(
                 "UPDATE appointments "
-                "SET reminders_sent = array_append(reminders_sent, :offset), "
+                f"SET {column} = array_append({column}, :offset), "
                 "    reminder_sent_at = :now "
                 "WHERE id = :appt_id"
             ),
             {"offset": offset_minutes, "now": now, "appt_id": appt.id},
         )
         # Sync the in-memory object so the caller's view is consistent
-        current = list(appt.reminders_sent or [])
+        current = list(_sent_offsets(appt, channel))
         if offset_minutes not in current:
             current.append(offset_minutes)
-        appt.reminders_sent = current
+        setattr(appt, column, current)
         appt.reminder_sent_at = now
 
     # ------------------------------------------------------------------
@@ -442,12 +570,12 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
         first_name = contact.first_name or "there"
 
-        # No custom template — return the original hardcoded message unchanged
+        # Keep the fallback channel-neutral: not every booking is a video call,
+        # and an email provider failure should never make the SMS lie about a link.
         if not template:
             return (
-                f"Hi {first_name}, just a reminder about your upcoming appointment "
-                f"at {time_str}. Check your email for the video call link. "
-                f"Reply here if you need to reschedule."
+                f"Hi {first_name}, a quick reminder about your appointment "
+                f"{datetime_str}. Reply here if you need to reschedule."
             )
 
         # Scheduling is self-contained: there is no external reschedule URL, so

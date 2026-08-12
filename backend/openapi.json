@@ -2089,6 +2089,11 @@
             "title": "Channel Mode",
             "type": "string"
           },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {
@@ -2249,6 +2254,16 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
+          },
           "reminder_enabled": {
             "default": true,
             "title": "Reminder Enabled",
@@ -2406,6 +2421,11 @@
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
+          },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -2572,6 +2592,16 @@
               }
             ],
             "title": "Post Meeting Template"
+          },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
           },
           "reminder_enabled": {
             "title": "Reminder Enabled",
@@ -2808,6 +2838,17 @@
               }
             ],
             "title": "Channel Mode"
+          },
+          "confirmation_email_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Email Enabled"
           },
           "description": {
             "anyOf": [
@@ -3064,6 +3105,20 @@
               }
             ],
             "title": "Post Meeting Template"
+          },
+          "reminder_channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Channels"
           },
           "reminder_enabled": {
             "anyOf": [

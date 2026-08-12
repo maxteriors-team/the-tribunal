@@ -35,7 +35,7 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.workspace import WorkspaceIntegration
 from app.services.ai.base_tool_executor import BaseToolExecutor
-from app.services.appointments.booking_finalizer import finalize_booking
+from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
 from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
 
@@ -386,6 +386,11 @@ class TextToolExecutor(BaseToolExecutor):
     def get_contact_phone(self) -> str | None:
         if self._contact:
             return self._clean_phone_number(self._contact.phone_number)
+        return None
+
+    def get_contact_address(self) -> str | None:
+        if self._contact:
+            return format_contact_address(self._contact) or None
         return None
 
     def get_booking_metadata(self, notes: str | None) -> dict[str, Any] | None:

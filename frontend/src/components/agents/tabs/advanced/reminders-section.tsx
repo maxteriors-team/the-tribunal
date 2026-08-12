@@ -3,6 +3,7 @@ import { type Control, useWatch } from "react-hook-form";
 import type { EditAgentFormValues } from "@/components/agents/agent-edit-schema";
 import { ReminderOffsetsInput } from "@/components/agents/reminder-offsets-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   FormControl,
   FormDescription,
@@ -20,6 +21,11 @@ interface RemindersSectionProps {
 
 const DEFAULT_REMINDER_TEMPLATE_PLACEHOLDER =
   "Hi {first_name}, this is a reminder about your appointment on {appointment_date} at {appointment_time}. Reply STOP to opt out.";
+
+const REMINDER_CHANNELS = [
+  { value: "sms", label: "Text message", hint: "Skipped for contacts who replied STOP" },
+  { value: "email", label: "Email", hint: "Skipped for contacts with no email on file" },
+] as const;
 
 const REMINDER_VARIABLES = [
   { name: "{first_name}", description: "Contact's first name" },
@@ -48,7 +54,7 @@ export function RemindersSection({ control }: RemindersSectionProps) {
               <div className="space-y-0.5">
                 <FormLabel className="text-base">Enable Reminders</FormLabel>
                 <FormDescription>
-                  Automatically send SMS reminders before appointments
+                  Automatically remind contacts before their appointments
                 </FormDescription>
               </div>
               <FormControl>
@@ -78,6 +84,61 @@ export function RemindersSection({ control }: RemindersSectionProps) {
                   {field.value.length === 0 && (
                     <p className="text-xs text-amber-600">
                       Add at least one reminder time for reminders to be sent.
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={control}
+              name="reminderChannels"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reminder Channels</FormLabel>
+                  <div className="space-y-2">
+                    {REMINDER_CHANNELS.map((channel) => {
+                      const checked = field.value.includes(channel.value);
+                      return (
+                        <div
+                          key={channel.value}
+                          className="flex items-start gap-3 rounded-lg border p-3"
+                        >
+                          <FormControl>
+                            <Checkbox
+                              id={`reminder-channel-${channel.value}`}
+                              checked={checked}
+                              onCheckedChange={(next) => {
+                                field.onChange(
+                                  next === true
+                                    ? [...field.value, channel.value]
+                                    : field.value.filter((c) => c !== channel.value),
+                                );
+                              }}
+                            />
+                          </FormControl>
+                          <label
+                            htmlFor={`reminder-channel-${channel.value}`}
+                            className="space-y-0.5 cursor-pointer"
+                          >
+                            <span className="block text-sm font-medium leading-none">
+                              {channel.label}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {channel.hint}
+                            </span>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <FormDescription>
+                    Each channel sends its own reminder at every time above.
+                  </FormDescription>
+                  {field.value.length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      Pick at least one channel or no reminders will be sent.
                     </p>
                   )}
                   <FormMessage />
@@ -132,6 +193,25 @@ export function RemindersSection({ control }: RemindersSectionProps) {
             />
           </>
         )}
+
+        <FormField
+          control={control}
+          name="confirmationEmailEnabled"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel className="text-base">Send confirmation email with calendar invite</FormLabel>
+                <FormDescription>
+                  Emails the contact an .ics invite when they book, so the appointment lands on
+                  their calendar
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={control}

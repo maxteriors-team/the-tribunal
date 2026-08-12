@@ -43,6 +43,28 @@ def _normalize_assignment_strategy(value: object) -> object:
     return normalized if normalized in _VALID_ASSIGNMENT_STRATEGIES else "single"
 
 
+_VALID_REMINDER_CHANNELS = ("sms", "email")
+
+
+def _validate_reminder_channels(value: object) -> object:
+    """Reject unknown reminder channels.
+
+    Unlike the other enum-ish fields this raises instead of coercing: silently
+    dropping a channel the operator selected would look like a saved setting
+    that never sends.
+    """
+    if value is None or not isinstance(value, list):
+        return value
+    unknown = [c for c in value if c not in _VALID_REMINDER_CHANNELS]
+    if unknown:
+        raise ValueError(
+            f"Unsupported reminder channel(s): {', '.join(map(str, unknown))}. "
+            f"Supported: {', '.join(_VALID_REMINDER_CHANNELS)}."
+        )
+    # Preserve order while removing duplicates so a channel cannot fire twice.
+    return list(dict.fromkeys(value))
+
+
 def _normalize_transfer_mode(value: object) -> object:
     """Coerce the transfer mode to 'warm'/'cold', defaulting unknowns to 'warm'."""
     if not isinstance(value, str):
@@ -91,6 +113,8 @@ class AgentCreate(BaseModel):
     reminder_minutes_before: int = 30
     reminder_offsets: list[int] = [1440, 120, 30]
     reminder_template: str | None = None
+    reminder_channels: list[str] = ["sms"]
+    confirmation_email_enabled: bool = True
     # Experiment auto-evaluation
     auto_evaluate: bool = False
     # Greeting
@@ -131,6 +155,12 @@ class AgentCreate(BaseModel):
     def validate_assignment_strategy(cls, value: object) -> object:
         """Normalize the booking assignment strategy to a supported value."""
         return _normalize_assignment_strategy(value)
+
+    @field_validator("reminder_channels", mode="before")
+    @classmethod
+    def validate_reminder_channels(cls, value: object) -> object:
+        """Reject reminder channels the worker cannot dispatch."""
+        return _validate_reminder_channels(value)
 
 
 class AgentUpdate(BaseModel):
@@ -174,6 +204,8 @@ class AgentUpdate(BaseModel):
     reminder_minutes_before: int | None = None
     reminder_offsets: list[int] | None = None
     reminder_template: str | None = None
+    reminder_channels: list[str] | None = None
+    confirmation_email_enabled: bool | None = None
     # Experiment auto-evaluation
     auto_evaluate: bool | None = None
     # Greeting
@@ -219,6 +251,12 @@ class AgentUpdate(BaseModel):
             return None
         return _normalize_assignment_strategy(value)
 
+    @field_validator("reminder_channels", mode="before")
+    @classmethod
+    def validate_reminder_channels(cls, value: object) -> object:
+        """Reject reminder channels the worker cannot dispatch."""
+        return _validate_reminder_channels(value)
+
 
 class AgentResponse(BaseModel):
     """Agent response schema."""
@@ -259,6 +297,8 @@ class AgentResponse(BaseModel):
     reminder_minutes_before: int
     reminder_offsets: list[int]
     reminder_template: str | None
+    reminder_channels: list[str] = ["sms"]
+    confirmation_email_enabled: bool = True
     # Experiment auto-evaluation
     auto_evaluate: bool
     # Greeting

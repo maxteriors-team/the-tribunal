@@ -450,6 +450,11 @@ TIME FORMAT RULES:
 
 AVAILABILITY ACCURACY RULES:
 - ONLY offer times from check_availability. NEVER make up or guess times.
+- book_appointment validates the slot before confirming. NEVER tell the customer
+  they are booked until it returns success - a success=false result means nothing
+  was scheduled, no matter how the conversation sounded.
+- On success=false, read the "message" field and act on it (bad email, past time,
+  slot taken) instead of repeating the confirmation.
 - If booking fails, use alternative_slots from the error. Do NOT re-state failed time.
 - When booking fails, say "That time is no longer available" and offer alternatives.
 - If no alternatives are provided, ask the customer to check a different day.

@@ -981,3 +981,154 @@ async def send_appointment_booked_notification(
         email_id=response.get("id"),
     )
     return True
+
+
+async def send_appointment_confirmation_to_attendee(
+    to_email: str,
+    contact_name: str,
+    business_name: str,
+    appointment_time: datetime,
+    service_type: str | None = None,
+    location: str | None = None,
+    timezone: str | None = None,
+    ics_content: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email the customer their booking confirmation with a calendar invite.
+
+    The customer previously got only an SMS, so the appointment lived nowhere
+    they'd be reminded by — attaching the ``.ics`` puts it on the calendar they
+    already watch. Transactional and appointment-scoped, so no unsubscribe
+    footer, matching the other booking notifications.
+
+    All interpolated values are contact/operator-derived free text and are
+    HTML-escaped here so they cannot inject markup.
+    """
+    formatted_time = format_local_datetime(appointment_time, timezone)
+    safe_business = html_escape(business_name or "our team")
+    safe_name = html_escape(contact_name or "there")
+    subject = f"Appointment confirmed — {formatted_time}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
+    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
+
+    detail_rows = (
+        f'<p style="{label_style}">When</p>'
+        f'<p style="{value_style}">{html_escape(formatted_time)}</p>'
+    )
+    if service_type:
+        detail_rows += (
+            f'<p style="{label_style}">Service</p>'
+            f'<p style="{value_style}">{html_escape(service_type)}</p>'
+        )
+    if location:
+        detail_rows += (
+            f'<p style="{label_style}">Location</p>'
+            f'<p style="{value_style}">{html_escape(location)}</p>'
+        )
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <h1 style="color: #1a1a1a; margin-bottom: 5px;">You're all set</h1>
+    <p>Hi {safe_name},</p>
+    <p>Your appointment with {safe_business} is confirmed. The calendar invite is
+       attached, so you can add it to your calendar in one tap.</p>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
+        {detail_rows}
+    </div>
+    <p>Need to change or cancel? Just reply to the text message from
+       {safe_business} and we'll take care of it.</p>
+</body>
+</html>"""
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": html_content,
+    }
+
+    if ics_content:
+        params["attachments"] = [
+            {
+                "filename": "invite.ics",
+                "content": list(ics_content.encode("utf-8")),
+                "content_type": "text/calendar; charset=utf-8; method=REQUEST",
+            }
+        ]
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "appointment_attendee_confirmation_sent",
+        to_email=to_email,
+        email_id=response.get("id"),
+    )
+    return True
+
+
+async def send_appointment_reminder_email(
+    to_email: str,
+    contact_name: str,
+    business_name: str,
+    body_text: str,
+    appointment_time: datetime,
+    timezone: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
+) -> bool:
+    """Email a customer a reminder for an upcoming appointment.
+
+    ``body_text`` is the same rendered copy the SMS reminder uses, so the two
+    channels can never quote different times for the same appointment.
+    """
+    formatted_time = format_local_datetime(appointment_time, timezone)
+    subject = f"Reminder: your appointment {formatted_time}"
+
+    body_style = (
+        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
+        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
+    )
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="{body_style}">
+    <p>{html_escape(body_text).replace(chr(10), "<br>")}</p>
+    <p style="color: #666; font-size: 13px;">
+        {html_escape(formatted_time)} &middot; {html_escape(business_name or "")}
+    </p>
+</body>
+</html>"""
+
+    response = await _send(
+        {
+            "from": _from_address(),
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content,
+        },
+        idempotency_key=idempotency_key,
+    )
+    if response is None:
+        return False
+
+    logger.info(
+        "appointment_reminder_email_sent",
+        to_email=to_email,
+        contact_name=contact_name,
+        email_id=response.get("id"),
+    )
+    return True
