@@ -1,42 +1,38 @@
 """Product-help retrieval for the CRM assistant.
 
-"How do I set up an automation?" used to be answered from model priors: the
-assistant had no product corpus, while its own prompt forbids inventing facts.
-This tool points it at the workspace-level help corpus
-(:mod:`app.services.knowledge.product_help`) through the same hybrid retrieval
-stack the customer-facing agents use — vector KNN + keyword, fused and
-diversified.
-
-Retrieval is scoped to ``workspace_id`` with ``agent_id=None``, so it reads only
-workspace-level help documents and can never surface another tenant's data or a
-customer-facing agent's business knowledge.
+The tool ranks the markdown bundled with the backend directly. Product guidance
+therefore changes atomically with a deployment and cannot lag behind because a
+workspace seed or embedding request was skipped. It also cannot surface tenant
+business knowledge: only ``backend/docs/help`` is searched.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+import structlog
+
 from app.services.ai.crm_assistant._pagination import local_listing
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 from app.services.ai.crm_assistant._tool_errors import missing_argument
-from app.services.knowledge.retrieval_service import (
-    DEFAULT_TOP_K,
-    knowledge_retrieval_service,
-)
+from app.services.knowledge.product_help import ProductHelpError, search_help_documents
+
+logger = structlog.get_logger()
+DEFAULT_TOP_K = 5
 
 # Ceiling on passages per call, independent of what the model asks for, so one
 # help lookup cannot crowd out the conversation.
 MAX_TOP_K = 8
 
 _GROUND_IN_PASSAGES = (
-    "Answer only from these passages and say which help topic you used. "
-    "Do not add product behaviour that is not written here."
+    "Answer only from these passages. Give numbered steps for a how-to, preserve "
+    "every UI label and route exactly, and name the source topic. Do not add "
+    "product behavior that is not written here."
 )
 
 _NO_MATCH = (
-    "No product help matched that question. Tell the operator you do not have "
-    "documented guidance for it instead of guessing, or search again with "
-    "different wording."
+    "No bundled product help matched that question. Tell the operator the "
+    "workflow is not documented as supported instead of guessing."
 )
 
 
@@ -53,7 +49,7 @@ def _clamp_top_k(raw_value: Any) -> int:
 
 
 class HelpAssistantTools:
-    """Answer product and how-to questions from the workspace help corpus."""
+    """Answer product and how-to questions from bundled help articles."""
 
     def __init__(self, context: CRMToolContext) -> None:
         self.context = context
@@ -69,13 +65,17 @@ class HelpAssistantTools:
                 "Pass the operator's question, e.g. 'how do I set up an automation'.",
             )
 
-        passages = await knowledge_retrieval_service.retrieve_passages(
-            self.context.db,
-            workspace_id=self.context.workspace_id,
-            agent_id=None,
-            query=query,
-            top_k=_clamp_top_k(args.get("top_k")),
-        )
+        try:
+            passages = search_help_documents(
+                query,
+                top_k=_clamp_top_k(args.get("top_k")),
+            )
+        except ProductHelpError as exc:
+            logger.exception("product_help_source_unavailable", error=str(exc))
+            return {
+                "success": False,
+                "error": "Product help is temporarily unavailable; do not answer from memory.",
+            }
 
         if not passages:
             return local_listing([], extra={"message": _NO_MATCH})
@@ -85,7 +85,8 @@ class HelpAssistantTools:
                 {
                     "title": passage.title,
                     "content": passage.content,
-                    "score": round(passage.score, 4),
+                    "source": passage.source,
+                    "score": passage.score,
                 }
                 for passage in passages
             ],

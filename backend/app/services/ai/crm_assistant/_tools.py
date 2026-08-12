@@ -1184,13 +1184,14 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "search_help",
             "description": (
-                "Search the product help corpus for how this CRM works: setting up "
-                "automations, campaigns vs automations, the approval queue, adding a "
-                "sending phone number, quiet hours and consent rules, what the "
-                "assistant can do. Use it for every 'how do I', 'where do I', or "
-                "'does the system' question instead of answering from memory, and "
-                "never create a record to demonstrate an answer. Returns ranked "
-                "passages with their help topic title."
+                "Search the bundled product-help source for any CRM screen or workflow, "
+                "including exact UI labels, routes, supported actions, and limitations. "
+                "Call it first for every product 'how do I', 'where do I', 'what's the "
+                "difference', or 'does the system' question instead of answering from "
+                "memory. Never create a record to demonstrate an answer. Use only the "
+                "returned passages, preserve their labels and routes exactly, and say "
+                "the workflow is not documented as supported when the passages do not "
+                "answer the question. Returns ranked passages with help titles and sources."
             ),
             "parameters": {
                 "type": "object",
