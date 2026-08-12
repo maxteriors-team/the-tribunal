@@ -168,6 +168,30 @@ describe("RecentChatsMenu", () => {
       name: "Recent chats, 7 unread",
     });
     expect(within(trigger).getByText("7")).toBeInTheDocument();
+    // The badge comes from the rollup alone — no thread list needed.
+    expect(listMock).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch the thread list until the menu is opened", async () => {
+    // This menu renders on every page; fetching threads before it is opened
+    // would put a request on every page load for every operator.
+    listMock.mockResolvedValue({
+      items: [conversation()],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+
+    renderMenu();
+    await waitFor(() => expect(unreadSummaryMock).toHaveBeenCalled());
+    expect(listMock).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+
+    await waitFor(() =>
+      expect(listMock).toHaveBeenCalledWith("ws-1", { page: 1, page_size: 12 }),
+    );
   });
 
   it("marks a single thread read without navigating", async () => {

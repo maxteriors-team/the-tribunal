@@ -15,14 +15,14 @@ const {
   markReadMock,
   pushMock,
   useWorkspaceIdMock,
-  useRecentChatsMock,
+  useUnreadSummaryMock,
   toastMessageMock,
 } = vi.hoisted(() => ({
   listMock: vi.fn(),
   markReadMock: vi.fn(),
   pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
-  useRecentChatsMock: vi.fn(),
+  useUnreadSummaryMock: vi.fn(),
   toastMessageMock: vi.fn(),
 }));
 
@@ -34,14 +34,12 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
 
-// Polls are driven through the hook boundary: the notifier's job is to decide
-// what to announce given consecutive poll results, and asserting that directly
-// avoids depending on React Query's internal notification timing. The real
-// query path (fetch -> render) is covered in recent-chats-menu.test.tsx.
-vi.mock("@/hooks/useRecentChats", () => ({
-  useRecentChats: (...args: unknown[]) => useRecentChatsMock(...args),
-  RECENT_CHATS_LIMIT: 12,
-  RECENT_CHATS_PARAMS: { page: 1, page_size: 12 },
+// The unread rollup is driven through the hook boundary so polls are explicit;
+// everything downstream of it (the on-demand list fetch, the cache entry it
+// writes) runs for real against a live QueryClient.
+vi.mock("@/hooks/useConversations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useConversations")>()),
+  useUnreadSummary: (...args: unknown[]) => useUnreadSummaryMock(...args),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -79,7 +77,8 @@ function page(items: Conversation[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
-  useRecentChatsMock.mockReturnValue({ data: undefined });
+  useUnreadSummaryMock.mockReturnValue({ data: undefined });
+  listMock.mockResolvedValue(page([]));
   markReadMock.mockResolvedValue(conversation({ unread_count: 0 }));
 });
 
@@ -177,15 +176,25 @@ describe("findNewInboundMessages", () => {
 });
 
 describe("NewMessageNotifier", () => {
+  function summary(unreadMessages: number, unreadConversations = 1) {
+    return {
+      data: {
+        unread_messages: unreadMessages,
+        unread_conversations: unreadMessages === 0 ? 0 : unreadConversations,
+      },
+    };
+  }
+
   /**
-   * Render with the first poll already returned, establishing the baseline,
-   * then `poll()` plays the next snapshot and re-renders.
+   * Render with an opening rollup, then `poll()` plays the next rollup value
+   * and the thread list the notifier would fetch in response.
    */
-  function renderNotifier(initial: Conversation[]) {
+  function renderNotifier(initialUnread: number, items: Conversation[] = []) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    useRecentChatsMock.mockReturnValue({ data: page(initial) });
+    useUnreadSummaryMock.mockReturnValue(summary(initialUnread));
+    listMock.mockResolvedValue(page(items));
 
     // A fresh element per render: passing the same element object back to
     // `rerender` lets React bail out of the subtree entirely.
@@ -196,32 +205,40 @@ describe("NewMessageNotifier", () => {
     );
     const view = render(ui());
 
-    const poll = (items: Conversation[]) => {
-      useRecentChatsMock.mockReturnValue({ data: page(items) });
+    const poll = async (unreadMessages: number, next: Conversation[]) => {
+      useUnreadSummaryMock.mockReturnValue(summary(unreadMessages));
+      listMock.mockResolvedValue(page(next));
       view.rerender(ui());
+      // Let the on-demand fetch and its toasts settle.
+      await waitFor(() => {});
     };
 
     return { ...view, client, poll };
   }
 
-  it("stays silent on the first poll", () => {
-    // A full inbox at sign-in must not fire a toast per unread thread.
-    renderNotifier([conversation({ unread_count: 3, contact_name: "Robin" })]);
+  it("never fetches the thread list while the inbox is empty", async () => {
+    // This is what keeps the app shell to a single request per page.
+    const { poll } = renderNotifier(0);
+    await poll(0, []);
 
+    expect(listMock).not.toHaveBeenCalled();
     expect(toastMessageMock).not.toHaveBeenCalled();
   });
 
-  it("toasts the sender and preview when a message arrives", () => {
-    const { poll } = renderNotifier([
-      conversation({
-        id: "conv-a",
-        contact_name: "Robin Stevanovich",
-        unread_count: 0,
-        last_message_at: "2026-07-10T18:00:00Z",
-      }),
+  it("stays silent when unread threads are already waiting at sign-in", async () => {
+    renderNotifier(3, [
+      conversation({ unread_count: 3, contact_name: "Robin" }),
     ]);
 
-    poll([
+    // It fetches once to learn what was already there, but announces nothing.
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
+    expect(toastMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("toasts the sender and preview when a message arrives", async () => {
+    const { poll } = renderNotifier(0);
+
+    await poll(1, [
       conversation({
         id: "conv-a",
         contact_name: "Robin Stevanovich",
@@ -241,34 +258,44 @@ describe("NewMessageNotifier", () => {
     expect(options.cancel.label).toBe("Mark read");
   });
 
-  it("does not re-toast a thread that stays unread across polls", () => {
+  it("does not fetch again while the rollup holds steady", async () => {
     const arrived = conversation({
       id: "conv-a",
       unread_count: 1,
       last_message_at: "2026-07-10T18:05:00Z",
     });
 
-    const { poll } = renderNotifier([
-      conversation({
-        id: "conv-a",
-        unread_count: 0,
-        last_message_at: "2026-07-10T18:00:00Z",
-      }),
-    ]);
+    const { poll } = renderNotifier(0);
+    await poll(1, [arrived]);
+    expect(listMock).toHaveBeenCalledTimes(1);
 
-    poll([arrived]);
-    poll([arrived]);
-    poll([arrived]);
+    // An unread thread nobody has touched is not a new arrival.
+    await poll(1, [arrived]);
+    await poll(1, [arrived]);
 
+    expect(listMock).toHaveBeenCalledTimes(1);
     expect(toastMessageMock).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the thread and clears it from the toast action", async () => {
-    const { poll } = renderNotifier([
-      conversation({ id: "conv-a", unread_count: 0 }),
+  it("does not fetch or toast when the rollup shrinks", async () => {
+    const { poll } = renderNotifier(0);
+    await poll(3, [
+      conversation({ id: "conv-a", unread_count: 3, last_message_at: "2026-07-10T18:05:00Z" }),
     ]);
+    toastMessageMock.mockClear();
+    listMock.mockClear();
 
-    poll([
+    // The operator read something; nothing arrived.
+    await poll(1, []);
+
+    expect(listMock).not.toHaveBeenCalled();
+    expect(toastMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the thread and clears it from the toast action", async () => {
+    const { poll } = renderNotifier(0);
+
+    await poll(1, [
       conversation({
         id: "conv-a",
         contact_id: 101,
@@ -286,11 +313,9 @@ describe("NewMessageNotifier", () => {
   });
 
   it("clears the thread from the toast without navigating", async () => {
-    const { poll } = renderNotifier([
-      conversation({ id: "conv-a", unread_count: 0 }),
-    ]);
+    const { poll } = renderNotifier(0);
 
-    poll([
+    await poll(1, [
       conversation({
         id: "conv-a",
         unread_count: 1,
@@ -306,12 +331,10 @@ describe("NewMessageNotifier", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("omits the open action for a thread with no linked contact", () => {
-    const { poll } = renderNotifier([
-      conversation({ id: "conv-a", unread_count: 0 }),
-    ]);
+  it("omits the open action for a thread with no linked contact", async () => {
+    const { poll } = renderNotifier(0);
 
-    poll([
+    await poll(1, [
       conversation({
         id: "conv-a",
         contact_id: null,
@@ -324,25 +347,38 @@ describe("NewMessageNotifier", () => {
     expect(toastMessageMock.mock.calls[0][1].action).toBeUndefined();
   });
 
-  it("polls the workspace the operator is in", () => {
-    renderNotifier([conversation()]);
+  it("survives a failed list fetch and recovers on the next arrival", async () => {
+    const { poll } = renderNotifier(0);
 
-    expect(useRecentChatsMock).toHaveBeenCalledWith("ws-1");
-  });
+    useUnreadSummaryMock.mockReturnValue(summary(1));
+    listMock.mockRejectedValueOnce(new Error("network"));
+    await poll(1, []);
+    expect(toastMessageMock).not.toHaveBeenCalled();
 
-  it("re-baselines on workspace switch so the new inbox stays silent", () => {
-    const { poll } = renderNotifier([
+    await poll(2, [
       conversation({
         id: "conv-a",
-        unread_count: 0,
-        last_message_at: "2026-07-10T18:00:00Z",
+        unread_count: 1,
+        last_message_at: "2026-07-10T18:05:00Z",
       }),
     ]);
+
+    expect(toastMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("watches the workspace the operator is in", () => {
+    renderNotifier(0);
+
+    expect(useUnreadSummaryMock).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("re-baselines on workspace switch so the new inbox stays silent", async () => {
+    const { poll } = renderNotifier(0);
 
     // Switching workspaces swaps in a different inbox; its unread threads are
     // not new arrivals for this operator's session.
     useWorkspaceIdMock.mockReturnValue("ws-2");
-    poll([
+    await poll(5, [
       conversation({
         id: "conv-other-workspace",
         unread_count: 5,
@@ -350,6 +386,16 @@ describe("NewMessageNotifier", () => {
       }),
     ]);
 
+    expect(toastMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("makes no requests at all without a workspace", async () => {
+    useWorkspaceIdMock.mockReturnValue(null);
+
+    const { poll } = renderNotifier(0);
+    await poll(3, [conversation({ unread_count: 3 })]);
+
+    expect(listMock).not.toHaveBeenCalled();
     expect(toastMessageMock).not.toHaveBeenCalled();
   });
 });

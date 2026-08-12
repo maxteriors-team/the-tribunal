@@ -47,9 +47,12 @@ export function RecentChatsMenu() {
   const workspaceId = useWorkspaceId();
   const [open, setOpen] = useState(false);
 
-  // Shared with NewMessageNotifier: same key, so one poll feeds both and the
-  // menu opens with data already in cache.
-  const { data, isPending, isError } = useRecentChats(workspaceId);
+  // Only fetch once the menu is opened, to avoid a load on every page. The
+  // notifier writes this same cache entry when a message arrives, so a
+  // just-toasted thread is already here.
+  const { data, isPending, isError } = useRecentChats(workspaceId, {
+    enabled: open,
+  });
   const { data: unread } = useUnreadSummary(workspaceId);
   const markRead = useMarkConversationRead(workspaceId ?? "");
   const markAllRead = useMarkAllConversationsRead(workspaceId ?? "");

@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 
 import { conversationsApi } from "@/lib/api/conversations";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_15S } from "@/lib/query-options";
 
 export const RECENT_CHATS_LIMIT = 12;
 export const RECENT_CHATS_PARAMS = {
@@ -11,18 +10,33 @@ export const RECENT_CHATS_PARAMS = {
 } as const;
 
 /**
- * The freshest conversation threads, ordered newest-first by the API.
+ * Shared query definition for the freshest conversation threads, ordered
+ * newest-first by the API.
  *
- * Both the header chat menu and the new-message notifier call this with the
- * same params, so React Query dedupes them into a single polled request: the
- * notifier keeps it warm, and opening the menu renders already-fetched data
- * instead of a spinner.
+ * Exported so the notifier can `fetchQuery` the exact same key the menu reads
+ * from: an on-demand fetch warms the menu's cache rather than racing it.
  */
-export function useRecentChats(workspaceId: string | null | undefined) {
+export function recentChatsQueryOptions(workspaceId: string) {
+  return {
+    queryKey: queryKeys.conversations.list(workspaceId, RECENT_CHATS_PARAMS),
+    queryFn: () => conversationsApi.list(workspaceId, RECENT_CHATS_PARAMS),
+  };
+}
+
+/**
+ * The freshest conversation threads.
+ *
+ * Deliberately not polled: this list is only needed once the operator opens the
+ * chat menu, and polling it would put a request on every page for every
+ * operator. The unread badge polls a cheap aggregate instead, and the notifier
+ * fetches this list only when that aggregate says something actually arrived.
+ */
+export function useRecentChats(
+  workspaceId: string | null | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
-    queryKey: queryKeys.conversations.list(workspaceId ?? "", RECENT_CHATS_PARAMS),
-    queryFn: () => conversationsApi.list(workspaceId!, RECENT_CHATS_PARAMS),
-    enabled: !!workspaceId,
-    ...POLL_15S,
+    ...recentChatsQueryOptions(workspaceId ?? ""),
+    enabled: enabled && !!workspaceId,
   });
 }
