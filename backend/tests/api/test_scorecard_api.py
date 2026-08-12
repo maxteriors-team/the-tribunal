@@ -111,6 +111,12 @@ class TestScorecardHappyPath:
             after_hours_coverage_rate=75.0,
             avg_handle_time_seconds=120.0,
             top_call_reasons=[],
+            new_leads_total=3,
+            new_leads_by_day=[
+                {"date": "2026-01-01", "count": 2},
+                {"date": "2026-01-02", "count": 1},
+            ],
+            avg_new_leads_per_day=1.5,
         )
         with pytest.MonkeyPatch().context() as mp:
             mock_get = AsyncMock(return_value=sample)
@@ -124,3 +130,10 @@ class TestScorecardHappyPath:
         assert body["answer_rate"] == 80.0
         assert body["missed_calls_recovered"] == 1
         assert body["currency"] == "USD"
+        assert body["new_leads_total"] == 3
+        assert body["avg_new_leads_per_day"] == 1.5
+        # Serialized as ISO date strings the chart can bucket directly.
+        assert body["new_leads_by_day"] == [
+            {"date": "2026-01-01", "count": 2},
+            {"date": "2026-01-02", "count": 1},
+        ]

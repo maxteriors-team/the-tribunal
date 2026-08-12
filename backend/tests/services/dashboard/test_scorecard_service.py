@@ -12,6 +12,7 @@ from app.services.dashboard.scorecard_service import (
     AppointmentRow,
     CallRow,
     InboundReplyRow,
+    LeadRow,
     OpportunityRow,
     TextbackRow,
     aggregate_scorecard,
@@ -55,6 +56,7 @@ def _aggregate(**overrides):
         "inbound_replies": [],
         "appointments": [],
         "opportunities": [],
+        "leads": [],
         "tz": UTC_TZ,
     }
     kwargs.update(overrides)
@@ -203,6 +205,75 @@ class TestRevenueAndReasons:
         assert reasons["hours"] == 1
         # Most common is first.
         assert card.top_call_reasons[0].reason == "pricing"
+
+
+class TestNewLeadsByDay:
+    def test_series_covers_every_day_in_range_zero_filled(self) -> None:
+        # Two leads on Jan 2, none on any other day.
+        leads = [
+            LeadRow(created_at=datetime(2026, 1, 2, 9, 0, tzinfo=UTC)),
+            LeadRow(created_at=datetime(2026, 1, 2, 21, 30, tzinfo=UTC)),
+        ]
+        card = _aggregate(leads=leads)
+
+        # One entry per day of the inclusive Jan 1 – Jan 31 range.
+        assert len(card.new_leads_by_day) == 31
+        assert card.new_leads_by_day[0].date == date(2026, 1, 1)
+        assert card.new_leads_by_day[-1].date == date(2026, 1, 31)
+        # Ascending, contiguous — no gaps.
+        dates = [d.date for d in card.new_leads_by_day]
+        assert dates == sorted(dates)
+
+        by_date = {d.date: d.count for d in card.new_leads_by_day}
+        assert by_date[date(2026, 1, 2)] == 2
+        # A quiet day is an explicit zero, not a missing entry.
+        assert by_date[date(2026, 1, 3)] == 0
+        assert card.new_leads_total == 2
+
+    def test_empty_range_totals_zero_but_keeps_series(self) -> None:
+        card = _aggregate()
+        assert card.new_leads_total == 0
+        assert len(card.new_leads_by_day) == 31
+        assert all(d.count == 0 for d in card.new_leads_by_day)
+        assert card.avg_new_leads_per_day == 0.0
+
+    def test_average_is_per_day_of_range(self) -> None:
+        leads = [LeadRow(created_at=datetime(2026, 1, 5, 12, 0, tzinfo=UTC)) for _ in range(62)]
+        card = _aggregate(leads=leads)
+        # 62 leads over 31 days.
+        assert card.avg_new_leads_per_day == 2.0
+
+    def test_buckets_by_workspace_local_day_not_utc(self) -> None:
+        # 01:30 UTC on Jan 6 is still the evening of Jan 5 in New York. An owner
+        # who took that lead "yesterday evening" must not see it on today's bar.
+        leads = [LeadRow(created_at=datetime(2026, 1, 6, 1, 30, tzinfo=UTC))]
+        card = _aggregate(leads=leads, tz=ZoneInfo("America/New_York"))
+
+        by_date = {d.date: d.count for d in card.new_leads_by_day}
+        assert by_date[date(2026, 1, 5)] == 1
+        assert by_date[date(2026, 1, 6)] == 0
+
+    def test_naive_timestamps_are_treated_as_utc(self) -> None:
+        leads = [LeadRow(created_at=datetime(2026, 1, 9, 15, 0))]
+        card = _aggregate(leads=leads)
+        by_date = {d.date: d.count for d in card.new_leads_by_day}
+        assert by_date[date(2026, 1, 9)] == 1
+
+    def test_leads_outside_range_are_excluded(self) -> None:
+        leads = [
+            LeadRow(created_at=datetime(2025, 12, 31, 12, 0, tzinfo=UTC)),
+            LeadRow(created_at=datetime(2026, 2, 1, 12, 0, tzinfo=UTC)),
+            LeadRow(created_at=datetime(2026, 1, 15, 12, 0, tzinfo=UTC)),
+        ]
+        card = _aggregate(leads=leads)
+        assert card.new_leads_total == 1
+
+    def test_single_day_range(self) -> None:
+        leads = [LeadRow(created_at=datetime(2026, 1, 1, 8, 0, tzinfo=UTC))]
+        card = _aggregate(leads=leads, start_date=date(2026, 1, 1), end_date=date(2026, 1, 1))
+        assert len(card.new_leads_by_day) == 1
+        assert card.new_leads_by_day[0].count == 1
+        assert card.avg_new_leads_per_day == 1.0
 
 
 class TestResolveRange:

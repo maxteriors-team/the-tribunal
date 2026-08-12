@@ -15534,6 +15534,19 @@ export interface components {
             name?: string | null;
         };
         /**
+         * DailyLeadCount
+         * @description New leads captured on one calendar day (workspace-local).
+         */
+        DailyLeadCount: {
+            /** Count */
+            count: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+        };
+        /**
          * DashboardResponse
          * @description Complete dashboard response.
          */
@@ -26149,6 +26162,8 @@ export interface components {
             appointments_booked: number;
             /** Avg Handle Time Seconds */
             avg_handle_time_seconds: number | null;
+            /** Avg New Leads Per Day */
+            avg_new_leads_per_day: number | null;
             /** Calls Answered */
             calls_answered: number;
             /** Calls Total */
@@ -26168,6 +26183,10 @@ export interface components {
             missed_calls_recovered: number;
             /** Missed Calls Textback Sent */
             missed_calls_textback_sent: number;
+            /** New Leads By Day */
+            new_leads_by_day: components["schemas"]["DailyLeadCount"][];
+            /** New Leads Total */
+            new_leads_total: number;
             /** Recovery Rate */
             recovery_rate: number | null;
             /** Revenue Booked */
