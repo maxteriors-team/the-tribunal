@@ -34,7 +34,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
-    from app.models.user import User
     from app.models.workspace import Workspace
 
 
@@ -127,7 +126,11 @@ class BookableStaff(Base):
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="bookable_staff")
     agent: Mapped["Agent | None"] = relationship("Agent", back_populates="bookable_staff")
-    user: Mapped["User | None"] = relationship("User", lazy="raise")
+    # No ORM relationship to ``User`` on purpose. Importing it here — even under
+    # TYPE_CHECKING — closes a module cycle (user → workspace → bookable_staff →
+    # user) that CodeQL flags as py/unsafe-cyclic-import, and nothing reads
+    # ``staff.user`` yet. Callers resolve the login through ``user_id``; add the
+    # relationship when something actually needs it, and break the cycle then.
 
     def __repr__(self) -> str:
         return f"<BookableStaff(id={self.id}, name={self.name}, skills={self.skills})>"
