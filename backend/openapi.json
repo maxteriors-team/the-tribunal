@@ -14045,6 +14045,26 @@
         "title": "CrewUpdate",
         "type": "object"
       },
+      "DailyLeadCount": {
+        "description": "New leads captured on one calendar day (workspace-local).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ],
+        "title": "DailyLeadCount",
+        "type": "object"
+      },
       "DashboardResponse": {
         "description": "Complete dashboard response.",
         "properties": {
@@ -41635,6 +41655,17 @@
             ],
             "title": "Avg Handle Time Seconds"
           },
+          "avg_new_leads_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg New Leads Per Day"
+          },
           "calls_answered": {
             "title": "Calls Answered",
             "type": "integer"
@@ -41666,6 +41697,17 @@
           },
           "missed_calls_textback_sent": {
             "title": "Missed Calls Textback Sent",
+            "type": "integer"
+          },
+          "new_leads_by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DailyLeadCount"
+            },
+            "title": "New Leads By Day",
+            "type": "array"
+          },
+          "new_leads_total": {
+            "title": "New Leads Total",
             "type": "integer"
           },
           "recovery_rate": {
@@ -41710,6 +41752,9 @@
           "revenue_booked",
           "deposits_booked",
           "currency",
+          "new_leads_total",
+          "new_leads_by_day",
+          "avg_new_leads_per_day",
           "after_hours_calls",
           "after_hours_answered",
           "after_hours_coverage_rate",

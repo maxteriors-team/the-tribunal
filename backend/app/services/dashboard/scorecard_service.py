@@ -4,12 +4,12 @@ Computes the owner-facing retention scorecard for a workspace over a date
 range. The heavy lifting is split into two layers:
 
 * :class:`ScorecardService` runs the workspace-scoped queries against
-  ``call_outcomes``, ``messages``, ``appointments`` and ``opportunities``,
-  mapping each row into a small frozen dataclass.
+  ``call_outcomes``, ``messages``, ``appointments``, ``opportunities`` and
+  ``contacts``, mapping each row into a small frozen dataclass.
 * The module-level ``aggregate_*`` helpers turn those dataclasses into the
   response numbers. They are pure functions (no DB, no clock) so the metric
   maths — answer rate, missed-call recovery, after-hours coverage, average
-  handle time, top reasons — can be unit-tested directly.
+  handle time, top reasons, daily new leads — can be unit-tested directly.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
 from app.models.call_outcome import CallOutcome
+from app.models.contact import Contact
 from app.models.conversation import (
     Conversation,
     Message,
@@ -34,7 +35,7 @@ from app.models.conversation import (
 )
 from app.models.opportunity import Opportunity
 from app.models.workspace import Workspace
-from app.schemas.scorecard import CallReasonStat, ReceptionistScorecard
+from app.schemas.scorecard import CallReasonStat, DailyLeadCount, ReceptionistScorecard
 from app.services.telephony.missed_call_textback import MISSED_CALL_OUTCOMES
 
 logger = structlog.get_logger()
@@ -116,6 +117,13 @@ class OpportunityRow:
     closed_date: date | None
 
 
+@dataclass(slots=True, frozen=True)
+class LeadRow:
+    """A contact (lead) created within the range."""
+
+    created_at: datetime
+
+
 def _resolve_tz(workspace: Workspace) -> ZoneInfo:
     tz_name = (workspace.settings or {}).get("timezone") or "UTC"
     try:
@@ -180,6 +188,41 @@ def _compute_recovery(
     return textback_sent, recovered
 
 
+def _local_date(moment: datetime, tz: ZoneInfo) -> date:
+    """Return the workspace-local calendar date ``moment`` falls on."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone(tz).date()
+
+
+def _compute_leads_by_day(
+    leads: list[LeadRow],
+    start_date: date,
+    end_date: date,
+    tz: ZoneInfo,
+) -> list[DailyLeadCount]:
+    """Bucket leads onto workspace-local calendar days, zero-filling gaps.
+
+    Every day in ``[start_date, end_date]`` gets an entry so the series is a
+    continuous timeline — a quiet day reads as 0 rather than disappearing and
+    silently compressing the chart.
+    """
+    counts: Counter[date] = Counter()
+    for lead in leads:
+        day = _local_date(lead.created_at, tz)
+        # Guard against clock skew / rows fetched at a window edge landing
+        # outside the requested range once converted to local time.
+        if start_date <= day <= end_date:
+            counts[day] += 1
+
+    series: list[DailyLeadCount] = []
+    day = start_date
+    while day <= end_date:
+        series.append(DailyLeadCount(date=day, count=counts.get(day, 0)))
+        day += timedelta(days=1)
+    return series
+
+
 def _compute_after_hours(calls: list[CallRow], tz: ZoneInfo) -> tuple[int, int]:
     """Return ``(after_hours_calls, after_hours_answered)``."""
     after_hours_calls = 0
@@ -201,6 +244,7 @@ def aggregate_scorecard(
     inbound_replies: list[InboundReplyRow],
     appointments: list[AppointmentRow],
     opportunities: list[OpportunityRow],
+    leads: list[LeadRow],
     tz: ZoneInfo,
     currency: str = "USD",
 ) -> ReceptionistScorecard:
@@ -233,6 +277,13 @@ def aggregate_scorecard(
         for reason, count in reason_counter.most_common(TOP_REASONS_LIMIT)
     ]
 
+    # --- New leads --------------------------------------------------------
+    new_leads_by_day = _compute_leads_by_day(leads, start_date, end_date, tz)
+    new_leads_total = sum(d.count for d in new_leads_by_day)
+    avg_new_leads_per_day = (
+        round(new_leads_total / len(new_leads_by_day), 1) if new_leads_by_day else None
+    )
+
     # --- Revenue ----------------------------------------------------------
     revenue_booked = round(sum(o.amount for o in opportunities), 2)
     deposits_booked = round(
@@ -254,6 +305,9 @@ def aggregate_scorecard(
         revenue_booked=revenue_booked,
         deposits_booked=deposits_booked,
         currency=currency,
+        new_leads_total=new_leads_total,
+        new_leads_by_day=new_leads_by_day,
+        avg_new_leads_per_day=avg_new_leads_per_day,
         after_hours_calls=after_hours_calls,
         after_hours_answered=after_hours_answered,
         after_hours_coverage_rate=(
@@ -293,9 +347,16 @@ class ScorecardService:
         end_date: date | None = None,
     ) -> ReceptionistScorecard:
         resolved_start, resolved_end = resolve_range(start_date, end_date)
+        tz = _resolve_tz(workspace)
         # Inclusive day range → [start 00:00 UTC, end+1 00:00 UTC).
         window_start = datetime.combine(resolved_start, time.min, tzinfo=UTC)
         window_end = datetime.combine(resolved_end + timedelta(days=1), time.min, tzinfo=UTC)
+        # The daily lead series is bucketed by local calendar day, so it needs a
+        # window anchored to local midnight. Reusing the UTC window would clip a
+        # partial day off each end for any non-UTC workspace — an owner in
+        # UTC-5 would see the first day's evening leads missing entirely.
+        leads_window_start = datetime.combine(resolved_start, time.min, tzinfo=tz)
+        leads_window_end = datetime.combine(resolved_end + timedelta(days=1), time.min, tzinfo=tz)
 
         conv_select = select(Conversation.id).where(Conversation.workspace_id == workspace.id)
 
@@ -304,6 +365,7 @@ class ScorecardService:
         replies = await self._fetch_inbound_replies(conv_select, window_start, window_end)
         appointments = await self._fetch_appointments(workspace.id, window_start, window_end)
         opportunities = await self._fetch_opportunities(workspace.id, window_start, window_end)
+        leads = await self._fetch_leads(workspace.id, leads_window_start, leads_window_end)
 
         return aggregate_scorecard(
             start_date=resolved_start,
@@ -313,7 +375,8 @@ class ScorecardService:
             inbound_replies=replies,
             appointments=appointments,
             opportunities=opportunities,
-            tz=_resolve_tz(workspace),
+            leads=leads,
+            tz=tz,
         )
 
     async def _fetch_calls(
@@ -417,6 +480,24 @@ class ScorecardService:
             AppointmentRow(contact_id=row.contact_id, created_at=row.created_at)
             for row in result.all()
         ]
+
+    async def _fetch_leads(
+        self, workspace_id: uuid.UUID, window_start: datetime, window_end: datetime
+    ) -> list[LeadRow]:
+        """Fetch contacts created in the window — one row per new lead.
+
+        Only ``created_at`` is selected: the daily count never touches the
+        Fernet-encrypted PII columns (name/email/phone), so no decryption cost
+        and no PII enters the aggregate.
+        """
+        result = await self.db.execute(
+            select(Contact.created_at).where(
+                Contact.workspace_id == workspace_id,
+                Contact.created_at >= window_start,
+                Contact.created_at < window_end,
+            )
+        )
+        return [LeadRow(created_at=row.created_at) for row in result.all()]
 
     async def _fetch_opportunities(
         self, workspace_id: uuid.UUID, window_start: datetime, window_end: datetime
