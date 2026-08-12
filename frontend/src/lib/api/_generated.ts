@@ -6846,6 +6846,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Opportunity Note
+         * @description Record a note or status update on the deal itself.
+         */
+        post: operations["add_opportunity_note_api_v1_workspaces__workspace_id__opportunities__opportunity_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/remove-from-pipeline": {
         parameters: {
             query?: never;
@@ -6867,6 +6887,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Opportunity Tasks
+         * @description List follow-up tasks for an opportunity.
+         */
+        get: operations["list_opportunity_tasks_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks_get"];
+        put?: never;
+        /**
+         * Create Opportunity Task
+         * @description Create a follow-up task on an opportunity.
+         */
+        post: operations["create_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Opportunity Task
+         * @description Delete a task.
+         */
+        delete: operations["delete_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks__task_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Opportunity Task
+         * @description Update a task, including marking it done or reopening it.
+         */
+        patch: operations["update_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks__task_id__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/outbound-missions": {
@@ -21407,6 +21475,11 @@ export interface components {
              */
             status: "open" | "won" | "lost" | "abandoned";
             /**
+             * Tasks
+             * @default []
+             */
+            tasks: components["schemas"]["OpportunityTaskResponse"][];
+            /**
              * Updated At
              * Format: date-time
              */
@@ -21500,6 +21573,20 @@ export interface components {
             unit_price?: number | null;
         };
         /**
+         * OpportunityNoteCreate
+         * @description A note or status update written against the deal.
+         */
+        OpportunityNoteCreate: {
+            /** Body */
+            body: string;
+            /**
+             * Kind
+             * @default note
+             * @enum {string}
+             */
+            kind: "note" | "update";
+        };
+        /**
          * OpportunityResponse
          * @description Opportunity response schema.
          */
@@ -21582,6 +21669,73 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * OpportunityTaskCreate
+         * @description Create a follow-up task on an opportunity.
+         */
+        OpportunityTaskCreate: {
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * OpportunityTaskResponse
+         * @description Opportunity task response schema.
+         */
+        OpportunityTaskResponse: {
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            assignee?: components["schemas"]["AssigneeSummary"] | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Opportunity Id
+             * Format: uuid
+             */
+            opportunity_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * OpportunityTaskUpdate
+         * @description Patch a task. Every field optional so a checkbox can send only ``completed``.
+         */
+        OpportunityTaskUpdate: {
+            /** Assigned User Id */
+            assigned_user_id?: number | null;
+            /** Completed */
+            completed?: boolean | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * OpportunityUpdate
@@ -44536,6 +44690,42 @@ export interface operations {
             };
         };
     };
+    add_opportunity_note_api_v1_workspaces__workspace_id__opportunities__opportunity_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityNoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_opportunity_from_pipeline_api_v1_workspaces__workspace_id__opportunities__opportunity_id__remove_from_pipeline_post: {
         parameters: {
             query?: never;
@@ -44555,6 +44745,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpportunityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_opportunity_tasks_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityTaskResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityTaskCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityTaskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks__task_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opportunity_task_api_v1_workspaces__workspace_id__opportunities__opportunity_id__tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityTaskUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityTaskResponse"];
                 };
             };
             /** @description Validation Error */

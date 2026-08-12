@@ -92,5 +92,24 @@ export interface Opportunity {
   updated_at: string;
   line_items?: OpportunityLineItem[];
   activities?: OpportunityActivity[];
+  tasks?: OpportunityTask[];
   primary_contact?: OpportunityContact | null;
 }
+
+/** A follow-up owed on this deal, as opposed to on the contact behind it. */
+export interface OpportunityTask {
+  id: string;
+  opportunity_id: string;
+  title: string;
+  notes?: string | null;
+  due_at?: string | null;
+  /** Null while open; the completion timestamp once done. */
+  completed_at?: string | null;
+  assigned_user_id?: number | null;
+  assignee?: OpportunityAssignee | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Operator commentary on the deal. "update" is a status post; "note" is a memo. */
+export type OpportunityNoteKind = "note" | "update";

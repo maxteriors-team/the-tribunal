@@ -198,6 +198,11 @@ class Opportunity(Base):
         "OpportunityActivity", back_populates="opportunity", cascade="all, delete-orphan"
     )
 
+    # Follow-ups owed on this deal
+    tasks: Mapped[list["OpportunityTask"]] = relationship(
+        "OpportunityTask", back_populates="opportunity", cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return f"<Opportunity(id={self.id}, name={self.name}, amount={self.amount})>"
 
@@ -241,6 +246,69 @@ class OpportunityLineItem(Base):
 
     def __repr__(self) -> str:
         return f"<OpportunityLineItem(id={self.id}, name={self.name}, total={self.total})>"
+
+
+class OpportunityTask(Base):
+    """A follow-up owed on a deal.
+
+    Deliberately not an ``OpportunityActivity`` row: activities are an immutable
+    audit trail of what already happened, while a task is mutable state about
+    what has *not* happened yet -- it gets reassigned, rescheduled and completed.
+    Storing both in one table would mean either mutating audit history or
+    carrying four always-null columns on every stage change.
+
+    Scoped through ``opportunity_id`` only, matching ``OpportunityLineItem``;
+    every read path loads the parent opportunity by workspace first, so a task
+    is never reachable across tenants.
+    """
+
+    __tablename__ = "opportunity_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    opportunity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("opportunities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    # Completion is a nullable timestamp rather than a boolean: "when was this
+    # done" is what every follow-up report asks, and a bool cannot answer it.
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    completed_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    assigned_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    opportunity: Mapped["Opportunity"] = relationship("Opportunity", back_populates="tasks")
+    assigned_user: Mapped["User | None"] = relationship("User", foreign_keys=[assigned_user_id])
+
+    def __repr__(self) -> str:
+        return f"<OpportunityTask(id={self.id}, title={self.title})>"
 
 
 class OpportunityActivity(Base):

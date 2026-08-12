@@ -137,6 +137,60 @@ class OpportunityActivityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# A note and a status update differ only in intent, so they share a table and a
+# route and are told apart by this discriminator in the timeline.
+OpportunityNoteKind = Literal["note", "update"]
+
+
+class OpportunityNoteCreate(BaseModel):
+    """A note or status update written against the deal."""
+
+    body: str = Field(min_length=1, max_length=5000)
+    kind: OpportunityNoteKind = "note"
+
+
+class OpportunityTaskBase(BaseModel):
+    """Fields shared by task create and update."""
+
+    title: str = Field(min_length=1, max_length=255)
+    notes: str | None = Field(default=None, max_length=5000)
+    due_at: datetime | None = None
+    assigned_user_id: int | None = None
+
+
+class OpportunityTaskCreate(OpportunityTaskBase):
+    """Create a follow-up task on an opportunity."""
+
+
+class OpportunityTaskUpdate(BaseModel):
+    """Patch a task. Every field optional so a checkbox can send only ``completed``."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    notes: str | None = Field(default=None, max_length=5000)
+    due_at: datetime | None = None
+    assigned_user_id: int | None = None
+    # Exposed as a boolean because that is what a checkbox has; the service
+    # turns it into the ``completed_at`` timestamp that reporting needs.
+    completed: bool | None = None
+
+
+class OpportunityTaskResponse(BaseModel):
+    """Opportunity task response schema."""
+
+    id: uuid.UUID
+    opportunity_id: uuid.UUID
+    title: str
+    notes: str | None = None
+    due_at: datetime | None = None
+    completed_at: datetime | None = None
+    assigned_user_id: int | None = None
+    assignee: AssigneeSummary | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OpportunityContactSummary(BaseModel):
     """Minimal primary-contact detail embedded in opportunity responses.
 
@@ -229,6 +283,7 @@ class OpportunityDetailResponse(OpportunityResponse):
     """Detailed opportunity response with all related data."""
 
     activities: list[OpportunityActivityResponse] = []
+    tasks: list[OpportunityTaskResponse] = []
 
 
 class PaginatedOpportunities(BaseModel):

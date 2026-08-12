@@ -11,14 +11,22 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
-from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityLineItem
+from app.models.opportunity import (
+    Opportunity,
+    OpportunityActivity,
+    OpportunityLineItem,
+    OpportunityTask,
+)
 from app.models.pipeline import Pipeline, PipelineStage
 from app.schemas.opportunity import (
     OpportunityCreate,
     OpportunityDetailResponse,
     OpportunityLineItemCreate,
     OpportunityLineItemUpdate,
+    OpportunityNoteCreate,
     OpportunityResponse,
+    OpportunityTaskCreate,
+    OpportunityTaskUpdate,
     OpportunityUpdate,
     PaginatedOpportunities,
     PipelineCreate,
@@ -350,6 +358,9 @@ class OpportunityService:
             options=[
                 selectinload(Opportunity.line_items),
                 selectinload(Opportunity.activities),
+                # Eager-loaded with its assignee: serializing either lazily here
+                # raises MissingGreenlet and 500s the detail sheet.
+                selectinload(Opportunity.tasks).selectinload(OpportunityTask.assigned_user),
                 selectinload(Opportunity.primary_contact),
                 selectinload(Opportunity.assigned_user),
             ],
@@ -662,3 +673,163 @@ class OpportunityService:
         )
         await self.db.delete(line_item)
         await self.db.commit()
+
+    async def add_note(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        note_in: OpportunityNoteCreate,
+        user_id: int | None = None,
+        restrict_to_user_id: int | None = None,
+    ) -> OpportunityActivity:
+        """Record a note or status update against the deal.
+
+        Stored as an activity so operator commentary lands in the same timeline
+        as the automatic stage changes -- a note filed somewhere else is a note
+        nobody reads next to the event that prompted it.
+        """
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        activity = OpportunityActivity(
+            opportunity_id=opportunity_id,
+            user_id=user_id,
+            activity_type=note_in.kind,
+            description=note_in.body.strip(),
+        )
+        self.db.add(activity)
+        await self.db.commit()
+        await self.db.refresh(activity)
+        return activity
+
+    async def list_tasks(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        restrict_to_user_id: int | None = None,
+    ) -> list[OpportunityTask]:
+        """List a deal's follow-ups, soonest-due first with done ones last."""
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        result = await self.db.execute(
+            select(OpportunityTask)
+            .where(OpportunityTask.opportunity_id == opportunity_id)
+            .options(selectinload(OpportunityTask.assigned_user))
+            .order_by(
+                # Open work first, then by when it is due. NULLS LAST keeps
+                # undated tasks from burying the ones with a deadline.
+                OpportunityTask.completed_at.is_not(None),
+                OpportunityTask.due_at.asc().nulls_last(),
+                OpportunityTask.created_at.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def create_task(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        task_in: OpportunityTaskCreate,
+        user_id: int | None = None,
+        restrict_to_user_id: int | None = None,
+    ) -> OpportunityTask:
+        """Create a follow-up task on an opportunity."""
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        task = OpportunityTask(
+            opportunity_id=opportunity_id,
+            title=task_in.title.strip(),
+            notes=task_in.notes,
+            due_at=task_in.due_at,
+            # Unassigned follow-ups get owned by whoever booked them, so a task
+            # always has someone to chase rather than sitting in limbo.
+            assigned_user_id=task_in.assigned_user_id or user_id,
+            created_by_id=user_id,
+        )
+        self.db.add(task)
+        await self.db.commit()
+        return await self._load_task(task.id)
+
+    async def update_task(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        task_id: uuid.UUID,
+        task_in: OpportunityTaskUpdate,
+        user_id: int | None = None,
+        restrict_to_user_id: int | None = None,
+    ) -> OpportunityTask:
+        """Patch a task, translating ``completed`` into a completion timestamp."""
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        task = await get_nested_or_404(
+            self.db,
+            OpportunityTask,
+            task_id,
+            parent_field="opportunity_id",
+            parent_id=opportunity_id,
+            detail="Task not found",
+        )
+
+        fields = task_in.model_dump(exclude_unset=True)
+        completed = fields.pop("completed", None)
+        for field, value in fields.items():
+            setattr(task, field, value)
+
+        if completed is True and task.completed_at is None:
+            task.completed_at = datetime.now(UTC)
+            task.completed_by_id = user_id
+        elif completed is False:
+            task.completed_at = None
+            task.completed_by_id = None
+
+        await self.db.commit()
+        return await self._load_task(task.id)
+
+    async def delete_task(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        task_id: uuid.UUID,
+        restrict_to_user_id: int | None = None,
+    ) -> None:
+        """Delete a task."""
+        opportunity = await get_or_404(
+            self.db, Opportunity, opportunity_id, workspace_id=workspace_id
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        task = await get_nested_or_404(
+            self.db,
+            OpportunityTask,
+            task_id,
+            parent_field="opportunity_id",
+            parent_id=opportunity_id,
+            detail="Task not found",
+        )
+        await self.db.delete(task)
+        await self.db.commit()
+
+    async def _load_task(self, task_id: uuid.UUID) -> OpportunityTask:
+        """Re-read a task with its assignee eager-loaded.
+
+        Serializing ``assignee`` off a freshly committed row would lazy-load
+        inside async serialization and raise ``MissingGreenlet``.
+        """
+        result = await self.db.execute(
+            select(OpportunityTask)
+            .where(OpportunityTask.id == task_id)
+            .options(selectinload(OpportunityTask.assigned_user))
+        )
+        return result.scalar_one()

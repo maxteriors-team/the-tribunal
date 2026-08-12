@@ -100,7 +100,12 @@ from app.models.neighbor_outreach import (
 )
 from app.models.offer import Offer
 from app.models.offer_lead_magnet import OfferLeadMagnet
-from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityLineItem
+from app.models.opportunity import (
+    Opportunity,
+    OpportunityActivity,
+    OpportunityLineItem,
+    OpportunityTask,
+)
 from app.models.opt_out import GlobalOptOut
 from app.models.outbound_action_audit_log import OutboundActionAuditLog
 from app.models.outbound_mission import MissionStatus, OutboundMission
@@ -236,6 +241,7 @@ __all__ = [
     "PipelineStage",
     "Opportunity",
     "OpportunityLineItem",
+    "OpportunityTask",
     "OpportunityActivity",
     "CatalogItem",
     "InventoryItem",

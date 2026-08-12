@@ -103,10 +103,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
   // Same query the LeadSourcePicker runs, so React Query serves both from one
   // fetch. Resolving the channel from the stored id (rather than remembering it
   // from the last onChange) keeps the partner field correct after a form reset.
+  // Fetched in edit mode too: attribution is often only learned after the first
+  // conversation, so it has to be correctable without recreating the contact.
   const { data: leadSources } = useQuery({
     queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
     queryFn: () => leadSourcesApi.list(workspaceId!),
-    enabled: mode === "create" && !!workspaceId,
+    enabled: !!workspaceId,
   });
 
   const createContactMutation = useMutation({
@@ -152,6 +154,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
         ? data.tags.split(",").map((tag) => tag.trim()).filter(Boolean)
         : undefined;
 
+      // Resolve the channel from the submitted id rather than from render
+      // state, so the payload can never disagree with what was selected.
+      const submittedSourceIsReferral =
+        leadSources?.find((source) => source.id === data.lead_source_id)
+          ?.source_type === "referral_partner";
+
       if (mode === "create") {
         if (
           captureSettings?.require_lead_source_on_manual_create &&
@@ -160,12 +168,6 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
           toast.error("Select how this contact heard about the business");
           return;
         }
-
-        // Resolve the channel from the submitted id rather than from render
-        // state, so the payload can never disagree with what was selected.
-        const submittedSourceIsReferral =
-          leadSources?.find((source) => source.id === data.lead_source_id)
-            ?.source_type === "referral_partner";
 
         const request: ManualContactCreatePayload = {
           first_name: data.first_name,
@@ -214,6 +216,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
         tags: tagsArray,
         notes: data.notes || undefined,
         important_dates: hasImportantDates ? importantDates : null,
+        // null (not undefined) so clearing the picker actually unsets the
+        // source -- the API drops unset keys, which would silently keep it.
+        first_touch_lead_source_id: data.lead_source_id || null,
+        referral_partner_id: submittedSourceIsReferral
+          ? data.referral_partner_id || null
+          : null,
         address_line1: data.address_line1 || undefined,
         address_line2: data.address_line2 || undefined,
         address_city: data.address_city || undefined,
@@ -233,6 +241,12 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
   const isReferralPartnerSource =
     leadSources?.find((source) => source.id === selectedLeadSourceId)
       ?.source_type === "referral_partner";
+
+  // The "require a source" policy is a *capture* rule for new contacts. Applying
+  // it on edit would lock an operator out of saving any older contact that has
+  // no source recorded -- the exact records they open the form to fix.
+  const isSourceRequired =
+    mode === "create" && !!captureSettings?.require_lead_source_on_manual_create;
 
   // Filling the rest of the address from one pick is the point of the lookup:
   // city/state/ZIP typed by hand are where duplicate addresses come from. Blank
@@ -370,33 +384,31 @@ export function ContactFormDialog(props: ContactFormDialogProps) {
         )}
       />
 
-      {mode === "create" && (
-        <FormField
-          control={form.control}
-          name="lead_source_id"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                How did you hear about us?
-                {captureSettings?.require_lead_source_on_manual_create ? " *" : ""}
-              </FormLabel>
-              <FormControl>
-                <LeadSourceField
-                  workspaceId={workspaceId ?? ""}
-                  value={field.value || undefined}
-                  onChange={(leadSourceId) => field.onChange(leadSourceId)}
-                  onClear={() => field.onChange("")}
-                  allowClear={!captureSettings?.require_lead_source_on_manual_create}
-                  aria-label="How did you hear about us?"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      )}
+      <FormField
+        control={form.control}
+        name="lead_source_id"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>
+              How did you hear about us?
+              {isSourceRequired ? " *" : ""}
+            </FormLabel>
+            <FormControl>
+              <LeadSourceField
+                workspaceId={workspaceId ?? ""}
+                value={field.value || undefined}
+                onChange={(leadSourceId) => field.onChange(leadSourceId)}
+                onClear={() => field.onChange("")}
+                allowClear={!isSourceRequired}
+                aria-label="How did you hear about us?"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
 
-      {mode === "create" && isReferralPartnerSource && (
+      {isReferralPartnerSource && (
         <FormField
           control={form.control}
           name="referral_partner_id"

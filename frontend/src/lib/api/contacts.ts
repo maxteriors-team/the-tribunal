@@ -120,6 +120,10 @@ export interface UpdateContactRequest {
   tags?: string[];
   notes?: string;
   important_dates?: ImportantDates | null;
+  // Attribution. Nullable rather than optional-only so the edit form can
+  // actively clear a source that was recorded by mistake.
+  first_touch_lead_source_id?: string | null;
+  referral_partner_id?: string | null;
   address_line1?: string;
   address_line2?: string;
   address_city?: string;

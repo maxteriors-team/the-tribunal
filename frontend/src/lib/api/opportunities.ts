@@ -1,6 +1,9 @@
-import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "@/lib/api";
 import type {
   Opportunity,
+  OpportunityActivity,
+  OpportunityNoteKind,
+  OpportunityTask,
   Pipeline,
   PipelineStage,
 } from "@/types";
@@ -227,6 +230,62 @@ export const opportunitiesApi = {
   ): Promise<void> => {
     await apiDelete(
       `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages/${stageId}`
+    );
+  },
+
+  addNote: async (
+    workspaceId: string,
+    opportunityId: string,
+    data: { body: string; kind?: OpportunityNoteKind }
+  ): Promise<OpportunityActivity> => {
+    return apiPost<OpportunityActivity>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/notes`,
+      data
+    );
+  },
+
+  listTasks: async (workspaceId: string, opportunityId: string): Promise<OpportunityTask[]> => {
+    return apiGet<OpportunityTask[]>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks`
+    );
+  },
+
+  createTask: async (
+    workspaceId: string,
+    opportunityId: string,
+    data: { title: string; notes?: string; due_at?: string | null; assigned_user_id?: number | null }
+  ): Promise<OpportunityTask> => {
+    return apiPost<OpportunityTask>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks`,
+      data
+    );
+  },
+
+  updateTask: async (
+    workspaceId: string,
+    opportunityId: string,
+    taskId: string,
+    data: {
+      title?: string;
+      notes?: string | null;
+      due_at?: string | null;
+      assigned_user_id?: number | null;
+      completed?: boolean;
+    }
+  ): Promise<OpportunityTask> => {
+    return apiPatch<OpportunityTask>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks/${taskId}`,
+      data
+    );
+  },
+
+  deleteTask: async (
+    workspaceId: string,
+    opportunityId: string,
+    taskId: string
+  ): Promise<void> => {
+    await apiDelete(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks/${taskId}`
     );
   },
 };

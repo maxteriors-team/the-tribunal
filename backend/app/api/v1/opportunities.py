@@ -23,11 +23,16 @@ from app.schemas.deal_coach import (
     DraftActionResponse,
 )
 from app.schemas.opportunity import (
+    OpportunityActivityResponse,
     OpportunityCreate,
     OpportunityDetailResponse,
     OpportunityLineItemCreate,
     OpportunityLineItemUpdate,
+    OpportunityNoteCreate,
     OpportunityResponse,
+    OpportunityTaskCreate,
+    OpportunityTaskResponse,
+    OpportunityTaskUpdate,
     OpportunityUpdate,
     PaginatedOpportunities,
     PipelineCreate,
@@ -406,5 +411,111 @@ async def delete_line_item(
         workspace_id,
         opportunity_id,
         item_id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.post(
+    "/{opportunity_id}/notes",
+    response_model=OpportunityActivityResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_opportunity_note(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    note_in: OpportunityNoteCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWritePipelineOwn,
+) -> Any:
+    """Record a note or status update on the deal itself."""
+    service = OpportunityService(db)
+    return await service.add_note(
+        workspace_id,
+        opportunity_id,
+        note_in,
+        user_id=current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.get("/{opportunity_id}/tasks", response_model=list[OpportunityTaskResponse])
+async def list_opportunity_tasks(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> Any:
+    """List follow-up tasks for an opportunity."""
+    service = OpportunityService(db)
+    return await service.list_tasks(
+        workspace_id,
+        opportunity_id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.post(
+    "/{opportunity_id}/tasks",
+    response_model=OpportunityTaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_opportunity_task(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    task_in: OpportunityTaskCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWritePipelineOwn,
+) -> Any:
+    """Create a follow-up task on an opportunity."""
+    service = OpportunityService(db)
+    return await service.create_task(
+        workspace_id,
+        opportunity_id,
+        task_in,
+        user_id=current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.patch("/{opportunity_id}/tasks/{task_id}", response_model=OpportunityTaskResponse)
+async def update_opportunity_task(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    task_id: uuid.UUID,
+    task_in: OpportunityTaskUpdate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWritePipelineOwn,
+) -> Any:
+    """Update a task, including marking it done or reopening it."""
+    service = OpportunityService(db)
+    return await service.update_task(
+        workspace_id,
+        opportunity_id,
+        task_id,
+        task_in,
+        user_id=current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.delete("/{opportunity_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_opportunity_task(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    task_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWritePipelineOwn,
+) -> None:
+    """Delete a task."""
+    service = OpportunityService(db)
+    await service.delete_task(
+        workspace_id,
+        opportunity_id,
+        task_id,
         restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
     )
