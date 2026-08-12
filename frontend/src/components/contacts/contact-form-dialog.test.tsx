@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import type { LeadSource } from "@/lib/api/lead-sources";
-import type { Tag } from "@/types";
+import type { Contact, Tag } from "@/types";
 
 /**
  * The three detours this form used to force on an operator mid-contact:
@@ -103,6 +103,31 @@ function renderDialog() {
   render(
     <QueryClientProvider client={client}>
       <ContactFormDialog mode="create" open onOpenChange={vi.fn()} />
+    </QueryClientProvider>,
+  );
+}
+
+function makeContact(overrides: Partial<Contact> = {}): Contact {
+  return {
+    id: 1,
+    user_id: 1,
+    first_name: "Dana",
+    last_name: "Reyes",
+    phone_number: "+15125550142",
+    status: "new",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  } as Contact;
+}
+
+function renderEditDialog(contact: Contact = makeContact()) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <ContactFormDialog mode="edit" open contact={contact} onOpenChange={vi.fn()} />
     </QueryClientProvider>,
   );
 }
@@ -345,5 +370,68 @@ describe("ContactFormDialog layout", () => {
     expect(scroller).not.toContainElement(
       within(dialog).getByRole("button", { name: "Create Contact" }),
     );
+  });
+});
+
+/**
+ * Attribution is usually learned *after* the contact exists — the operator asks
+ * "how did you find us?" on the first call, by which point the record is
+ * already saved. The source field used to render only in create mode, so the
+ * answer had nowhere to go and the ROI reporting built on it stayed wrong.
+ */
+describe("ContactFormDialog source editing", () => {
+  it("offers the source field when editing an existing contact", async () => {
+    renderEditDialog();
+
+    expect(await screen.findByLabelText("How did you hear about us?")).toBeVisible();
+  });
+
+  it("preselects the source already recorded on the contact", async () => {
+    renderEditDialog(makeContact({ first_touch_lead_source_id: "src-1" }));
+
+    const trigger = await screen.findByLabelText("How did you hear about us?");
+    await waitFor(() => expect(trigger).toHaveTextContent("FB Christmas light leads"));
+  });
+
+  it("submits a newly picked source on save", async () => {
+    const user = userEvent.setup();
+    updateMock.mockResolvedValue({ id: 1 });
+    renderEditDialog();
+
+    await user.click(await screen.findByLabelText("How did you hear about us?"));
+    await user.click(await screen.findByRole("option", { name: /FB Christmas light leads/i }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    expect(updateMock.mock.calls[0][2]).toMatchObject({
+      first_touch_lead_source_id: "src-1",
+    });
+  });
+
+  it("clears a source that was recorded by mistake", async () => {
+    const user = userEvent.setup();
+    updateMock.mockResolvedValue({ id: 1 });
+    renderEditDialog(makeContact({ first_touch_lead_source_id: "src-1" }));
+
+    await user.click(await screen.findByLabelText("How did you hear about us?"));
+    await user.click(await screen.findByRole("option", { name: "No lead source" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
+    // null, not undefined: an omitted key would leave the wrong source in place.
+    expect(updateMock.mock.calls[0][2].first_touch_lead_source_id).toBeNull();
+  });
+
+  it("does not enforce the create-time source requirement when editing", async () => {
+    const user = userEvent.setup();
+    captureSettingsMock.mockResolvedValue({ require_lead_source_on_manual_create: true });
+    updateMock.mockResolvedValue({ id: 1 });
+    renderEditDialog();
+
+    await user.click(await screen.findByRole("button", { name: "Save Changes" }));
+
+    // An old contact with no source must still be saveable, or the operator is
+    // locked out of the very record they opened the form to fix.
+    await waitFor(() => expect(updateMock).toHaveBeenCalled());
   });
 });

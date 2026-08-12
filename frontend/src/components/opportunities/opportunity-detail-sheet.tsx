@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { OpportunityFollowups } from "@/components/opportunities/opportunity-followups";
 import { Badge } from "@/components/ui/badge";
 import {
   PageErrorState,
@@ -195,6 +196,12 @@ export function OpportunityDetailSheet({
                   </p>
                 </div>
               ) : null}
+
+              <OpportunityFollowups
+                workspaceId={workspaceId}
+                opportunityId={opportunity.id}
+                tasks={opportunity.tasks ?? []}
+              />
 
               {opportunity.activities && opportunity.activities.length > 0 ? (
                 <div className="space-y-2">

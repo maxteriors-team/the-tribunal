@@ -111,12 +111,40 @@ def range_filter_specs(
     )
 
 
+# A search box is a name box in practice, so multi-word queries have to work.
+# Capped so a pasted paragraph cannot expand into an unbounded AND-of-ORs.
+_MAX_SEARCH_TOKENS = 6
+
+
 def search_filter(*columns: Any) -> ConditionBuilder:
-    """Build an ORed ILIKE search condition across multiple columns."""
+    """Build an ILIKE search condition across multiple columns.
+
+    Matching the raw query against each column independently means a full name
+    finds nothing: "Lisa Shelton" is never a substring of ``first_name`` or of
+    ``last_name``, so typing the name off a contact card returned "No results".
+
+    So the query is also split on whitespace and every token must match at least
+    one column, which makes word order irrelevant ("Shelton Lisa" works too).
+
+    The whole-string match is kept and ORed in rather than replaced, so this is
+    strictly more permissive than before -- it can only find more rows, never
+    fewer. That matters for values that legitimately contain spaces: a stored
+    company name like "Acme Roofing Co" still matches the query "Acme Roofing"
+    as a single substring even though no single token spans it.
+    """
 
     def _condition(value: Any) -> ColumnElement[bool] | None:
-        like = f"%{value}%"
-        return or_(*(column.ilike(like) for column in columns))
+        whole = or_(*(column.ilike(f"%{value}%") for column in columns))
+
+        tokens = str(value).split()[:_MAX_SEARCH_TOKENS]
+        if len(tokens) < 2:
+            # Single word (or empty): the token match is the whole match.
+            return whole
+
+        every_token_matches = and_(
+            *(or_(*(column.ilike(f"%{token}%") for column in columns)) for token in tokens)
+        )
+        return or_(whole, every_token_matches)
 
     return _condition
 
