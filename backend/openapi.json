@@ -5777,6 +5777,18 @@
             },
             "title": "Skills",
             "type": "array"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Workspace member this staff row belongs to. Setting it puts the bookings on that person's calendar, so it requires members:manage.",
+            "title": "User Id"
           }
         },
         "required": [
@@ -5894,6 +5906,17 @@
             "title": "Updated At",
             "type": "string"
           },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -5906,6 +5929,7 @@
           "agent_id",
           "name",
           "email",
+          "user_id",
           "calcom_event_type_id",
           "skills",
           "is_active",
@@ -5991,6 +6015,18 @@
               }
             ],
             "title": "Skills"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Workspace member this staff row belongs to; send null to unlink. Requires members:manage — the link decides whose calendar the bookings appear on.",
+            "title": "User Id"
           }
         },
         "title": "BookableStaffUpdate",

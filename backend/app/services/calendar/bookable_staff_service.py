@@ -15,6 +15,7 @@ from app.schemas.bookable_staff import (
     BookableStaffList,
     BookableStaffUpdate,
 )
+from app.services.field_service._refs import assert_user_is_member
 
 logger = structlog.get_logger()
 
@@ -56,6 +57,8 @@ class BookableStaffService:
     ) -> BookableStaff:
         """Add a staff member to an agent's pool."""
         await self._assert_agent(workspace_id, agent_id)
+        if body.user_id is not None:
+            await assert_user_is_member(self.db, body.user_id, workspace_id)
         staff = BookableStaff(
             workspace_id=workspace_id,
             agent_id=agent_id,
@@ -81,7 +84,12 @@ class BookableStaffService:
     ) -> BookableStaff:
         """Update a staff member's config."""
         staff = await self._get_staff(workspace_id, agent_id, staff_id)
-        for field, value in body.model_dump(exclude_unset=True).items():
+        changes = body.model_dump(exclude_unset=True)
+        # A login may only be linked to someone who is actually in this
+        # workspace, so a staff row can never point at an outside account.
+        if changes.get("user_id") is not None:
+            await assert_user_is_member(self.db, changes["user_id"], workspace_id)
+        for field, value in changes.items():
             setattr(staff, field, value)
         await self.db.commit()
         await self.db.refresh(staff)
