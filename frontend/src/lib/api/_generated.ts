@@ -10703,6 +10703,11 @@ export interface components {
              * @default both
              */
             channel_mode: string;
+            /**
+             * Confirmation Email Enabled
+             * @default true
+             */
+            confirmation_email_enabled: boolean;
             /** Description */
             description?: string | null;
             /**
@@ -10786,6 +10791,13 @@ export interface components {
             post_meeting_sms_enabled: boolean;
             /** Post Meeting Template */
             post_meeting_template?: string | null;
+            /**
+             * Reminder Channels
+             * @default [
+             *       "sms"
+             *     ]
+             */
+            reminder_channels: string[];
             /**
              * Reminder Enabled
              * @default true
@@ -10880,6 +10892,11 @@ export interface components {
             /** Channel Mode */
             channel_mode: string;
             /**
+             * Confirmation Email Enabled
+             * @default true
+             */
+            confirmation_email_enabled: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -10950,6 +10967,13 @@ export interface components {
             post_meeting_sms_enabled: boolean;
             /** Post Meeting Template */
             post_meeting_template?: string | null;
+            /**
+             * Reminder Channels
+             * @default [
+             *       "sms"
+             *     ]
+             */
+            reminder_channels: string[];
             /** Reminder Enabled */
             reminder_enabled: boolean;
             /** Reminder Minutes Before */
@@ -11035,6 +11059,8 @@ export interface components {
             calcom_event_type_id?: number | null;
             /** Channel Mode */
             channel_mode?: string | null;
+            /** Confirmation Email Enabled */
+            confirmation_email_enabled?: boolean | null;
             /** Description */
             description?: string | null;
             /** Enable Ivr Navigation */
@@ -11081,6 +11107,8 @@ export interface components {
             post_meeting_sms_enabled?: boolean | null;
             /** Post Meeting Template */
             post_meeting_template?: string | null;
+            /** Reminder Channels */
+            reminder_channels?: string[] | null;
             /** Reminder Enabled */
             reminder_enabled?: boolean | null;
             /** Reminder Minutes Before */

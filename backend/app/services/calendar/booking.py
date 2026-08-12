@@ -70,6 +70,9 @@ class BookingResult:
     booking_uid: str | None = None
     booking_id: int | None = None
     error: str | None = None
+    # Customer-facing guidance the agent should act on when ``error`` is a short
+    # code (validation failures); optional for availability failures.
+    message: str | None = None
     alternative_slots: list[AvailableSlot] = field(default_factory=list)
 
 
@@ -156,16 +159,19 @@ class BookingService:
         metadata: dict[str, Any] | None = None,
         phone_number: str | None = None,
         *,
-        pre_validate: bool = False,
+        pre_validate: bool = True,
         now: datetime | None = None,
     ) -> BookingResult:
         """Confirm a local booking.
 
         No external calendar is contacted — the caller persists the appointment
-        row. When ``pre_validate`` is set (voice agents), the slot is re-checked
-        against current availability and alternatives are returned if it was
-        taken since it was offered. ``now`` is injectable (default the current
-        clock) so the re-check is deterministic in tests.
+        row. The slot is re-checked against current availability and
+        alternatives are returned if it was taken since it was offered. That
+        re-check used to be opt-in per channel, which is exactly how the text
+        agent shipped confirming slots that were already booked; only pass
+        ``pre_validate=False`` for a caller that has just computed availability
+        itself. ``now`` is injectable (default the current clock) so the
+        re-check is deterministic in tests.
         """
         try:
             self._get_timezone()

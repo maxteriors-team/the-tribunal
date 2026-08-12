@@ -54,6 +54,8 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     reminder_minutes_before: 60,
     reminder_offsets: [2880, 60],
     reminder_template: "Reminder!",
+    reminder_channels: ["sms", "email"],
+    confirmation_email_enabled: true,
     noshow_sms_enabled: true,
     noshow_reengagement_enabled: false,
     noshow_day3_template: "d3",

@@ -10,8 +10,8 @@ Everything that must happen when a booking succeeds lives here:
 1. **Rep assignment** — resolve the bookable staff member via the agent's routing
    strategy so an appointment has an owner instead of sitting unassigned.
 2. **The appointment row** — the CRM table is the source of truth for scheduling.
-3. **Customer confirmation SMS** — previously only sent by the Cal.com webhook,
-   which never fires for a local booking, so customers got no confirmation.
+3. **Customer confirmation** — SMS where no live channel reply exists, plus an
+   emailed ``.ics`` invitation so the meeting reaches the address collected at booking.
 4. **Calendar invite to the rep** — an ``.ics`` attachment so the appointment
    shows up in the calendar they actually watch.
 
@@ -38,7 +38,10 @@ from app.models.contact import Contact
 from app.models.workspace import Workspace
 from app.services.appointments.lifecycle_sms import build_confirmation_body, send_lifecycle_sms
 from app.services.calendar.ics import CalendarInvite, appointment_uid, render_invite
-from app.services.email import send_appointment_booked_notification
+from app.services.email import (
+    send_appointment_booked_notification,
+    send_appointment_confirmation_to_attendee,
+)
 from app.services.idempotency import derive_outbound_key
 from app.utils.background_tasks import spawn_background_task
 from app.utils.timezones import DEFAULT_WORKSPACE_TIMEZONE, workspace_timezone_name
@@ -67,6 +70,7 @@ async def finalize_booking(
     calcom_booking_id: int | None = None,
     calcom_event_type_id: int | None = None,
     notify: bool = True,
+    send_customer_sms: bool = True,
 ) -> Appointment:
     """Persist a booked appointment and trigger its downstream notifications.
 
@@ -160,7 +164,7 @@ async def finalize_booking(
 
     if notify:
         spawn_background_task(
-            deliver_booking_notifications(appointment.id),
+            deliver_booking_notifications(appointment.id, send_customer_sms=send_customer_sms),
             name=f"booking_notifications:{appointment.id}",
         )
 
@@ -221,12 +225,17 @@ async def _resolve_staff(
         return None
 
 
-async def deliver_booking_notifications(appointment_id: int) -> None:
-    """Send the customer confirmation SMS and the rep's calendar invite.
+async def deliver_booking_notifications(
+    appointment_id: int,
+    *,
+    send_customer_sms: bool = True,
+) -> None:
+    """Send customer and rep booking notifications.
 
-    Runs on its own session because it is spawned after the caller's session has
-    committed (and may already be closed). Each side is independently guarded so
-    a failing SMS provider still lets the calendar invite through, and vice versa.
+    ``send_customer_sms`` is false for a live SMS tool call because the tool's
+    single natural-language reply is itself the confirmation. Other booking paths
+    keep the deterministic lifecycle text. Customer and rep emails are independent
+    so either can succeed when the other provider call fails.
     """
     log = logger.bind(appointment_id=appointment_id)
 
@@ -251,8 +260,16 @@ async def deliver_booking_notifications(appointment_id: int) -> None:
             else None
         )
 
-        await _send_customer_confirmation(
-            db,
+        if send_customer_sms:
+            await _send_customer_confirmation(
+                db,
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                agent=agent,
+                log=log,
+            )
+        await _send_attendee_confirmation(
             appointment=appointment,
             contact=contact,
             workspace=workspace,
@@ -301,6 +318,63 @@ async def _send_customer_confirmation(
         idempotency_parts=(appointment.id,),
     )
     log.info("booking_confirmation_sms_dispatched", contact_id=contact.id)
+
+
+async def _send_attendee_confirmation(
+    *,
+    appointment: Appointment,
+    contact: Contact,
+    workspace: Workspace | None,
+    agent: Agent | None,
+    log: structlog.BoundLogger,
+) -> None:
+    """Email the customer their confirmation plus a calendar invite.
+
+    Skipped when the agent has confirmation emails off or we have no address to
+    send to. Fully guarded: this is the newest of the three notifications, and a
+    failure here must not cost the customer their SMS or the rep their invite.
+    """
+    if agent is not None and not agent.confirmation_email_enabled:
+        return
+    if not contact.email:
+        log.info("attendee_confirmation_skipped_no_email", contact_id=contact.id)
+        return
+
+    try:
+        contact_name = contact.full_name or "there"
+        business_name = workspace.name if workspace is not None else ""
+        location = format_contact_address(contact)
+
+        summary = (
+            f"{appointment.service_type or DEFAULT_SERVICE_SUMMARY} — {business_name}"
+        ).strip(" —")
+        invite = CalendarInvite(
+            uid=appointment_uid(appointment.id),
+            starts_at=appointment.scheduled_at,
+            duration_minutes=appointment.duration_minutes,
+            summary=summary,
+            description=_invite_description(contact, appointment),
+            location=location,
+            organizer_email=_organizer_email(),
+            organizer_name=business_name or None,
+            attendee_email=contact.email,
+            attendee_name=contact.full_name or None,
+        )
+
+        await send_appointment_confirmation_to_attendee(
+            to_email=contact.email,
+            contact_name=contact_name,
+            business_name=business_name,
+            appointment_time=appointment.scheduled_at,
+            service_type=appointment.service_type,
+            location=location or None,
+            timezone=_workspace_timezone(workspace),
+            ics_content=render_invite(invite),
+            idempotency_key=derive_outbound_key("attendee_booking_invite_email", appointment.id),
+        )
+        log.info("attendee_confirmation_email_dispatched", contact_id=contact.id)
+    except Exception:  # noqa: BLE001 - notification must not break booking
+        log.exception("attendee_confirmation_email_failed")
 
 
 async def _send_rep_invite(

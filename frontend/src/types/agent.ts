@@ -35,6 +35,8 @@ export interface Agent {
   reminder_minutes_before: number;
   reminder_offsets: number[];
   reminder_template: string | null;
+  reminder_channels: ("sms" | "email")[];
+  confirmation_email_enabled: boolean;
   noshow_sms_enabled: boolean;
   // No-show multi-day re-engagement sequence
   noshow_reengagement_enabled: boolean;

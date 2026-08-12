@@ -75,6 +75,9 @@ export const reminderCoreFields = {
 export const reminderExtendedFields = {
   reminderOffsets: z.array(z.number().int().min(1).max(10080)),
   reminderTemplate: z.string().nullable().optional(),
+  // Backend rejects anything outside this set, so keep the enum in step.
+  reminderChannels: z.array(z.enum(["sms", "email"])),
+  confirmationEmailEnabled: z.boolean(),
 } as const;
 
 /** Experiment auto-evaluation toggle shared by both forms. */
@@ -110,6 +113,8 @@ export const REMINDER_CORE_DEFAULTS = {
 export const REMINDER_EXTENDED_DEFAULTS = {
   reminderOffsets: [1440, 120, 30] as number[],
   reminderTemplate: null as string | null,
+  reminderChannels: ["sms"] as ("sms" | "email")[],
+  confirmationEmailEnabled: true,
 } as const;
 
 export const TOOLS_DEFAULTS = {
@@ -235,6 +240,7 @@ export const EDIT_AGENT_FORM_DEFAULTS: EditAgentFormValues = {
   ...IVR_DEFAULTS,
   ...REMINDER_CORE_DEFAULTS,
   ...REMINDER_EXTENDED_DEFAULTS,
+  reminderChannels: [...REMINDER_EXTENDED_DEFAULTS.reminderChannels],
   noshowSmsEnabled: false,
   noshowReengagementEnabled: true,
   noshowDay3Template: null,
@@ -267,6 +273,8 @@ export const TAB_FIELDS: Record<string, (keyof EditAgentFormValues)[]> = {
     "reminderMinutesBefore",
     "reminderOffsets",
     "reminderTemplate",
+    "reminderChannels",
+    "confirmationEmailEnabled",
     "noshowSmsEnabled",
     "noshowReengagementEnabled",
     "noshowDay3Template",
@@ -346,6 +354,8 @@ export function buildUpdateAgentRequest(data: EditAgentFormValues): UpdateAgentR
     reminder_minutes_before: data.reminderMinutesBefore,
     reminder_offsets: data.reminderOffsets,
     reminder_template: data.reminderTemplate ?? null,
+    reminder_channels: data.reminderChannels,
+    confirmation_email_enabled: data.confirmationEmailEnabled,
     noshow_sms_enabled: data.noshowSmsEnabled,
     noshow_reengagement_enabled: data.noshowReengagementEnabled,
     noshow_day3_template: data.noshowDay3Template ?? null,
@@ -410,6 +420,10 @@ export function agentToEditFormValues(agent: Agent): EditAgentFormValues {
       agent.reminder_minutes_before ?? REMINDER_CORE_DEFAULTS.reminderMinutesBefore,
     reminderOffsets: agent.reminder_offsets ?? [...REMINDER_EXTENDED_DEFAULTS.reminderOffsets],
     reminderTemplate: agent.reminder_template ?? null,
+    reminderChannels: (agent.reminder_channels as ("sms" | "email")[] | undefined) ?? [
+      ...REMINDER_EXTENDED_DEFAULTS.reminderChannels,
+    ],
+    confirmationEmailEnabled: agent.confirmation_email_enabled ?? true,
     noshowSmsEnabled: agent.noshow_sms_enabled ?? false,
     noshowReengagementEnabled: agent.noshow_reengagement_enabled ?? true,
     noshowDay3Template: agent.noshow_day3_template ?? null,

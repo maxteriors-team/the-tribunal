@@ -135,6 +135,15 @@ class Agent(Base):
         ARRAY(Integer), default=lambda: [1440, 120, 30], nullable=False
     )
     reminder_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Channels reminders go out on: any of "sms", "email". SMS-only preserves
+    # the pre-existing behaviour for every agent that predates this column.
+    reminder_channels: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=lambda: ["sms"], server_default="{sms}", nullable=False
+    )
+    # Email the customer a confirmation with a calendar invite (.ics) on booking
+    confirmation_email_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     # Send re-engagement SMS with rebook link when a contact no-shows
     noshow_sms_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, server_default="true"

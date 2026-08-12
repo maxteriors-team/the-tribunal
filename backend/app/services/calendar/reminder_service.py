@@ -21,10 +21,11 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
+from app.services.email import send_appointment_reminder_email
 from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
-from app.utils.timezones import resolve_workspace_timezone
+from app.utils.timezones import resolve_workspace_timezone, workspace_timezone_name
 
 logger = structlog.get_logger()
 
@@ -176,6 +177,44 @@ def render_reminder_body(
             )
 
     return message
+
+
+# ---------------------------------------------------------------------------
+# Email reminder
+# ---------------------------------------------------------------------------
+
+
+async def send_appointment_reminder_email_for(
+    appointment: Appointment,
+    workspace: Workspace,
+    contact: Contact,
+    agent: Agent | None,
+) -> bool:
+    """Email ``contact`` a reminder using the same body the SMS reminder renders.
+
+    Sharing ``render_reminder_body`` is the point: two independent renderers is
+    how one channel ends up quoting a different hour than the other. Returns
+    False when there is no address or the provider rejected the send.
+    """
+    if not contact.email:
+        return False
+
+    body = render_reminder_body(
+        template=agent.reminder_template if agent is not None else None,
+        contact=contact,
+        appointment=appointment,
+        workspace=workspace,
+        agent=agent,
+    )
+    return await send_appointment_reminder_email(
+        to_email=contact.email,
+        contact_name=contact.full_name or "there",
+        business_name=workspace.name or "",
+        body_text=body,
+        appointment_time=appointment.scheduled_at,
+        timezone=workspace_timezone_name(workspace),
+        idempotency_key=derive_outbound_key("manual_appointment_reminder_email", appointment.id),
+    )
 
 
 # ---------------------------------------------------------------------------
