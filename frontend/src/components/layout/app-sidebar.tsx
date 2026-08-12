@@ -82,6 +82,7 @@ import {
   type AppNavItem,
   type AppNavSection,
 } from "./app-nav";
+import { NewMessageNotifier } from "./new-message-notifier";
 import { RecentChatsMenu } from "./recent-chats-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -534,6 +535,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
               ⌘K
             </kbd>
           </button>
+          {/* Renders nothing; toasts inbound messages from the shared poll. */}
+          <NewMessageNotifier />
           <RecentChatsMenu />
           <Button
             variant="ghost"

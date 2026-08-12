@@ -6,6 +6,7 @@ import {
   History,
   Loader2,
   Bot,
+  Check,
   User,
   Trash2,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,9 +45,11 @@ interface ChatHeaderProps {
   isToggleAIPending: boolean;
   isAssignAgentPending: boolean;
   isClearHistoryPending: boolean;
+  isMarkReadPending: boolean;
   onToggleAI: () => void;
   onAssignAgent: (agentId: string | null) => void;
   onClearHistory: () => void;
+  onMarkRead: () => void;
 }
 
 export function ChatHeader({
@@ -58,9 +62,11 @@ export function ChatHeader({
   isToggleAIPending,
   isAssignAgentPending,
   isClearHistoryPending,
+  isMarkReadPending,
   onToggleAI,
   onAssignAgent,
   onClearHistory,
+  onMarkRead,
 }: ChatHeaderProps) {
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
@@ -68,6 +74,8 @@ export function ChatHeader({
     onClearHistory();
     setShowClearHistoryDialog(false);
   };
+
+  const unreadCount = conversation?.unread_count ?? 0;
 
   const assignedAgentName = conversation?.assigned_agent_id
     ? agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent"
@@ -78,6 +86,11 @@ export function ChatHeader({
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b shrink-0">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="truncate font-semibold">{contactName}</h2>
+          {unreadCount > 0 ? (
+            <Badge variant="default" className="h-5 shrink-0 px-1.5 text-[10px]">
+              {unreadCount} new
+            </Badge>
+          ) : null}
           {phoneNumber && (
             <span className="text-sm text-muted-foreground hidden truncate sm:inline">
               {phoneNumber}
@@ -167,6 +180,17 @@ export function ChatHeader({
               </DropdownMenuItem>
               <DropdownMenuItem>Schedule appointment</DropdownMenuItem>
               <DropdownMenuItem>Add note</DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onMarkRead}
+                disabled={unreadCount === 0 || isMarkReadPending}
+              >
+                {isMarkReadPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                Mark as read
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"

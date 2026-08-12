@@ -70,6 +70,23 @@ class PaginatedConversations(BaseModel):
     pages: int
 
 
+class UnreadSummary(BaseModel):
+    """Workspace-wide unread rollup backing the header chat badge.
+
+    ``unread_messages`` is the sum of every thread's ``unread_count`` (what the
+    badge shows); ``unread_conversations`` is how many threads are waiting.
+    """
+
+    unread_conversations: int
+    unread_messages: int
+
+
+class MarkAllReadResponse(BaseModel):
+    """Result of clearing every unread thread in a workspace."""
+
+    conversations_marked: int
+
+
 class AIToggle(BaseModel):
     """AI toggle request."""
 

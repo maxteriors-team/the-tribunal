@@ -9,6 +9,7 @@ from app.models.conversation import Message
 from app.schemas.conversation import (
     AgentAssign,
     AIToggle,
+    ConversationResponse,
     ConversationWithMessages,
     FollowupGenerateRequest,
     FollowupGenerateResponse,
@@ -16,9 +17,11 @@ from app.schemas.conversation import (
     FollowupSendResponse,
     FollowupSettingsResponse,
     FollowupSettingsUpdate,
+    MarkAllReadResponse,
     MessageCreate,
     MessageResponse,
     PaginatedConversations,
+    UnreadSummary,
 )
 from app.services.conversations import ConversationService
 
@@ -49,6 +52,33 @@ async def list_conversations(
     )
 
 
+# NOTE: the two static paths below must stay ABOVE `/{conversation_id}`. FastAPI
+# matches routes in declaration order, so a later `GET /unread` would be
+# swallowed by the UUID path param and fail validation with a 422.
+@router.get("/unread", response_model=UnreadSummary)
+async def get_unread_summary(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> UnreadSummary:
+    """Unread rollup for the workspace, polled by the header chat badge."""
+    svc = ConversationService(db)
+    return await svc.get_unread_summary(workspace_id=workspace_id)
+
+
+@router.post("/read", response_model=MarkAllReadResponse)
+async def mark_all_conversations_read(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> MarkAllReadResponse:
+    """Mark every conversation in the workspace as read."""
+    svc = ConversationService(db)
+    return await svc.mark_all_read(workspace_id=workspace_id)
+
+
 @router.get("/{conversation_id}", response_model=ConversationWithMessages)
 async def get_conversation(
     workspace_id: uuid.UUID,
@@ -64,6 +94,25 @@ async def get_conversation(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
         limit=limit,
+    )
+
+
+# Unread state is shared across the workspace and `GET /{conversation_id}`
+# already clears it, so this deliberately requires only CRM read — anyone who
+# can open the inbox can clear its badge.
+@router.post("/{conversation_id}/read", response_model=ConversationResponse)
+async def mark_conversation_read(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationResponse:
+    """Mark a single conversation as read."""
+    svc = ConversationService(db)
+    return await svc.mark_read(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
     )
 
 

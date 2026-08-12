@@ -3,17 +3,39 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RecentChatsMenu } from "@/components/layout/recent-chats-menu";
+import {
+  RecentChatsMenu,
+  formatUnreadBadge,
+} from "@/components/layout/recent-chats-menu";
 import type { Conversation } from "@/types";
 
-const { listMock, pushMock, useWorkspaceIdMock } = vi.hoisted(() => ({
+const {
+  listMock,
+  markReadMock,
+  markAllReadMock,
+  unreadSummaryMock,
+  pushMock,
+  useWorkspaceIdMock,
+  toastErrorMock,
+  toastSuccessMock,
+} = vi.hoisted(() => ({
   listMock: vi.fn(),
+  markReadMock: vi.fn(),
+  markAllReadMock: vi.fn(),
+  unreadSummaryMock: vi.fn(),
   pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+  toastSuccessMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/conversations", () => ({
-  conversationsApi: { list: listMock },
+  conversationsApi: {
+    list: listMock,
+    markRead: markReadMock,
+    markAllRead: markAllReadMock,
+    getUnreadSummary: unreadSummaryMock,
+  },
 }));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
@@ -22,6 +44,10 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: toastErrorMock, success: toastSuccessMock },
 }));
 
 function conversation(overrides: Partial<Conversation> = {}): Conversation {
@@ -58,6 +84,24 @@ function renderMenu() {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+  unreadSummaryMock.mockResolvedValue({
+    unread_conversations: 0,
+    unread_messages: 0,
+  });
+  markReadMock.mockResolvedValue(conversation({ unread_count: 0 }));
+  markAllReadMock.mockResolvedValue({ conversations_marked: 0 });
+});
+
+describe("formatUnreadBadge", () => {
+  it("shows the exact count up to 99", () => {
+    expect(formatUnreadBadge(1)).toBe("1");
+    expect(formatUnreadBadge(99)).toBe("99");
+  });
+
+  it("caps at 99+ so the badge stays two digits", () => {
+    expect(formatUnreadBadge(100)).toBe("99+");
+    expect(formatUnreadBadge(4210)).toBe("99+");
+  });
 });
 
 describe("RecentChatsMenu", () => {
@@ -87,7 +131,7 @@ describe("RecentChatsMenu", () => {
     });
 
     renderMenu();
-    await userEvent.click(screen.getByRole("button", { name: "Recent chats" }));
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
 
     const items = await screen.findAllByRole("listitem");
     expect(items).toHaveLength(2);
@@ -97,11 +141,189 @@ describe("RecentChatsMenu", () => {
     expect(within(items[0]).getByText("Freshest thread")).toBeInTheDocument();
     expect(within(items[1]).getByText("Casey Nguyen")).toBeInTheDocument();
     expect(within(items[1]).getByText("Older thread")).toBeInTheDocument();
-    // Unread total surfaces in the header.
-    expect(screen.getByText("2 unread")).toBeInTheDocument();
 
-    await userEvent.click(within(items[0]).getByRole("button"));
+    await userEvent.click(
+      within(items[0]).getByRole("button", { name: /Freshest thread/ }),
+    );
     expect(pushMock).toHaveBeenCalledWith("/contacts/101");
+  });
+
+  it("shows the workspace unread rollup on the trigger, not the page total", async () => {
+    // The menu only fetched one thread, but the workspace has more unread.
+    listMock.mockResolvedValue({
+      items: [conversation({ unread_count: 2 })],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+    unreadSummaryMock.mockResolvedValue({
+      unread_conversations: 3,
+      unread_messages: 7,
+    });
+
+    renderMenu();
+
+    const trigger = await screen.findByRole("button", {
+      name: "Recent chats, 7 unread",
+    });
+    expect(within(trigger).getByText("7")).toBeInTheDocument();
+  });
+
+  it("marks a single thread read without navigating", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        conversation({
+          id: "conv-unread",
+          contact_name: "Robin Stevanovich",
+          unread_count: 3,
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+    unreadSummaryMock.mockResolvedValue({
+      unread_conversations: 1,
+      unread_messages: 3,
+    });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Mark Robin Stevanovich as read",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(markReadMock).toHaveBeenCalledWith("ws-1", "conv-unread"),
+    );
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("clears the unread count when opening an unread thread", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        conversation({
+          id: "conv-unread",
+          contact_id: 101,
+          contact_name: "Robin Stevanovich",
+          last_message_preview: "Are you free Tuesday?",
+          unread_count: 1,
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Are you free Tuesday\?/ }),
+    );
+
+    await waitFor(() =>
+      expect(markReadMock).toHaveBeenCalledWith("ws-1", "conv-unread"),
+    );
+    expect(pushMock).toHaveBeenCalledWith("/contacts/101");
+  });
+
+  it("does not fire mark-read when opening an already-read thread", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        conversation({
+          contact_id: 101,
+          contact_name: "Casey Nguyen",
+          last_message_preview: "Older thread",
+          unread_count: 0,
+        }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Older thread/ }),
+    );
+
+    expect(markReadMock).not.toHaveBeenCalled();
+    expect(pushMock).toHaveBeenCalledWith("/contacts/101");
+  });
+
+  it("marks every thread read from the menu header", async () => {
+    listMock.mockResolvedValue({
+      items: [conversation({ unread_count: 2 })],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+    unreadSummaryMock.mockResolvedValue({
+      unread_conversations: 4,
+      unread_messages: 9,
+    });
+    markAllReadMock.mockResolvedValue({ conversations_marked: 4 });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Mark all read" }),
+    );
+
+    await waitFor(() => expect(markAllReadMock).toHaveBeenCalledWith("ws-1"));
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      "4 conversations marked as read",
+    );
+  });
+
+  it("hides mark all read when nothing is unread", async () => {
+    listMock.mockResolvedValue({
+      items: [conversation()],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+
+    await screen.findByText("Recent chats");
+    expect(
+      screen.queryByRole("button", { name: "Mark all read" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces a mark-read failure instead of silently doing nothing", async () => {
+    listMock.mockResolvedValue({
+      items: [
+        conversation({ contact_name: "Robin Stevanovich", unread_count: 1 }),
+      ],
+      total: 1,
+      page: 1,
+      page_size: 12,
+      pages: 1,
+    });
+    markReadMock.mockRejectedValue(new Error("network down"));
+
+    renderMenu();
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Mark Robin Stevanovich as read",
+      }),
+    );
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
   });
 
   it("falls back to the phone number when the thread has no contact name", async () => {
@@ -120,11 +342,9 @@ describe("RecentChatsMenu", () => {
     });
 
     renderMenu();
-    await userEvent.click(screen.getByRole("button", { name: "Recent chats" }));
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
 
-    expect(
-      await screen.findByText("+1 (555) 111-0003"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("+1 (555) 111-0003")).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no conversations", async () => {
@@ -137,7 +357,7 @@ describe("RecentChatsMenu", () => {
     });
 
     renderMenu();
-    await userEvent.click(screen.getByRole("button", { name: "Recent chats" }));
+    await userEvent.click(screen.getByRole("button", { name: /Recent chats/ }));
 
     await waitFor(() =>
       expect(screen.getByText("No conversations yet.")).toBeInTheDocument(),

@@ -15,6 +15,7 @@ import {
   useToggleConversationAI,
   useAssignAgent,
   useClearConversationHistory,
+  useMarkConversationRead,
 } from "@/hooks/useConversations";
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -137,6 +138,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
   const assignAgentMutation = useAssignAgent(workspaceId ?? "");
   const clearHistoryMutation = useClearConversationHistory(workspaceId ?? "");
+  const markReadMutation = useMarkConversationRead(workspaceId ?? "");
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -250,6 +252,22 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     );
   };
 
+  const handleMarkRead = () => {
+    if (!contactConversation) {
+      toast.error("No conversation found for this contact");
+      return;
+    }
+
+    markReadMutation.mutate(contactConversation.id, {
+      onSuccess: () => {
+        toast.success("Marked as read");
+      },
+      onError: (err: unknown) => {
+        toast.error(getApiErrorMessage(err, "Failed to mark as read"));
+      },
+    });
+  };
+
   const handleClearHistory = () => {
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
@@ -301,9 +319,11 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         isToggleAIPending={toggleAIMutation.isPending}
         isAssignAgentPending={assignAgentMutation.isPending}
         isClearHistoryPending={clearHistoryMutation.isPending}
+        isMarkReadPending={markReadMutation.isPending}
         onToggleAI={handleToggleAI}
         onAssignAgent={handleAssignAgent}
         onClearHistory={handleClearHistory}
+        onMarkRead={handleMarkRead}
       />
 
       {/* Messages */}

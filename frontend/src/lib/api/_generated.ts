@@ -3934,6 +3934,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark All Conversations Read
+         * @description Mark every conversation in the workspace as read.
+         */
+        post: operations["mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/conversations/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unread Summary
+         * @description Unread rollup for the workspace, polled by the header chat badge.
+         */
+        get: operations["get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -4153,6 +4193,26 @@ export interface paths {
          * @description Clear all messages in a conversation.
          */
         delete: operations["clear_conversation_history_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Conversation Read
+         * @description Mark a single conversation as read.
+         */
+        post: operations["mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -19696,6 +19756,14 @@ export interface components {
             /** Utm Term */
             utm_term?: string | null;
         };
+        /**
+         * MarkAllReadResponse
+         * @description Result of clearing every unread thread in a workspace.
+         */
+        MarkAllReadResponse: {
+            /** Conversations Marked */
+            conversations_marked: number;
+        };
         /** MeasurementSchema */
         MeasurementSchema: {
             a: components["schemas"]["PointSchema"];
@@ -28871,6 +28939,19 @@ export interface components {
             /** Suggested Lead Source Id */
             suggested_lead_source_id?: string | null;
             suggested_source_type?: components["schemas"]["LeadSourceType"] | null;
+        };
+        /**
+         * UnreadSummary
+         * @description Workspace-wide unread rollup backing the header chat badge.
+         *
+         *     ``unread_messages`` is the sum of every thread's ``unread_count`` (what the
+         *     badge shows); ``unread_conversations`` is how many threads are waiting.
+         */
+        UnreadSummary: {
+            /** Unread Conversations */
+            unread_conversations: number;
+            /** Unread Messages */
+            unread_messages: number;
         };
         /**
          * UpdateMemberRoleRequest
@@ -38067,6 +38148,68 @@ export interface operations {
             };
         };
     };
+    mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkAllReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_conversation_api_v1_workspaces__workspace_id__conversations__conversation_id__get: {
         parameters: {
             query?: {
@@ -38473,6 +38616,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

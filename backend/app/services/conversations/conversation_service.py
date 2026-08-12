@@ -2,10 +2,11 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import delete, inspect, select
+from sqlalchemy import CursorResult, delete, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,8 +20,10 @@ from app.schemas.conversation import (
     FollowupGenerateResponse,
     FollowupSendResponse,
     FollowupSettingsResponse,
+    MarkAllReadResponse,
     MessageResponse,
     PaginatedConversations,
+    UnreadSummary,
 )
 from app.services.ai.openai_credentials import get_openai_bearer_token
 from app.services.ai.text_response_generator import generate_followup_message
@@ -182,6 +185,62 @@ class ConversationService:
             **serialize_conversation(conversation).model_dump(),
             messages=[MessageResponse.model_validate(m) for m in messages],
         )
+
+    async def get_unread_summary(self, workspace_id: uuid.UUID) -> UnreadSummary:
+        """Roll up unread counts for the workspace.
+
+        One aggregate query rather than paging the thread list, because the
+        header badge polls this from every screen in the app.
+        """
+        result = await self.db.execute(
+            select(
+                func.count(Conversation.id),
+                func.coalesce(func.sum(Conversation.unread_count), 0),
+            ).where(
+                Conversation.workspace_id == workspace_id,
+                Conversation.unread_count > 0,
+            )
+        )
+        conversations, messages = result.one()
+        return UnreadSummary(
+            unread_conversations=int(conversations or 0),
+            unread_messages=int(messages or 0),
+        )
+
+    async def mark_read(
+        self,
+        conversation_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+    ) -> ConversationResponse:
+        """Clear the unread counter on one thread.
+
+        Returns the updated thread so the caller can patch its cache without a
+        refetch. Idempotent: already-read threads skip the write entirely.
+        """
+        conversation = await self._get_conversation(
+            conversation_id, workspace_id, load_contact=True
+        )
+        if conversation.unread_count:
+            conversation.unread_count = 0
+            await self.db.commit()
+        return serialize_conversation(conversation)
+
+    async def mark_all_read(self, workspace_id: uuid.UUID) -> MarkAllReadResponse:
+        """Clear unread counters across the workspace in a single statement."""
+        result = await self.db.execute(
+            update(Conversation)
+            .where(
+                Conversation.workspace_id == workspace_id,
+                Conversation.unread_count > 0,
+            )
+            .values(unread_count=0)
+            .execution_options(synchronize_session=False)
+        )
+        await self.db.commit()
+        # ``execute`` is typed as returning ``Result``; a bulk UPDATE always
+        # yields a ``CursorResult``, which is where ``rowcount`` lives.
+        rowcount = cast("CursorResult[Any]", result).rowcount
+        return MarkAllReadResponse(conversations_marked=rowcount or 0)
 
     async def send_message(
         self,
