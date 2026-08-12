@@ -9605,13 +9605,27 @@ export interface paths {
         };
         /**
          * Readyz
-         * @description Readiness probe — startup complete + Postgres + Redis reachable.
+         * @description Readiness probe — startup complete + Postgres + Redis + help corpus.
          *
          *     Returns HTTP 503 when:
          *
          *     * ``app.state.ready`` is ``False`` — the lifespan handler hasn't finished
          *       validating config and starting workers yet (or shutdown is in progress).
          *     * Either Postgres or Redis fails / times out (2s budget each).
+         *     * The bundled product-help corpus is missing from this image.
+         *
+         *     The corpus gates readiness even though wedged workers (below) deliberately
+         *     do not, because the two failures are not the same kind of thing. A worker
+         *     heartbeat is dynamic and transient: it can recover on its own, and a
+         *     restart actively makes it worse. The corpus is a static build artifact --
+         *     it is either baked into the image or it is not, the answer never changes
+         *     for the life of the process, and no restart can conjure the files. Failing
+         *     readiness on it therefore cannot produce the restart loop documented below;
+         *     what it does instead is stop an orchestrator from promoting a
+         *     mis-packaged deploy, so the previous release keeps serving. That is the
+         *     safe direction: a blocked deploy is visible in seconds, whereas the
+         *     silent alternative is an assistant that has quietly stopped answering
+         *     product questions in production and no failing check anywhere.
          *
          *     Worker heartbeats are **reported but not gating**. This endpoint answers one
          *     question for the orchestrator: "can this container serve HTTP traffic?" A

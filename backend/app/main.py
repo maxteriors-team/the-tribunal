@@ -35,6 +35,11 @@ from app.core.telemetry import configure_tracing, instrument_app
 from app.db.redis import close_redis
 from app.db.session import engine
 from app.services.ai.openai_credentials import is_openai_configured
+from app.services.knowledge.product_help import (
+    HELP_DOCS_DIR,
+    ProductHelpError,
+    load_product_help_articles,
+)
 from app.websockets.call_supervisor import router as call_supervisor_router
 from app.websockets.voice_bridge import router as voice_bridge_router
 from app.websockets.voice_test import router as voice_test_router
@@ -404,6 +409,39 @@ def _validate_public_urls(log: structlog.stdlib.BoundLogger) -> None:
             )
 
 
+def _warm_product_help_corpus(log: structlog.stdlib.BoundLogger) -> None:
+    """Load the bundled help corpus once at boot and say so in the logs.
+
+    ``/readyz`` gates on this corpus, but a readiness 503 alone only tells an
+    operator that *something* is wrong. Touching it here turns a packaging
+    mistake into a named log line at the moment of boot, and leaves the
+    process-wide cache warm so the first probe does no file I/O on the event
+    loop.
+
+    Deliberately does not raise: readiness already refuses to promote a
+    mis-packaged deploy, and a container that stays up while reporting exactly
+    which check failed is easier to diagnose than a crash loop whose only
+    evidence is scrollback.
+    """
+    try:
+        articles = load_product_help_articles()
+    except ProductHelpError as exc:
+        log.error(
+            "product_help_corpus_missing",
+            severity="critical",
+            error=str(exc),
+            expected_dir=str(HELP_DOCS_DIR),
+            message=(
+                "Bundled help corpus did not ship in this build; /readyz will "
+                "report unavailable and the in-app assistant cannot answer "
+                "product questions."
+            ),
+        )
+        return
+
+    log.info("product_help_corpus_loaded", articles=len(articles))
+
+
 def _validate_startup_config() -> None:
     """Validate required configuration at startup.
 
@@ -414,6 +452,10 @@ def _validate_startup_config() -> None:
 
     # Customer-facing URLs must be reachable from a customer's device.
     _validate_public_urls(log)
+
+    # Product-help markdown is application data, not documentation — confirm the
+    # build actually carried it.
+    _warm_product_help_corpus(log)
 
     # Check required API keys
     if not is_openai_configured():
