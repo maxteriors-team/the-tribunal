@@ -44,7 +44,6 @@ class TestNormalizeSteps:
 
     def test_malformed_entries_are_dropped_not_raised(self):
         """One bad row must not take a workspace's automations offline."""
-        steps = _steps({"type": "send_sms"})
         steps = normalize_steps([{"type": "send_sms"}, "garbage", None, {"type": "wait"}])
         assert [s.type for s in steps] == ["send_sms", "wait"]
         assert [s.index for s in steps] == [0, 1]

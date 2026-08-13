@@ -51,7 +51,10 @@ class TestTokens:
         monkeypatch.setattr(settings, "frontend_url", "https://app.example.com")
         url = build_email_unsubscribe_url(7)
         assert url is not None
-        assert url.startswith("https://app.example.com/api/v1/email/unsubscribe-contact?token=")
+        expected_origin = "https://app.example.com"
+        assert url.removeprefix(expected_origin).startswith(
+            "/api/v1/email/unsubscribe-contact?token="
+        )
 
     def test_url_is_none_without_a_configured_origin(self, monkeypatch: pytest.MonkeyPatch):
         """Callers must treat this as 'cannot send', not 'send without footer'."""
@@ -66,9 +69,9 @@ class TestWorkflowSendGate:
     """``_action_send_email`` is the one path workflow email takes."""
 
     def _worker(self):
-        from app.workers.automation_worker import AutomationWorker
+        from app.workers import automation_worker
 
-        return AutomationWorker()
+        return automation_worker.AutomationWorker()
 
     def _contact(self):
         contact = MagicMock()
@@ -89,13 +92,15 @@ class TestWorkflowSendGate:
         return automation
 
     async def _run(self, monkeypatch, config, *, suppressed=False, frontend="https://app.x.com"):
-        import app.workers.automation_worker as mod
         from app.core.config import settings
+        from app.workers import automation_worker
 
         monkeypatch.setattr(settings, "frontend_url", frontend)
-        monkeypatch.setattr(mod, "email_suppressed", AsyncMock(return_value=suppressed))
+        monkeypatch.setattr(
+            automation_worker, "email_suppressed", AsyncMock(return_value=suppressed)
+        )
         send = AsyncMock(return_value=True)
-        monkeypatch.setattr(mod, "send_automation_email", send)
+        monkeypatch.setattr(automation_worker, "send_automation_email", send)
 
         await self._worker()._action_send_email(
             self._automation(), self._contact(), config, {}, AsyncMock()
