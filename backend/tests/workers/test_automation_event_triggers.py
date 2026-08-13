@@ -107,6 +107,11 @@ def _execution() -> SimpleNamespace:
         scheduled_for=None,
         executed_at=None,
         error=None,
+        # Resume state: the cursor the step walk starts from, the trigger
+        # payload carried across a wait, and the loop budget.
+        step_index=0,
+        context={},
+        resume_count=0,
     )
 
 
@@ -248,25 +253,33 @@ async def test_action_send_sms_normalizes_raw_us_number(
     contact.first_name = None  # exercise the fallback path
     contact.phone_number = "(248) 555-0123"
 
-    sms_service = MagicMock()
-    sms_service.send_message = AsyncMock()
-    sms_service.close = AsyncMock()
-    monkeypatch.setattr(mod, "get_text_message_provider", lambda: sms_service)
+    delivered = SimpleNamespace(status=SimpleNamespace(value="sent"), reason=None)
+    deliver = AsyncMock(return_value=delivered)
+    monkeypatch.setattr(mod.outbound_delivery_service, "deliver", deliver)
     worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
 
     automation = _automation("lead_created", [])
+    db = MagicMock()
     await worker._action_send_sms(
         automation,
         contact,
-        {"message": "Hi {first_name}", "fallbacks": {"first_name": "there"}},
+        {
+            "message": "Hi {first_name}",
+            "fallbacks": {"first_name": "there"},
+            "require_consent": True,
+        },
         {},
-        MagicMock(),
+        db,
     )
 
-    sms_service.send_message.assert_awaited_once()
-    kwargs = sms_service.send_message.await_args.kwargs
-    assert kwargs["to_number"] == "+12485550123"
-    assert kwargs["body"] == "Hi there"
+    deliver.assert_awaited_once()
+    delivered_db, request = deliver.await_args.args
+    assert delivered_db is db
+    assert request.to == "+12485550123"
+    assert request.body == "Hi there"
+    assert request.contact is contact
+    assert request.require_sms_consent is True
+    assert request.action_type == "automation_sms"
 
 
 async def test_action_send_sms_skips_unnormalizable_phone(
@@ -279,10 +292,8 @@ async def test_action_send_sms_skips_unnormalizable_phone(
     contact = _contact()
     contact.phone_number = "not-a-phone"
 
-    sms_service = MagicMock()
-    sms_service.send_message = AsyncMock()
-    sms_service.close = AsyncMock()
-    monkeypatch.setattr(mod, "get_text_message_provider", lambda: sms_service)
+    deliver = AsyncMock()
+    monkeypatch.setattr(mod.outbound_delivery_service, "deliver", deliver)
     worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
 
     automation = _automation("lead_created", [])
@@ -290,7 +301,7 @@ async def test_action_send_sms_skips_unnormalizable_phone(
         automation, contact, {"message": "Hi {first_name}"}, {}, MagicMock()
     )
 
-    sms_service.send_message.assert_not_awaited()
+    deliver.assert_not_awaited()
 
 
 async def test_process_event_dedupes_existing_execution() -> None:

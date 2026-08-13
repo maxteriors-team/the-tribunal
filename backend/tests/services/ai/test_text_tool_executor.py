@@ -1,4 +1,4 @@
-"""Regression tests for qualification gating and booking results in the SMS tool executor."""
+"""Regression tests for SMS booking result behavior."""
 
 import uuid
 from datetime import UTC, datetime
@@ -12,11 +12,6 @@ from app.services.ai.website_lead_qualification import WebsiteLeadQualificationP
 
 
 def test_booking_success_tells_model_exactly_what_was_queued() -> None:
-    """The model may only claim an invite went out when the result says so.
-
-    Without ``invitation_sent`` the model invented "I emailed you the invite",
-    and the customer waited on an email that was never attempted.
-    """
     executor = TextToolExecutor.__new__(TextToolExecutor)
     executor._appointment_datetime = datetime.fromisoformat("2026-08-12T13:30:00-04:00")
 
@@ -25,19 +20,18 @@ def test_booking_success_tells_model_exactly_what_was_queued() -> None:
         contact_name="Scott McKenzie",
         date_str="2026-08-12",
         time_str="13:30",
-        email="scott@example.com",
+        email="Scottpmckenzie@aol.com",
         duration_minutes=30,
     )
 
     assert result["invitation_sent"] is True
-    assert result["booking_email"] == "scott@example.com"
+    assert result["booking_email"] == "Scottpmckenzie@aol.com"
     assert "Calendar invitation queued" in result["message"]
     assert "no separate reminder" in result["message"]
 
 
 @pytest.mark.asyncio
 async def test_live_sms_booking_suppresses_generic_confirmation() -> None:
-    """The assistant confirms in-turn, so the lifecycle SMS would double-text."""
     executor = TextToolExecutor.__new__(TextToolExecutor)
     executor.db = MagicMock()
     executor.conversation = SimpleNamespace(workspace_id="workspace", campaign_id=None)
@@ -56,7 +50,7 @@ async def test_live_sms_booking_suppresses_generic_confirmation() -> None:
             SimpleNamespace(booking_uid="book-123", booking_id=456),
             date_str="2026-08-12",
             time_str="13:30",
-            email="scott@example.com",
+            email="Scottpmckenzie@aol.com",
             duration_minutes=30,
             notes=None,
         )

@@ -4,6 +4,8 @@ import type { Automation, AutomationActionType, AutomationTriggerType } from "@/
 
 // Backend response types
 export interface AutomationAction {
+  /** Stable step id; omitted by the backend unless a branch targets the step. */
+  id?: string;
   type: AutomationActionType;
   config: Record<string, unknown>;
 }
@@ -64,7 +66,10 @@ function transformAutomation(raw: unknown): Automation {
     description: response.description ?? undefined,
     trigger_type: response.trigger_type,
     trigger_config: response.trigger_config,
+    // Step ids are load-bearing: a branch's then_goto/else_goto names one, and
+    // dropping it here would make every saved branch dangle on the next edit.
     actions: response.actions.map((action) => ({
+      ...(action.id ? { id: action.id } : {}),
       type: action.type,
       config: action.config,
     })),

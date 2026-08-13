@@ -126,6 +126,11 @@ def _execution() -> SimpleNamespace:
         scheduled_for=None,
         executed_at=None,
         error=None,
+        # Resume state: the cursor the step walk starts from, the trigger
+        # payload carried across a wait, and the loop budget.
+        step_index=0,
+        context={},
+        resume_count=0,
     )
 
 

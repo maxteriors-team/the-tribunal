@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Luxor Lighting App — Owner's Guide | Maxteriors</title>
+<meta name="description" content="How to run your landscape lighting from the Luxor app: groups, themes, dimming, color, schedules, and what to do when something looks off.">
+<meta name="robots" content="index, follow">
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --ink-soft: #3f3f46;
+    --line: #e4e4e7;
+    --panel: #f4f4f5;
+    --accent: #ffb90a;
+    --accent-soft: #fef9c3;
+    --warn: #d97706;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: #fff;
+    color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 0 20px 64px; }
+  header.masthead { border-bottom: 4px solid var(--accent); padding: 28px 0 18px; margin-bottom: 28px; }
+  .logo { display: block; width: 300px; max-width: 78%; height: auto; margin: 0 0 16px; }
+  .brand { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; margin: 0 0 10px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-soft); margin: 0; font-size: 16px; }
+  h2 { font-size: 22px; line-height: 1.25; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h2:first-of-type { border-top: 0; }
+  h3 { font-size: 17px; margin: 24px 0 6px; }
+  p, li { color: var(--ink); }
+  ol, ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  li ul, li ol { margin: 6px 0; }
+  a { color: var(--ink); text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 2px; }
+  .lede { font-size: 18px; color: var(--ink-soft); }
+  .panel { background: var(--panel); border-radius: var(--radius); padding: 16px 18px; margin: 20px 0; }
+  .panel > :first-child { margin-top: 0; }
+  .panel > :last-child { margin-bottom: 0; }
+  .callout { background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0; padding: 14px 16px; margin: 20px 0; }
+  .callout strong { color: var(--warn); }
+  .callout > :first-child { margin-top: 0; }
+  .callout > :last-child { margin-bottom: 0; }
+  nav.toc { background: var(--panel); border-radius: var(--radius); padding: 16px 18px; margin: 24px 0 8px; }
+  nav.toc p { margin: 0 0 8px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  dl { margin: 16px 0; }
+  dt { font-weight: 700; margin-top: 14px; }
+  dd { margin: 2px 0 0; color: var(--ink-soft); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 16px; }
+  th, td { text-align: left; vertical-align: top; padding: 12px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+  td:first-child { font-weight: 600; width: 38%; }
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 18px 0; }
+  .steps > li { counter-increment: step; position: relative; padding: 0 0 0 44px; margin: 0 0 18px; }
+  .steps > li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 0;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--ink); color: #fff;
+    font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps h3 { margin: 3px 0 4px; }
+  .help { background: var(--ink); color: #fff; border-radius: var(--radius); padding: 22px; margin: 40px 0 0; }
+  .help h2 { color: #fff; border: 0; margin: 0 0 8px; padding: 0; }
+  .help a { color: var(--accent); }
+  .help p { color: #e8e8e8; }
+  .cta { display: inline-block; background: var(--accent); color: var(--ink); text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 8px; margin-top: 6px; }
+  footer.fine { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line); color: #767676; font-size: 13px; }
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    h1 { font-size: 25px; }
+    td:first-child { width: 42%; }
+  }
+  @media print {
+    body { font-size: 11pt; }
+    .wrap { max-width: none; padding: 0; }
+    h2 { page-break-after: avoid; }
+    table, .panel, .callout, .help { page-break-inside: avoid; }
+    .help { background: #fff; color: #000; border: 2px solid #000; }
+    .help h2, .help p, .help a { color: #000; }
+    nav.toc { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <img class="logo" src="/static/brand/maxteriors-logo.png" alt="Maxteriors — landscape, permanent, holiday and event lighting" width="300" height="71">
+  <p class="brand">Owner's Guide</p>
+  <h1>Running your landscape lighting from the Luxor app</h1>
+  <p class="sub">Everything your system does, in plain English — plus what to check before you call us.</p>
+</header>
+
+<p class="lede">Your lights are already programmed and running on their own schedule. You do not have to touch the app for the system to work. The app is there for the nights you want something different: brighter, dimmer, a different color, or lights on late for company.</p>
+
+<nav class="toc" aria-label="Contents">
+  <p>In this guide</p>
+  <ol>
+    <li><a href="#start">Get the app connected</a></li>
+    <li><a href="#words">Four words worth knowing</a></li>
+    <li><a href="#everyday">Everyday things you'll actually do</a></li>
+    <li><a href="#schedule">Your nightly schedule</a></li>
+    <li><a href="#color">Color (ZDC systems)</a></li>
+    <li><a href="#wifi">Wi-Fi, away-from-home, and new routers</a></li>
+    <li><a href="#fix">If something looks off</a></li>
+    <li><a href="#care">Keeping it looking new</a></li>
+    <li><a href="#call">When to call us</a></li>
+  </ol>
+</nav>
+
+<h2 id="start">1. Get the app connected</h2>
+
+<ol class="steps">
+  <li>
+    <h3>Download the Luxor app</h3>
+    <p>Search <strong>“FX Luminaire Luxor”</strong> in the App Store or Google Play. It's free. For Luxor Cloud, the app may ask for the controller serial number and a four-digit verification code shown on the controller — that's the normal pairing flow.</p>
+  </li>
+  <li>
+    <h3>Put your phone on your home Wi-Fi</h3>
+    <p>Your controller joins your network on the <strong>2.4 GHz</strong> band, not 5 GHz. If your router shows one network name for both bands, you're usually fine — but if the app can't find the controller, that split is the first thing to look at.</p>
+  </li>
+  <li>
+    <h3>Open the app and tap your controller</h3>
+    <p>The app looks for controllers on your network by itself. When it finds yours, you'll see the groups and themes we set up during your install, using the names we gave them.</p>
+  </li>
+  <li>
+    <h3>Try one thing tonight</h3>
+    <p>Run a theme and watch what happens. That's the fastest way to learn your system. If you change a schedule or theme by mistake, text us and we'll help restore the settings.</p>
+  </li>
+</ol>
+
+<div class="callout">
+  <p><strong>Good to know:</strong> the schedule lives inside the controller, not in your phone or in the cloud. If your internet goes out, your Wi-Fi drops, or your phone dies, your lights still come on and go off exactly as programmed.</p>
+</div>
+
+<h2 id="words">2. Four words worth knowing</h2>
+
+<dl>
+  <dt>Group</dt>
+  <dd>A set of fixtures that turn on together — “Front Trees,” “Walkway,” “Back Patio.” Every fixture we installed belongs to a group, and each group can be dimmed on its own from 0 to 100%.</dd>
+
+  <dt>Theme</dt>
+  <dd>A saved scene: which groups are on, how bright each one is, and (on color systems) what color. “Everyday,” “Dinner Party,” and “All Off” are themes. Tapping one theme sets the whole yard at once.</dd>
+
+  <dt>Intensity</dt>
+  <dd>Brightness, 0–100%. Lower is usually better than you'd think — most yards look best well under full power.</dd>
+
+  <dt>Event</dt>
+  <dd>One scheduled change: “Everyday theme on at sunset,” “off at 11:30pm.” Your nightly program is just a short list of events.</dd>
+</dl>
+
+<div class="panel">
+  <p><strong>Why the box outside shows numbers instead of names.</strong> The screen on the transformer (the “facepack”) shows groups as numbers and themes as letters. The friendly names live in the app. That's normal — nothing is misconfigured.</p>
+</div>
+
+<h2 id="everyday">3. Everyday things you'll actually do</h2>
+
+<h3>Turn one area on or off right now</h3>
+<p>Open <strong>Groups</strong>, find the area, and slide it up or down. This is a manual override. Depending on the app/controller screen, you may also choose a duration. While manual control is active it takes priority; the regular program resumes at the next scheduled event.</p>
+
+<div class="callout">
+  <p><strong>The one thing that confuses everybody:</strong> manual control takes priority over the program while it is running. Your schedule isn't broken and nothing needs reprogramming — normal operation resumes at the next scheduled event. If you want normal back sooner, stop the manual run and call your everyday theme.</p>
+</div>
+
+<h3>Set a mood in one tap</h3>
+<p>Open <strong>Themes</strong> and tap the one you want. Themes are the fastest way to use the system, and they're what we recommend to guests and house sitters.</p>
+
+<h3>Change what a theme does</h3>
+<p>Edit the theme, add or remove groups, and set each group's brightness. Save it. The next time that theme runs — by hand or on schedule — it uses your new settings.</p>
+
+<h3>Leave the lights on late</h3>
+<p>Run a theme after your normal shutoff time, or start the groups you want in manual control and choose a duration. The next scheduled event returns the controller to its regular program.</p>
+
+<h2 id="schedule">4. Your nightly schedule</h2>
+
+<p>We usually program lights to come on at sunset and shut off at a set hour. Sunset events shift on their own through the year — earlier in December, later in June — so you should never have to “fix the timer” in the fall or spring. Daylight-saving changes are handled the same way.</p>
+
+<p>Want a different shutoff time, or lights on later on weekends? You can edit it in the app, or text us the times you want and we'll set it for you.</p>
+
+<h2 id="color">5. Color (ZDC systems only)</h2>
+
+<p>If we installed color-capable fixtures, you'll see a color option in the app. Pick a hue, then dial the saturation down for a subtle wash or up for a bold, saturated look. You can save a palette of favorites and drop them into themes — a warm white everyday scene, plus red and green for December, orange for Halloween, or your team's colors for a game day.</p>
+
+<p>Two habits that keep it looking designed instead of loud: use color on a few features rather than the whole house, and keep the everyday theme in warm white.</p>
+
+<h2 id="wifi">6. Wi-Fi, away-from-home, and new routers</h2>
+
+<h3>Controlling the lights when you're not home</h3>
+<p>Luxor Cloud lets you run the lights from anywhere once the controller is connected to your router and paired in the app. The current setup uses the controller serial number plus a four-digit verification code displayed on the controller. Without Cloud, network mode works when your phone and controller are on the same local network.</p>
+
+<h3>If your router dies or you're mid-swap</h3>
+<p>The controller can broadcast its own Wi-Fi network (“direct” mode). Join that network from your phone and the app works, one device at a time. You'll have no internet on your phone while you're connected to it — that's expected. Switch your phone back to your home Wi-Fi when you're done.</p>
+
+<div class="callout">
+  <p><strong>New router, new network name, or a changed Wi-Fi password?</strong> The controller doesn't learn that on its own — it has to be pointed at the new network from the screen on the transformer. Your lights keep running their schedule the whole time; only app control stops. Text us and we'll walk you through it in about five minutes.</p>
+</div>
+
+<h2 id="fix">7. If something looks off</h2>
+
+<table>
+  <thead>
+    <tr><th scope="col">What you see</th><th scope="col">Check this first</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>One area is dark</td>
+      <td>Open that group in the app and slide it to 100%. If it lights up, someone left it turned down by hand. If it stays dark, it's a fixture or connection — send us the group name.</td>
+    </tr>
+    <tr>
+      <td>Everything is dark</td>
+      <td>Check the breaker and the GFCI outlet feeding the transformer, then look at the transformer screen. Blank screen means no power. If the fuse keeps blowing, stop swapping it and call us — that's a short or overload that has to be found in the field.</td>
+    </tr>
+    <tr>
+      <td>App can't find the controller</td>
+      <td>Confirm your phone is on your home Wi-Fi (2.4 GHz), restart the app, then restart your router. Still nothing? The controller may have dropped off the network — see the router note above.</td>
+    </tr>
+    <tr>
+      <td>Lights come on too early or too late</td>
+      <td>Sunset-based events drift with the season by design. If the time is wildly off, the controller's clock or location setting is off — that's a two-minute fix for us.</td>
+    </tr>
+    <tr>
+      <td>Lights never shut off</td>
+      <td>Almost always a manual override left on. Run your everyday theme, or set the group back to 0 and let tonight's schedule take over.</td>
+    </tr>
+    <tr>
+      <td>A zone flickers or dims oddly</td>
+      <td>Usually a wire connection that's taken on water or damage. Don't dig — send us a photo and we'll come out.</td>
+    </tr>
+    <tr>
+      <td>Colors don't match the theme</td>
+      <td>Check the theme's color assignment for that group. Only color-capable fixtures change color; standard fixtures in the same theme stay white.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="care">8. Keeping it looking new</h2>
+
+<ul>
+  <li><strong>Keep lenses clear.</strong> Mulch, leaves, and fresh growth block more light than anything else. A quick wipe with a damp cloth twice a year is plenty.</li>
+  <li><strong>Watch the string trimmer.</strong> Most service calls we run start with a trimmer or an edger, not with the equipment.</li>
+  <li><strong>Tell your landscaper the wire is there.</strong> Aeration, new beds, and fence posts are the usual suspects.</li>
+  <li><strong>Plants grow, aim drifts.</strong> After a season of growth, a few fixtures usually want re-aiming — that's normal, and it's the cheapest way to make the whole system look new again.</li>
+  <li><strong>Snow and ice:</strong> leave buried fixtures alone until it melts. Chipping ice off a lens is how lenses crack.</li>
+</ul>
+
+<h2 id="call">9. When to call us</h2>
+
+<p>Call us for anything electrical, anything underground, a fixture that's dark after you've checked its group, or any time you'd rather we just handle it. Reprogramming, re-aiming, and adding fixtures are all normal service visits.</p>
+
+<div class="panel">
+  <p><strong>Have this ready and we'll usually solve it on the first message:</strong></p>
+  <ul>
+    <li>Which group or area (the name in the app)</li>
+    <li>What time of night it happens</li>
+    <li>A photo of the transformer screen</li>
+    <li>Anything that changed recently — new router, landscaping, storm, power outage</li>
+  </ul>
+</div>
+
+<div class="help">
+  <img src="/static/brand/maxteriors-mark.png" alt="" width="52" height="52" style="display:block;width:52px;height:52px;margin:0 0 12px;background:#fff;border-radius:50%;padding:5px;box-sizing:border-box;">
+  <h2>Maxteriors</h2>
+  <p>Call or text <strong>(248) 593-0266</strong> — texting a photo is usually fastest.</p>
+  <a class="cta" href="tel:+12485930266">Call or text us</a>
+</div>
+
+<footer class="fine">
+  <p>Written by Maxteriors for our own clients. Luxor and FX Luminaire are trademarks of their respective owners; we are not affiliated with or endorsed by them, and app screens can change with updates. Anything involving line-voltage power, buried wire, or a repeatedly blown fuse should be handled by us rather than at home.</p>
+</footer>
+
+</div>
+</body>
+</html>
