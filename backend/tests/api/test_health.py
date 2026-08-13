@@ -19,7 +19,6 @@ from httpx import ASGITransport, AsyncClient
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.services.knowledge.product_help import ProductHelpError
-from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core import build_info
 from app.websockets.voice_bridge import router as voice_bridge_router
@@ -45,7 +44,6 @@ def _make_test_app() -> FastAPI:
     # Register all the same routers as the real app
     app.include_router(api_router, prefix="/api/v1")
     app.include_router(health_router)
-    app.include_router(calcom_webhook_router, prefix="/api/webhooks")
     app.include_router(telnyx_webhook_router, prefix="/api/webhooks")
     app.include_router(voice_bridge_router)
     app.include_router(voice_test_router)
