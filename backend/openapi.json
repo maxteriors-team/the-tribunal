@@ -37108,6 +37108,14 @@
       "ProposalDraftSchema": {
         "additionalProperties": false,
         "properties": {
+          "additionalLineItems": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalLineItemSchema"
+            },
+            "maxItems": 100,
+            "title": "Additionallineitems",
+            "type": "array"
+          },
           "commitments": {
             "items": {
               "maxLength": 2000,
@@ -37369,6 +37377,34 @@
           "line_total"
         ],
         "title": "ProposalLine",
+        "type": "object"
+      },
+      "ProposalLineItemSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ProposalLineItemSchema",
         "type": "object"
       },
       "ProposalMockup": {

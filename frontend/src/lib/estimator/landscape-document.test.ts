@@ -68,6 +68,23 @@ describe("landscape document v2", () => {
     });
   });
 
+  it("normalizes persisted additional proposal line items", () => {
+    const document = normalizeLandscapeDocument({
+      ...createLandscapeDocument([shot], "shot-1"),
+      proposal: {
+        additionalLineItems: [
+          { id: "custom-1", description: "Core drill", amount: 275.5 },
+          { id: "custom-2", description: "", amount: -10 },
+        ],
+      },
+    });
+
+    expect(document?.proposal?.additionalLineItems).toEqual([
+      { id: "custom-1", description: "Core drill", amount: 275.5 },
+      { id: "custom-2", description: "", amount: 0 },
+    ]);
+  });
+
   it("rejects malformed image payloads and excessive sheets", () => {
     expect(
       normalizeLandscapeDocument({

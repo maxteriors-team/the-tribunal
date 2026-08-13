@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
+from app.core.config import settings
 from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.catalog import CatalogItem
@@ -102,7 +103,9 @@ from app.services.automations.events import (
     EVENT_QUOTE_SENT,
     emit_automation_event,
 )
+from app.services.email import send_quote_acceptance_receipt
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.idempotency import derive_outbound_key
 from app.services.notifications import notify_workspace_event
 from app.services.nudges.strategies.base import dedup_exists
 from app.services.opportunities.quote_opportunity import place_quote_on_pipeline
@@ -1874,6 +1877,7 @@ class QuoteService:
         automation event fire; an expired/declined proposal is rejected there.
         """
         quote = await self._load_by_token(token)
+        should_send_receipt = quote.status in {"draft", "sent"}
         # Re-pointing an already-decided quote would rewrite a signed agreement,
         # so the lifecycle guard runs first and a late package switch is ignored.
         if selected_tier and quote.status in {"draft", "sent"}:
@@ -1884,6 +1888,8 @@ class QuoteService:
 
         due = resolve_amount(quote)
         unpaid = due is not None and quote.deposit_paid_at is None
+        if should_send_receipt:
+            await self._send_acceptance_receipt(quote, deposit_amount=due)
         return PublicProposalActionResult(
             token=token,
             status=result.status,
@@ -1891,6 +1897,37 @@ class QuoteService:
             deposit_required=unpaid,
             deposit_amount=due,
         )
+
+    async def _send_acceptance_receipt(self, quote: Quote, *, deposit_amount: float | None) -> None:
+        """Best-effort transactional receipt for the customer who accepted."""
+        contact = quote.contact
+        workspace = quote.workspace
+        if contact is None or not contact.email:
+            return
+        try:
+            await send_quote_acceptance_receipt(
+                to_email=contact.email,
+                customer_name=contact.first_name or contact.full_name or "there",
+                business_name=workspace.name,
+                quote_number=quote.number,
+                quote_title=quote.title or f"Proposal {quote.number}",
+                total=float(quote.total),
+                currency=quote.currency,
+                accepted_at=quote.approved_at or datetime.now(UTC),
+                idempotency_key=derive_outbound_key("quote_acceptance_receipt", quote.id),
+                support_email=str(workspace.settings.get("support_email") or "") or None,
+                support_phone=str(workspace.settings.get("support_phone") or "") or None,
+                deposit_required=deposit_amount is not None,
+                deposit_amount=deposit_amount,
+                deposit_paid=quote.deposit_paid_at is not None,
+                proposal_url=f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}",
+            )
+        except Exception as exc:  # pragma: no cover - best-effort receipt
+            self.log.warning(
+                "quote_acceptance_receipt_failed",
+                quote_id=str(quote.id),
+                error=str(exc),
+            )
 
     async def record_public_view(self, token: str) -> None:
         """Record that a client opened their proposal, and alert the operator once.

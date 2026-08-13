@@ -186,7 +186,13 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
         <ToolButton label="Undo" icon={Undo2} action="undo" disabled={!props.canUndo} onAction={action} />
         <ToolButton label="Redo" icon={Redo2} action="redo" disabled={!props.canRedo} onAction={action} />
         <ToolButton label="Wiring" icon={Cable} action="wire" active={props.activeAction === "wire"} onAction={action} />
-        <ToolButton label="Highlight" icon={Highlighter} action="highlight" active={props.activeAction === "highlight"} onAction={action} />
+        <ToolButton
+          label="Highlight"
+          icon={Highlighter}
+          action="highlight"
+          active={props.activeAction === "highlight"}
+          onAction={action}
+        />
         <ToolButton label="Numbers" icon={CircleDot} action="fixture-numbers" active={props.fixtureNumbersVisible} onAction={action} />
         {props.fixtureTools?.map(({ id, label, icon: Icon, active, onSelect }) => (
           <button

@@ -1,10 +1,10 @@
 # Compliance Register
 
-Snapshot: 12 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+Snapshot: 13 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
 
-Commit reviewed: working tree on `669fd941` (uncommitted approved implementation).
+Commit reviewed: working tree on `origin/main` (uncommitted NiteLite-parity implementation).
 
-Scope of this pass: landscape-lighting proposal deposit truth, accepted-quote conversion, crew assignment notifications, and authenticated installation-plan delivery. This is a focused feature review, not a certification or a full-product legal/security audit.
+Scope of this pass: landscape-lighting proposal deposit truth, custom monetary line items, customer acceptance receipts, accepted-quote conversion, crew assignment notifications, and authenticated installation-plan delivery. This is a focused feature review, not a certification or a full-product legal/security audit.
 
 ## Assumed exposure profile
 
@@ -45,7 +45,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, accepted-quote co
 | U2 | Third-party scripts consent | n-a | No tracking script added. |
 | U3 | Account security baseline | pass | Focused authorization tests and runtime probes passed; product-wide auth was not re-audited. |
 | U4 | Public-page accessibility | n-a | No new public page; existing hosted proposal/payment surfaces were reused. |
-| U5 | Email duties | pass | CODE/RUNTIME: assignment copy is transactional, preference-aware, recipient-scoped, deduplicated, and contains no imagery/token. |
+| U5 | Email duties | pass | CODE/tests: assignment copy and the new customer acceptance receipt are transactional, recipient-scoped, HTML-escaped, and use deterministic provider idempotency keys; repeated acceptance does not resend. |
 | U6 | Contact form privacy | n-a | No contact form added. |
 | U7 | Error/log handling | pass | CODE: delivery errors produce counts/status without payload bytes or provider secrets. |
 | U8 | Personal-liability/entity review | n-a | Exact contracting entity was outside this focused implementation. |
@@ -70,6 +70,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, accepted-quote co
 | LL-004 | HIGH | Failed delivery must remain retryable and truthful | RUNTIME: initial probe found a failed send retained its dedupe claim and a retry falsely said sent | Release dedupe claims after total failure; report delivery separately from committed job | Fixed | Post-fix exact retry remained `failed`; targeted tests and final backend CI |
 | LL-005 | LAWYER | US consumers may pay a landscape-lighting deposit through the public proposal | CODE/DEDUCED: hosted checkout and server-derived totals are present, but the customer-facing cancellation, refund, tax, and contract terms were outside this review | Confirm the actual proposal terms match each US jurisdiction served | Open | Legal review of the deployed proposal and refund/cancellation policy |
 | LL-006 | LAWYER | EU/UK consumers may pay a landscape-lighting deposit if the service is offered there | CODE/DEDUCED: no geographic block was established and jurisdiction-specific pre-contract/withdrawal wording was not reviewed | Confirm required pre-contract information, withdrawal handling, and any early-service waiver before offering there | Open if EU/UK consumers are served | Legal review plus a jurisdictional launch checklist |
+| LL-007 | HIGH | A customer needs durable proof after accepting a proposal | CODE/tests: acceptance previously changed status without sending the customer a receipt; the new transactional email records proposal number, accepted UTC timestamp, accepted total, deposit state, and a stable proposal link | Send one itemized, escaped, idempotent receipt only on the first acceptance | Fixed | Email-renderer test plus public-approval duplicate-send guard |
 
 ## Implemented in this pass
 
@@ -79,6 +80,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, accepted-quote co
 - Payment truth remains Stripe-derived; scheduling an unpaid required deposit needs explicit acknowledgement but cannot mark it paid.
 - Notifications target active direct/crew installers, honor existing master/preferences, use deterministic dedupe, report partial/failure separately, and omit imagery/tokens.
 - Internal payment receipts identify the client using CRM name, email, phone, and quote number; payment credentials and provider identifiers remain excluded, and all customer-supplied values are HTML-escaped.
+- Customer proposal-acceptance receipts are transactional, itemize the accepted total and deposit state, retain a proposal link, and use deterministic idempotency; they do not contain marketing or unsubscribe theater.
 - Read-only installer actions support print/download while preserving the editable project as the single design source.
 
 ## Open — needs a decision from you

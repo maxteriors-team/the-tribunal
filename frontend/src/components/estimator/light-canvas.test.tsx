@@ -43,6 +43,10 @@ vi.mock("@/lib/estimator/photo", () => ({
   }),
 }));
 
+vi.mock("@/components/sales-wizard/image-resize", () => ({
+  fileToResizedDataUrl: vi.fn().mockResolvedValue("data:image/jpeg;base64,RESIZED"),
+}));
+
 const PHOTO: PhotoInfo = {
   dataUrl: "data:image/png;base64,AAAA",
   width: 1000,
@@ -135,6 +139,47 @@ describe("LightCanvas — geometry stays on the photo", () => {
     clickAt(0, 0);
     clickAt(PHOTO.width, PHOTO.height);
     expect(placed()).toBe(2);
+  });
+});
+
+describe("LightCanvas — highlights", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("commits a freehand highlight after a drag", () => {
+    const dispatch = vi.fn();
+    const state = { ...initialEditorState(), tool: { type: "highlight" as const } };
+    const { container } = render(
+      <LightCanvas photo={PHOTO} products={[UPLIGHT]} state={state} dispatch={dispatch} />,
+    );
+    const canvas = container.querySelector("canvas")!;
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: PHOTO.width,
+      height: PHOTO.height,
+      right: PHOTO.width,
+      bottom: PHOTO.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    fireEvent.pointerDown(canvas, { pointerId: 12, clientX: 180, clientY: 170 });
+    fireEvent.pointerMove(canvas, { pointerId: 12, clientX: 230, clientY: 205 });
+    fireEvent.pointerMove(canvas, { pointerId: 12, clientX: 280, clientY: 235 });
+    fireEvent.pointerUp(canvas, { pointerId: 12, clientX: 280, clientY: 235 });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "ADD_HIGHLIGHT",
+        highlight: expect.objectContaining({
+          color: "rgba(255, 226, 74, 0.55)",
+          widthPx: 34,
+        }),
+      }),
+    );
   });
 });
 
@@ -240,17 +285,17 @@ describe("LightCanvas — plan images", () => {
     await waitFor(() => expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(true));
   });
 
-  it("rejects oversized plan images before they enter autosave", async () => {
+  it("compresses oversized plan images before they enter autosave", async () => {
     const { container, seen } = setupCanvas();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "too-large.png", {
+    const file = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "large-photo.png", {
       type: "image/png",
     });
 
     fireEvent.change(input, { target: { files: [file] } });
 
-    await waitFor(() => expect(container.querySelector('[role="alert"]')).not.toBeNull());
-    expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(false);
+    await waitFor(() => expect(seen.some((action) => action.type === "ADD_PLAN_IMAGE")).toBe(true));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 });
 

@@ -74,6 +74,7 @@ export const defaultLandscapeProposal = (): LandscapeProposalSettings => ({
   ],
   electricalResponsibility: "",
   enhancements: [],
+  additionalLineItems: [],
   commitments: [],
   signatureName: "",
   signatureDate: null,
@@ -203,6 +204,19 @@ const normalizeProposal = (value: unknown): LandscapeProposalSettings => {
     paymentMilestones: milestones,
     electricalResponsibility: stringValue(proposal.electricalResponsibility),
     enhancements: Array.isArray(proposal.enhancements) ? (proposal.enhancements as never[]) : [],
+    additionalLineItems: Array.isArray(proposal.additionalLineItems)
+      ? proposal.additionalLineItems.flatMap((entry, index) => {
+          const item = record(entry);
+          if (!item) return [];
+          return [
+            {
+              id: stringValue(item.id, `line-item-${index + 1}`),
+              description: stringValue(item.description),
+              amount: finiteNumber(item.amount, 0, 0, 1_000_000),
+            },
+          ];
+        })
+      : [],
     commitments: Array.isArray(proposal.commitments)
       ? proposal.commitments.filter((item): item is string => typeof item === "string")
       : [],

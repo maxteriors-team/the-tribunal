@@ -12,6 +12,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from datetime import date, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,7 +207,14 @@ async def test_unknown_and_draft_tokens_404() -> None:
             await svc.get_public_proposal("draft-quote-has-no-token")
 
 
-async def test_public_approve_flips_status_and_is_idempotent() -> None:
+async def test_public_approve_flips_status_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receipt = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "app.services.quotes.quote_service.send_quote_acceptance_receipt",
+        receipt,
+    )
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
@@ -215,10 +223,14 @@ async def test_public_approve_flips_status_and_is_idempotent() -> None:
 
         first = await svc.approve_public(token)
         assert first.status == "approved"
+        receipt.assert_awaited_once()
+        assert receipt.await_args.kwargs["to_email"] == contact.email
+        assert receipt.await_args.kwargs["quote_title"] == "Backyard lighting install"
 
-        # Idempotent: approving again stays approved (client double-clicks).
+        # Idempotent: approving again stays approved without a duplicate receipt.
         second = await svc.approve_public(token)
         assert second.status == "approved"
+        receipt.assert_awaited_once()
 
         proposal = await svc.get_public_proposal(token)
         assert proposal.status == "approved"

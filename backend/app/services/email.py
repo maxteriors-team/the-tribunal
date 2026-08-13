@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.services.email_layout import (
     Block,
     Brand,
+    Button,
     Details,
     EmailCategory,
     Paragraph,
@@ -223,6 +224,89 @@ async def send_event_notification_email(
         "event_notification_email_sent",
         to_email=to_email,
         subject=subject,
+        email_id=response.get("id"),
+    )
+    return True
+
+
+async def send_quote_acceptance_receipt(
+    *,
+    to_email: str,
+    customer_name: str,
+    business_name: str,
+    quote_number: str,
+    quote_title: str,
+    total: float,
+    currency: str,
+    accepted_at: datetime,
+    idempotency_key: uuid.UUID,
+    logo_url: str | None = None,
+    support_email: str | None = None,
+    support_phone: str | None = None,
+    deposit_required: bool = False,
+    deposit_amount: float | None = None,
+    deposit_paid: bool = False,
+    proposal_url: str | None = None,
+) -> bool:
+    """Send the customer a transactional receipt for their accepted quote."""
+    currency_code = (currency or "USD").upper()
+    accepted_label = accepted_at.astimezone(UTC).strftime("%B %-d, %Y at %-I:%M %p UTC")
+    receipt_lines = [
+        f"Proposal: {quote_title}",
+        f"Receipt number: {quote_number}",
+        f"Accepted: {accepted_label}",
+        f"Accepted total: {currency_code} {total:,.2f}",
+    ]
+    if deposit_required:
+        deposit_status = "paid" if deposit_paid else "due"
+        receipt_lines.append(
+            f"Deposit: {currency_code} {(deposit_amount or 0):,.2f} ({deposit_status})"
+        )
+    if support_email:
+        receipt_lines.append(f"Questions: {support_email}")
+    elif support_phone:
+        receipt_lines.append(f"Questions: {support_phone}")
+
+    blocks: list[Block] = [
+        Paragraph(f"Hi {customer_name or 'there'},"),
+        Paragraph(f"This receipt confirms that you accepted {quote_title} from {business_name}."),
+        Details(
+            rows={
+                line.split(": ", maxsplit=1)[0]: line.split(": ", maxsplit=1)[1]
+                for line in receipt_lines
+            }
+        ),
+    ]
+    if proposal_url:
+        blocks.append(Button("View accepted proposal", proposal_url))
+    blocks.append(
+        Paragraph(
+            "Keep this email for your records. The team will contact you about "
+            "scheduling and any next payment step."
+        )
+    )
+    rendered = render_email(
+        category=EmailCategory.TRANSACTIONAL,
+        heading="Proposal accepted",
+        blocks=blocks,
+        brand=_brand(business_name, logo_url),
+    )
+    response = await _send(
+        {
+            "from": _from_address(),
+            "to": [to_email],
+            "subject": f"Receipt for accepted proposal {quote_number}",
+            "html": rendered.html,
+            "text": rendered.text,
+        },
+        idempotency_key=idempotency_key,
+    )
+    if response is None:
+        return False
+    logger.info(
+        "quote_acceptance_receipt_sent",
+        to_email=to_email,
+        quote_number=quote_number,
         email_id=response.get("id"),
     )
     return True

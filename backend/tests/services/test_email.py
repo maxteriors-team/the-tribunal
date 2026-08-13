@@ -193,6 +193,40 @@ async def test_payment_receipt_includes_minimal_client_info_and_escapes_it(
 
 
 @pytest.mark.asyncio
+async def test_quote_acceptance_receipt_is_transactional_and_itemized(
+    fake_resend: _FakeResend,
+) -> None:
+    key = uuid.UUID(int=42)
+    sent = await email.send_quote_acceptance_receipt(
+        to_email="dana@example.com",
+        customer_name="Dana <Homeowner>",
+        business_name="Maxteriors Lighting",
+        quote_number="QUO-000042",
+        quote_title="Backyard lighting",
+        total=4242.5,
+        currency="usd",
+        accepted_at=email.datetime(2026, 8, 13, 14, 30, tzinfo=email.UTC),
+        idempotency_key=key,
+        support_email="office@example.com",
+        deposit_required=True,
+        deposit_amount=2121.25,
+        proposal_url="https://app.example/p/quotes/token",
+    )
+
+    assert sent is True
+    call = fake_resend.Emails.send_async.await_args
+    params = call.args[0]
+    assert params["to"] == ["dana@example.com"]
+    assert params["subject"] == "Receipt for accepted proposal QUO-000042"
+    assert "Dana &lt;Homeowner&gt;" in params["html"]
+    assert "USD 4,242.50" in params["html"]
+    assert "USD 2,121.25 (due)" in params["html"]
+    assert "View accepted proposal" in params["html"]
+    assert "unsubscribe" not in params["html"].lower()
+    assert call.args[1] == {"idempotency_key": str(key)}
+
+
+@pytest.mark.asyncio
 async def test_quote_email_renders_view_proposal_button(fake_resend: _FakeResend) -> None:
     key = uuid.uuid4()
 

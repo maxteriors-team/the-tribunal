@@ -15,7 +15,8 @@ const PROJECT_DRAFT_STORE = "landscape-project-drafts";
 export type LandscapeProposalDraft = Pick<
   LandscapeProposalSettings,
   "selectedTierKey" | "selectedCarePlanKey"
->;
+> &
+  Partial<Pick<LandscapeProposalSettings, "additionalLineItems">>;
 export type LandscapeDraft = LandscapeDocumentV2;
 
 interface LegacyLandscapeDraft {

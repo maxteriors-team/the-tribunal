@@ -372,6 +372,12 @@ export interface LandscapeProposalEnhancement {
   note: string;
 }
 
+export interface LandscapeProposalLineItem {
+  id: string;
+  description: string;
+  amount: number;
+}
+
 export interface LandscapeProposalSettings {
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
@@ -382,6 +388,7 @@ export interface LandscapeProposalSettings {
   paymentMilestones: LandscapePaymentMilestone[];
   electricalResponsibility: string;
   enhancements: LandscapeProposalEnhancement[];
+  additionalLineItems?: LandscapeProposalLineItem[];
   commitments: string[];
   signatureName: string;
   signatureDate: string | null;
@@ -417,7 +424,8 @@ export type Tool =
   | { type: "select" }
   | { type: "calibrate" }
   | { type: "draw"; productId: string }
-  | { type: "place"; productId: string };
+  | { type: "place"; productId: string }
+  | { type: "highlight" };
 
 export type Selection = { kind: "run" | "item" | "planImage"; id: string } | null;
 

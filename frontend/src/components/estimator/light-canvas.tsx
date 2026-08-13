@@ -26,6 +26,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { fileToResizedDataUrl } from "@/components/sales-wizard/image-resize";
 import { indexProducts } from "@/lib/estimator/catalog";
 import { designScale, formatFeet } from "@/lib/estimator/design";
 import { distance, distToPolyline, polylineLength, snapAngle } from "@/lib/estimator/geometry";
@@ -63,6 +64,7 @@ type Drag =
   | { mode: "aim"; itemId: string; before: Design }
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
   | { mode: "plan-image-resize"; imageId: string; before: Design }
+  | { mode: "highlight"; before: Design }
   | { mode: "cal-a" | "cal-b"; before: Design };
 
 const MAX_PLAN_IMAGES = 12;
@@ -80,9 +82,18 @@ interface LightCanvasProps {
   products: Product[];
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
+  planImageRequestToken?: number;
+  onPlanImageRequestHandled?: () => void;
 }
 
-export function LightCanvas({ photo, products, state, dispatch }: LightCanvasProps) {
+export function LightCanvas({
+  photo,
+  products,
+  state,
+  dispatch,
+  planImageRequestToken = 0,
+  onPlanImageRequestHandled,
+}: LightCanvasProps) {
   const { design, tool, selection, dusk } = state;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +111,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   const [imageDragActive, setImageDragActive] = useState(false);
   const [view, setView] = useState<View>({ scale: 1, ox: 0, oy: 0 });
   const [draft, setDraft] = useState<Point[]>([]);
+  const [draftHighlight, setDraftHighlight] = useState<Point[] | null>(null);
   const [calDraft, setCalDraft] = useState<Point | null>(null);
   const [hoverPt, setHoverPt] = useState<Point | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
@@ -192,6 +204,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
   // Reset interaction state when the tool changes.
   useEffect(() => {
     setDraft([]);
+    setDraftHighlight(null);
     setCalDraft(null);
     setHoverPt(null);
   }, [tool]);
@@ -229,23 +242,13 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
       showChrome: !showBefore,
       calibrateTool: tool.type === "calibrate",
       planImageElements,
+      draftHighlight: showBefore ? null : draftHighlight,
     });
 
     if (!showBefore) {
       ctx.save();
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      for (const highlight of design.highlights ?? []) {
-        if (highlight.points.length < 2) continue;
-        ctx.beginPath();
-        highlight.points.forEach((point, index) =>
-          index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y),
-        );
-        ctx.globalAlpha = 0.35;
-        ctx.strokeStyle = highlight.color;
-        ctx.lineWidth = highlight.widthPx;
-        ctx.stroke();
-      }
       ctx.globalAlpha = 1;
       ctx.font = "600 16px sans-serif";
       for (const measurement of design.measurements ?? []) {
@@ -303,6 +306,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     pxPerFt,
     selection,
     draft,
+    draftHighlight,
     activeProduct,
     calDraft,
     hoverPt,
@@ -372,12 +376,15 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         setPlanImageError("Use a PNG, JPEG, GIF, WebP, or AVIF image.");
         return;
       }
-      if (file.size > MAX_PLAN_IMAGE_BYTES) {
-        setPlanImageError("Plan images must be 2 MB or smaller.");
-        return;
-      }
       try {
-        const uploaded = await fileToPhoto(file);
+        const uploaded =
+          file.size > MAX_PLAN_IMAGE_BYTES
+            ? await (async () => {
+                const dataUrl = await fileToResizedDataUrl(file);
+                const image = await loadImage(dataUrl);
+                return { dataUrl, width: image.naturalWidth, height: image.naturalHeight };
+              })()
+            : await fileToPhoto(file);
         const maxWidth = photo.width * 0.34;
         const maxHeight = photo.height * 0.34;
         const scale = Math.min(1, maxWidth / uploaded.width, maxHeight / uploaded.height);
@@ -403,7 +410,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           },
         });
       } catch {
-        setPlanImageError("That image could not be read.");
+        setPlanImageError("That image could not be read or compressed.");
       }
     },
     [design.planImages, dispatch, insidePhoto, photo.height, photo.width],
@@ -414,6 +421,12 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     event.target.value = "";
     if (file) void addPlanImage(file);
   };
+
+  useEffect(() => {
+    if (planImageRequestToken <= 0) return;
+    planImageInputRef.current?.click();
+    onPlanImageRequestHandled?.();
+  }, [onPlanImageRequestHandled, planImageRequestToken]);
 
   const onPlanImageDrop = (event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -711,7 +724,7 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     // fixture on the photo — counted, priced, and sent to the crew. Deferring
     // to release lets a second finger cancel it. Mouse and pen keep acting on
     // press, where there is no such ambiguity and the immediacy is the feel.
-    if (e.pointerType === "touch" && tool.type !== "select") {
+    if (e.pointerType === "touch" && tool.type !== "select" && tool.type !== "highlight") {
       tapRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
     }
@@ -764,6 +777,12 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           type: "ADD_ITEM",
           item: { id: nextId("item"), productId: tool.productId, at: p, sizePx },
         });
+        return;
+      }
+      case "highlight": {
+        if (!insidePhoto(p)) return;
+        setDraftHighlight([p]);
+        dragRef.current = { mode: "highlight", before: design };
         return;
       }
       case "select": {
@@ -905,6 +924,17 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
           scale: view.scale,
           ox: drag.ox + (e.clientX - drag.startX),
           oy: drag.oy + (e.clientY - drag.startY),
+        });
+        return;
+      }
+      case "highlight": {
+        if (!insidePhoto(p)) return;
+        setDraftHighlight((points) => {
+          if (!points?.length) return [p];
+          const previous = points[points.length - 1];
+          return distance(previous, p) >= 2 / Math.max(view.scale, 0.1)
+            ? [...points, p]
+            : points;
         });
         return;
       }
@@ -1080,6 +1110,22 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
     const drag = dragRef.current;
     dragRef.current = null;
     setPanning(false);
+    if (drag?.mode === "highlight") {
+      const points = draftHighlight ?? [];
+      setDraftHighlight(null);
+      if (points.length > 1) {
+        dispatch({
+          type: "ADD_HIGHLIGHT",
+          highlight: {
+            id: nextId("highlight"),
+            points,
+            color: "rgba(255, 226, 74, 0.55)",
+            widthPx: 34,
+          },
+        });
+      }
+      return;
+    }
     if (drag && drag.mode !== "pan") {
       dispatch({ type: "COMMIT_HISTORY", before: drag.before });
     }
@@ -1108,6 +1154,8 @@ export function LightCanvas({ photo, products, state, dispatch }: LightCanvasPro
         : "Click along the roofline to add points · Shift snaps angles";
   } else if (tool.type === "place") {
     hint = `Click to place ${activeProduct?.name ?? "item"} · then switch to Select (V) to move or resize`;
+  } else if (tool.type === "highlight") {
+    hint = "Drag across the plan to highlight · choose Highlight again or Select when finished";
   } else if (selection?.kind === "planImage") {
     hint = "Drag or arrow keys move · corner handle or Alt + arrows resize · Delete removes";
   } else if (selection) {
