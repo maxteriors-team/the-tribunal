@@ -85,6 +85,28 @@ AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
 )
 
 
+def event_matches_trigger_config(
+    event_type: str,
+    trigger_config: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Return whether an event satisfies selectors supported by its trigger.
+
+    Most lifecycle triggers match every event. ``lead_created`` supports lead
+    source selectors; ``job_completed`` supports ``lighting_project_only`` so a
+    landscape-system owner's guide cannot go out after service calls, permanent
+    installs, repairs, or takedowns.
+    """
+    normalized_type = event_type.strip().lower()
+    if normalized_type == EVENT_LEAD_CREATED:
+        return lead_created_event_matches(trigger_config, payload)
+    if normalized_type == EVENT_JOB_COMPLETED:
+        config = trigger_config or {}
+        if bool(config.get("lighting_project_only")):
+            return bool((payload or {}).get("lighting_project_id"))
+    return True
+
+
 def lead_created_event_matches(
     trigger_config: dict[str, Any] | None,
     payload: dict[str, Any] | None,

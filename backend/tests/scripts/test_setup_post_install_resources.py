@@ -10,7 +10,9 @@ from __future__ import annotations
 import importlib.util
 import logging
 import sys
+import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -51,6 +53,13 @@ def test_trigger_and_actions_are_dispatched_by_the_engine(script: Any) -> None:
     assert {action["type"] for action in _actions(script)} <= set(AUTOMATION_ACTION_TYPES)
 
 
+def test_install_trigger_is_narrowed_to_lighting_projects(script: Any) -> None:
+    """A repair, service visit or takedown must not get install instructions."""
+    source = _SCRIPT.read_text()
+
+    assert '"lighting_project_only": True' in source
+
+
 def test_sms_requires_consent_and_names_the_sender(script: Any) -> None:
     sms = next(action["config"] for action in _actions(script) if action["type"] == "send_sms")
 
@@ -75,3 +84,50 @@ def test_email_is_service_mail_with_explicit_workspace_brand(script: Any) -> Non
 def test_public_customer_urls_are_https_and_branded(script: Any) -> None:
     assert script.DEFAULT_GUIDE_URL.startswith("https://go.maxteriorslighting.com/")
     assert "/static/guides/index.html" in script.DEFAULT_GUIDE_URL
+
+
+def test_backfill_groups_all_owned_systems_per_contact(script: Any) -> None:
+    contact_id = 42
+    landscape = SimpleNamespace(
+        contact_id=contact_id,
+        lighting_project_id=uuid.uuid4(),
+        lighting_project=SimpleNamespace(
+            document={
+                "shots": [
+                    {
+                        "design": {
+                            "items": [
+                                {
+                                    "productId": "fixture-transformer",
+                                    "catalogSku": "best-luxor",
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ),
+        source_quote=None,
+    )
+    permanent = SimpleNamespace(
+        contact_id=contact_id,
+        lighting_project_id=None,
+        lighting_project=None,
+        source_quote=SimpleNamespace(proposal_document={"service": "permanent"}),
+    )
+
+    assert script._group_completed_install_tags([landscape, permanent]) == {
+        contact_id: ["Lighting System", "Luxor System", "Permanent Light System"]
+    }
+
+
+def test_backfill_ignores_completed_service_jobs(script: Any) -> None:
+    service_job = SimpleNamespace(
+        contact_id=42,
+        lighting_project_id=None,
+        lighting_project=None,
+        source_quote=None,
+        title="Install Luxor repair",
+    )
+
+    assert script._group_completed_install_tags([service_job]) == {}
