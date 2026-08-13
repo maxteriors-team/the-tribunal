@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -120,7 +121,9 @@ class TestWorkflowSendGate:
     ):
         send = await self._run(monkeypatch, {"subject": "Hi", "message": "Body"})
         send.assert_awaited_once()
-        assert send.await_args.kwargs["unsubscribe_url"].startswith("https://app.x.com")
+        unsubscribe_url = send.await_args.kwargs["unsubscribe_url"]
+        assert urlsplit(unsubscribe_url).netloc == "app.x.com"
+        assert urlsplit(unsubscribe_url).scheme == "https"
         assert send.await_args.kwargs["category"] is EmailCategory.MARKETING
 
     async def test_workflow_email_defaults_to_commercial(self, monkeypatch: pytest.MonkeyPatch):
